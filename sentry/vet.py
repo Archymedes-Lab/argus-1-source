@@ -95,6 +95,32 @@ DUAL_USE_DOMAINS = {
     "checkip.amazonaws.com", "ipv6.icanhazip.com", "ip.sb", "myip.com",
 }
 
+# Package registries and their CDNs. These appear throughout URLhaus and
+# ThreatFox because attackers genuinely host payloads on them — but the
+# hostname is identical for every user on earth, so matching it flags every
+# `npm install`, `pip install` and `go get`. The first Sysmon run produced five
+# criticals and every one was a package registry.
+#
+# This is a different case from SHARED_HOSTING below, where the *subdomain* is
+# per-tenant and therefore specific: `x7f2q.trycloudflare.com` identifies one
+# tunnel, while `raw.githubusercontent.com` identifies nobody. So these are
+# denied along with their subdomains.
+PACKAGE_INFRA = {
+    "githubusercontent.com", "codeload.github.com", "github.com",
+    "registry.npmjs.org", "registry.yarnpkg.com", "npmjs.org", "npmjs.com",
+    "pythonhosted.org", "pypi.org", "pypi.python.org",
+    "jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com", "jsdelivr.com",
+    "crates.io", "static.crates.io", "proxy.golang.org", "sum.golang.org",
+    "ghcr.io", "docker.io", "docker.com", "quay.io", "gcr.io",
+    "packages.microsoft.com", "archive.ubuntu.com", "security.ubuntu.com",
+    "deb.debian.org", "ppa.launchpad.net", "rubygems.org", "nuget.org",
+    "maven.apache.org", "repo1.maven.org", "packagist.org", "hex.pm",
+    "goproxy.io", "sourceforge.net", "fastly.net", "jsdelivr.b-cdn.net",
+    "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+    "raw.githubusercontent.com", "files.pythonhosted.org",
+    "huggingface.co", "cdn-lfs.huggingface.co", "ollama.com", "ollama.ai",
+}
+
 # Shared hosting, CDNs and tunnels. These are denied as an EXACT match only,
 # never as a parent of their subdomains — the distinction matters because
 # `trycloudflare.com` is not an indicator but `x7f2q.trycloudflare.com` is a
@@ -344,6 +370,10 @@ def vet_domain(value: str):
         return None, "publisher or example domain"
     if v in SHARED_HOSTING:
         return None, "shared hosting root, not a specific host"
+    parts_pi = v.split(".")
+    for i in range(len(parts_pi) - 1):
+        if ".".join(parts_pi[i:]) in PACKAGE_INFRA:
+            return None, "package registry or its CDN, used by everyone"
     if v in DUAL_USE_DOMAINS:
         return None, "public IP-lookup service, used by benign software too"
     parts_du = v.split(".")

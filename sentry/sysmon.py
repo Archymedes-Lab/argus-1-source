@@ -57,6 +57,19 @@ LSASS_EXPECTED = {
 }
 
 
+# Windows creates threads across its own processes as normal operation — the
+# desktop compositor into the client-server subsystem, the crash handler into
+# whatever crashed. Reporting those as injection is the CreateRemoteThread
+# equivalent of flagging every browser sandbox hook.
+SYSTEM_INJECTORS = {
+    "dwm.exe", "csrss.exe", "wininit.exe", "services.exe", "smss.exe",
+    "lsass.exe", "svchost.exe", "werfault.exe", "werfaultsecure.exe",
+    "explorer.exe", "audiodg.exe", "taskmgr.exe", "system", "ntoskrnl.exe",
+    "sihost.exe", "runtimebroker.exe", "dllhost.exe", "conhost.exe",
+    "searchindexer.exe", "wmiprvse.exe", "msmpeng.exe", "mssense.exe",
+}
+
+
 def _finding(category, severity, title, detail, where="", host="win"):
     return {"category": category, "severity": severity, "title": title,
             "detail": detail, "where": where, "host": host}
@@ -105,7 +118,10 @@ $rows = foreach ($e in $ev) {
   [pscustomobject]@{
     id      = $e.Id
     time    = $e.TimeCreated.ToString('o')
-    image   = [string]$d['Image']
+    # ProcessAccess (10) and CreateRemoteThread (8) name the actor
+    # SourceImage, not Image — reading the wrong field left every injection
+    # finding with a blank process name.
+    image   = [string]$(if ($d['SourceImage']) { $d['SourceImage'] } else { $d['Image'] })
     target  = [string]$d['TargetImage']
     granted = [string]$d['GrantedAccess']
     parent  = [string]$d['ParentImage']
@@ -136,7 +152,15 @@ def _sha256_of(hashes):
 
 
 def _base(path):
-    return (path or "").replace("/", "\\").rsplit("\\", 1)[-1].lower()
+    """Basename of a Sysmon image path, or "" when Sysmon could not resolve it.
+
+    Sysmon writes the literal string `<unknown process>` rather than leaving
+    the field empty, so testing for emptiness silently never fires.
+    """
+    p = (path or "").strip()
+    if not p or p.startswith("<"):
+        return ""
+    return p.replace("/", "\\").rsplit("\\", 1)[-1].lower()
 
 
 def audit(store=None, hours=24, hosts=("win",)):
@@ -169,8 +193,8 @@ def audit(store=None, hours=24, hosts=("win",)):
     events = _aslist(data.get("events"))
     out = []
 
-    lsass_hits, remote_threads, tampering, unsigned = [], [], [], []
-    dns_names, proc_hashes = {}, {}
+    lsass_hits, remote_threads, tampering = [], [], []
+    unsigned, dns_names, proc_hashes = {}, {}, {}
 
     for e in events:
         eid = int(e.get("id") or 0)
@@ -218,12 +242,25 @@ def audit(store=None, hours=24, hosts=("win",)):
               f"other.", image))
 
     # -- injection ---------------------------------------------------------
-    for image, target, when in remote_threads[:20]:
+    routine = 0
+    for image, target, when in remote_threads[:40]:
+        src, dst = _base(image), _base(target)
+        if src in SYSTEM_INJECTORS and dst in SYSTEM_INJECTORS:
+            routine += 1
+            continue
         out.append(_finding(
-            "injection", "high",
-            f"{_base(image)} created a thread inside {_base(target)}",
+            "injection", "medium" if not src else "high",
+            f"{src or '<unknown process>'} created a thread inside {dst}",
             f"{iso_of(when)} — a thread starting in another process's address "
-            f"space is code executing where it was not loaded", image))
+            f"space is code executing where it was not loaded"
+            + ("; Sysmon could not resolve the source image, which usually "
+               "means the kernel" if not src else ""), image))
+    if routine:
+        out.append(_finding(
+            "injection", "ok",
+            f"{routine} remote threads between Windows system processes",
+            "the compositor, subsystem and crash handler create threads in "
+            "each other as normal operation", "SYSTEM_INJECTORS"))
 
     for image, kind, when in tampering[:20]:
         out.append(_finding(
