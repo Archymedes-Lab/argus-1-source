@@ -69,8 +69,12 @@ $o.neighbors = @(Get-NetNeighbor -AddressFamily IPv4 |
 # Only fetched when asked. The state sample has to be frequent to catch a drop;
 # the historical log does not change between two samples five minutes apart,
 # and re-reading a week of it every time was most of this collector's cost.
+# The flag is substituted into the script rather than passed as an environment
+# variable: WSL does not export its environment to Windows processes unless the
+# name is listed in WSLENV, so $env:... here was always empty and the history
+# was silently never fetched.
 $o.wlanlog = @()
-if ($env:SENTRY_WLAN_LOG -eq '1') {
+if (__WANT_LOG__) {
 $o.wlanlog = @(Get-WinEvent -FilterHashtable @{
     LogName='Microsoft-Windows-WLAN-AutoConfig/Operational'
     StartTime=(Get-Date).AddDays(-7)} -MaxEvents 300 |
@@ -139,15 +143,8 @@ def sample(with_log=False):
     a week of events, parsed — and it does not change between two samples five
     minutes apart, so the caller decides how often it is worth paying for.
     """
-    old = os.environ.get("SENTRY_WLAN_LOG")
-    os.environ["SENTRY_WLAN_LOG"] = "1" if with_log else "0"
-    try:
-        data = _ps_json(PS_NET, timeout=90)
-    finally:
-        if old is None:
-            os.environ.pop("SENTRY_WLAN_LOG", None)
-        else:
-            os.environ["SENTRY_WLAN_LOG"] = old
+    script = PS_NET.replace("__WANT_LOG__", "$true" if with_log else "$false")
+    data = _ps_json(script, timeout=120)
     if not data:
         return None
     wlan = _parse_wlan(data.get("wlan"))
@@ -346,15 +343,27 @@ def _ingest_wlanlog(store, rows):
         "SELECT curr FROM net_events WHERE kind LIKE 'wlan-%' "
         "ORDER BY ts DESC LIMIT 400")}
     for r in rows:
-        stamp = (r.get("time") or "")[:19]
+        raw = (r.get("time") or "")
+        stamp = raw[:19]
         if not stamp or stamp in seen:
             continue
         kind, sev = _WLAN_KIND.get(int(r.get("id") or 0), ("wlan-event", "low"))
+        # PowerShell emits ISO-8601 *with* an offset. Slicing to 19 characters
+        # throws that away, and treating the remainder as UTC skewed every
+        # Windows-side event by the offset — three hours here, because Windows
+        # runs +02:00 while this WSL install runs +03:00. A forensic timeline
+        # that is silently three hours wrong correlates the wrong events, which
+        # is worse than having no timeline.
         try:
-            import calendar, time as _t
-            ts = int(calendar.timegm(_t.strptime(stamp, "%Y-%m-%dT%H:%M:%S")))
-        except Exception:
-            continue
+            from datetime import datetime
+            ts = int(datetime.fromisoformat(raw).timestamp())
+        except (ValueError, TypeError):
+            try:
+                import calendar
+                import time as _t
+                ts = int(calendar.timegm(_t.strptime(stamp, "%Y-%m-%dT%H:%M:%S")))
+            except Exception:
+                continue
         store.db.execute(
             """INSERT INTO net_events(ts,iface,kind,severity,detail,prev,curr)
                VALUES(?,?,?,?,?,?,?)""",
