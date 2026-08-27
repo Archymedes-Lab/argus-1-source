@@ -28,8 +28,8 @@ from urllib.parse import parse_qs, urlparse
 
 from . import (backdoor, control, feeds, firewall, hidden, hunt, implant,
                intel,
-               inputwatch, memscan, monitor, netwatch, posture, spyware,
-               startup)
+               inputwatch, memscan, monitor, netwatch, posture, secrets,
+               spyware, startup)
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
@@ -84,6 +84,8 @@ JOBS = {
     # Walks every readable process's address space; expensive, so it runs
     # rarely and its cost is accounted for in the duty cycle above.
     "memscan":  (7200,  "Memory & instruction level"),
+    # Walks the home directory; slow, and secrets do not appear by the minute.
+    "secrets":  (43200, "Plaintext credentials"),
 }
 
 
@@ -148,6 +150,8 @@ def _run_job(name, hosts):
         return backdoor.audit(hosts=hosts)
     if name == "memscan":
         return memscan.audit(hosts=hosts)
+    if name == "secrets":
+        return secrets.audit()
     if name == "input":
         store = Store(_run_job.db_path)
         try:

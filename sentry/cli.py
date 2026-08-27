@@ -8,8 +8,8 @@ import time
 from . import (asep, backdoor, collect_windows, control, coverage, detect,
                feeds,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
-               inputwatch, memscan, monitor, netwatch, posture, spyware,
-               startup)
+               inputwatch, memscan, monitor, netwatch, posture, secrets,
+               spyware, startup)
 from .store import DEFAULT_DB, Store
 from .util import iso, now, short
 
@@ -364,6 +364,7 @@ def cmd_investigate(args, store):
         ("BACKDOORS & ACCESS GRANTS", lambda: backdoor.audit(hosts=hosts)),
         ("SYNTHETIC INPUT", lambda: inputwatch.audit(store)),
         ("MEMORY & INSTRUCTION LEVEL", lambda: memscan.audit(hosts=hosts)),
+        ("PLAINTEXT CREDENTIALS", lambda: secrets.audit()),
         ("THREAT-INTEL MATCHES", lambda: hunt.sort_findings(
             hunt.hunt(store, hosts=hosts))),
     ]
@@ -459,6 +460,22 @@ def cmd_implant(args, store):
     _report(findings, verbose=args.verbose, severity=args.severity,
             sev_order=implant.SEV_ORDER, show_ok=True,
             empty="no interception or boundary-bypass artifacts found")
+
+
+def cmd_secrets(args, store):
+    """Credentials sitting in plaintext on this disk."""
+    roots = args.path or None
+    where = (", ".join(roots) if roots
+             else "all of $HOME" if args.deep
+             else "config directories, documents and git checkouts")
+    print(f"Scanning for credentials in plaintext ({where})…\n")
+    findings = secrets.audit(roots=roots, deep=args.deep)
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=secrets.SEV_ORDER, show_ok=True,
+            empty="no plaintext credentials found")
 
 
 def cmd_memscan(args, store):
@@ -823,6 +840,17 @@ def build_parser():
     it2.add_argument("-v", "--verbose", action="store_true")
     it2.add_argument("--json", action="store_true")
     it2.set_defaults(fn=cmd_intel)
+
+    sc = sub.add_parser("secrets",
+                        help="credentials sitting in plaintext on disk")
+    sc.add_argument("--path", action="append",
+                    help="scan this directory instead (repeatable)")
+    sc.add_argument("--deep", action="store_true",
+                    help="scan all of $HOME, including dependency trees")
+    sc.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    sc.add_argument("-v", "--verbose", action="store_true")
+    sc.add_argument("--json", action="store_true")
+    sc.set_defaults(fn=cmd_secrets)
 
     mem = sub.add_parser("memscan",
                          help="unbacked executable memory, hooked ntdll stubs, "
