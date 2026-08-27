@@ -101,16 +101,32 @@ $o.reader = [bool]((whoami /groups) -match 'Event Log Readers')
     return d or {}
 
 
-def _fetch(hours=24, max_events=3000):
-    """Pull the event types worth reasoning about, already reduced to fields."""
+def _fetch(hours=24, max_events=1200, minutes=None):
+    """Pull the event types worth reasoning about, already reduced to fields.
+
+    Cost here is almost entirely `Get-WinEvent`, and it scales with how many
+    events come back: 2354 events took 23s and 800 took 11s, while the XML
+    parsing everyone blames was 4s of that. So the lever is the window, not
+    the parsing — and re-reading a full day of log every ten minutes was
+    paying for the same events over and over.
+    """
     script = r"""
 $ErrorActionPreference = 'SilentlyContinue'
 $o = [ordered]@{}
-$since = (Get-Date).AddHours(-__HOURS__)
-$ev = Get-WinEvent -FilterHashtable @{
+$since = __SINCE__
+# Event 3 (network connect) was being fetched and never read — on a busy
+# desktop it is most of the log by volume, and dropping it is most of the cost.
+# The remaining types split by frequency: 8/10/25 are rare and each one
+# matters, while 1/7/22 are continuous and only need a representative sample.
+$rare  = Get-WinEvent -FilterHashtable @{
         LogName='Microsoft-Windows-Sysmon/Operational'
-        Id=1,3,7,8,10,22,25
+        Id=8,10,25
+        StartTime=$since } -MaxEvents 800 -EA SilentlyContinue
+$bulk  = Get-WinEvent -FilterHashtable @{
+        LogName='Microsoft-Windows-Sysmon/Operational'
+        Id=1,7,22
         StartTime=$since } -MaxEvents __MAX__ -EA SilentlyContinue
+$ev = @($rare) + @($bulk)
 
 $rows = foreach ($e in $ev) {
   $d = @{}
@@ -138,7 +154,11 @@ $rows = foreach ($e in $ev) {
 }
 $o.events = @($rows)
 $o.count = @($rows).Count
-""".replace("__HOURS__", str(int(hours))).replace("__MAX__", str(int(max_events)))
+"""
+    since = (f"(Get-Date).AddMinutes(-{int(minutes)})" if minutes
+             else f"(Get-Date).AddHours(-{int(hours)})")
+    script = (script.replace("__SINCE__", since)
+                    .replace("__MAX__", str(int(max_events))))
     return _ps(script, timeout=420) or {}
 
 
@@ -163,7 +183,7 @@ def _base(path):
     return p.replace("/", "\\").rsplit("\\", 1)[-1].lower()
 
 
-def audit(store=None, hours=24, hosts=("win",)):
+def audit(store=None, hours=24, hosts=("win",), incremental=False):
     if "win" not in hosts:
         return []
 
@@ -189,9 +209,19 @@ def audit(store=None, hours=24, hosts=("win",)):
             "out and back in. Running sentry elevated also works.",
             CHANNEL)]
 
-    data = _fetch(hours=hours)
+    minutes = None
+    if incremental and store is not None:
+        last = int(store.get_meta("sysmon_last_run", 0) or 0)
+        if last:
+            # A minute of overlap, so an event landing between the query and
+            # the timestamp write is seen twice rather than never.
+            minutes = max(2, min(int((now() - last) / 60) + 1, hours * 60))
+        store.set_meta("sysmon_last_run", now())
+
+    data = _fetch(hours=hours, minutes=minutes)
     events = _aslist(data.get("events"))
     out = []
+    window = (f"{minutes} minutes" if minutes else f"{hours}h")
 
     lsass_hits, remote_threads, tampering = [], [], []
     unsigned, dns_names, proc_hashes = {}, {}, {}
@@ -281,9 +311,14 @@ def audit(store=None, hours=24, hosts=("win",)):
     if store is not None:
         out += _correlate(store, dns_names, proc_hashes)
 
+    # Persist and re-surface. Reading incrementally means each run sees only
+    # new events, so anything worth reporting has to outlive its own snapshot.
+    if store is not None:
+        out = _remember(store, out, hours)
+
     out.append(_finding(
         "telemetry", "ok",
-        f"Sysmon delivered {len(events)} events in the last {hours}h",
+        f"Sysmon delivered {len(events)} events in the last {window}",
         f"{len(dns_names)} distinct DNS names and {len(proc_hashes)} process "
         f"hashes were checked against the indicator corpus; "
         f"{len(lsass_hits)} unexpected LSASS opens, "
@@ -294,6 +329,41 @@ def audit(store=None, hours=24, hosts=("win",)):
 def iso_of(t):
     """Sysmon timestamps arrive as ISO strings already; keep them readable."""
     return (t or "")[:19].replace("T", " ")
+
+
+def _remember(store, findings, hours):
+    """Store this run's real findings, and return everything still in window.
+
+    The `ok` rows are per-run status and are not kept — only things that
+    happened. A repeat of the same detection updates its timestamp rather than
+    accumulating duplicates.
+    """
+    ts = now()
+    keep = [f for f in findings if f["severity"] != "ok"]
+    for f in keep:
+        store.db.execute(
+            """INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_)
+               VALUES(?,?,?,?,?,?)
+               ON CONFLICT(category,title,where_) DO UPDATE SET
+                   ts=excluded.ts, severity=excluded.severity,
+                   detail=excluded.detail""",
+            (ts, f["category"], f["severity"], f["title"][:300],
+             f["detail"][:600], f["where"][:400]))
+    store.db.execute("DELETE FROM sysmon_hits WHERE ts < ?",
+                     (ts - 30 * 86400,))
+    store.commit()
+
+    since = ts - hours * 3600
+    out = [f for f in findings if f["severity"] == "ok"]
+    for r in store.db.execute(
+            "SELECT * FROM sysmon_hits WHERE ts >= ? ORDER BY ts DESC",
+            (since,)):
+        detail = r["detail"]
+        if ts - r["ts"] > 900:
+            detail += f"  [last seen {iso(r['ts'])}]"
+        out.append(_finding(r["category"], r["severity"], r["title"],
+                            detail, r["where_"]))
+    return out
 
 
 def _correlate(store, dns_names, proc_hashes):

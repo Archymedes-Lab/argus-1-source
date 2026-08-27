@@ -204,6 +204,23 @@ CREATE TABLE IF NOT EXISTS input_beats (
     lat_samples    INTEGER NOT NULL DEFAULT 0
 );
 
+-- Sysmon findings, kept because the collector reads incrementally. Each run
+-- only sees events since the last one, so without this a critical detection
+-- would live in exactly one snapshot and then be replaced by the next run's
+-- "nothing new" — an optimisation that silently loses findings is not one.
+CREATE TABLE IF NOT EXISTS sysmon_hits (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    title    TEXT NOT NULL,
+    detail   TEXT DEFAULT '',
+    where_   TEXT DEFAULT '',
+    UNIQUE(category, title, where_)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sysmon_ts ON sysmon_hits(ts DESC);
+
 -- Per-feed bookkeeping: when it last ran, how big it was, whether it worked.
 CREATE TABLE IF NOT EXISTS feed_runs (
     name      TEXT PRIMARY KEY,

@@ -29,6 +29,7 @@ What the transitions mean:
 """
 
 import json
+import os
 import re
 import subprocess
 
@@ -65,6 +66,11 @@ $o.neighbors = @(Get-NetNeighbor -AddressFamily IPv4 |
 
 # The WLAN service's own record of connects and disconnects, which survives
 # reboots and covers the time before this monitor was watching.
+# Only fetched when asked. The state sample has to be frequent to catch a drop;
+# the historical log does not change between two samples five minutes apart,
+# and re-reading a week of it every time was most of this collector's cost.
+$o.wlanlog = @()
+if ($env:SENTRY_WLAN_LOG -eq '1') {
 $o.wlanlog = @(Get-WinEvent -FilterHashtable @{
     LogName='Microsoft-Windows-WLAN-AutoConfig/Operational'
     StartTime=(Get-Date).AddDays(-7)} -MaxEvents 300 |
@@ -72,6 +78,7 @@ $o.wlanlog = @(Get-WinEvent -FilterHashtable @{
   ForEach-Object { [pscustomobject]@{ id=$_.Id
                                       time=$_.TimeCreated.ToString('o')
                                       msg=($_.Message -replace "`r`n",' ') }})
+}
 
 $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
@@ -125,9 +132,22 @@ def _parse_wlan(text):
     return out
 
 
-def sample():
-    """One reading of the current network state, or None if unavailable."""
-    data = _ps_json(PS_NET, timeout=90)
+def sample(with_log=False):
+    """One reading of the current network state, or None if unavailable.
+
+    `with_log` also pulls Windows' WLAN history. That is the expensive half —
+    a week of events, parsed — and it does not change between two samples five
+    minutes apart, so the caller decides how often it is worth paying for.
+    """
+    old = os.environ.get("SENTRY_WLAN_LOG")
+    os.environ["SENTRY_WLAN_LOG"] = "1" if with_log else "0"
+    try:
+        data = _ps_json(PS_NET, timeout=90)
+    finally:
+        if old is None:
+            os.environ.pop("SENTRY_WLAN_LOG", None)
+        else:
+            os.environ["SENTRY_WLAN_LOG"] = old
     if not data:
         return None
     wlan = _parse_wlan(data.get("wlan"))
@@ -209,7 +229,15 @@ def _event(store, ts, iface, kind, severity, detail, prev="", curr=""):
 
 def record(store, s=None):
     """Store one sample and raise events for anything that changed."""
-    s = s or sample()
+    if s is None:
+        # The WLAN history is re-read every half hour, not every sample: it
+        # covers a week and cannot change meaningfully in five minutes, and
+        # fetching it was most of this collector's cost.
+        last = int(store.get_meta("netwatch_log_at", 0) or 0)
+        want_log = (now() - last) > 1800
+        s = sample(with_log=want_log)
+        if s and want_log:
+            store.set_meta("netwatch_log_at", now())
     if not s:
         return []
     iface = s["iface"]

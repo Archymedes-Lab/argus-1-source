@@ -50,9 +50,17 @@ PAGE = os.path.join(HERE, "static", "dashboard.html")
 # checks silently starving behind a four-minute firewall audit and serving
 # hour-old snapshots that still looked current.
 #
-# Measured costs on this machine: firewall up to 240s, intrusion ~105s, spy
-# ~21s, posture ~19s, control ~16s, implant ~15s, hidden ~11s, netwatch ~8s,
-# everything else under 7s.
+# Measured on this machine, not estimated. The expensive collectors are the
+# ones that cross the WSL interop boundary and ask Windows for a lot: the cost
+# is the query, not the interop — a bare powershell.exe round trip is 0.5s.
+#
+#   hidden 14s   netwatch 10s   implant 15s   posture 14s   intrusion 106s
+#   firewall 18s   control 16s   spy 22s   memscan 90s   feeds 90s
+#   sysmon 1.5s (incremental; 23s before)   scan 2.2s   secrets 60s
+#   coverage/hunt/gaps under 0.5s — they only touch SQLite
+#
+# Sysmon earned its short interval by reading only what happened since the
+# last run instead of re-reading a day of log every time.
 JOBS = {
     "scan":     (60,    "Processes & network"),
     "hidden":   (300,   "Hidden processes"),
@@ -158,7 +166,9 @@ def _run_job(name, hosts):
     if name == "sysmon":
         store = Store(_run_job.db_path)
         try:
-            return sysmon.audit(store=store, hosts=hosts)
+            # Incremental: each run reads only what happened since the
+            # last one, instead of re-reading a day of log every ten minutes.
+            return sysmon.audit(store=store, hosts=hosts, incremental=True)
         finally:
             store.close()
     if name == "input":
