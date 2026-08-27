@@ -5,8 +5,11 @@ import json
 import sys
 import time
 
-from . import (asep, collect_windows, control, detect, firewall, hidden,
-               intrusion, monitor, spyware, startup)
+from . import (asep, backdoor, collect_windows, control, coverage, detect,
+               feeds,
+               firewall, hidden, evasion, hunt, implant, intel, intrusion,
+               inputwatch, memscan, monitor, netwatch, posture, spyware,
+               startup)
 from .store import DEFAULT_DB, Store
 from .util import iso, now, short
 
@@ -180,6 +183,15 @@ SECTION = {
     "extension": "BROWSER EXTENSIONS — what can read your sessions",
     "staging": "STAGED FILES — recent unsigned executables",
     "loader": "LOADER ABUSE — code injected into other processes",
+    "collectors": "COLLECTOR HEALTH — is every check actually running?",
+    "daemon": "CONTINUITY — is the monitor running, and will it survive a reboot?",
+    "visibility": "BLIND SPOTS — what this system currently cannot see",
+    "limits": "BY DESIGN — what this approach can never see",
+    "byovd": "KERNEL INTEGRITY — vulnerable drivers and what blocks them",
+    "ads": "ALTERNATE DATA STREAMS — files hidden inside other files",
+    "lnk": "SHORTCUTS — what they show versus what they run",
+    "c2": "DEAD-DROP C2 — commands and exfil over reputable services",
+    "unicode": "INVISIBLE CHARACTERS — displayed text that is not executed text",
     "logon": "LOGON CHAIN",
     "com": "COM REGISTRATIONS",
     "privileged": "PRIVILEGED PLUMBING — code loaded by system services",
@@ -293,6 +305,29 @@ def cmd_intrusion(args, store):
             empty="no intrusion artifacts found")
 
 
+def cmd_coverage(args, store):
+    print("Auditing the monitor itself — what is blind, stale or not running…\n")
+    findings = coverage.sort_findings(coverage.audit(db_path=store.path))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=coverage.SEV_ORDER, show_ok=True,
+            empty="coverage is complete")
+
+
+def cmd_evasion(args, store):
+    print("Checking kernel integrity, hidden streams, shortcuts and dead-drop "
+          "egress…\n")
+    findings = evasion.sort_findings(evasion.audit())
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=evasion.SEV_ORDER, show_ok=True,
+            empty="no evasion artifacts found")
+
+
 def cmd_asep(args, store):
     print("Auditing autostart extensibility points…\n")
     findings = asep.sort_findings(asep.audit())
@@ -319,9 +354,18 @@ def cmd_investigate(args, store):
         ("STARTUP", startup.audit),
         ("SPYWARE & CAPABILITY USE", lambda: spyware.sort_findings(spyware.audit())),
         ("INTRUSION ARTIFACTS", lambda: intrusion.sort_findings(intrusion.audit())),
+        ("EVASION & KERNEL INTEGRITY", lambda: evasion.sort_findings(evasion.audit())),
         ("AUTOSTART EXTENSIBILITY", lambda: asep.sort_findings(asep.audit())),
         ("FIREWALL & INBOUND", lambda: firewall.audit(hosts=hosts)),
         ("CONTROL SURFACES", lambda: control.audit(hosts=hosts)),
+        ("INTERCEPTION & BOUNDARY BYPASS", lambda: implant.audit(hosts=hosts)),
+        ("NETWORK & WIRELESS", lambda: netwatch.audit(store)),
+        ("SECURITY POSTURE", lambda: posture.audit(hosts=hosts)),
+        ("BACKDOORS & ACCESS GRANTS", lambda: backdoor.audit(hosts=hosts)),
+        ("SYNTHETIC INPUT", lambda: inputwatch.audit(store)),
+        ("MEMORY & INSTRUCTION LEVEL", lambda: memscan.audit(hosts=hosts)),
+        ("THREAT-INTEL MATCHES", lambda: hunt.sort_findings(
+            hunt.hunt(store, hosts=hosts))),
     ]
     worst = {}
     for title, fn in sections:
@@ -344,6 +388,255 @@ def cmd_investigate(args, store):
     tally = "  ".join(f"{k}={worst[k]}" for k in
                       ("critical", "high", "medium", "low") if k in worst)
     print(f"{color('TOTAL', 'bold', t)}   {tally or 'nothing at medium or above'}")
+
+
+
+def cmd_intel(args, store):
+    """Refresh the threat-intelligence knowledge base."""
+    t = _tty()
+    if args.set_key:
+        path = intel.save_key(args.set_key)
+        print(f"key stored in {path} (mode 0600, outside the repository)")
+        return
+    if args.revet:
+        st = intel.revet(store)
+        print(f"re-vetted {st['checked']} indicators — "
+              f"{st['dropped']} dropped, {st['moved']} reclassified")
+        for why, n in sorted(st["reasons"].items(), key=lambda kv: -kv[1])[:12]:
+            print(f"  {n:4}  {why}")
+        return
+    if args.show:
+        info = intel.summary(store)
+        print(f"documents     {info['docs']}")
+        print(f"indicators    {info['total']} active")
+        for kind, n in sorted(info["by_kind"].items(), key=lambda kv: -kv[1]):
+            print(f"  {kind:10} {n}")
+        last = info["last_refresh"]
+        print(f"last refresh  {iso(last) if last else 'never'}")
+        print(f"api spend     ${info['spend']:.3f} total")
+        return
+
+    topics = args.topic or None
+    if args.all:
+        topics = list(intel.CORPUS)
+    label = ", ".join(topics) if topics else "the least recently refreshed topic"
+    print(f"Fetching threat intelligence for {label}…\n")
+
+    def progress(topic, query):
+        print(color(f"  [{topic}] {short(query, 64)}", "dim", t))
+
+    try:
+        stats = intel.refresh(store, topics=topics, per_query=args.results,
+                              days=args.days, on_progress=progress)
+    except intel.IntelError as exc:
+        print(color(f"intel refresh failed: {exc}", "high", t))
+        return 1
+
+    print()
+    print(f"  {stats['queries']} queries · {stats['docs']} documents "
+          f"· ${stats['cost']:.3f}")
+    print(f"  {stats['kept']} indicators kept, {stats['rejected']} rejected "
+          f"of {stats['seen']} candidates")
+    if stats["not_research"]:
+        print(color(f"  {stats['not_research']} documents were not threat research",
+                    "dim", t))
+    if args.verbose and stats["reasons"]:
+        print(color("\n  why candidates were rejected:", "dim", t))
+        for why, n in sorted(stats["reasons"].items(), key=lambda kv: -kv[1])[:12]:
+            print(color(f"    {n:4}  {why}", "dim", t))
+    for err in stats["errors"]:
+        print(color(f"  {err}", "medium", t))
+
+
+def cmd_implant(args, store):
+    """Interception, boundary bypass and trust subversion."""
+    print("Auditing interception, network-boundary bypass and trust "
+          "subversion…\n")
+    findings = implant.audit(hosts=_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=implant.SEV_ORDER, show_ok=True,
+            empty="no interception or boundary-bypass artifacts found")
+
+
+def cmd_memscan(args, store):
+    """Executable memory with no file behind it, and patched syscall stubs."""
+    print("Scanning process memory for unbacked code and hooked stubs…\n")
+    findings = memscan.audit(hosts=_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=memscan.SEV_ORDER, show_ok=True,
+            empty="no unbacked executable memory or patched stubs found")
+
+
+def cmd_inputwatch(args, store):
+    """Synthetic keystrokes and clicks — input no hardware produced."""
+    t = _tty()
+    if args.start:
+        err = inputwatch.start()
+        print(color(f"  {err}", "medium", t) if err
+              else "  injected-input monitor started")
+        if err and err != "already running":
+            return 1
+    if args.stop:
+        err = inputwatch.stop()
+        print(f"  {err or 'injected-input monitor stopped'}")
+        return
+    findings = inputwatch.audit(store, hours=args.hours)
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=inputwatch.SEV_ORDER, show_ok=True,
+            empty="no synthetic input recorded")
+
+
+def cmd_backdoor(args, store):
+    """Ways back in: keys, grants, units, profiles, accounts."""
+    print("Auditing remote-access grants, privilege grants and login "
+          "persistence…\n")
+    findings = backdoor.audit(hosts=_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=backdoor.SEV_ORDER, show_ok=True,
+            empty="no backdoor mechanisms found")
+
+
+def cmd_posture(args, store):
+    """Windows security posture: what is on, off, and what to set."""
+    print("Auditing Windows security posture…\n")
+    if args.elevate:
+        print(color("  a UAC prompt will appear on the Windows desktop — "
+                    "accept it to read BitLocker, TPM and Defender exclusions",
+                    "dim", _tty()))
+    findings = posture.audit(hosts=_hosts(args), elevate=args.elevate)
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=posture.SEV_ORDER, show_ok=True,
+            empty="posture could not be read")
+
+
+def cmd_netwatch(args, store):
+    """Sample network state, then report what the history shows."""
+    t = _tty()
+    if args.timeline:
+        rows = netwatch.timeline(store, hours=args.hours)
+        if not rows:
+            print("no network events recorded yet")
+            return
+        for r in rows:
+            sev = r["severity"]
+            print(f"{iso(r['ts'])}  {color(sev.upper()[:4].ljust(4), sev, t)}  "
+                  f"{r['kind']:22} {short(r['detail'], 76)}")
+        return
+    if not args.no_sample:
+        events = netwatch.record(store)
+        for e in events:
+            print(color(f"  {e['severity']}: {e['detail']}", e["severity"], t))
+    findings = netwatch.audit(store, hours=args.hours)
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=netwatch.SEV_ORDER, show_ok=True,
+            empty="no network changes recorded")
+
+
+def cmd_feeds(args, store):
+    """Refresh the free bulk indicator feeds."""
+    t = _tty()
+    if args.status:
+        rows = feeds.status(store)
+        if not rows:
+            print("no feed has run yet — run `sentry feeds`")
+            return
+        for r in rows:
+            when = iso(r["last_run"]) if r["last_run"] else "never"
+            line = (f"  {r['name']:16} {when}  {r['kept']:>7} kept "
+                    f"of {r['rows']:>7}  {r['bytes'] / 1024:>8.0f} KiB")
+            print(line + (color("  " + r["error"], "high", t) if r["error"] else ""))
+        return
+    if args.prune:
+        n = feeds.prune(store, days=args.days)
+        print(f"retired {n} feed indicators not seen in {args.days} days")
+        return
+
+    print("Refreshing bulk indicator feeds…\n")
+
+    def progress(name, desc):
+        print(color(f"  {name:16} {desc}", "dim", t))
+
+    results = feeds.refresh(store, names=args.feed or None, force=args.force,
+                            on_progress=progress)
+    if args.attack or args.force:
+        print(color("  attack           MITRE ATT&CK technique catalogue", "dim", t))
+        results.append(feeds.refresh_attack(store, force=args.force))
+
+    print()
+    total = 0
+    for r in results:
+        if r.get("skipped"):
+            continue
+        if r.get("error"):
+            print(color(f"  {r['name']:16} failed: {r['error']}", "medium", t))
+            continue
+        total += r.get("kept", 0)
+        print(f"  {r['name']:16} {r.get('kept', 0):>7} kept "
+              f"of {r.get('rows', 0):>7} rows")
+    if not results:
+        print("  every feed is still within its refresh interval "
+              "(use --force to override)")
+    else:
+        print(f"\n  {total} indicators added or refreshed")
+
+
+def cmd_hunt(args, store):
+    """Check every stored indicator against this machine."""
+    t = _tty()
+    info = intel.summary(store)
+    if not info["total"]:
+        print("no indicators yet — run `sentry intel` first")
+        return
+    print(f"Hunting {info['total']} indicators from {info['docs']} writeups "
+          f"across {'+'.join(_hosts(args))}…\n")
+    findings = hunt.sort_findings(hunt.hunt(store, hosts=_hosts(args)))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            empty="no indicator matched anything on this machine")
+
+
+def cmd_gaps(args, store):
+    """What current intel talks about that no collector checks."""
+    t = _tty()
+    findings, covered, closeable = hunt.gaps(store, min_docs=args.min_docs)
+    if args.json:
+        print(json.dumps({"gaps": findings,
+                          "covered": [{"id": c[0], "docs": c[1], "by": c[2]}
+                                      for c in covered]}, indent=2))
+        return
+    total = len(covered) + len(closeable)
+    if not total:
+        print("no ATT&CK techniques in the knowledge base yet — run `sentry intel`")
+        return
+    pct = 100.0 * len(covered) / total
+    print(f"of the techniques in current intel that leave host artifacts, "
+          f"{len(covered)} of {total} are covered ({pct:.0f}%)\n")
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            empty="every technique in current intel is covered")
+    if args.verbose and covered:
+        print(color("\n  already covered:", "dim", t))
+        for tid, n, where in covered[:40]:
+            print(color(f"    {tid:11} ×{n:<3} {where}", "dim", t))
 
 
 def cmd_procs(args, store):
@@ -477,6 +770,20 @@ def build_parser():
     it.add_argument("--json", action="store_true")
     it.set_defaults(fn=cmd_intrusion)
 
+    cv = sub.add_parser("coverage",
+                        help="self-audit: blind spots, stale collectors, failures")
+    cv.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    cv.add_argument("-v", "--verbose", action="store_true")
+    cv.add_argument("--json", action="store_true")
+    cv.set_defaults(fn=cmd_coverage)
+
+    ev = sub.add_parser("evasion",
+                        help="BYOVD, alternate data streams, LNK abuse, dead-drop C2")
+    ev.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    ev.add_argument("-v", "--verbose", action="store_true")
+    ev.add_argument("--json", action="store_true")
+    ev.set_defaults(fn=cmd_evasion)
+
     ap = sub.add_parser("asep",
                         help="autostart extensibility points beyond Run keys")
     ap.add_argument("--severity", choices=["critical", "high", "medium", "low"])
@@ -495,6 +802,114 @@ def build_parser():
     inv.add_argument("--severity", choices=["critical", "high", "medium", "low"])
     inv.add_argument("-v", "--verbose", action="store_true")
     inv.set_defaults(fn=cmd_investigate)
+
+
+    it2 = sub.add_parser("intel",
+                         help="refresh the threat-intelligence knowledge base")
+    it2.add_argument("--topic", action="append",
+                     choices=sorted(intel.CORPUS),
+                     help="refresh only this topic (repeatable)")
+    it2.add_argument("--all", action="store_true", help="refresh every topic")
+    it2.add_argument("--results", type=int, default=6,
+                     help="results per query (default 6)")
+    it2.add_argument("--days", type=int, default=365,
+                     help="only consider writeups published in the last N days")
+    it2.add_argument("--set-key", metavar="KEY", help="store the Exa API key")
+    it2.add_argument("--revet", action="store_true",
+                     help="re-judge stored indicators against the current rules")
+    it2.add_argument("--show", action="store_true",
+                     help="show what the knowledge base holds")
+    it2.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    it2.add_argument("-v", "--verbose", action="store_true")
+    it2.add_argument("--json", action="store_true")
+    it2.set_defaults(fn=cmd_intel)
+
+    mem = sub.add_parser("memscan",
+                         help="unbacked executable memory, hooked ntdll stubs, "
+                              "process mitigations")
+    mem.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    mem.add_argument("-v", "--verbose", action="store_true")
+    mem.add_argument("--json", action="store_true")
+    mem.set_defaults(fn=cmd_memscan)
+
+    iw = sub.add_parser("inputwatch",
+                        help="detect keystrokes and clicks no hardware produced")
+    iw.add_argument("--start", action="store_true", help="start the hook helper")
+    iw.add_argument("--stop", action="store_true", help="stop the hook helper")
+    iw.add_argument("--hours", type=int, default=24,
+                    help="how far back to report (default 24)")
+    iw.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    iw.add_argument("-v", "--verbose", action="store_true")
+    iw.add_argument("--json", action="store_true")
+    iw.set_defaults(fn=cmd_inputwatch)
+
+    bd = sub.add_parser("backdoor",
+                        help="SSH keys, sudo grants, autostart units, accounts")
+    bd.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    bd.add_argument("-v", "--verbose", action="store_true")
+    bd.add_argument("--json", action="store_true")
+    bd.set_defaults(fn=cmd_backdoor)
+
+    po = sub.add_parser("posture",
+                        help="Windows security settings: what is on and what to set")
+    po.add_argument("--elevate", action="store_true",
+                    help="re-run through a UAC prompt to read the "
+                         "administrator-only checks")
+    po.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    po.add_argument("-v", "--verbose", action="store_true")
+    po.add_argument("--json", action="store_true")
+    po.set_defaults(fn=cmd_posture)
+
+    nw = sub.add_parser("netwatch",
+                        help="record network state and report tampering signs")
+    nw.add_argument("--hours", type=int, default=24,
+                    help="how far back to report (default 24)")
+    nw.add_argument("--timeline", action="store_true",
+                    help="print the recorded event history instead")
+    nw.add_argument("--no-sample", action="store_true",
+                    help="report only; do not take a new sample")
+    nw.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    nw.add_argument("-v", "--verbose", action="store_true")
+    nw.add_argument("--json", action="store_true")
+    nw.set_defaults(fn=cmd_netwatch)
+
+    im = sub.add_parser("implant",
+                        help="interception, boundary bypass, trust subversion")
+    im.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    im.add_argument("-v", "--verbose", action="store_true")
+    im.add_argument("--json", action="store_true")
+    im.set_defaults(fn=cmd_implant)
+
+    fd = sub.add_parser("feeds",
+                        help="refresh free bulk indicator feeds (no API key)")
+    fd.add_argument("--feed", action="append", choices=sorted(feeds.FEEDS),
+                    help="refresh only this feed (repeatable)")
+    fd.add_argument("--force", action="store_true",
+                    help="refresh even if not yet due")
+    fd.add_argument("--attack", action="store_true",
+                    help="also refresh the MITRE ATT&CK catalogue")
+    fd.add_argument("--status", action="store_true", help="show feed health")
+    fd.add_argument("--prune", action="store_true",
+                    help="retire feed indicators no longer listed")
+    fd.add_argument("--days", type=int, default=90,
+                    help="staleness threshold for --prune (default 90)")
+    fd.set_defaults(fn=cmd_feeds)
+
+    hu = sub.add_parser("hunt",
+                        help="check stored indicators against this machine")
+    hu.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    hu.add_argument("-v", "--verbose", action="store_true")
+    hu.add_argument("--json", action="store_true")
+    hu.set_defaults(fn=cmd_hunt)
+
+    gp = sub.add_parser("gaps",
+                        help="techniques in current intel that nothing checks")
+    gp.add_argument("--min-docs", type=int, default=1,
+                    help="only techniques seen in at least N writeups")
+    gp.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    gp.add_argument("-v", "--verbose", action="store_true")
+    gp.add_argument("--json", action="store_true")
+    gp.set_defaults(fn=cmd_gaps)
 
     pr = sub.add_parser("procs", help="list fingerprints in the baseline")
     pr.add_argument("--approved", type=int, choices=[0, 1])

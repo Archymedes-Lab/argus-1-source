@@ -26,8 +26,13 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import control, firewall, hidden, monitor, spyware, startup
+from . import (backdoor, control, feeds, firewall, hidden, hunt, implant,
+               intel,
+               inputwatch, memscan, monitor, netwatch, posture, spyware,
+               startup)
 from . import asep as asep_mod
+from . import coverage as coverage_mod
+from . import evasion as evasion_mod
 from . import intrusion as intrusion_mod
 from .store import DEFAULT_DB, Store
 from .util import now
@@ -36,15 +41,49 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "static", "dashboard.html")
 
 # name -> (interval seconds, label, callable(hosts) -> list[finding])
+# Intervals have to fit through one worker. The scheduler runs jobs strictly
+# one at a time on purpose — two concurrent powershell.exe launches are slower
+# than running them back to back and fight over the same interop pipe — so the
+# sum of (duration / interval) across every job is a duty cycle that must stay
+# well under 1. Adding the intel and forensics collectors pushed it over, and
+# the symptom was exactly what coverage.py is built to catch: short-interval
+# checks silently starving behind a four-minute firewall audit and serving
+# hour-old snapshots that still looked current.
+#
+# Measured costs on this machine: firewall up to 240s, intrusion ~105s, spy
+# ~21s, posture ~19s, control ~16s, implant ~15s, hidden ~11s, netwatch ~8s,
+# everything else under 7s.
 JOBS = {
     "scan":     (60,    "Processes & network"),
     "hidden":   (300,   "Hidden processes"),
-    "firewall": (900,   "Firewall & inbound"),
+    "firewall": (2400,  "Firewall & inbound"),
     "control":  (1800,  "Control surfaces"),
     "asep":     (3600,  "Autostart points"),
-    "spy":      (3600,  "Spyware & capabilities"),
-    "intrusion":(1800,  "Intrusion artifacts"),
+    "spy":      (5400,  "Spyware & capabilities"),
+    "intrusion":(5400,  "Intrusion artifacts"),
+    "evasion":  (1200,  "Evasion & kernel integrity"),
+    "coverage": (600,   "Self-audit & blind spots"),
     "boot":     (21600, "Startup analysis"),
+    # Local and cheap: compare what intel knows against what is on the box.
+    "hunt":     (1800,  "Threat-intel indicator hunt"),
+    "gaps":     (21600, "Detection coverage vs current intel"),
+    # Networked and metered. One topic per run, so the corpus rotates itself
+    # and the daily budget guard in intel.py is what actually bounds spend.
+    "intel":    (21600, "Threat-intelligence refresh"),
+    # Free, unauthenticated and high volume. Each feed has its own publisher
+    # cadence; this job just asks which are due.
+    "feeds":    (3600,  "Bulk indicator feeds"),
+    "implant":  (3600,  "Interception & boundary bypass"),
+    # Short interval on purpose: the value is a continuous record, and a drop
+    # that happened between two samples is a drop that cannot be investigated.
+    "netwatch": (300,   "Network & wireless state"),
+    "posture":  (7200,  "Windows security posture"),
+    "backdoor": (3600,  "Backdoors & access grants"),
+    # Cheap: the helper does the watching, this only drains its output file.
+    "input":    (300,   "Synthetic input"),
+    # Walks every readable process's address space; expensive, so it runs
+    # rarely and its cost is accounted for in the duty cycle above.
+    "memscan":  (7200,  "Memory & instruction level"),
 }
 
 
@@ -94,8 +133,90 @@ def _run_job(name, hosts):
         return spyware.sort_findings(spyware.audit())
     if name == "intrusion":
         return intrusion_mod.sort_findings(intrusion_mod.audit())
+    if name == "evasion":
+        return evasion_mod.sort_findings(evasion_mod.audit())
+    if name == "coverage":
+        return coverage_mod.sort_findings(
+            coverage_mod.audit(db_path=_run_job.db_path, hosts=hosts))
     if name == "boot":
         return startup.sort_findings(startup.audit())
+    if name == "implant":
+        return implant.audit(hosts=hosts)
+    if name == "posture":
+        return posture.audit(hosts=hosts)
+    if name == "backdoor":
+        return backdoor.audit(hosts=hosts)
+    if name == "memscan":
+        return memscan.audit(hosts=hosts)
+    if name == "input":
+        store = Store(_run_job.db_path)
+        try:
+            return inputwatch.audit(store)
+        finally:
+            store.close()
+    if name == "netwatch":
+        store = Store(_run_job.db_path)
+        try:
+            netwatch.record(store)
+            return netwatch.audit(store)
+        finally:
+            store.close()
+
+    if name == "feeds":
+        store = Store(_run_job.db_path)
+        try:
+            results = feeds.refresh(store)
+            results.append(feeds.refresh_attack(store))
+            out = []
+            for r in results:
+                if r.get("error"):
+                    out.append({"category": "feed", "severity": "medium",
+                                "host": "wsl",
+                                "title": f"{r['name']} feed failed",
+                                "detail": r["error"], "where": ""})
+            kept = sum(r.get("kept", 0) for r in results if not r.get("error"))
+            if kept:
+                out.append({"category": "feed", "severity": "low", "host": "wsl",
+                            "title": f"{kept} indicators refreshed",
+                            "detail": ", ".join(
+                                r["name"] for r in results
+                                if r.get("kept")), "where": ""})
+            feeds.prune(store)
+            return out
+        finally:
+            store.close()
+
+    if name in ("hunt", "gaps", "intel"):
+        store = Store(_run_job.db_path)
+        try:
+            if name == "hunt":
+                return hunt.sort_findings(hunt.hunt(store, hosts=hosts))
+            if name == "gaps":
+                return hunt.gaps(store)[0]
+            try:
+                stats = intel.refresh(store)
+            except intel.BudgetExceeded as exc:
+                # Not a failure: the brake worked. Say so quietly and keep the
+                # previous findings on the dashboard.
+                return [{"category": "intel", "severity": "low",
+                         "host": "wsl", "title": "intel refresh paused",
+                         "detail": str(exc), "where": ""}]
+            out = []
+            if stats["errors"]:
+                out.append({
+                    "category": "intel", "severity": "medium", "host": "wsl",
+                    "title": "intel refresh had errors",
+                    "detail": "; ".join(stats["errors"])[:400], "where": ""})
+            out.append({
+                "category": "intel", "severity": "low", "host": "wsl",
+                "title": f"refreshed {', '.join(stats['topics'])}",
+                "detail": f"{stats['docs']} documents, {stats['kept']} indicators "
+                          f"kept of {stats['seen']} candidates, "
+                          f"${stats['cost']:.3f}",
+                "where": ""})
+            return out
+        finally:
+            store.close()
     raise ValueError(name)
 
 
@@ -158,28 +279,71 @@ class Scheduler(threading.Thread):
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
 
+def _intel_state(store):
+    """Knowledge-base health, so the page shows what the hunt is hunting with.
+
+    A hunt that finds nothing is only reassuring if the thing doing the hunting
+    is current. Showing the indicator count, the age of each feed and the last
+    refresh makes "no findings" mean something.
+    """
+    try:
+        kinds = {r["kind"]: r["n"] for r in store.db.execute(
+            "SELECT kind, COUNT(*) n FROM indicators WHERE status='active' "
+            "GROUP BY kind ORDER BY n DESC")}
+        feeds_rows = [dict(r) for r in store.db.execute(
+            "SELECT name,last_run,rows,kept,error FROM feed_runs ORDER BY name")]
+        hits = [dict(r) for r in store.db.execute(
+            "SELECT ts,kind,value,host,severity,evidence FROM hunt_hits "
+            "ORDER BY ts DESC LIMIT 20")]
+        docs = store.db.execute(
+            "SELECT COUNT(*) FROM intel_docs").fetchone()[0]
+        today = time.strftime("%Y%m%d")
+        return {
+            "total": sum(kinds.values()),
+            "kinds": kinds,
+            "docs": docs,
+            "feeds": feeds_rows,
+            "hits": hits,
+            "last_refresh": int(store.get_meta("intel_last_refresh", 0) or 0),
+            "last_hunt": int(store.get_meta("hunt_last_run", 0) or 0),
+            "spend_today": float(store.get_meta(f"intel_spend_{today}", 0) or 0),
+            "spend_total": float(store.get_meta("intel_spend_total", 0) or 0),
+        }
+    except Exception:
+        return {"total": 0, "kinds": {}, "docs": 0, "feeds": [], "hits": [],
+                "last_refresh": 0, "last_hunt": 0,
+                "spend_today": 0.0, "spend_total": 0.0}
+
+
 def build_state(db_path, scheduler):
     store = Store(db_path)
     try:
         snaps = store.get_snapshots()
-        jobs, all_findings = [], []
+        jobs, all_findings, all_checks = [], [], []
         for name, (interval, label) in JOBS.items():
             s = snaps.get(name)
-            counts = {}
+            counts, ok_count = {}, 0
             if s:
                 for f in s["findings"]:
                     sev = f.get("severity")
-                    if sev and sev != "ok":
+                    if sev == "ok":
+                        # "Checked and found clean" is a result, not an absence
+                        # of one. Without it the page cannot distinguish a check
+                        # that passed from a check that never ran.
+                        ok_count += 1
+                        all_checks.append({**f, "job": name})
+                    elif sev:
                         counts[sev] = counts.get(sev, 0) + 1
-                for f in s["findings"]:
-                    if f.get("severity") != "ok":
                         all_findings.append({**f, "job": name})
             jobs.append({
                 "name": name, "label": label, "interval": interval,
                 "ts": s["ts"] if s else 0,
                 "duration": round(s["duration"], 1) if s else 0,
                 "error": (s["error"] or "")[:400] if s else "",
-                "counts": counts,
+                "counts": counts, "ok": ok_count,
+                "stale": bool(s and s["ts"]
+                              and (time.time() - s["ts"]) > max(interval * 2,
+                                                                interval + 300)),
                 "running": scheduler.current == name,
                 "next": int(scheduler.next_run.get(name, 0) - time.time()),
             })
@@ -191,14 +355,47 @@ def build_state(db_path, scheduler):
         for f in all_findings:
             totals[f["severity"]] = totals.get(f["severity"], 0) + 1
 
+        all_checks.sort(key=lambda f: (f.get("job", ""), f.get("title", "")))
+
+        by_host = {}
+        for f in all_findings:
+            h = f.get("host") or "?"
+            by_host.setdefault(h, {})
+            by_host[h][f["severity"]] = by_host[h].get(f["severity"], 0) + 1
+
+        by_category = {}
+        for f in all_findings:
+            c = f.get("category") or "other"
+            by_category[c] = by_category.get(c, 0) + 1
+
+        def _count(sql):
+            try:
+                return store.db.execute(sql).fetchone()[0]
+            except Exception:
+                return 0
+
         return {
             "now": now(),
             "worst": worst,
             "totals": totals,
+            "by_host": by_host,
+            "by_category": by_category,
             "jobs": jobs,
-            "findings": all_findings[:400],
+            "findings": all_findings[:1000],
+            "findings_total": len(all_findings),
+            "checks": all_checks,
             "history": store.get_history(24),
-            "peers": [dict(r) for r in store.list_peers(scope="public", limit=25)],
+            "peers": [dict(r) for r in store.list_peers(scope="public", limit=60)],
+            "events": [dict(r) for r in store.list_events(limit=40)],
+            "stats": {
+                "procs": _count("SELECT COUNT(*) FROM procs"),
+                "approved": _count("SELECT COUNT(*) FROM procs WHERE approved=1"),
+                "peers": _count("SELECT COUNT(*) FROM peers"),
+                "peers_public": _count(
+                    "SELECT COUNT(*) FROM peers WHERE scope='public'"),
+                "events": _count("SELECT COUNT(*) FROM events"),
+            },
+            "intel": _intel_state(store),
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
         }

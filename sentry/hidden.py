@@ -123,6 +123,65 @@ def view_stat_sweep(limit=DEFAULT_SWEEP):
     return found
 
 
+# ---------------------------------------------------------------------------
+# Linux view 4: the signal path — no filesystem involved at all
+# ---------------------------------------------------------------------------
+
+def view_kill_probe(limit=DEFAULT_SWEEP):
+    """Ask the kernel whether a pid exists by trying to signal it.
+
+    Every view above this one goes through procfs, so a rootkit that filters
+    procfs defeats all of them at once. kill(pid, 0) delivers nothing but
+    resolves the pid through the kernel's pid hash table instead, which is a
+    different structure reached by a different path. ESRCH means no such
+    process; success or EPERM both mean it is there.
+    """
+    found = set()
+    for pid in range(1, limit + 1):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            found.add(pid)          # exists, owned by someone else
+            continue
+        except OSError:
+            continue
+        found.add(pid)
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Linux view 5: the scheduler's own task list
+# ---------------------------------------------------------------------------
+
+# Task rows look like:  " R          systemd     1      6462.573889   ..."
+_SCHED_ROW = re.compile(r"^\s*[RS>]?\s+(\S+)\s+(\d+)\s+\d")
+
+
+def view_sched_debug():
+    """Read pids out of /proc/sched_debug.
+
+    The scheduler prints every task on every runqueue. It is generated from the
+    runqueues rather than from the procfs directory tree, so a rootkit that
+    hides a /proc/<pid> entry has to remember to scrub this too, and most do
+    not. Returns None when the kernel was built without CONFIG_SCHED_DEBUG,
+    which is a missing view rather than a clean one.
+    """
+    text = _read(f"{PROC}/sched_debug")
+    if not text.strip():
+        return None
+    pids = set()
+    for line in text.splitlines():
+        m = _SCHED_ROW.match(line)
+        if m:
+            try:
+                pids.add(int(m.group(2)))
+            except ValueError:
+                continue
+    return pids or None
+
+
 def pid_max():
     try:
         with open(f"{PROC}/sys/kernel/pid_max") as fh:
@@ -337,6 +396,106 @@ def bpf_programs():
     return progs, holders
 
 
+# Names that eBPF rootkits give their pinned maps. A hiding rootkit has to keep
+# the list of what it is hiding somewhere, and a pinned map is the usual place —
+# which means the map can be read back to recover exactly what was concealed.
+BPF_HIDE_MAPS = re.compile(r"hidden_(pids?|names?|inodes?|files?|ports?)|"
+                           r"(pid|name|inode|port)s?_to_hide|hide_(pid|list|map)",
+                           re.I)
+
+
+def bpf_hidden_pins():
+    """Walk /sys/fs/bpf looking for pinned objects that exist to hide things.
+
+    This is the rare check that can do better than 'something is wrong': if a
+    map named hidden_pids is present, its contents are the answer.
+    """
+    out, names = [], []
+    root = "/sys/fs/bpf"
+    if not os.path.isdir(root):
+        return out
+    for dirpath, dirnames, filenames in os.walk(root):
+        for n in list(dirnames) + list(filenames):
+            names.append(os.path.join(dirpath, n))
+    for path in names:
+        base = os.path.basename(path)
+        if BPF_HIDE_MAPS.search(base):
+            out.append(_finding(
+                "critical", "eBPF object pinned under a concealment name",
+                f"{base} — an eBPF map by this name exists to hold the list of "
+                f"pids, filenames or ports being hidden from you. Read it with "
+                f"`sudo bpftool map dump pinned {path}` to recover what was "
+                f"concealed.",
+                path))
+    if names and not out:
+        out.append(_finding("ok", "pinned eBPF objects",
+                            f"{len(names)} pinned under /sys/fs/bpf, none named "
+                            f"for concealment", root))
+    elif not names:
+        out.append(_finding("ok", "no pinned eBPF objects",
+                            "/sys/fs/bpf is empty", root))
+    return out
+
+
+def io_uring_state():
+    """io_uring is the current way to act without making syscalls.
+
+    It can read and write files, open sockets and spawn processes through a
+    shared ring buffer, so a tool that watches syscalls sees nothing at all —
+    this is the blind spot the 'Curing' proof-of-concept rootkit was written to
+    demonstrate. Nothing here is evidence of compromise on its own; it is
+    exposure, plus the list of who is currently using it.
+    """
+    out = []
+    disabled = _read(f"{PROC}/sys/kernel/io_uring_disabled").strip()
+
+    users = []
+    for entry in os.listdir(PROC):
+        if not entry.isdigit():
+            continue
+        fddir = f"{PROC}/{entry}/fd"
+        try:
+            fds = os.listdir(fddir)
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                if "io_uring" in os.readlink(f"{fddir}/{fd}"):
+                    users.append(int(entry))
+                    break
+            except OSError:
+                continue
+
+    for pid in users:
+        info = _describe(pid)
+        out.append(_finding(
+            "medium", "process is using io_uring",
+            f"pid {pid} ({info['name']}) holds an io_uring ring — its file, "
+            f"socket and process operations do not appear as syscalls. Legitimate "
+            f"for databases, proxies and modern runtimes; confirm you know this one.",
+            info["cmdline"] or info["exe"] or ""))
+
+    if disabled == "0":
+        out.append(_finding(
+            "low", "io_uring is available to every process",
+            "io_uring_disabled=0. Setting it to 2 disables io_uring entirely and "
+            "closes the syscall-monitoring blind spot, at the cost of breaking "
+            "software that genuinely uses it.",
+            f"{PROC}/sys/kernel/io_uring_disabled"))
+    elif disabled == "2":
+        out.append(_finding("ok", "io_uring is disabled kernel-wide",
+                            "io_uring_disabled=2 — the syscall-bypass path is shut",
+                            f"{PROC}/sys/kernel/io_uring_disabled"))
+    elif disabled:
+        out.append(_finding("ok", "io_uring is restricted",
+                            f"io_uring_disabled={disabled}",
+                            f"{PROC}/sys/kernel/io_uring_disabled"))
+    if not users:
+        out.append(_finding("ok", "no process is using io_uring",
+                            "no open io_uring ring in any visible process", ""))
+    return out
+
+
 def ftrace_hooks():
     """Kernel functions currently hooked via ftrace — how many rootkits patch
     syscalls without touching the syscall table itself."""
@@ -443,6 +602,8 @@ def audit_linux(deep=False):
     readdir = view_readdir()
     getdents = view_getdents()
     swept = view_stat_sweep(sweep_limit)
+    signalled = view_kill_probe(sweep_limit)
+    sched = view_sched_debug()
 
     # Anything the sweep can stat but the listing omitted. Re-verify, because a
     # process that simply exited between the two passes looks identical here.
@@ -482,10 +643,57 @@ def audit_linux(deep=False):
                     info["cmdline"] or info["exe"],
                 ))
 
+    # -- the signal path vs procfs ----------------------------------------
+    # Everything above reaches the kernel through procfs, so one rootkit that
+    # filters procfs defeats all of them together. kill(pid, 0) resolves through
+    # the pid hash table instead, and a pid that answers a signal while having no
+    # /proc entry at all is hidden below the filesystem layer.
+    ghosts = sorted(signalled - readdir - swept)
+    if ghosts:
+        time.sleep(0.35)
+        fresh_read, fresh_sig = view_readdir(), view_kill_probe(sweep_limit)
+        for pid in ghosts:
+            if pid in fresh_sig and pid not in fresh_read and not is_thread(pid):
+                info = _describe(pid)
+                out.append(_finding(
+                    "critical", "pid answers signals but has no /proc entry",
+                    f"pid {pid} accepts kill(pid, 0) while procfs denies it "
+                    f"exists — procfs is being filtered below the point every "
+                    f"other view reads from",
+                    f"name={info['name'] or '?'} exe={info['exe'] or '?'}"))
+    else:
+        out.append(_finding("ok", "signal view agrees with /proc",
+                            f"{len(signalled)} pids answer kill(pid, 0), all of "
+                            f"them present in procfs", f"1–{sweep_limit}"))
+
+    # -- the scheduler's view ---------------------------------------------
+    if sched is None:
+        out.append(_finding(
+            "low", "scheduler view unavailable",
+            "/proc/sched_debug is absent — this kernel was built without "
+            "CONFIG_SCHED_DEBUG, so the runqueue cross-check was skipped",
+            f"{PROC}/sched_debug"))
+    else:
+        missing = sorted(p for p in sched - readdir if _alive(p) and not is_thread(p))
+        for pid in missing:
+            info = _describe(pid)
+            out.append(_finding(
+                "critical", "process on a runqueue but absent from /proc",
+                f"pid {pid} ({info['name']}) is scheduled by the kernel yet does "
+                f"not appear in the process listing",
+                info["cmdline"] or info["exe"] or ""))
+        if not missing:
+            out.append(_finding("ok", "scheduler view agrees with /proc",
+                                f"{len(sched)} scheduled tasks, all visible",
+                                f"{PROC}/sched_debug"))
+
     for path in proc_overmounts():
         out.append(_finding("critical", "/proc entry is bind-mounted over",
                             f"{path} is masked by a mount, hiding that process",
                             "/proc/self/mountinfo"))
+
+    out.extend(bpf_hidden_pins())
+    out.extend(io_uring_state())
 
     # -- hidden listeners --------------------------------------------------
     port_limit = 65535 if deep else 10000
@@ -573,6 +781,163 @@ $o.tasklist = @((tasklist /fo csv /nh 2>$null) -split "`n" | Where-Object { $_ -
                                    [pscustomobject]@{ name=$p[0].Trim('"'); pid=[int]($p[1]) } })
 $o.netpids  = @((Get-NetTCPConnection).OwningProcess | Sort-Object -Unique)
 
+# --- view 5: OpenProcess sweep, i.e. the PspCidTable ----------------------
+# The classic way to hide a process on Windows is DKOM: unlink its EPROCESS
+# from ActiveProcessLinks, which is the list every enumeration API above walks.
+# The handle table (PspCidTable) is a *separate* kernel structure, and unlinking
+# from one does not unlink from the other -- so a pid that opens successfully
+# while appearing in none of the enumerations is the signature of that attack.
+# The loop lives in C# because 16k P/Invoke calls from PowerShell would take
+# minutes; Windows pids are always multiples of four, so only those are tried.
+Add-Type -ErrorAction SilentlyContinue -TypeDefinition @'
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class PidSweep {
+  const uint STILL_ACTIVE = 259;
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern bool CloseHandle(IntPtr h);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern bool GetExitCodeProcess(IntPtr h, out uint code);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern bool QueryFullProcessImageName(IntPtr h, uint flags, StringBuilder buf, ref uint size);
+
+  // A pid that opens is NOT necessarily a running process. When a process
+  // exits, its kernel object -- and therefore its pid -- stays valid for as
+  // long as anything still holds a handle to it, so OpenProcess keeps
+  // succeeding on something that is already gone. Reporting those as concealed
+  // processes produced ~27 false positives on an ordinary desktop. The exit
+  // code is what separates the two: a live process has none yet.
+  // 0 = nothing there. 1 = confirmed running. 2 = something is there but it
+  // will not let us look, so we cannot tell running from already-exited.
+  // Keeping 2 separate matters: ERROR_ACCESS_DENIED is returned both by
+  // protected processes and by pids we have no way to qualify, and treating it
+  // as proof of a concealed process is guesswork dressed up as a critical alert.
+  public static int Probe(int pid) {
+    IntPtr h = OpenProcess(0x1000, false, (uint)pid);
+    if (h == IntPtr.Zero) {
+      return Marshal.GetLastWin32Error() == 5 ? 2 : 0;
+    }
+    uint code;
+    bool got = GetExitCodeProcess(h, out code);
+    CloseHandle(h);
+    if (!got) return 2;
+    return code == STILL_ACTIVE ? 1 : 0;
+  }
+
+  public static bool Alive(int pid) { return Probe(pid) == 1; }
+
+  // A concealed process still has a backing image; a dead object has none, so
+  // this doubles as a second confirmation and names the binary in the report.
+  public static string Image(int pid) {
+    IntPtr h = OpenProcess(0x1000, false, (uint)pid);
+    if (h == IntPtr.Zero) return "";
+    var sb = new StringBuilder(1024); uint n = 1024;
+    string s = QueryFullProcessImageName(h, 0, sb, ref n) ? sb.ToString() : "";
+    CloseHandle(h);
+    return s;
+  }
+
+  public static int[] Live(int max) {
+    var found = new List<int>();
+    for (uint pid = 4; pid <= (uint)max; pid += 4) {
+      if (Probe((int)pid) == 1) found.Add((int)pid);
+    }
+    return found.ToArray();
+  }
+  public static int[] Opaque(int max) {
+    var found = new List<int>();
+    for (uint pid = 4; pid <= (uint)max; pid += 4) {
+      if (Probe((int)pid) == 2) found.Add((int)pid);
+    }
+    return found.ToArray();
+  }
+}
+'@
+
+# A sweep of 16k pids takes long enough that processes start and exit while it
+# runs, and either one looks exactly like a concealed process. So the sweep is
+# bracketed by two enumerations and only pids missing from BOTH survive, then
+# each survivor is re-opened and re-checked against a third, fresh listing. What
+# is left is a pid that was continuously openable and continuously absent, which
+# no amount of ordinary process churn can produce.
+$before = @{}
+@(Get-CimInstance Win32_Process | ForEach-Object { $_.ProcessId }) +
+  @(Get-Process | ForEach-Object { $_.Id }) | ForEach-Object { $before[[int]$_] = $true }
+
+$sweep = @()
+try { $sweep = [int[]][PidSweep]::Live(65535) } catch { $sweep = @() }
+
+$after = @{}
+@(Get-CimInstance Win32_Process | ForEach-Object { $_.ProcessId }) +
+  @(Get-Process | ForEach-Object { $_.Id }) | ForEach-Object { $after[[int]$_] = $true }
+
+$cand = @($sweep | Where-Object { -not $before.ContainsKey($_) -and -not $after.ContainsKey($_) })
+
+Start-Sleep -Milliseconds 400
+$third = @{}
+@(Get-CimInstance Win32_Process | ForEach-Object { $_.ProcessId }) +
+  @(Get-Process | ForEach-Object { $_.Id }) +
+  @((tasklist /fo csv /nh 2>$null) -split "`n" | Where-Object { $_ -match '^"' } |
+      ForEach-Object { [int](($_ -split '","')[1]) }) |
+  ForEach-Object { $third[[int]$_] = $true }
+
+$o.openable = @($cand |
+    Where-Object { -not $third.ContainsKey($_) -and [PidSweep]::Alive($_) } |
+    ForEach-Object { [pscustomobject]@{ pid=[int]$_; image=[string][PidSweep]::Image($_) } })
+$o.openableTotal = @($sweep).Count
+# Pids that exist in some form but refuse inspection. Reported as a gap in
+# coverage, not as a detection.
+$opaque = @()
+try { $opaque = [int[]][PidSweep]::Opaque(65535) } catch { $opaque = @() }
+$o.opaque = @($opaque | Where-Object { -not $third.ContainsKey($_) })
+
+# --- view 6: the thread list ----------------------------------------------
+# Threads are tracked separately from processes. A process unlinked from the
+# process list still has threads, and they still name their owning process.
+$o.threadOwners = @((Get-CimInstance Win32_Thread |
+                     Select-Object -ExpandProperty ProcessHandle) |
+                    Sort-Object -Unique | ForEach-Object { [int]$_ })
+
+# --- view 7: the performance subsystem ------------------------------------
+# Perfmon reads process data through a different provider chain again.
+$o.perfpids = @()
+try {
+  $o.perfpids = @((Get-Counter '\Process(*)\ID Process' -ErrorAction Stop).CounterSamples |
+                  ForEach-Object { [int]$_.CookedValue } | Where-Object { $_ -gt 0 } |
+                  Sort-Object -Unique)
+} catch { $o.perfpids = @() }
+
+# --- view 8: what the service controller thinks is running ----------------
+$o.svcpids = @(Get-CimInstance Win32_Service | Where-Object { $_.ProcessId -gt 0 } |
+               ForEach-Object { [int]$_.ProcessId } | Sort-Object -Unique)
+
+# --- verification pass ------------------------------------------------------
+# Views 6-8 are each a single snapshot taken at a slightly different instant
+# from the enumerations they are compared against, so a process that starts or
+# exits in between shows up as concealed. Every candidate is therefore re-tested
+# against one final, fresh listing and re-probed for life; only a pid that is
+# still running and still absent survives. Without this the scan reports a
+# couple of phantom criticals per run, which is worse than reporting nothing.
+$verify = @{}
+@(Get-CimInstance Win32_Process | ForEach-Object { $_.ProcessId }) +
+  @(Get-Process | ForEach-Object { $_.Id }) +
+  @((tasklist /fo csv /nh 2>$null) -split "`n" | Where-Object { $_ -match '^"' } |
+      ForEach-Object { [int](($_ -split '","')[1]) }) |
+  ForEach-Object { $verify[[int]$_] = $true }
+
+function Confirm-Ghosts($pids) {
+  @($pids | Where-Object {
+      $_ -gt 4 -and -not $verify.ContainsKey($_) -and [PidSweep]::Probe($_) -eq 1 } |
+    ForEach-Object { [pscustomobject]@{ pid=[int]$_; image=[string][PidSweep]::Image($_) } })
+}
+$o.ghostThreads = Confirm-Ghosts $o.threadOwners
+$o.ghostPerf    = Confirm-Ghosts $o.perfpids
+$o.ghostSvc     = Confirm-Ghosts $o.svcpids
+
 $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 """
@@ -621,9 +986,77 @@ def audit_windows():
                             f"process listing",
                             "Get-NetTCPConnection vs process views"))
 
+    # -- the DKOM cross-view ----------------------------------------------
+    # Everything above walks ActiveProcessLinks, one kernel list. These three
+    # reach process objects by other routes, so a pid they can see while the
+    # enumerations cannot is the signature of a process unlinked from that list.
+    enumerated = set(wmi) | set(api) | set(tl)
+    threads = {p for p in _aslist(data.get("threadOwners")) if isinstance(p, int)}
+    perf = {p for p in _aslist(data.get("perfpids")) if isinstance(p, int)}
+    svc = {p for p in _aslist(data.get("svcpids")) if isinstance(p, int)}
+
+    # pid 0 and 4 are the System process and have no ordinary listing entry.
+    IGNORE = {0, 4}
+
+    # The handle-table suspects are already triple-verified inside PowerShell
+    # (see PS_HIDDEN), so anything still here survived two bracketing
+    # enumerations, a third fresh listing and a re-opened handle.
+    for s in _aslist(data.get("openable")):
+        pid = s.get("pid") if isinstance(s, dict) else None
+        if pid is None or pid in IGNORE:
+            continue
+        image = (s.get("image") or "").strip()
+        out.append(_finding(
+            "critical", "process visible only to the handle table",
+            f"pid {pid} ({image or 'no image name'}) is running — not merely a "
+            f"handle held open on a dead object — yet appears in no enumeration. "
+            f"The handle table (PspCidTable) still holds it, which is what "
+            f"unlinking an EPROCESS from ActiveProcessLinks (DKOM) leaves behind",
+            image or "OpenProcess vs WMI/Get-Process/tasklist"))
+
+    opaque = {p for p in _aslist(data.get("opaque")) if isinstance(p, int)} - IGNORE
+    if opaque:
+        out.append(_finding(
+            "low", "some pids could not be qualified",
+            f"{len(opaque)} pid(s) return ERROR_ACCESS_DENIED to a limited-info "
+            f"open, so this scan cannot tell a protected process from an already "
+            f"exited one and does not guess: {', '.join(str(p) for p in sorted(opaque)[:10])}"
+            + (" …" if len(opaque) > 10 else "")
+            + ". Running the audit elevated resolves them.",
+            "OpenProcess"))
+
+    for src_name, src, ghost_key, note in (
+        ("the thread list", threads, "ghostThreads",
+         "owns running threads while appearing in no process listing"),
+        ("the performance counters", perf, "ghostPerf",
+         "is reported by the performance subsystem but by no enumeration API"),
+        ("the service controller", svc, "ghostSvc",
+         "is registered as a running service's process but appears in no listing"),
+    ):
+        if not src:
+            out.append(_finding("low", f"{src_name} view unavailable",
+                                "this cross-check was skipped", "Windows"))
+            continue
+        # Already re-verified against a fourth enumeration inside PowerShell.
+        ghosts = [g for g in _aslist(data.get(ghost_key))
+                  if isinstance(g, dict) and g.get("pid") not in IGNORE]
+        for g in ghosts:
+            image = (g.get("image") or "").strip()
+            out.append(_finding(
+                "critical", f"process visible only to {src_name}",
+                f"pid {g.get('pid')} ({image or 'no image name'}) {note}, and is "
+                f"still running when re-checked",
+                image or f"{src_name} vs WMI/Get-Process/tasklist"))
+        if not ghosts:
+            out.append(_finding("ok", f"{src_name} agrees with the process listings",
+                                f"{len(src)} pids, none of them concealed", ""))
+
     out.append(_finding("ok", "cross-view scan complete",
                         f"{len(wmi)} via WMI, {len(api)} via process API, "
-                        f"{len(tl)} via tasklist", ""))
+                        f"{len(tl)} via tasklist, "
+                        f"{data.get('openableTotal', 0)} via OpenProcess sweep, "
+                        f"{len(threads)} via threads, {len(perf)} via perf counters",
+                        ""))
     for f in out:
         f["host"] = "win"
     return out, data

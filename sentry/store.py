@@ -80,6 +80,162 @@ CREATE TABLE IF NOT EXISTS history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_history_ts ON history(ts DESC);
+
+-- ── Threat intelligence ────────────────────────────────────────────────
+-- Fetched security writeups. Text is kept only long enough to extract from;
+-- what persists is the extraction, not the article.
+CREATE TABLE IF NOT EXISTS intel_docs (
+    url        TEXT PRIMARY KEY,
+    title      TEXT DEFAULT '',
+    published  TEXT DEFAULT '',
+    topic      TEXT DEFAULT '',
+    query      TEXT DEFAULT '',
+    fetched_at INTEGER NOT NULL,
+    text_len   INTEGER NOT NULL DEFAULT 0,
+    n_indicators INTEGER NOT NULL DEFAULT 0
+);
+
+-- One observable extracted from a writeup. Never authoritative on its own:
+-- an indicator can only ever raise suspicion, never clear it.
+CREATE TABLE IF NOT EXISTS indicators (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    norm       TEXT NOT NULL,
+    confidence TEXT NOT NULL DEFAULT 'medium',
+    topic      TEXT DEFAULT '',
+    context    TEXT DEFAULT '',
+    source_url TEXT NOT NULL,
+    first_seen INTEGER NOT NULL,
+    last_seen  INTEGER NOT NULL,
+    doc_count  INTEGER NOT NULL DEFAULT 1,
+    status     TEXT NOT NULL DEFAULT 'active',
+    source     TEXT NOT NULL DEFAULT 'exa',
+    malware    TEXT DEFAULT '',
+    UNIQUE(kind, norm)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ind_kind ON indicators(kind, status);
+
+-- The ATT&CK catalogue, so a technique id can be shown with its real name and
+-- gap analysis can talk about behaviour instead of numbers.
+CREATE TABLE IF NOT EXISTS attack_techniques (
+    tid       TEXT PRIMARY KEY,
+    name      TEXT NOT NULL,
+    tactics   TEXT DEFAULT '',
+    platforms TEXT DEFAULT '',
+    updated   INTEGER NOT NULL
+);
+
+-- Continuous network state. Sampled on a short interval and kept, because
+-- the question "when did the wifi drop, and was anything else happening then?"
+-- can only ever be answered from history that was already being recorded.
+CREATE TABLE IF NOT EXISTS net_samples (
+    ts        INTEGER NOT NULL,
+    iface     TEXT NOT NULL,
+    state     TEXT DEFAULT '',
+    ssid      TEXT DEFAULT '',
+    bssid     TEXT DEFAULT '',
+    channel   INTEGER DEFAULT 0,
+    band      TEXT DEFAULT '',
+    auth      TEXT DEFAULT '',
+    cipher    TEXT DEFAULT '',
+    signal    INTEGER DEFAULT 0,
+    ipv4      TEXT DEFAULT '',
+    gateway   TEXT DEFAULT '',
+    gw_mac    TEXT DEFAULT '',
+    dns       TEXT DEFAULT '',
+    PRIMARY KEY (ts, iface)
+);
+
+CREATE INDEX IF NOT EXISTS idx_net_ts ON net_samples(ts DESC);
+
+-- A transition worth remembering: a drop, a disable, an access point swap.
+CREATE TABLE IF NOT EXISTS net_events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       INTEGER NOT NULL,
+    iface    TEXT DEFAULT '',
+    kind     TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    detail   TEXT DEFAULT '',
+    prev     TEXT DEFAULT '',
+    curr     TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_netev_ts ON net_events(ts DESC);
+
+-- Access points this machine has associated with, so a familiar SSID
+-- appearing on unfamiliar hardware is visible as such.
+CREATE TABLE IF NOT EXISTS known_aps (
+    ssid       TEXT NOT NULL,
+    bssid      TEXT NOT NULL,
+    auth       TEXT DEFAULT '',
+    first_seen INTEGER NOT NULL,
+    last_seen  INTEGER NOT NULL,
+    seen_count INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (ssid, bssid)
+);
+
+-- Synthetic input. Only injected events are stored, never real keystrokes and
+-- never what was typed — see sentry/win/inputhook.ps1 for why.
+CREATE TABLE IF NOT EXISTS input_events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       INTEGER NOT NULL,
+    kind     TEXT NOT NULL,
+    lower_il INTEGER NOT NULL DEFAULT 0,
+    class    TEXT DEFAULT '',
+    fg       TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_input_ts ON input_events(ts DESC);
+
+-- Heartbeats, so a dead hook and a quiet keyboard are distinguishable.
+CREATE TABLE IF NOT EXISTS input_beats (
+    ts             INTEGER PRIMARY KEY,
+    real_keys      INTEGER NOT NULL DEFAULT 0,
+    injected_keys  INTEGER NOT NULL DEFAULT 0,
+    real_clicks    INTEGER NOT NULL DEFAULT 0,
+    injected_clicks INTEGER NOT NULL DEFAULT 0,
+    real_moves     INTEGER NOT NULL DEFAULT 0,
+    injected_moves INTEGER NOT NULL DEFAULT 0,
+    lat_avg_ms     INTEGER NOT NULL DEFAULT 0,
+    lat_max_ms     INTEGER NOT NULL DEFAULT 0,
+    lat_over50     INTEGER NOT NULL DEFAULT 0,
+    lat_samples    INTEGER NOT NULL DEFAULT 0
+);
+
+-- Per-feed bookkeeping: when it last ran, how big it was, whether it worked.
+CREATE TABLE IF NOT EXISTS feed_runs (
+    name      TEXT PRIMARY KEY,
+    last_run  INTEGER NOT NULL,
+    rows      INTEGER NOT NULL DEFAULT 0,
+    kept      INTEGER NOT NULL DEFAULT 0,
+    bytes     INTEGER NOT NULL DEFAULT 0,
+    error     TEXT DEFAULT ''
+);
+
+-- A live match of an indicator against this machine.
+CREATE TABLE IF NOT EXISTS hunt_hits (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts        INTEGER NOT NULL,
+    kind      TEXT NOT NULL,
+    value     TEXT NOT NULL,
+    host      TEXT NOT NULL,
+    severity  TEXT NOT NULL,
+    evidence  TEXT DEFAULT '',
+    source_url TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_hits_ts ON hunt_hits(ts DESC);
+
+-- Cache of file hashes so a hunt does not re-read every binary each pass.
+CREATE TABLE IF NOT EXISTS file_hashes (
+    path    TEXT PRIMARY KEY,
+    sha256  TEXT NOT NULL,
+    size    INTEGER NOT NULL,
+    mtime   INTEGER NOT NULL,
+    hashed_at INTEGER NOT NULL
+);
 """
 
 
@@ -89,8 +245,44 @@ class Store:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
+        # The indicator tables grow into the hundreds of thousands of rows and
+        # are written in large batches by the feeds while the dashboard reads
+        # from another thread. WAL keeps readers from blocking on those writes;
+        # the rest trades a little crash-durability for bulk-insert speed, which
+        # is the right trade for a cache that can be rebuilt by re-fetching.
+        for pragma in ("journal_mode=WAL", "synchronous=NORMAL",
+                       "cache_size=-65536", "temp_store=MEMORY",
+                       "mmap_size=268435456", "busy_timeout=10000"):
+            try:
+                self.db.execute(f"PRAGMA {pragma}")
+            except sqlite3.Error:
+                pass
         self.db.executescript(SCHEMA)
+        self._migrate()
         self.db.commit()
+
+    def _migrate(self):
+        """Add columns introduced after a database was first created."""
+        beat = {r[1] for r in self.db.execute("PRAGMA table_info(input_beats)")}
+        for col in ("real_moves", "injected_moves", "lat_avg_ms", "lat_max_ms",
+                    "lat_over50", "lat_samples"):
+            if col not in beat:
+                self.db.execute(
+                    f"ALTER TABLE input_beats ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+        have = {r[1] for r in self.db.execute("PRAGMA table_info(indicators)")}
+        for col, decl in (("source", "TEXT NOT NULL DEFAULT 'exa'"),
+                          ("malware", "TEXT DEFAULT ''")):
+            if col not in have:
+                self.db.execute(f"ALTER TABLE indicators ADD COLUMN {col} {decl}")
+        self.db.execute("CREATE INDEX IF NOT EXISTS idx_ind_source "
+                        "ON indicators(source, last_seen)")
+        # hunt joins the peer table against indicators by address, so the
+        # address needs its own index once peers number in the tens of
+        # thousands. Without it every hunt is a full scan of peers.
+        self.db.execute("CREATE INDEX IF NOT EXISTS idx_peers_ip "
+                        "ON peers(remote_ip)")
+        self.db.execute("CREATE INDEX IF NOT EXISTS idx_peers_rdns "
+                        "ON peers(rdns)")
 
     def close(self):
         self.db.close()

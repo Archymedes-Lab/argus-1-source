@@ -82,12 +82,20 @@ at logon, with no visible window.
 Run this ONCE in Windows PowerShell (no elevation needed):
 
   $a = New-ScheduledTaskAction -Execute "wsl.exe" `
-       -Argument "-d Ubuntu -u $env:USERNAME --exec /bin/true"
-  $t = New-ScheduledTaskTrigger -AtLogOn
+       -Argument "-d Ubuntu --exec /bin/true"
+  $t = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+  $p = New-ScheduledTaskPrincipal -UserId $env:USERNAME `
+       -LogonType Interactive -RunLevel Limited
   $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
-       -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -Hidden
+       -DontStopIfGoingOnBatteries -StartWhenAvailable `
+       -ExecutionTimeLimit ([TimeSpan]::Zero)
   Register-ScheduledTask -TaskName "WSL sentry 24x7" -Action $a `
-       -Trigger $t -Settings $s -Description "Starts WSL so sentry keeps running"
+       -Trigger $t -Principal $p -Settings $s `
+       -Description "Starts WSL so sentry keeps running"
+
+RunLevel Limited is load-bearing: asking for -RunLevel Highest makes
+registration itself require an elevated shell and fails with 0x80070005.
+The task does not need admin — it only has to start WSL.
 
 Starting WSL is enough: systemd then starts sentry.service on its own,
 and linger keeps it up with no session attached.

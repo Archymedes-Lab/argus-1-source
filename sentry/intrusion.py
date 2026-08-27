@@ -98,10 +98,25 @@ $o.threats = @(Get-MpThreatDetection | Sort-Object InitialDetectionTime -Descend
       resources= [string]($t.Resources -join ' | ')
       id       = [string]$t.ThreatID
     } })
+# IsActive and "does the file still exist" are the two facts that decide whether
+# a Get-MpThreat entry is a live problem or a historical record. Defender keeps
+# naming a threat long after the file behind it is gone, so without these every
+# past detection reads as an ongoing compromise forever.
 $o.threatNames = @(Get-MpThreat | Select-Object -First 40 |
-  ForEach-Object { [pscustomobject]@{ name=[string]$_.ThreatName
-                                      severity=[string]$_.SeverityID
-                                      resources=[string]($_.Resources -join ' | ') } })
+  ForEach-Object {
+    $res = @($_.Resources)
+    $files = @($res | Where-Object { $_ -like 'file:_*' } |
+                      ForEach-Object { $_.Substring(6) })
+    [pscustomobject]@{
+      name      = [string]$_.ThreatName
+      severity  = [string]$_.SeverityID
+      resources = [string]($res -join ' | ')
+      active    = [bool]$_.IsActive
+      # $null when the threat names no file at all (registry/memory detections),
+      # which must not be mistaken for "the file is gone".
+      onDisk    = if ($files.Count -eq 0) { $null }
+                  else { [bool](@($files | Where-Object { Test-Path -LiteralPath $_ }).Count) }
+    } })
 
 # --- 4. Browser extensions -------------------------------------------------
 $ext = New-Object System.Collections.ArrayList
@@ -191,6 +206,41 @@ SUSPICIOUS_HISTORY = re.compile(
     re.I,
 )
 
+# Download-and-execute is also how half of developer tooling installs itself, so
+# shape alone cannot separate `iex (irm chocolatey.org/install.ps1)` from a
+# ClickFix payload. What does separate them is where the code comes from: an
+# HTTPS URL on a known vendor's own domain. A lure has to host its payload
+# somewhere, and it is never here.
+VENDOR_INSTALL = re.compile(
+    r"https://([a-z0-9-]+\.)*("
+    r"chocolatey\.org|community\.chocolatey\.org|"
+    r"astral\.sh|ollama\.com|rustup\.rs|sh\.rustup\.rs|"
+    r"get\.scoop\.sh|scoop\.sh|nodejs\.org|python\.org|"
+    r"aka\.ms|microsoft\.com|windows\.net|"
+    r"githubusercontent\.com/(docker|nvm-sh|Homebrew|oven-sh|pyenv)/|"
+    r"deb\.nodesource\.com|get\.docker\.com|starship\.rs|deno\.land|bun\.sh"
+    r")/",
+    re.I,
+)
+
+# A vendor domain only excuses the URL. If the same line also turns off a
+# defence or hides itself, the origin is beside the point.
+NEVER_BENIGN = re.compile(
+    r"set-mppreference\s+-disable|add-mppreference\s+-exclusionpath|"
+    r"-enc(odedcommand)?\s+[A-Za-z0-9+/=]{30,}|frombase64string|"
+    r"-w(indowstyle)?\s+hidden|disable-windowsoptionalfeature",
+    re.I,
+)
+
+
+def _history_severity(line: str) -> str:
+    if NEVER_BENIGN.search(line):
+        return "high"
+    if VENDOR_INSTALL.search(line):
+        return "low"
+    return "high"
+
+
 # Extensions that ship with the browser or are installed by Windows itself.
 STOCK_EXT = re.compile(r"^(Chrome Web Store Payments|Google Docs Offline|"
                        r"Microsoft Defender Browser Protection|"
@@ -229,7 +279,10 @@ def audit():
     hist = _aslist(data.get("psHistory"))
     hits = [h for h in hist if isinstance(h, str) and SUSPICIOUS_HISTORY.search(h)]
     for h in hits[:15]:
-        out.append(_finding("clickfix", "high", "suspicious PowerShell command in history",
+        sev = _history_severity(h)
+        title = ("download-and-execute from a known vendor domain"
+                 if sev == "low" else "suspicious PowerShell command in history")
+        out.append(_finding("clickfix", sev, title,
                             h[:150], data.get("psHistoryPath", "")))
     if hist and not hits:
         out.append(_finding("clickfix", "ok", "PowerShell history clean",
@@ -237,10 +290,24 @@ def audit():
                             f"download-and-execute or defence-tampering shapes", ""))
 
     # -- 3. Defender's own findings ---------------------------------------
+    # Grade on what is still true, not on the fact that Defender once said the
+    # name. A threat Defender still calls active is critical; an inactive one
+    # whose file is still sitting on disk is a live risk waiting to be run
+    # again; an inactive one whose file is gone is history, and reporting it
+    # forever trains you to ignore the category.
     for t in _aslist(data.get("threatNames")):
-        out.append(_finding("av", "critical", "Defender detected a threat",
-                            f"{t.get('name')} — {(t.get('resources') or '')[:110]}",
-                            "Get-MpThreat"))
+        active, on_disk = t.get("active"), t.get("onDisk")
+        if active:
+            sev, note = "critical", "still active"
+        elif on_disk:
+            sev, note = "high", "not active, but the file is still on disk"
+        elif on_disk is None:
+            sev, note = "medium", "not active; names no file to verify"
+        else:
+            sev, note = "low", "not active, file no longer on disk — historical"
+        out.append(_finding("av", sev, "Defender detected a threat",
+                            f"{t.get('name')} — {note}",
+                            (t.get("resources") or "")[:110] or "Get-MpThreat"))
     # Defender logs one detection per scan, so the same file appears repeatedly.
     # Collapse by resource and keep the worst outcome and latest time.
     detections = {}
