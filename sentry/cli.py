@@ -9,7 +9,7 @@ from . import (asep, backdoor, collect_windows, control, coverage, detect,
                feeds,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               spyware, startup)
+               spyware, startup, sysmon)
 from .store import DEFAULT_DB, Store
 from .util import iso, now, short
 
@@ -365,6 +365,7 @@ def cmd_investigate(args, store):
         ("SYNTHETIC INPUT", lambda: inputwatch.audit(store)),
         ("MEMORY & INSTRUCTION LEVEL", lambda: memscan.audit(hosts=hosts)),
         ("PLAINTEXT CREDENTIALS", lambda: secrets.audit()),
+        ("SYSMON TELEMETRY", lambda: sysmon.audit(store=store, hosts=hosts)),
         ("THREAT-INTEL MATCHES", lambda: hunt.sort_findings(
             hunt.hunt(store, hosts=hosts))),
     ]
@@ -460,6 +461,18 @@ def cmd_implant(args, store):
     _report(findings, verbose=args.verbose, severity=args.severity,
             sev_order=implant.SEV_ORDER, show_ok=True,
             empty="no interception or boundary-bypass artifacts found")
+
+
+def cmd_sysmon(args, store):
+    """Kernel-level telemetry: LSASS access, injection, tampering."""
+    print("Reading Sysmon telemetry…\n")
+    findings = sysmon.audit(store=store, hours=args.hours, hosts=_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=sysmon.SEV_ORDER, show_ok=True,
+            empty="Sysmon reported nothing of interest")
 
 
 def cmd_secrets(args, store):
@@ -840,6 +853,15 @@ def build_parser():
     it2.add_argument("-v", "--verbose", action="store_true")
     it2.add_argument("--json", action="store_true")
     it2.set_defaults(fn=cmd_intel)
+
+    sm = sub.add_parser("sysmon",
+                        help="LSASS access, injection and tampering from Sysmon")
+    sm.add_argument("--hours", type=int, default=24,
+                    help="how far back to read (default 24)")
+    sm.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    sm.add_argument("-v", "--verbose", action="store_true")
+    sm.add_argument("--json", action="store_true")
+    sm.set_defaults(fn=cmd_sysmon)
 
     sc = sub.add_parser("secrets",
                         help="credentials sitting in plaintext on disk")

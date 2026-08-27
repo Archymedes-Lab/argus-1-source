@@ -29,7 +29,7 @@ from urllib.parse import parse_qs, urlparse
 from . import (backdoor, control, feeds, firewall, hidden, hunt, implant,
                intel,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               spyware, startup)
+               spyware, startup, sysmon)
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
@@ -86,6 +86,9 @@ JOBS = {
     "memscan":  (7200,  "Memory & instruction level"),
     # Walks the home directory; slow, and secrets do not appear by the minute.
     "secrets":  (43200, "Plaintext credentials"),
+    # The interception layer. Frequent, because its value is catching things
+    # that start and exit between the sampling passes.
+    "sysmon":   (600,   "Sysmon telemetry"),
 }
 
 
@@ -152,6 +155,12 @@ def _run_job(name, hosts):
         return memscan.audit(hosts=hosts)
     if name == "secrets":
         return secrets.audit()
+    if name == "sysmon":
+        store = Store(_run_job.db_path)
+        try:
+            return sysmon.audit(store=store, hosts=hosts)
+        finally:
+            store.close()
     if name == "input":
         store = Store(_run_job.db_path)
         try:

@@ -77,6 +77,8 @@ read.
 | `posture` | Are the defenses that would have stopped this switched on? |
 | `netwatch` | What has the network been doing, and did anything tamper with it? |
 | `inputwatch` | Did anything type or move the cursor that was not a human? |
+| `sysmon` | What happened between two sampling passes? |
+| `secrets` | Which credentials are sitting in plaintext on this disk? |
 | `serve` | Run everything continuously behind a local dashboard. |
 
 ```bash
@@ -494,6 +496,29 @@ border was shown. Legacy GDI scraping — `BitBlt` against the screen DC — lea
 no such record and a sampling monitor cannot see it. That is a genuine blind
 spot rather than a covered one, and it is listed as such rather than papered
 over.
+
+## Sysmon: the ceiling this design otherwise has
+
+`coverage` reports its own limit honestly: *sampling, not interception —
+anything that starts and exits between two passes is never seen.* That is why
+`T1003` (OS credential dumping), the most-raised technique in the whole
+intelligence corpus, was marked unclosable. Catching a process opening LSASS
+means being told when it happens, not asking afterwards.
+
+Sysmon is a kernel driver that does exactly that. With it installed, `sysmon`
+reads process access (event 10), remote threads (8), image tampering (25),
+unsigned image loads (7), DNS queries (22) and process starts with hashes (1).
+
+The last two are worth more than their own findings. A DNS query is a name to
+check against the 53,000 domains in the corpus, and a process start carries a
+SHA-256 to check against 252,000 sample digests — so the knowledge base stops
+being something matched against *current* state and becomes something matched
+against everything that happened while nobody was looking.
+
+Reading the channel needs membership in `Event Log Readers`, or elevation.
+When that is missing the module says so and says how to fix it, because a log
+that cannot be read produces exactly the same silence as a machine with nothing
+wrong. That distinction is the whole reason `coverage.py` exists.
 
 ## Detecting how machines actually get broken into now
 
