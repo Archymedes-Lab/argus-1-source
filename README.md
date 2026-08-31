@@ -84,6 +84,7 @@ read.
 | `sniffing` | Is anything capturing traffic — promiscuous NICs, raw sockets, pcap drivers? |
 | `webshell` | Is there a command dispatcher sitting in a web server's document root? |
 | `auditd` | Is Linux syscall interception installed and actually recording? |
+| `sysmon-linux` | eBPF syscall events (execve, connect, ptrace, file writes) with rules. |
 | `serve` | Run everything continuously behind a local dashboard. |
 | `alert` | Email me when a collector stops recording or something critical fires. |
 
@@ -599,10 +600,19 @@ intel corpus. Three collectors were added to close its highest-signal misses:
   walks its document root for recently written server-side scripts whose
   contents read as a command dispatcher (an exec primitive beside a request
   variable, an `eval` of decoded input, an ASP page that shells out).
-- **`auditd`** — reports whether Linux has syscall interception at all. Its
-  absence is why `gaps` lists ~230 techniques as *not observable* rather than
-  *uncovered*; installing auditd and loading a ruleset moves them into range,
-  and `gaps` then counts them covered.
+- **`auditd`** — reports whether Linux has syscall interception at all. On WSL2
+  auditd cannot run (the kernel rejects the audit daemon), which the collector
+  now says explicitly.
+- **`sysmon-linux`** — the WSL2-viable alternative: Microsoft's **Sysmon for
+  Linux** hooks execve, connect, ptrace, raw disk reads and file create/delete
+  through eBPF and emits Windows-Sysmon-schema events to the journal. This
+  reads them incrementally and applies Linux-adapted rules — a shell spawned by
+  the web server, execution from a world-writable directory, a download-and-run
+  command line, a write to `authorized_keys` / cron / a systemd unit, one
+  process reading another's memory, a deleted log file, a recon burst — and
+  correlates observed destinations against the indicator corpus. Install steps
+  are in `sentry/sysmon_linux.py`. Once it is recording, `gaps` counts the
+  behavioural techniques covered.
 
 BITS transfer jobs (T1197) folded into `intrusion`, and several techniques that
 existing modules already answered (`secrets` → T1552, `intrusion` → T1539 /

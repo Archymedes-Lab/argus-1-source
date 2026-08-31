@@ -9,7 +9,7 @@ from . import (alert, asep, auditd, backdoor, bruteforce, collect_windows,
                control, coverage, detect, feeds,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               sniffing, spyware, startup, sysmon, webshell)
+               sniffing, spyware, startup, sysmon, sysmon_linux, webshell)
 from .store import DEFAULT_DB, Store
 from .util import iso, now, short
 
@@ -737,6 +737,18 @@ cmd_webshell = _simple_cmd(webshell, "no web server to audit")
 cmd_auditd = _simple_cmd(auditd, "syscall-interception posture unavailable")
 
 
+def cmd_sysmon_linux(args, store):
+    """eBPF syscall events from Sysmon for Linux."""
+    findings = sysmon_linux.audit(store=store, hosts=_hosts(args),
+                                  incremental=False)
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=sysmon_linux.SEV_ORDER, show_ok=True,
+            empty="no Sysmon-for-Linux events in the window")
+
+
 def cmd_alert(args, store):
     """Outbound email alerts through Resend — status, or a test send."""
     if args.test:
@@ -1057,6 +1069,8 @@ def build_parser():
          "dispatchers in web roots"),
         ("auditd", cmd_auditd, "is Linux syscall interception installed and "
          "recording?"),
+        ("sysmon-linux", cmd_sysmon_linux, "eBPF syscall events from Sysmon "
+         "for Linux, with rules"),
     ):
         _p = sub.add_parser(_name, help=_help)
         _p.add_argument("--severity",

@@ -29,7 +29,7 @@ from urllib.parse import parse_qs, urlparse
 from . import (alert, auditd, backdoor, bruteforce, control, feeds, firewall,
                hidden, hunt, implant, intel,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               sniffing, spyware, startup, sysmon, webshell)
+               sniffing, spyware, startup, sysmon, sysmon_linux, webshell)
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
@@ -110,6 +110,8 @@ JOBS = {
     "webshell": (21600, "Web shells"),
     # Is the Linux syscall-interception layer present and recording?
     "auditd":   (7200,  "Syscall interception posture"),
+    # eBPF syscall interception on Linux — reads incrementally, like sysmon.
+    "sysmon_linux":(600, "Sysmon for Linux (eBPF)"),
     # The interception layer. Frequent, because its value is catching things
     # that start and exit between the sampling passes.
     "sysmon":   (600,   "Sysmon telemetry"),
@@ -187,6 +189,12 @@ def _run_job(name, hosts):
         return webshell.audit(hosts=hosts)
     if name == "auditd":
         return auditd.audit(hosts=hosts)
+    if name == "sysmon_linux":
+        store = Store(_run_job.db_path)
+        try:
+            return sysmon_linux.audit(store=store, hosts=hosts, incremental=True)
+        finally:
+            store.close()
     if name == "sysmon":
         store = Store(_run_job.db_path)
         try:

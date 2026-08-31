@@ -485,15 +485,23 @@ _INTERCEPT = None
 
 
 def _intercept_active():
-    """True once auditd is recording — then the behavioural bucket is covered,
-    not merely unobservable. Probed once per process."""
+    """(active, name) — is a syscall-interception layer recording on this box?
+
+    auditd or Sysmon for Linux (eBPF). When one is, the behavioural bucket is
+    covered rather than merely unobservable. Probed once per process.
+    """
     global _INTERCEPT
     if _INTERCEPT is None:
-        try:
-            from . import auditd
-            _INTERCEPT = bool(auditd.active())
-        except Exception:
-            _INTERCEPT = False
+        _INTERCEPT = (False, "")
+        for name in ("auditd", "sysmon_linux"):
+            try:
+                mod = __import__(f"sentry.{name}", fromlist=[name])
+                if mod.active():
+                    _INTERCEPT = (True, "auditd" if name == "auditd"
+                                  else "Sysmon for Linux")
+                    break
+            except Exception:
+                continue
     return _INTERCEPT
 
 
@@ -533,8 +541,10 @@ def gaps(store, min_docs=1):
             continue
         tset = {t for t in (tactics or "").split(",") if t}
         if tset and tset <= BEHAVIOURAL_TACTICS:
-            if _intercept_active():
-                covered.append((tid, n, "auditd — syscall interception active"))
+            intercept_on, intercept_name = _intercept_active()
+            if intercept_on:
+                covered.append((tid, n,
+                                f"{intercept_name} — syscall interception active"))
             else:
                 behavioural.append((tid, n, "runtime behaviour — needs syscall "
                                             "interception (auditd/Sysmon)", name))
