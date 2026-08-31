@@ -33,13 +33,14 @@ SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CHANNEL = "journal:sysmon"
 
 WORLD_WRITABLE = ("/tmp/", "/dev/shm/", "/var/tmp/", "/run/user/", "/var/lib/php/")
+# Unambiguous web servers only. node/java/python host servers too but also host
+# most other things, so a shell under those is not on its own a signal.
 WEB_PARENTS = ("nginx", "httpd", "apache2", "php-fpm", "php-cgi", "php",
-               "caddy", "lighttpd", "tomcat", "gunicorn", "uwsgi", "node")
+               "caddy", "lighttpd", "tomcat", "gunicorn", "uwsgi")
 SHELLS = ("sh", "bash", "dash", "zsh", "ksh", "ash", "busybox")
-RECON_BINS = {"whoami", "id", "uname", "hostname", "hostnamectl", "ip",
-              "ifconfig", "ss", "netstat", "arp", "route", "ps", "w", "who",
-              "last", "lastlog", "crontab", "systemctl", "lsmod", "getent",
-              "groups", "env", "printenv"}
+RECON_BINS = {"whoami", "id", "uname", "hostname", "hostnamectl", "ifconfig",
+              "netstat", "arp", "route", "w", "who", "last", "lastlog",
+              "crontab", "lsmod", "nmap", "showmount", "rpcinfo"}
 REVSHELL_BINS = {"nc", "ncat", "netcat", "socat", "telnet"}
 PERSIST_PATHS = re.compile(
     r"/\.ssh/authorized_keys$|/etc/cron|/var/spool/cron|"
@@ -154,8 +155,14 @@ def _parse(text):
     return events
 
 
+def _clean(v):
+    v = (v or "").strip()
+    return "" if v in ("-", "<unknown process>", "<unknown>", "") else v
+
+
 def _base(path):
-    return os.path.basename((path or "").split()[0]) if path else ""
+    path = _clean(path)
+    return os.path.basename(path.split()[0]) if path else ""
 
 
 def _is_public_ip(ip):
@@ -179,6 +186,15 @@ def _is_public_ip(ip):
 
 # ── rules ──────────────────────────────────────────────────────────────────
 
+def _is_sentry(e):
+    """sentry shells out to ps/ss/ip/journalctl constantly — do not report
+    its own activity as reconnaissance or unexplained egress."""
+    blob = (str(e.get("ParentCommandLine", "")) + " "
+            + str(e.get("CommandLine", "")) + " "
+            + str(e.get("ParentImage", ""))).lower()
+    return "sentry" in blob or "-m sentry" in blob
+
+
 def _rules(events, store=None):
     out = []
     recon = {}
@@ -186,13 +202,17 @@ def _rules(events, store=None):
 
     for e in events:
         eid = e.get("id")
-        img = e.get("Image") or e.get("SourceImage") or ""
-        cmd = e.get("CommandLine") or ""
-        parent = e.get("ParentImage") or ""
+        img = _clean(e.get("Image") or e.get("SourceImage"))
+        cmd = _clean(e.get("CommandLine"))
+        parent = _clean(e.get("ParentImage"))
         base, pbase = _base(img), _base(parent)
+        mine = _is_sentry(e)
 
         if eid == 1:
-            if any(img.startswith(w) or f" {w}" in cmd for w in WORLD_WRITABLE):
+            # Only the executable's own path counts — a world-writable path in
+            # an argument (runc/containerd pass plenty) is not execution from
+            # there.
+            if img and img.startswith(WORLD_WRITABLE):
                 out.append(_finding(
                     "sysmon-linux", "high",
                     "process executed from a world-writable directory",
@@ -213,7 +233,7 @@ def _rules(events, store=None):
                     "sysmon-linux", "high",
                     f"{base} invoked with a connect-back argument",
                     cmd[:160], CHANNEL))
-            if base in RECON_BINS:
+            if base in RECON_BINS and not mine:
                 recon.setdefault(pbase or "?", set()).add(base)
 
         elif eid == 3:
@@ -224,9 +244,11 @@ def _rules(events, store=None):
                 dns_names.add(host.lower())
             if dst:
                 dests.add(dst)
-            if _is_public_ip(dst) and pbase not in (
+            if _is_public_ip(dst) and not mine and pbase not in (
                     "firefox", "chrome", "chromium", "curl", "wget", "apt",
-                    "snap", "packagekitd", "systemd", "NetworkManager"):
+                    "apt-get", "snap", "snapd", "packagekitd", "systemd",
+                    "NetworkManager", "dockerd", "containerd", "git", "gh",
+                    "ssh", "sshd", "code", "node", "python3", "bun"):
                 out.append(_finding(
                     "sysmon-linux", "medium",
                     f"outbound connection to {dst}:{port}",
@@ -266,13 +288,20 @@ def _rules(events, store=None):
                 f"for raw access — disk imaging or filesystem-bypass read",
                 CHANNEL))
 
+    # Container and build tooling legitimately runs a lot of these.
+    build_parents = {"runc", "containerd", "containerd-shim", "dockerd",
+                     "docker", "buildkitd", "bun", "node", "npm", "yarn",
+                     "make", "cmake", "cargo", "go", "bazel", "ansible-playbook"}
     for pbase, bins in recon.items():
-        if len(bins) >= 4:
+        # An unresolved parent means unattributable — and that bucket is
+        # dominated by short-lived system and monitoring processes.
+        if pbase and pbase != "?" and pbase not in build_parents and len(bins) >= 5:
             out.append(_finding(
                 "sysmon-linux", "medium",
                 f"host reconnaissance burst under {pbase}",
-                f"{', '.join(sorted(bins))} in a short window — enumeration "
-                f"that a sampling monitor would never have caught", CHANNEL))
+                f"{', '.join(sorted(bins))} from one parent in a short window — "
+                f"enumeration a sampling monitor would never have caught",
+                CHANNEL))
 
     if store is not None and (dns_names or dests):
         out += _correlate(store, dns_names, dests)
