@@ -111,17 +111,48 @@ def daemon_health():
         return [_finding("daemon", "medium", "systemd not available",
                          "cannot verify that the monitor runs continuously", "")]
 
+    # `--priority` moves the unit to the system manager (still running as this
+    # user) so it can hold a negative nice and OOM score. Accept either scope.
+    flag = "--user"
     active = _cmd(["systemctl", "--user", "is-active", "sentry.service"])
-    enabled = _cmd(["systemctl", "--user", "is-enabled", "sentry.service"])
+    if active != "active" and _cmd(["systemctl", "is-active", "sentry.service"]) \
+            == "active":
+        flag, active = "--system", "active"
+    scope = [] if flag == "--system" else ["--user"]
+    enabled = _cmd(["systemctl", *scope, "is-enabled", "sentry.service"])
+    hint = "" if flag == "--system" else "--user "
     if active != "active":
         out.append(_finding("daemon", "critical", "the monitor is not running",
                             f"sentry.service is '{active or 'unknown'}' — nothing "
                             f"is being collected right now",
-                            "systemctl --user status sentry.service"))
-    if enabled != "enabled":
+                            f"systemctl {hint}status sentry.service"))
+    if enabled not in ("enabled", "enabled-runtime", "static"):
         out.append(_finding("daemon", "high", "the monitor will not start on boot",
                             f"sentry.service is '{enabled or 'unknown'}'",
-                            "systemctl --user enable sentry.service"))
+                            f"systemctl {hint}enable sentry.service"))
+
+    # Priority: a monitor that loses CPU/IO contention or gets OOM-killed under
+    # load is not continuous when it matters most.
+    mainpid = _cmd(["systemctl", *scope, "show", "sentry.service",
+                    "-p", "MainPID", "--value"])
+    if mainpid.isdigit() and mainpid != "0":
+        try:
+            with open(f"/proc/{mainpid}/stat") as fh:
+                nice = int(fh.read().split(") ", 1)[1].split()[16])
+        except (OSError, IndexError, ValueError):
+            nice = 0
+        try:
+            with open(f"/proc/{mainpid}/oom_score_adj") as fh:
+                oom = int(fh.read().strip())
+        except (OSError, ValueError):
+            oom = 0
+        if nice > 0 or oom > 0:
+            out.append(_finding(
+                "daemon", "medium", "the monitor runs at default priority",
+                f"nice {nice}, oom_score_adj {oom} — under CPU, IO or memory "
+                f"pressure it can be starved or killed. `./install.sh "
+                f"--priority` moves it to the system manager with nice -10 and "
+                f"OOM immunity", "install.sh --priority"))
 
     linger = _cmd(["loginctl", "show-user", os.environ.get("USER", ""),
                    "--property=Linger"])

@@ -3,8 +3,9 @@
 Monitors what runs on this machine — both the WSL2 Linux side and the Windows
 host — and audits the ways something could take or keep control of it.
 
-Pure Python 3 standard library. No dependencies, no agent, no network calls
-unless you ask for `--enrich`.
+Pure Python 3 standard library. No dependencies, no agent, and no network calls
+unless you ask for one — `--enrich`, the `intel` feeds, or email alerts once you
+have put a Resend key in the config.
 
 ## Start here
 
@@ -79,7 +80,12 @@ read.
 | `inputwatch` | Did anything type or move the cursor that was not a human? |
 | `sysmon` | What happened between two sampling passes? |
 | `secrets` | Which credentials are sitting in plaintext on this disk? |
+| `bruteforce` | Is anything guessing passwords — failed-auth spikes, lockouts? |
+| `sniffing` | Is anything capturing traffic — promiscuous NICs, raw sockets, pcap drivers? |
+| `webshell` | Is there a command dispatcher sitting in a web server's document root? |
+| `auditd` | Is Linux syscall interception installed and actually recording? |
 | `serve` | Run everything continuously behind a local dashboard. |
+| `alert` | Email me when a collector stops recording or something critical fires. |
 
 ```bash
 sentry baseline          # learn the current state as known-good (do this once)
@@ -490,12 +496,118 @@ It also reads `LowLevelHooksTimeout`. Windows silently removes a hook that
 takes longer than that to return, default 300 ms, so software wanting to keep a
 slow hook alive has a motive to raise it. An unexplained increase is a finding.
 
+### Keeping the hook up
+
+The helper is Windows-side and does not survive a reboot, a WSL restart or
+being killed — and anything that wants to drive this machine unseen has a
+direct motive to kill it. So the daemon runs an `input_hook` watchdog every
+45 seconds:
+
+- **Liveness is the heartbeat, not the PID.** A hung hook still has a PID and a
+  forged pid file still names one. Past 90 s without a heartbeat the watchdog
+  crosses the interop boundary once to tell "process gone" (restart now) from
+  "process alive, drain delayed by a slow collector" (wait); past ~210 s an
+  alive-but-silent helper is treated as a removed hook and cycled.
+- **Restarts back off exponentially** (20 s to 10 min) keyed to consecutive
+  failures, so a crash loop cannot become a `powershell.exe` spawn loop.
+- **Repeated failure is itself a finding.** More than four restarts in six
+  hours is reported `high`: a security monitor that keeps dying is a detection,
+  not an operational annoyance. Eight consecutive failed restarts is `critical`.
+- **The helper script is content-pinned.** A change to the trusted source is
+  surfaced; a staged copy that does not match it aborts the restart rather than
+  launching something unexpected.
+
+The healthy path is local-only — drain the output file, check the heartbeat
+age — so running it every 45 s costs about 25 ms and no interop round trip.
+
+## Alerts: being told when it stops
+
+The dashboard is only useful when you are looking at it. `sentry alert` adds an
+outbound path for the findings that matter when you are not — a collector that
+crashed, a monitor that stopped recording, anything `critical`.
+
+It is off until you configure it, and it is the one component besides `intel`
+that reaches the network on its own. It sends through [Resend](https://resend.com)
+over HTTPS, standard library only. Put this in `~/.sentry/config.json` (kept
+`0600`):
+
+```json
+{
+  "resend_api_key": "re_...",
+  "alert_from": "sentry@yourdomain.com",
+  "alert_to": "you@example.com",
+  "alert_min_severity": "high",
+  "alert_resend_after": 21600,
+  "alert_on_clear": true,
+  "alert_hourly_cap": 12
+}
+```
+
+`alert_from` must be a sender Resend has verified for your domain; `alert_to`
+takes a string or a list. The key may also come from `$SENTRY_RESEND_KEY`, and
+it is only ever sent in the `Authorization` header of the one request to
+`api.resend.com` — never logged, never in the body.
+
+Every finding has a stable key, so an alert pages you once when it fires, again
+after `alert_resend_after` if it is *still* firing, and once when it clears —
+not on every 45-second watchdog tick. Findings that mean "sentry itself is not
+watching something" page regardless of `alert_min_severity`, because a
+monitoring gap is the one class of finding whose whole point is that nothing
+else will tell you. `alert_hourly_cap` is a hard ceiling; anything past it is
+suppressed and noted in the next mail.
+
+```bash
+sentry alert            # show configuration and any active alerts
+sentry alert --test     # send a test message to the configured recipients
+```
+
 **On screen scraping**: the modern capture APIs go through the capability
 access manager and `spy` already reports them, including whether a capture
 border was shown. Legacy GDI scraping — `BitBlt` against the screen DC — leaves
 no such record and a sampling monitor cannot see it. That is a genuine blind
 spot rather than a covered one, and it is listed as such rather than papered
 over.
+
+## Brute force — counted from the logs
+
+Password guessing (T1110) is one of the most-cited techniques in the corpus and
+one of the few runtime behaviours that leaves a durable artefact: failed-auth
+records. `bruteforce` counts them.
+
+- **Linux** — sshd and PAM lines from the journal, or `/var/log/auth.log` if
+  there is no journal. Failures are grouped by source: a spike from one address,
+  or a spread across many usernames (spraying), is the finding. Failed `sudo`
+  authentications are counted separately.
+- **Windows** — Security event 4625 (failed logon) over 24h and 4740 (account
+  lockout) over a week, in one query. Reading that log needs Administrator or
+  *Event Log Readers*; if the query is denied, or auditing is off, that is
+  reported as "unknown", not "clean".
+
+It is a counting exercise, not interception, so it cannot see a slow low-volume
+guess that stays under the threshold — and it says so.
+
+## Closing the gaps `gaps` names
+
+`sentry gaps` measures itself against the ATT&CK techniques in the current
+intel corpus. Three collectors were added to close its highest-signal misses:
+
+- **`sniffing`** (T1040) — a promiscuous physical NIC, a process holding an
+  AF_PACKET / raw socket, or a pcap driver (Npcap/WinPcap) being installed at
+  all. Bridge and container interfaces are promiscuous by design and are noted,
+  not alarmed.
+- **`webshell`** (T1505.003) — only when a web server is actually listening:
+  walks its document root for recently written server-side scripts whose
+  contents read as a command dispatcher (an exec primitive beside a request
+  variable, an `eval` of decoded input, an ASP page that shells out).
+- **`auditd`** — reports whether Linux has syscall interception at all. Its
+  absence is why `gaps` lists ~230 techniques as *not observable* rather than
+  *uncovered*; installing auditd and loading a ruleset moves them into range,
+  and `gaps` then counts them covered.
+
+BITS transfer jobs (T1197) folded into `intrusion`, and several techniques that
+existing modules already answered (`secrets` → T1552, `intrusion` → T1539 /
+T1555.003, `sysmon` → T1003.001) were wired into the coverage map they were
+missing from.
 
 ## Sysmon: the ceiling this design otherwise has
 

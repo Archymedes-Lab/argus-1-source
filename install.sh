@@ -3,6 +3,8 @@
 #
 #   ./install.sh              put `sentry` on PATH
 #   ./install.sh --service    ...and run the daemon under systemd, always on
+#   ./install.sh --priority   ...and give it top CPU/IO priority + OOM immunity
+#                             (writes a system drop-in; needs sudo once)
 #   ./install.sh --windows    ...and print the one Windows command that keeps
 #                             WSL itself alive across reboots
 set -euo pipefail
@@ -24,10 +26,11 @@ case ":$PATH:" in
   *) echo "note: add $BIN to PATH — echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc" ;;
 esac
 
-want_service=false; want_windows=false
+want_service=false; want_windows=false; want_priority=false
 for arg in "$@"; do
   case "$arg" in
     --service) want_service=true ;;
+    --priority) want_service=true; want_priority=true ;;
     --windows) want_windows=true ;;
   esac
 done
@@ -46,9 +49,20 @@ WorkingDirectory=$HERE
 ExecStart=/usr/bin/python3 -m sentry serve --port $PORT
 Restart=always
 RestartSec=15
-# The collectors shell out to powershell.exe, which is memory-hungry on the
-# Windows side but cheap here; this cap only guards against a runaway in ours.
-MemoryMax=512M
+
+# This monitor is meant to win contention for the machine, not lose it.
+# CPUWeight/IOWeight are relative cgroup shares (max 10000) and need no
+# privilege. Nice and a negative OOMScoreAdjust require a privileged manager;
+# the user manager will log and ignore them — run \`./install.sh --priority\`
+# for a system drop-in that makes them stick.
+CPUWeight=10000
+IOWeight=10000
+Nice=-10
+OOMScoreAdjust=-800
+# A security monitor that gets OOM-killed is the failure it exists to prevent.
+MemoryHigh=1536M
+MemoryMax=2G
+TasksMax=4096
 
 [Install]
 WantedBy=default.target
@@ -67,6 +81,49 @@ EOF
     echo "To keep it running without a login session:"
     echo "    sudo loginctl enable-linger $USER"
   fi
+fi
+
+if $want_priority; then
+  # The user manager cannot grant a negative nice or a negative OOM score.
+  # Moving the unit to the system manager (still running as this user) can.
+  SYS="/etc/systemd/system/sentry.service"
+  echo
+  echo "Installing $SYS (system manager, runs as $USER) for real priority."
+  echo "This needs sudo once."
+  sudo tee "$SYS" >/dev/null <<EOF
+[Unit]
+Description=sentry — continuous monitoring (top priority)
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+Group=$(id -gn)
+WorkingDirectory=$HERE
+ExecStart=/usr/bin/python3 -m sentry serve --port $PORT
+Restart=always
+RestartSec=15
+
+# Win CPU and IO contention, and do not get OOM-killed. A privileged manager
+# is required for the last two, which is the whole reason this unit exists.
+CPUWeight=10000
+IOWeight=10000
+IOSchedulingClass=best-effort
+IOSchedulingPriority=0
+Nice=-10
+OOMScoreAdjust=-800
+MemoryHigh=1536M
+MemoryMax=2G
+TasksMax=4096
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl --user disable --now sentry.service 2>/dev/null || true
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now sentry.service
+  echo "now managed by:  sudo systemctl status sentry"
+  echo "verify:          systemctl show sentry -p Nice -p OOMScoreAdjust -p CPUWeight"
 fi
 
 if $want_windows; then

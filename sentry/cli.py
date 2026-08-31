@@ -5,11 +5,11 @@ import json
 import sys
 import time
 
-from . import (asep, backdoor, collect_windows, control, coverage, detect,
-               feeds,
+from . import (alert, asep, auditd, backdoor, bruteforce, collect_windows,
+               control, coverage, detect, feeds,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               spyware, startup, sysmon)
+               sniffing, spyware, startup, sysmon, webshell)
 from .store import DEFAULT_DB, Store
 from .util import iso, now, short
 
@@ -710,6 +710,63 @@ def cmd_approve(args, store):
     print(f"approved {n} fingerprint(s)")
 
 
+def cmd_bruteforce(args, store):
+    """Failed-authentication volume across both sides."""
+    findings = bruteforce.audit(hosts=_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=bruteforce.SEV_ORDER, show_ok=True,
+            empty="no failed-auth records to analyse")
+
+
+def _simple_cmd(mod, empty):
+    def run(args, store):
+        findings = mod.audit(hosts=_hosts(args))
+        if args.json:
+            print(json.dumps(findings, indent=2))
+            return
+        _report(findings, verbose=args.verbose, severity=args.severity,
+                sev_order=mod.SEV_ORDER, show_ok=True, empty=empty)
+    return run
+
+
+cmd_sniffing = _simple_cmd(sniffing, "no packet-capture state to report")
+cmd_webshell = _simple_cmd(webshell, "no web server to audit")
+cmd_auditd = _simple_cmd(auditd, "syscall-interception posture unavailable")
+
+
+def cmd_alert(args, store):
+    """Outbound email alerts through Resend — status, or a test send."""
+    if args.test:
+        print("Sending a test alert…")
+        err = alert.test(store)
+        print(color(f"  {err}", "high", _tty()) if err
+              else "  sent — check the inbox")
+        return 1 if err else 0
+    s = alert.status(store)
+    t = _tty()
+    on = color("enabled", "ok", t) if s["enabled"] else color(
+        "not configured", "medium", t)
+    print(f"alerts        {on}")
+    print(f"transport     Resend  (key {'present' if s['have_key'] else 'missing'})")
+    print(f"from          {s['from'] or '—'}")
+    print(f"to            {', '.join(s['to']) or '—'}")
+    print(f"min severity  {s['min_severity']}  (outage findings always page)")
+    print(f"resend after  {s['resend_after'] // 3600}h while still firing")
+    print(f"on clear      {'yes' if s['on_clear'] else 'no'}")
+    print(f"hourly cap    {s['hourly_cap']}   ({s['sent_last_hour']} sent in the last hour)")
+    if s["active"]:
+        print("active alerts:")
+        for k in s["active"]:
+            print(f"  - {k.replace('|', ' — ')}")
+    if not s["enabled"]:
+        print(f"\nSet resend_api_key, alert_from and alert_to in "
+              f"{alert.CONFIG_PATH} (0600). alert_from must be a "
+              f"Resend-verified sender.")
+
+
 def cmd_status(args, store):
     b = store.get_meta("baseline_at")
     total = len(store.known_fps())
@@ -985,6 +1042,34 @@ def build_parser():
 
     st = sub.add_parser("status", help="show what sentry knows so far")
     st.set_defaults(fn=cmd_status)
+
+    bf = sub.add_parser("bruteforce",
+                        help="failed-authentication spikes and account lockouts")
+    bf.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    bf.add_argument("-v", "--verbose", action="store_true")
+    bf.add_argument("--json", action="store_true")
+    bf.set_defaults(fn=cmd_bruteforce)
+
+    for _name, _fn, _help in (
+        ("sniffing", cmd_sniffing, "packet capture: promiscuous NICs, raw "
+         "sockets, capture drivers and tools"),
+        ("webshell", cmd_webshell, "server-side scripts that read as command "
+         "dispatchers in web roots"),
+        ("auditd", cmd_auditd, "is Linux syscall interception installed and "
+         "recording?"),
+    ):
+        _p = sub.add_parser(_name, help=_help)
+        _p.add_argument("--severity",
+                        choices=["critical", "high", "medium", "low"])
+        _p.add_argument("-v", "--verbose", action="store_true")
+        _p.add_argument("--json", action="store_true")
+        _p.set_defaults(fn=_fn)
+
+    al = sub.add_parser("alert",
+                        help="email alerts via Resend: status, or --test")
+    al.add_argument("--test", action="store_true",
+                    help="send a test alert to the configured recipients")
+    al.set_defaults(fn=cmd_alert)
     return p
 
 

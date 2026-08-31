@@ -26,10 +26,10 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import (backdoor, control, feeds, firewall, hidden, hunt, implant,
-               intel,
+from . import (alert, auditd, backdoor, bruteforce, control, feeds, firewall,
+               hidden, hunt, implant, intel,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               spyware, startup, sysmon)
+               sniffing, spyware, startup, sysmon, webshell)
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
@@ -63,6 +63,10 @@ PAGE = os.path.join(HERE, "static", "dashboard.html")
 # last run instead of re-reading a day of log every time.
 JOBS = {
     "scan":     (60,    "Processes & network"),
+    # Early in the dict so that on a cold start the input-hook watchdog runs
+    # before the long Windows audits, not after them. Its healthy path is
+    # local-only (~25ms), so its position costs the others nothing.
+    "input_hook":(45,   "Input monitor watchdog"),
     "hidden":   (300,   "Hidden processes"),
     "firewall": (2400,  "Firewall & inbound"),
     "control":  (1800,  "Control surfaces"),
@@ -87,13 +91,25 @@ JOBS = {
     "netwatch": (300,   "Network & wireless state"),
     "posture":  (7200,  "Windows security posture"),
     "backdoor": (3600,  "Backdoors & access grants"),
-    # Cheap: the helper does the watching, this only drains its output file.
+    # Cheap: the helper does the watching, this only drains its output file
+    # and runs the injected-event audit. The short-interval "input_hook"
+    # watchdog (declared above) is what keeps the helper itself alive.
     "input":    (300,   "Synthetic input"),
     # Walks every readable process's address space; expensive, so it runs
     # rarely and its cost is accounted for in the duty cycle above.
     "memscan":  (7200,  "Memory & instruction level"),
     # Walks the home directory; slow, and secrets do not appear by the minute.
     "secrets":  (43200, "Plaintext credentials"),
+    # Counts failed-auth records in the OS logs; one PowerShell call + a log
+    # read, so it is cheap enough to run hourly.
+    "bruteforce":(3600, "Brute force & auth failures"),
+    # Local packet-capture state on both sides.
+    "sniffing": (1800,  "Packet capture"),
+    # Walks web-server document roots; slow, and web shells do not appear by
+    # the minute.
+    "webshell": (21600, "Web shells"),
+    # Is the Linux syscall-interception layer present and recording?
+    "auditd":   (7200,  "Syscall interception posture"),
     # The interception layer. Frequent, because its value is catching things
     # that start and exit between the sampling passes.
     "sysmon":   (600,   "Sysmon telemetry"),
@@ -163,6 +179,14 @@ def _run_job(name, hosts):
         return memscan.audit(hosts=hosts)
     if name == "secrets":
         return secrets.audit()
+    if name == "bruteforce":
+        return bruteforce.audit(hosts=hosts)
+    if name == "sniffing":
+        return sniffing.audit(hosts=hosts)
+    if name == "webshell":
+        return webshell.audit(hosts=hosts)
+    if name == "auditd":
+        return auditd.audit(hosts=hosts)
     if name == "sysmon":
         store = Store(_run_job.db_path)
         try:
@@ -171,10 +195,18 @@ def _run_job(name, hosts):
             return sysmon.audit(store=store, hosts=hosts, incremental=True)
         finally:
             store.close()
-    if name == "input":
+    if name in ("input", "input_hook"):
         store = Store(_run_job.db_path)
         try:
-            return inputwatch.audit(store)
+            # The Windows-side hook does not survive a reboot or a WSL restart
+            # and nothing outside this loop respawns it, so supervise() keeps
+            # it up — cheaply on the healthy path, with backoff and flap
+            # detection when it is not. "input_hook" is the short-interval
+            # watchdog; "input" additionally runs the full injected-event audit.
+            pids, findings = inputwatch.supervise(store, deep=(name == "input"))
+            if name == "input":
+                findings += inputwatch.audit(store, pids=pids, supervised=True)
+            return findings
         finally:
             store.close()
     if name == "netwatch":
@@ -285,16 +317,24 @@ class Scheduler(threading.Thread):
                     continue
                 self.current = name
                 started = time.time()
+                findings, err = [], ""
                 try:
                     findings = _run_job(name, self.hosts)
                     store.save_snapshot(name, findings, max(0.0, time.time() - started))
                 except Exception:
                     # One broken collector must never stop the other six.
-                    store.save_snapshot(name, [], max(0.0, time.time() - started),
-                                        traceback.format_exc()[-800:])
+                    err = traceback.format_exc()[-800:]
+                    store.save_snapshot(name, [], max(0.0, time.time() - started), err)
                 finally:
                     self.current = None
                     self.next_run[name] = time.time() + JOBS[name][0]
+                # Page out anything that warrants it — especially a collector
+                # that has stopped recording. Guarded so a mail failure can
+                # never take down the scheduler.
+                try:
+                    alert.dispatch(store, name, findings, error=err)
+                except Exception:
+                    pass
         finally:
             store.close()
 

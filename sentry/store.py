@@ -198,6 +198,12 @@ CREATE TABLE IF NOT EXISTS input_beats (
     injected_clicks INTEGER NOT NULL DEFAULT 0,
     real_moves     INTEGER NOT NULL DEFAULT 0,
     injected_moves INTEGER NOT NULL DEFAULT 0,
+    injected_keyups     INTEGER NOT NULL DEFAULT 0,
+    injected_move_bursts INTEGER NOT NULL DEFAULT 0,
+    real_key_gaps  INTEGER NOT NULL DEFAULT 0,
+    real_key_sub20 INTEGER NOT NULL DEFAULT 0,
+    real_key_sub8  INTEGER NOT NULL DEFAULT 0,
+    cad_run_max    INTEGER NOT NULL DEFAULT 0,
     lat_avg_ms     INTEGER NOT NULL DEFAULT 0,
     lat_max_ms     INTEGER NOT NULL DEFAULT 0,
     lat_over50     INTEGER NOT NULL DEFAULT 0,
@@ -282,7 +288,9 @@ class Store:
         """Add columns introduced after a database was first created."""
         beat = {r[1] for r in self.db.execute("PRAGMA table_info(input_beats)")}
         for col in ("real_moves", "injected_moves", "lat_avg_ms", "lat_max_ms",
-                    "lat_over50", "lat_samples"):
+                    "lat_over50", "lat_samples", "injected_keyups",
+                    "injected_move_bursts", "real_key_gaps", "real_key_sub20",
+                    "real_key_sub8", "cad_run_max"):
             if col not in beat:
                 self.db.execute(
                     f"ALTER TABLE input_beats ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
