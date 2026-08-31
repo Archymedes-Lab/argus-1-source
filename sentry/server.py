@@ -26,8 +26,8 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import (alert, backdoor, control, feeds, firewall, hidden, hunt, implant,
-               intel,
+from . import (alert, backdoor, bruteforce, control, feeds, firewall, hidden,
+               hunt, implant, intel,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
                spyware, startup, sysmon)
 from . import asep as asep_mod
@@ -100,6 +100,9 @@ JOBS = {
     "memscan":  (7200,  "Memory & instruction level"),
     # Walks the home directory; slow, and secrets do not appear by the minute.
     "secrets":  (43200, "Plaintext credentials"),
+    # Counts failed-auth records in the OS logs; one PowerShell call + a log
+    # read, so it is cheap enough to run hourly.
+    "bruteforce":(3600, "Brute force & auth failures"),
     # The interception layer. Frequent, because its value is catching things
     # that start and exit between the sampling passes.
     "sysmon":   (600,   "Sysmon telemetry"),
@@ -169,6 +172,8 @@ def _run_job(name, hosts):
         return memscan.audit(hosts=hosts)
     if name == "secrets":
         return secrets.audit()
+    if name == "bruteforce":
+        return bruteforce.audit(hosts=hosts)
     if name == "sysmon":
         store = Store(_run_job.db_path)
         try:

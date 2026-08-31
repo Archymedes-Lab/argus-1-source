@@ -80,6 +80,7 @@ read.
 | `inputwatch` | Did anything type or move the cursor that was not a human? |
 | `sysmon` | What happened between two sampling passes? |
 | `secrets` | Which credentials are sitting in plaintext on this disk? |
+| `bruteforce` | Is anything guessing passwords — failed-auth spikes, lockouts? |
 | `serve` | Run everything continuously behind a local dashboard. |
 | `alert` | Email me when a collector stops recording or something critical fires. |
 
@@ -563,6 +564,24 @@ border was shown. Legacy GDI scraping — `BitBlt` against the screen DC — lea
 no such record and a sampling monitor cannot see it. That is a genuine blind
 spot rather than a covered one, and it is listed as such rather than papered
 over.
+
+## Brute force — counted from the logs
+
+Password guessing (T1110) is one of the most-cited techniques in the corpus and
+one of the few runtime behaviours that leaves a durable artefact: failed-auth
+records. `bruteforce` counts them.
+
+- **Linux** — sshd and PAM lines from the journal, or `/var/log/auth.log` if
+  there is no journal. Failures are grouped by source: a spike from one address,
+  or a spread across many usernames (spraying), is the finding. Failed `sudo`
+  authentications are counted separately.
+- **Windows** — Security event 4625 (failed logon) over 24h and 4740 (account
+  lockout) over a week, in one query. Reading that log needs Administrator or
+  *Event Log Readers*; if the query is denied, or auditing is off, that is
+  reported as "unknown", not "clean".
+
+It is a counting exercise, not interception, so it cannot see a slow low-volume
+guess that stays under the threshold — and it says so.
 
 ## Sysmon: the ceiling this design otherwise has
 

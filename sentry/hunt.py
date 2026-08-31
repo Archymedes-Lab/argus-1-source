@@ -76,22 +76,29 @@ COVERAGE = {
     "T1518":     "posture — installed defenses and their state",
     "T1600":     "implant — cryptographic trust weakening",
     "T1595":     "netwatch — wireless association history",
+    # Added with the bruteforce collector and by wiring existing modules to the
+    # techniques they already answer.
+    "T1110":     "bruteforce — failed-auth spikes and account lockouts",
+    "T1552":     "secrets — plaintext credentials on disk (files, history, config)",
+    "T1539":     "intrusion — browser session and cookie theft artefacts",
+    "T1555.003": "intrusion — browser credential stores",
+    "T1003.001": "sysmon — LSASS process-access events (Windows, needs Sysmon)",
 }
 
 # Techniques worth naming explicitly as uncovered when intel raises them, with
 # the reason they are hard rather than merely missing.
 KNOWN_BLIND = {
-    "T1555": "credentials from password stores — no credential-store auditing",
-    "T1552": "unsecured credentials on disk — no secret scanning",
-    "T1539": "stolen web session cookies — browser profiles are not examined",
+    "T1555": "credential stores beyond browsers — Windows Credential Manager "
+             "and OS keyrings are not read",
     "T1195": "supply chain compromise — installed packages are not verified",
     "T1554": "compromised host binary — no integrity baseline for system files",
     "T1505": "server software component — no web/server module auditing",
     "T1567": "exfiltration to web service — egress is seen but not classified",
     "T1611": "container escape — no container runtime auditing",
     "T1610": "malicious container deployment — no container runtime auditing",
-    "T1003": "credential dumping — needs LSASS access telemetry, which is a "
-             "kernel-callback job (Sysmon/EDR), not a sampling one",
+    "T1003": "credential dumping beyond LSASS memory (SAM, LSA secrets, NTDS, "
+             "DCSync) — sysmon covers LSASS access; the rest needs "
+             "registry/file/replication auditing",
 }
 
 

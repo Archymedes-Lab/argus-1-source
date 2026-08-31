@@ -5,8 +5,8 @@ import json
 import sys
 import time
 
-from . import (alert, asep, backdoor, collect_windows, control, coverage,
-               detect, feeds,
+from . import (alert, asep, backdoor, bruteforce, collect_windows, control,
+               coverage, detect, feeds,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
                spyware, startup, sysmon)
@@ -710,6 +710,17 @@ def cmd_approve(args, store):
     print(f"approved {n} fingerprint(s)")
 
 
+def cmd_bruteforce(args, store):
+    """Failed-authentication volume across both sides."""
+    findings = bruteforce.audit(hosts=_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    _report(findings, verbose=args.verbose, severity=args.severity,
+            sev_order=bruteforce.SEV_ORDER, show_ok=True,
+            empty="no failed-auth records to analyse")
+
+
 def cmd_alert(args, store):
     """Outbound email alerts through Resend — status, or a test send."""
     if args.test:
@@ -1015,6 +1026,13 @@ def build_parser():
 
     st = sub.add_parser("status", help="show what sentry knows so far")
     st.set_defaults(fn=cmd_status)
+
+    bf = sub.add_parser("bruteforce",
+                        help="failed-authentication spikes and account lockouts")
+    bf.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    bf.add_argument("-v", "--verbose", action="store_true")
+    bf.add_argument("--json", action="store_true")
+    bf.set_defaults(fn=cmd_bruteforce)
 
     al = sub.add_parser("alert",
                         help="email alerts via Resend: status, or --test")
