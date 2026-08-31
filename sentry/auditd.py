@@ -15,6 +15,7 @@ something", which is the question `gaps` needs answered before it can say
 whether 200-odd techniques are covered or merely unobservable.
 """
 
+import os
 import shutil
 import subprocess
 
@@ -45,34 +46,58 @@ def _run(args, timeout=15):
         return "", 1
 
 
-def state():
-    """(installed, running, rule_count) or "denied".
+def _rules_on_disk():
+    """Non-comment lines across /etc/audit/rules.d and audit.rules."""
+    import glob
+    n = 0
+    for path in glob.glob("/etc/audit/rules.d/*.rules") + ["/etc/audit/audit.rules"]:
+        try:
+            with open(path) as fh:
+                n += sum(1 for ln in fh
+                         if ln.strip() and not ln.lstrip().startswith("#"))
+        except OSError:
+            continue
+    return n
 
-    `auditctl` needs root even to read status, so a non-root run cannot tell
-    running-with-rules from stopped. That is reported as "denied", not guessed.
+
+def state():
+    """(installed, running, rule_count, how).
+
+    `auditctl` needs root even to read status. When it is denied, fall back to
+    signals a normal user can see — `systemctl is-active auditd`, the rule
+    files on disk, whether the audit log is being written — and mark `how` as
+    "fallback" so the caller can caveat.
     """
     if not shutil.which("auditctl"):
-        return False, False, 0
+        return False, False, 0, "none"
     out, rc = _run(["auditctl", "-s"])
-    if "must be root" in out.lower() or "operation not permitted" in out.lower():
-        return "denied"
-    running = False
-    for line in out.splitlines():
-        if line.startswith("enabled"):
-            running = line.split()[-1] in ("1", "2")
-        if line.startswith("pid") and line.split()[-1] not in ("0", ""):
-            running = True
-    rules_out, _ = _run(["auditctl", "-l"])
-    rc_rules = 0 if rules_out.strip().lower().startswith("no rules") \
-        else len([r for r in rules_out.splitlines() if r.strip()])
-    return True, running, rc_rules
+    denied = ("must be root" in out.lower()
+              or "operation not permitted" in out.lower())
+    if not denied and rc == 0 and out.strip():
+        running = False
+        for line in out.splitlines():
+            if line.startswith("enabled"):
+                running = line.split()[-1] in ("1", "2")
+            if line.startswith("pid") and line.split()[-1] not in ("0", ""):
+                running = True
+        rules_out, _ = _run(["auditctl", "-l"])
+        rc_rules = 0 if rules_out.strip().lower().startswith("no rules") \
+            else len([r for r in rules_out.splitlines() if r.strip()])
+        return True, running, rc_rules, "auditctl"
+
+    active_out, _ = _run(["systemctl", "is-active", "auditd"])
+    running = active_out.strip() == "active"
+    rules = _rules_on_disk()
+    try:
+        if os.path.getsize("/var/log/audit/audit.log") > 0:
+            rules = rules or 1
+    except OSError:
+        pass
+    return True, running, rules, "fallback"
 
 
 def active():
-    st = state()
-    if st == "denied" or not isinstance(st, tuple):
-        return False
-    installed, running, rules = st
+    installed, running, rules, _how = state()
     return installed and running and rules > 0
 
 
@@ -92,17 +117,9 @@ def _recent_notable():
 def audit(hosts=("wsl", "win")):
     if "wsl" not in hosts:
         return []
-    st = state()
-
-    if st == "denied":
-        return [_finding(
-            "auditd", "low",
-            "auditd is installed but its state cannot be read without root",
-            "run `sudo sentry auditd`, or `sudo systemctl status auditd` and "
-            "`sudo auditctl -l`, to confirm it is running with a ruleset",
-            "auditctl")]
-
-    installed, running, rules = st
+    installed, running, rules, how = state()
+    caveat = ("" if how == "auditctl"
+              else " (read without root — `sudo sentry auditd` confirms)")
 
     if not installed:
         return [_finding(
@@ -117,24 +134,24 @@ def audit(hosts=("wsl", "win")):
     out = []
     if not running:
         out.append(_finding(
-            "auditd", "high", "auditd is installed but not running",
+            "auditd", "high", f"auditd is installed but not running{caveat}",
             "the kernel is not recording syscalls — nothing between two "
-            "sampling passes is captured. `systemctl enable --now auditd`",
+            "sampling passes is captured. `sudo systemctl enable --now auditd`",
             "systemctl"))
         return out
 
     if rules == 0:
         out.append(_finding(
-            "auditd", "medium", "auditd is running with no rules loaded",
+            "auditd", "medium", f"auditd is running with no rules loaded{caveat}",
             "a running auditd with an empty ruleset records almost nothing. "
-            "Load a ruleset — Neo23x0/auditd or the CIS set — and the "
-            "runtime-behaviour techniques become observable", "auditctl -l"))
+            "Drop a ruleset into /etc/audit/rules.d/ — Neo23x0/auditd or the "
+            "CIS set — then `sudo augenrules --load`", "auditctl -l"))
         return out
 
     out.append(_finding(
-        "auditd", "ok", "syscall interception is active",
-        f"auditd running with {rules} rules loaded — runtime-behaviour "
-        f"techniques are being recorded", "auditctl"))
+        "auditd", "ok", f"syscall interception is active{caveat}",
+        f"auditd running with {rules} rule(s) — runtime-behaviour techniques "
+        f"are being recorded", "auditctl"))
 
     for key, n in _recent_notable():
         out.append(_finding(
