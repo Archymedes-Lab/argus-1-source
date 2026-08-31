@@ -5,11 +5,11 @@ import json
 import sys
 import time
 
-from . import (alert, asep, backdoor, bruteforce, collect_windows, control,
-               coverage, detect, feeds,
+from . import (alert, asep, auditd, backdoor, bruteforce, collect_windows,
+               control, coverage, detect, feeds,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               spyware, startup, sysmon)
+               sniffing, spyware, startup, sysmon, webshell)
 from .store import DEFAULT_DB, Store
 from .util import iso, now, short
 
@@ -721,6 +721,22 @@ def cmd_bruteforce(args, store):
             empty="no failed-auth records to analyse")
 
 
+def _simple_cmd(mod, empty):
+    def run(args, store):
+        findings = mod.audit(hosts=_hosts(args))
+        if args.json:
+            print(json.dumps(findings, indent=2))
+            return
+        _report(findings, verbose=args.verbose, severity=args.severity,
+                sev_order=mod.SEV_ORDER, show_ok=True, empty=empty)
+    return run
+
+
+cmd_sniffing = _simple_cmd(sniffing, "no packet-capture state to report")
+cmd_webshell = _simple_cmd(webshell, "no web server to audit")
+cmd_auditd = _simple_cmd(auditd, "syscall-interception posture unavailable")
+
+
 def cmd_alert(args, store):
     """Outbound email alerts through Resend — status, or a test send."""
     if args.test:
@@ -1033,6 +1049,21 @@ def build_parser():
     bf.add_argument("-v", "--verbose", action="store_true")
     bf.add_argument("--json", action="store_true")
     bf.set_defaults(fn=cmd_bruteforce)
+
+    for _name, _fn, _help in (
+        ("sniffing", cmd_sniffing, "packet capture: promiscuous NICs, raw "
+         "sockets, capture drivers and tools"),
+        ("webshell", cmd_webshell, "server-side scripts that read as command "
+         "dispatchers in web roots"),
+        ("auditd", cmd_auditd, "is Linux syscall interception installed and "
+         "recording?"),
+    ):
+        _p = sub.add_parser(_name, help=_help)
+        _p.add_argument("--severity",
+                        choices=["critical", "high", "medium", "low"])
+        _p.add_argument("-v", "--verbose", action="store_true")
+        _p.add_argument("--json", action="store_true")
+        _p.set_defaults(fn=_fn)
 
     al = sub.add_parser("alert",
                         help="email alerts via Resend: status, or --test")

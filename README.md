@@ -81,6 +81,9 @@ read.
 | `sysmon` | What happened between two sampling passes? |
 | `secrets` | Which credentials are sitting in plaintext on this disk? |
 | `bruteforce` | Is anything guessing passwords — failed-auth spikes, lockouts? |
+| `sniffing` | Is anything capturing traffic — promiscuous NICs, raw sockets, pcap drivers? |
+| `webshell` | Is there a command dispatcher sitting in a web server's document root? |
+| `auditd` | Is Linux syscall interception installed and actually recording? |
 | `serve` | Run everything continuously behind a local dashboard. |
 | `alert` | Email me when a collector stops recording or something critical fires. |
 
@@ -582,6 +585,29 @@ records. `bruteforce` counts them.
 
 It is a counting exercise, not interception, so it cannot see a slow low-volume
 guess that stays under the threshold — and it says so.
+
+## Closing the gaps `gaps` names
+
+`sentry gaps` measures itself against the ATT&CK techniques in the current
+intel corpus. Three collectors were added to close its highest-signal misses:
+
+- **`sniffing`** (T1040) — a promiscuous physical NIC, a process holding an
+  AF_PACKET / raw socket, or a pcap driver (Npcap/WinPcap) being installed at
+  all. Bridge and container interfaces are promiscuous by design and are noted,
+  not alarmed.
+- **`webshell`** (T1505.003) — only when a web server is actually listening:
+  walks its document root for recently written server-side scripts whose
+  contents read as a command dispatcher (an exec primitive beside a request
+  variable, an `eval` of decoded input, an ASP page that shells out).
+- **`auditd`** — reports whether Linux has syscall interception at all. Its
+  absence is why `gaps` lists ~230 techniques as *not observable* rather than
+  *uncovered*; installing auditd and loading a ruleset moves them into range,
+  and `gaps` then counts them covered.
+
+BITS transfer jobs (T1197) folded into `intrusion`, and several techniques that
+existing modules already answered (`secrets` → T1552, `intrusion` → T1539 /
+T1555.003, `sysmon` → T1003.001) were wired into the coverage map they were
+missing from.
 
 ## Sysmon: the ceiling this design otherwise has
 

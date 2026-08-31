@@ -83,6 +83,11 @@ COVERAGE = {
     "T1539":     "intrusion — browser session and cookie theft artefacts",
     "T1555.003": "intrusion — browser credential stores",
     "T1003.001": "sysmon — LSASS process-access events (Windows, needs Sysmon)",
+    "T1040":     "sniffing — promiscuous NICs, raw sockets, capture drivers/tools",
+    "T1197":     "intrusion — BITS transfer jobs outside the known updaters",
+    "T1505.003": "webshell — dispatcher-shaped scripts in web document roots",
+    "T1112":     "asep / control / posture — autostart and security-relevant "
+                 "registry surface",
 }
 
 # Techniques worth naming explicitly as uncovered when intel raises them, with
@@ -476,6 +481,21 @@ BEHAVIOURAL_TACTICS = {
     "resource-development", "initial-access",
 }
 
+_INTERCEPT = None
+
+
+def _intercept_active():
+    """True once auditd is recording — then the behavioural bucket is covered,
+    not merely unobservable. Probed once per process."""
+    global _INTERCEPT
+    if _INTERCEPT is None:
+        try:
+            from . import auditd
+            _INTERCEPT = bool(auditd.active())
+        except Exception:
+            _INTERCEPT = False
+    return _INTERCEPT
+
 
 def gaps(store, min_docs=1):
     """Techniques current intel is talking about, against what sentry checks.
@@ -513,8 +533,11 @@ def gaps(store, min_docs=1):
             continue
         tset = {t for t in (tactics or "").split(",") if t}
         if tset and tset <= BEHAVIOURAL_TACTICS:
-            behavioural.append((tid, n, "runtime behaviour — needs syscall "
-                                        "interception (auditd/Sysmon)", name))
+            if _intercept_active():
+                covered.append((tid, n, "auditd — syscall interception active"))
+            else:
+                behavioural.append((tid, n, "runtime behaviour — needs syscall "
+                                            "interception (auditd/Sysmon)", name))
         else:
             closeable.append((tid, n, why, name))
 

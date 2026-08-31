@@ -26,10 +26,10 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import (alert, backdoor, bruteforce, control, feeds, firewall, hidden,
-               hunt, implant, intel,
+from . import (alert, auditd, backdoor, bruteforce, control, feeds, firewall,
+               hidden, hunt, implant, intel,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               spyware, startup, sysmon)
+               sniffing, spyware, startup, sysmon, webshell)
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
@@ -103,6 +103,13 @@ JOBS = {
     # Counts failed-auth records in the OS logs; one PowerShell call + a log
     # read, so it is cheap enough to run hourly.
     "bruteforce":(3600, "Brute force & auth failures"),
+    # Local packet-capture state on both sides.
+    "sniffing": (1800,  "Packet capture"),
+    # Walks web-server document roots; slow, and web shells do not appear by
+    # the minute.
+    "webshell": (21600, "Web shells"),
+    # Is the Linux syscall-interception layer present and recording?
+    "auditd":   (7200,  "Syscall interception posture"),
     # The interception layer. Frequent, because its value is catching things
     # that start and exit between the sampling passes.
     "sysmon":   (600,   "Sysmon telemetry"),
@@ -174,6 +181,12 @@ def _run_job(name, hosts):
         return secrets.audit()
     if name == "bruteforce":
         return bruteforce.audit(hosts=hosts)
+    if name == "sniffing":
+        return sniffing.audit(hosts=hosts)
+    if name == "webshell":
+        return webshell.audit(hosts=hosts)
+    if name == "auditd":
+        return auditd.audit(hosts=hosts)
     if name == "sysmon":
         store = Store(_run_job.db_path)
         try:

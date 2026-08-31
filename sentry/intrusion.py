@@ -191,9 +191,31 @@ try {
   $o.credAccess = @($stores)
 } catch {}
 
+# --- 7. BITS transfer jobs (T1197) --------------------------------------
+# A queued BITS job survives reboots and logoffs and downloads with the
+# System service's network identity, which is why droppers and C2 use it.
+$o.bits = @()
+try {
+  $o.bits = @(Get-BitsTransfer -AllUsers -ErrorAction Stop | ForEach-Object {
+    [pscustomobject]@{
+      name  = [string]$_.DisplayName
+      state = [string]$_.JobState
+      owner = [string]$_.OwnerAccount
+      url   = [string](@($_.FileList | ForEach-Object { $_.RemoteName }) -join ' ; ')
+      local = [string](@($_.FileList | ForEach-Object { $_.LocalName }) -join ' ; ')
+    } })
+} catch {}
+
 $json = [pscustomobject]$o | ConvertTo-Json -Depth 6 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 """
+
+# BITS job names Windows Update and vendor updaters use — seeing these is
+# expected, not a finding.
+_BITS_BENIGN = re.compile(
+    r"windows ?update|wuauclt|delivery optimization|msedge|edgeupdate|"
+    r"google update|gupdate|dropbox|onedrive|office|teams|adobe|mozilla",
+    re.I)
 
 SUSPICIOUS_HISTORY = re.compile(
     r"(iwr|invoke-webrequest|curl|wget)[^|;\n]*\|\s*(iex|invoke-expression)|"
@@ -371,6 +393,32 @@ def audit():
             "staging", sev, "recently written unsigned executable",
             f"{path.split(chr(92))[-1]} — {sig}, "
             f"{(f.get('written') or '').replace('T', ' ')[:19]}", path))
+
+    # -- 6. BITS transfer jobs (T1197) ----------------------------------
+    bits = _aslist(data.get("bits"))
+    for j in bits:
+        name = j.get("name") or "(unnamed)"
+        url = j.get("url") or ""
+        if _BITS_BENIGN.search(name) or _BITS_BENIGN.search(url):
+            continue
+        http = re.search(r"https?://", url, re.I)
+        suspended = (j.get("state") or "").lower() in ("suspended", "queued",
+                                                       "transient_error")
+        if http and suspended:
+            sev, why = "high", ("a suspended job with an HTTP source is how a "
+                                "dropper stages a download to run later")
+        elif http:
+            sev, why = "medium", "downloads over HTTP under the service identity"
+        else:
+            sev, why = "low", "a BITS job outside the known updaters"
+        out.append(_finding(
+            "staging", sev, f"BITS transfer job: {name}",
+            f"{why} — state {j.get('state')}, owner {j.get('owner') or '?'}, "
+            f"url {url[:120] or '—'}", "Get-BitsTransfer"))
+    if bits and not any(f["title"].startswith("BITS") for f in out):
+        out.append(_finding("staging", "ok", "BITS jobs",
+                            f"{len(bits)} queued, all matching known updaters",
+                            "Get-BitsTransfer"))
 
     return out
 
