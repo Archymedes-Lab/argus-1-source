@@ -40,22 +40,28 @@ def sort_findings(f):
 def _run(args, timeout=15):
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
-        return r.stdout, r.returncode
+        return (r.stdout + r.stderr), r.returncode
     except (OSError, subprocess.SubprocessError):
         return "", 1
 
 
 def state():
-    """(installed, running, rule_count). Cheap; used by hunt.gaps() too."""
+    """(installed, running, rule_count) or "denied".
+
+    `auditctl` needs root even to read status, so a non-root run cannot tell
+    running-with-rules from stopped. That is reported as "denied", not guessed.
+    """
     if not shutil.which("auditctl"):
         return False, False, 0
     out, rc = _run(["auditctl", "-s"])
+    if "must be root" in out.lower() or "operation not permitted" in out.lower():
+        return "denied"
     running = False
     for line in out.splitlines():
         if line.startswith("enabled"):
             running = line.split()[-1] in ("1", "2")
         if line.startswith("pid") and line.split()[-1] not in ("0", ""):
-            running = running or True
+            running = True
     rules_out, _ = _run(["auditctl", "-l"])
     rc_rules = 0 if rules_out.strip().lower().startswith("no rules") \
         else len([r for r in rules_out.splitlines() if r.strip()])
@@ -63,7 +69,10 @@ def state():
 
 
 def active():
-    installed, running, rules = state()
+    st = state()
+    if st == "denied" or not isinstance(st, tuple):
+        return False
+    installed, running, rules = st
     return installed and running and rules > 0
 
 
@@ -83,7 +92,17 @@ def _recent_notable():
 def audit(hosts=("wsl", "win")):
     if "wsl" not in hosts:
         return []
-    installed, running, rules = state()
+    st = state()
+
+    if st == "denied":
+        return [_finding(
+            "auditd", "low",
+            "auditd is installed but its state cannot be read without root",
+            "run `sudo sentry auditd`, or `sudo systemctl status auditd` and "
+            "`sudo auditctl -l`, to confirm it is running with a ruleset",
+            "auditctl")]
+
+    installed, running, rules = st
 
     if not installed:
         return [_finding(

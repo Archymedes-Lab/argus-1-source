@@ -128,6 +128,10 @@ def send_email(conf, subject, text):
     req = urllib.request.Request(API_URL, data=payload, method="POST")
     req.add_header("Authorization", f"Bearer {key}")
     req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    # api.resend.com sits behind Cloudflare, which blocks the default
+    # "Python-urllib/x.y" agent with a 403 (error 1010). Any real UA is fine.
+    req.add_header("User-Agent", "sentry-monitor/1.0 (+https://github.com)")
     ctx = ssl.create_default_context()
     try:
         with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
