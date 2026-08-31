@@ -65,6 +65,22 @@ public static class SentryInputHook
     public static long RealKeys, InjectedKeys, RealClicks, InjectedClicks;
     public static long RealMoves, InjectedMoves;
 
+    // Injected key-up events, and the count of distinct injected cursor-move
+    // bursts (a run of injected moves with no >400 ms gap). Key-down alone
+    // missed the release half of a synthetic keystroke; the burst count makes
+    // a short reposition-and-click visible instead of being lost between the
+    // every-250th-move samples.
+    public static long InjectedKeyUps, InjectedMoveBursts;
+
+    // Real-keystroke cadence. Hardware-level injection — a malicious HID
+    // filter driver, a BadUSB device, an IOCTL straight to kbdclass — arrives
+    // with no injected flag set and is otherwise identical to a person typing.
+    // Timing is the only tell: humans do not hold a sub-8 ms inter-key gap, or
+    // a long run of gaps all within 2 ms of each other.
+    public static long RealKeyGaps, RealKeySub20, RealKeySub8, CadRunMax;
+    static uint _lastRealKeyTick, _lastInjMoveTick, _lastVk;
+    static long _lastGap = -1, _cadRun;
+
     // Input latency. Every low-level hook sits in a chain, and each one delays
     // every event until it returns. A cursor that feels slower than it used to
     // is the symptom a slow hook produces, so the delay is measured rather
@@ -110,8 +126,38 @@ public static class SentryInputHook
             uint pid;
             GetWindowThreadProcessId(GetForegroundWindow(), out pid);
             if (pid == 0) return "";
-            return Process.GetProcessById((int)pid).ProcessName;
+            return Process.GetProcessById((int)pid).ProcessName + ":" + pid;
         } catch { return ""; }
+    }
+
+    // Timing analysis for genuine (un-flagged) keystrokes. See the cadence
+    // counters above for why this is the only signal for driver-level input.
+    static void Cadence(uint eventTime, uint vk)
+    {
+        if (_lastRealKeyTick != 0) {
+            long gap = (long)(eventTime - _lastRealKeyTick);
+            // Key auto-repeat (a held key) is regular and fast but benign, so
+            // it is counted as a gap but kept out of the "too fast" and
+            // "robotically even" tallies.
+            bool repeat = (vk == _lastVk && gap >= 0 && gap < 60);
+            if (gap >= 0 && gap < 5000) {
+                RealKeyGaps++;
+                if (!repeat && gap < 20) RealKeySub20++;
+                if (!repeat && gap < 8)  RealKeySub8++;
+                if (!repeat && _lastGap >= 0 && gap < 120
+                        && Math.Abs(gap - _lastGap) <= 2) {
+                    _cadRun++;
+                    if (_cadRun > CadRunMax) CadRunMax = _cadRun;
+                } else if (!repeat) {
+                    _cadRun = 0;
+                }
+                _lastGap = gap;
+            } else {
+                _cadRun = 0; _lastGap = -1;
+            }
+        }
+        _lastRealKeyTick = eventTime;
+        _lastVk = vk;
     }
 
     static void Write(string kind, uint flags, string cls)
@@ -133,15 +179,21 @@ public static class SentryInputHook
     {
         if (nCode >= 0) {
             var d = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-            bool down = ((int)wParam == 0x0100 || (int)wParam == 0x0104);
+            int msg = (int)wParam;
+            bool down = (msg == 0x0100 || msg == 0x0104);
+            bool up   = (msg == 0x0101 || msg == 0x0105);
+            bool injected = (d.flags & LLKHF_INJECTED) != 0;
+            if (down || up) Latency(d.time);
             if (down) {
-                Latency(d.time);
-                if ((d.flags & LLKHF_INJECTED) != 0) {
+                if (injected) {
                     InjectedKeys++;
                     Write("key", d.flags, KeyClass(d.vkCode));
                 } else {
                     RealKeys++;
+                    Cadence(d.time, d.vkCode);
                 }
+            } else if (up && injected) {
+                InjectedKeyUps++;
             }
         }
         return CallNextHookEx(_kb, nCode, wParam, lParam);
@@ -160,11 +212,20 @@ public static class SentryInputHook
                 Latency(d.time);
                 if (inj) {
                     InjectedMoves++;
-                    // Movement is continuous, so writing a line per event would
-                    // produce megabytes. One line per burst is enough to say
-                    // "something moved the cursor, here, then".
-                    if (InjectedMoves == 1 || InjectedMoves % 250 == 0)
+                    // Movement is continuous, so a line per event would be
+                    // megabytes. Write one at the start of every burst — a run
+                    // broken by a >400 ms gap — so a brief synthetic reposition
+                    // is caught, not just multiples of 250. Keep the every-250
+                    // sample as a heartbeat inside a long continuous burst.
+                    long since = _lastInjMoveTick == 0
+                        ? 999999 : (long)(d.time - _lastInjMoveTick);
+                    if (since > 400) {
+                        InjectedMoveBursts++;
                         Write("move", d.flags, "cursor");
+                    } else if (InjectedMoves % 250 == 0) {
+                        Write("move", d.flags, "cursor");
+                    }
+                    _lastInjMoveTick = d.time;
                 } else {
                     RealMoves++;
                 }
@@ -198,6 +259,12 @@ public static class SentryInputHook
         return "{\"real_keys\":" + RealKeys + ",\"injected_keys\":" + InjectedKeys +
                ",\"real_clicks\":" + RealClicks + ",\"injected_clicks\":" + InjectedClicks +
                ",\"real_moves\":" + RealMoves + ",\"injected_moves\":" + InjectedMoves +
+               ",\"injected_keyups\":" + InjectedKeyUps +
+               ",\"injected_move_bursts\":" + InjectedMoveBursts +
+               ",\"real_key_gaps\":" + RealKeyGaps +
+               ",\"real_key_sub20\":" + RealKeySub20 +
+               ",\"real_key_sub8\":" + RealKeySub8 +
+               ",\"cad_run_max\":" + CadRunMax +
                ",\"lat_avg_ms\":" + avg + ",\"lat_max_ms\":" + LatMaxMs +
                ",\"lat_over50\":" + LatOver50 + ",\"lat_samples\":" + LatSamples + "}";
     }
@@ -224,8 +291,21 @@ $timer.Interval = $HeartbeatSeconds * 1000
 $timer.Add_Tick({
     $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     $c  = [SentryInputHook]::Counters()
-    Add-Content -Path $OutFile -Value ("{""ts"":$ts,""kind"":""heartbeat"",""counters"":$c}")
+    Add-Content -Path $OutFile -Value ("{""ts"":$ts,""kind"":""heartbeat"",""pid"":$PID,""counters"":$c}")
 })
 $timer.Start()
+
+# A faster, contentless liveness beat. The watchdog on the WSL side reads only
+# this file's mtime — a local stat, no interop — so a dead or wedged helper is
+# caught within one watchdog interval instead of waiting a full heartbeat. If
+# the message loop stalls, this timer stops too, which is the point.
+$aliveFile = [IO.Path]::ChangeExtension($OutFile, '.alive')
+$writePulse = { try { [IO.File]::WriteAllText($aliveFile,
+    ("" + $PID + ":" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds())) } catch { } }
+& $writePulse
+$pulse = New-Object System.Windows.Forms.Timer
+$pulse.Interval = 10000
+$pulse.Add_Tick($writePulse)
+$pulse.Start()
 
 [System.Windows.Forms.Application]::Run()
