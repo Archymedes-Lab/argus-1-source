@@ -101,6 +101,19 @@ def active():
     return installed and running and rules > 0
 
 
+def _is_wsl():
+    try:
+        with open("/proc/sys/kernel/osrelease") as fh:
+            return "microsoft" in fh.read().lower()
+    except OSError:
+        return False
+
+
+def _service_failed():
+    out, _ = _run(["systemctl", "is-failed", "auditd"])
+    return out.strip() == "failed"
+
+
 def _recent_notable():
     if not shutil.which("ausearch"):
         return []
@@ -133,6 +146,16 @@ def audit(hosts=("wsl", "win")):
 
     out = []
     if not running:
+        if _is_wsl() and _service_failed():
+            return [_finding(
+                "auditd", "medium",
+                "auditd cannot run on this WSL2 kernel",
+                "the service fails at start with 'audit_set_pid: Operation not "
+                "permitted' — Microsoft's WSL2 kernel rejects the audit daemon "
+                "over the netlink socket, and no userland change fixes it. "
+                "Syscall interception here needs eBPF tooling (Sysmon for "
+                "Linux; BTF is present). `sudo systemctl disable --now auditd` "
+                "to stop the restart loop", "auditd.service")]
         out.append(_finding(
             "auditd", "high", f"auditd is installed but not running{caveat}",
             "the kernel is not recording syscalls — nothing between two "
