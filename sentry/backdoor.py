@@ -58,6 +58,25 @@ def _read(path, limit=200000):
 
 _dpkg_owns = dpkg_owns
 
+# sentry's own units, installed by install.sh. A monitor that reports itself as
+# a backdoor trains you to skim the section where a real one would appear.
+_SELF_UNITS = ("sentry.service", "sentry-selfcheck.service",
+               "sentry-selfcheck.timer")
+
+
+def _is_self(unit_name, execs):
+    """True for sentry's own systemd units — matched on name AND command.
+
+    Both have to agree. Matching on the filename alone would let anything
+    named sentry.service through, which is a cheap way to hide in the one
+    place this audit has been told not to look.
+    """
+    if unit_name not in _SELF_UNITS:
+        return False
+    if not execs:
+        return unit_name.endswith(".timer")     # timers carry no Exec line
+    return all(re.search(r"-m\s+sentry\b", e) for e in execs)
+
 
 def _home_dirs():
     out = []
@@ -245,6 +264,12 @@ def check_persistence():
             full = os.path.join(d, fn)
             body = _read(full)
             execs = re.findall(r"^\s*Exec\w*\s*=\s*(.+)$", body, re.M)
+            # Do not report ourselves. sentry's own units are installed by
+            # install.sh and are the reason this audit runs at all; flagging
+            # them as persistence teaches you to skim past this section, which
+            # is exactly how a real unit slips through.
+            if _is_self(fn, execs):
+                continue
             out.append(_finding(
                 "persistence", "high",
                 f"systemd user unit for {user}: {fn}",
