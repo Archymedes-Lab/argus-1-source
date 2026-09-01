@@ -10,13 +10,24 @@
 Description=Run the sentry self-check every two minutes
 
 [Timer]
-# Start checking shortly after login/boot, then every two minutes.
-OnBootSec=2min
-OnStartupSec=2min
-OnUnitInactiveSec=2min
-AccuracySec=10s
-# If the machine was asleep or WSL was shut down, run as soon as it is back
-# rather than silently skipping the missed ticks.
+# A wall-clock schedule, deliberately NOT OnUnitInactiveSec=.
+#
+# OnUnitInactiveSec chains each run off the previous one's completion, so it
+# only keeps firing while that chain is unbroken. Disabling and re-enabling the
+# timer clears the service's InactiveEnterTimestamp, and the timer then sits
+# there ActiveState=active with NextElapseUSecMonotonic=infinity -- armed,
+# enabled, and never going to fire again. OnBootSec/OnStartupSec do not save it
+# either: they are monotonic offsets that elapsed once, hours ago.
+#
+# That is the worst failure available to a watchdog, because every status
+# command reports it healthy. A calendar expression always has a next elapse,
+# whatever happened before it.
+OnCalendar=*:0/2
+# Also check promptly after a boot rather than waiting for the next even minute.
+OnBootSec=1min
+AccuracySec=5s
+# Run a missed tick as soon as we are back, rather than skipping it silently --
+# this is what covers a WSL shutdown or a suspended machine.
 Persistent=true
 Unit=sentry-selfcheck.service
 

@@ -167,10 +167,33 @@ if $want_seal; then
   systemctl --user daemon-reload
   systemctl --user enable --now sentry-selfcheck.timer
   echo "  timer:    sentry-selfcheck.timer, every 2 min"
+
+  # 4. The outermost ring. Everything above lives inside the distro and is gone
+  #    the moment the WSL VM stops -- and nothing inside a stopped VM can start
+  #    it again. This Windows task is the only layer that can.
+  WAKE_DIR="$(wslpath -w "$HERE" 2>/dev/null || true)"
+  if command -v powershell.exe >/dev/null 2>&1; then
+    LOCAL_WAKE="/mnt/c/Users/$(powershell.exe -NoProfile -NonInteractive -Command '$env:USERNAME' 2>/dev/null | tr -d '\r')/AppData/Local/WSLKeepalive"
+    mkdir -p "$LOCAL_WAKE" 2>/dev/null || true
+    if cp "$HERE/wake-sentry.ps1" "$LOCAL_WAKE/" 2>/dev/null; then
+      # Run it from a local Windows path, not the \\wsl.localhost UNC share:
+      # scripts on a network path are treated as remote-zone and refused by
+      # any execution policy stricter than Bypass.
+      powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+        -File "$(wslpath -w "$LOCAL_WAKE/wake-sentry.ps1")" -Install 2>&1 \
+        | tr -d '\r' | sed 's/^/  /'
+    else
+      echo "  WARNING: could not stage wake-sentry.ps1 to the Windows side"
+    fi
+  else
+    echo "  skipped wake watchdog: powershell.exe unreachable from here"
+  fi
+
   echo
   echo "verify:  systemctl show sentry -p WatchdogUSec -p StartLimitIntervalUSec"
   echo "         systemctl --user list-timers sentry-selfcheck.timer"
   echo "         sentry selfcheck"
+  echo "         powershell.exe -Command \"Get-ScheduledTask 'sentry wake watchdog'\""
 fi
 
 if $want_windows; then

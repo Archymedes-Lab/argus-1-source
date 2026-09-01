@@ -29,6 +29,7 @@ inbox while the machine is genuinely broken.
 """
 
 import json
+import os
 import subprocess
 import time
 
@@ -61,9 +62,29 @@ _M_LAST_ALERT = "selfcheck_last_alert"
 _M_LAST_STATE = "selfcheck_last_state"
 
 
-def _run(cmd):
+def _user_env():
+    """Environment that lets `systemctl --user` find the user manager.
+
+    sentry.service runs under the *system* manager (as chris, but system
+    scope), and a system service inherits no XDG_RUNTIME_DIR or session bus.
+    Without them `systemctl --user` fails with "Failed to connect to bus: No
+    medium found", which reads identically to "the timer is not installed" --
+    so the daemon would report its own watchdog missing and try to reinstall
+    something that was there all along.
+    """
+    env = dict(os.environ)
+    runtime = env.get("XDG_RUNTIME_DIR")
+    if not runtime or not os.path.isdir(runtime):
+        candidate = f"/run/user/{os.getuid()}"
+        if os.path.isdir(candidate):
+            env["XDG_RUNTIME_DIR"] = candidate
+    return env
+
+
+def _run(cmd, env=None):
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+                           env=env)
         return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, "", str(exc)
@@ -80,7 +101,7 @@ def _systemctl(*args, user=False, privileged=False):
     not act, which is itself worth mailing about.
     """
     base = ["systemctl"] + (["--user"] if user else []) + list(args)
-    rc, out, err = _run(base)
+    rc, out, err = _run(base, env=_user_env() if user else None)
     if rc == 0 or user or not privileged:
         return rc, out, err
     blocked = ("access denied" in err.lower() or "authentication" in err.lower()
@@ -174,6 +195,70 @@ def check(db_path=DEFAULT_DB):
         "age": age,
         "problems": problems,
     }
+
+
+TIMER = "sentry-selfcheck.timer"
+
+
+def timer_state():
+    """(ActiveState, UnitFileState) of the out-of-daemon watchdog timer."""
+    rc, out, _ = _systemctl("show", TIMER, "-p", "ActiveState",
+                            "-p", "UnitFileState", user=True)
+    if rc != 0:
+        return "", ""
+    vals = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+    return vals.get("ActiveState", ""), vals.get("UnitFileState", "")
+
+
+def timer_will_fire():
+    """True only if the timer has a next elapse scheduled.
+
+    "active" is not the same as "will fire". A timer built on OnUnitInactiveSec
+    whose chain was broken -- by a disable/enable cycle, a failed run, a manual
+    stop -- sits at ActiveState=active with NextElapse=infinity: armed,
+    enabled, and never going to run again, reporting healthy to every status
+    command there is. That is the worst failure a watchdog can have, so it is
+    checked explicitly rather than inferred from ActiveState.
+    """
+    rc, out, _ = _systemctl("show", TIMER, "-p", "NextElapseUSecRealtime",
+                            "-p", "NextElapseUSecMonotonic", user=True)
+    if rc != 0:
+        return False
+    for line in out.splitlines():
+        _, _, val = line.partition("=")
+        val = val.strip()
+        if val and val not in ("infinity", "0", "n/a"):
+            return True
+    return False
+
+
+def ensure_timer():
+    """Re-arm the watchdog timer if it has stopped. Returns "" when healthy.
+
+    This is the other half of a mutual supervision loop: the timer restarts the
+    daemon when the daemon dies, and the daemon re-arms the timer when the
+    timer stops. Neither can be the single thing whose failure ends monitoring,
+    which is the whole point — a watchdog nothing watches is just a process.
+
+    Only meaningful when the timer is installed at all; an uninstalled timer is
+    a reporting matter for coverage, not something to conjure from here.
+    """
+    active, enabled_state = timer_state()
+    if not active:
+        return "not installed"
+    if active == "active" and enabled_state == "enabled" and timer_will_fire():
+        return ""
+    # A restart re-evaluates the schedule from scratch, which is what recovers
+    # an armed-but-never-firing timer; enable makes it survive the next login.
+    _systemctl("enable", TIMER, user=True)
+    _systemctl("restart", TIMER, user=True)
+    active2, enabled2 = timer_state()
+    if active2 == "active" and timer_will_fire():
+        return ""
+    if active2 == "active":
+        return (f"{TIMER} is active but has no next elapse — it will never "
+                f"fire again (unit file schedule is broken)")
+    return f"could not re-arm {TIMER} (state={active2 or 'unknown'}/{enabled2})"
 
 
 def confirm_unhealthy(db_path=DEFAULT_DB, attempts=ATTEMPTS):

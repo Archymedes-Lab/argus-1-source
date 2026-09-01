@@ -29,8 +29,8 @@ from urllib.parse import parse_qs, urlparse
 from . import (alert, auditd, backdoor, bruteforce, control, feeds, firewall,
                hidden, hunt, implant, intel,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               sdnotify, sniffing, spyware, startup, sysmon, sysmon_linux,
-               webshell)
+               sdnotify, selfcheck, sniffing, spyware, startup, sysmon,
+               sysmon_linux, webshell)
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
@@ -75,6 +75,11 @@ JOBS = {
     # immediately regardless of alert_min_severity.
     "bridge":   (45,    "Windows bridge reachability"),
     "input_hook":(45,   "Input monitor watchdog"),
+    # The other half of the mutual supervision loop. sentry-selfcheck.timer
+    # restarts this daemon when it dies; this re-arms that timer when it stops.
+    # Without it the timer is a single point of failure that nothing watches,
+    # and a stopped timer looks exactly like a healthy one from in here.
+    "watchdogs":(120,   "Watchdog mutual supervision"),
     "hidden":   (300,   "Hidden processes"),
     "firewall": (2400,  "Firewall & inbound"),
     "control":  (1800,  "Control surfaces"),
@@ -176,6 +181,41 @@ def _run_job(name, hosts):
         return evasion_mod.sort_findings(evasion_mod.audit())
     if name == "bridge":
         return coverage_mod.bridge_status()
+    if name == "watchdogs":
+        active, enabled_state = selfcheck.timer_state()
+        if not active:
+            return [{
+                "category": "daemon", "severity": "high", "host": "wsl",
+                "title": "the out-of-daemon watchdog is not installed",
+                "detail": "sentry-selfcheck.timer is absent, so nothing outside "
+                          "this process can restart it if it dies — and a dead "
+                          "daemon cannot report its own death. Install with "
+                          "`./install.sh --seal`.",
+                "where": "sentry-selfcheck.timer"}]
+        err = selfcheck.ensure_timer()
+        if err:
+            return [{
+                "category": "daemon", "severity": "high", "host": "wsl",
+                "title": "the out-of-daemon watchdog has stopped",
+                "detail": f"sentry-selfcheck.timer is {active}/{enabled_state} "
+                          f"and could not be re-armed: {err}",
+                "where": "sentry-selfcheck.timer"}]
+        if active != "active" or enabled_state != "enabled":
+            # ensure_timer() fixed it. Say so — a watchdog that keeps needing
+            # to be restarted is a finding, not a routine success.
+            return [{
+                "category": "daemon", "severity": "medium", "host": "wsl",
+                "title": "the out-of-daemon watchdog had stopped and was re-armed",
+                "detail": f"sentry-selfcheck.timer was {active}/{enabled_state}; "
+                          f"it is running again. Repeated occurrences mean "
+                          f"something is stopping it.",
+                "where": "sentry-selfcheck.timer"}]
+        return [{
+            "category": "daemon", "severity": "ok", "host": "wsl",
+            "title": "watchdogs supervise each other",
+            "detail": f"sentry-selfcheck.timer {active}/{enabled_state} — it "
+                      f"restarts this daemon, this daemon re-arms it",
+            "where": "sentry-selfcheck.timer"}]
     if name == "coverage":
         return coverage_mod.sort_findings(
             coverage_mod.audit(db_path=_run_job.db_path, hosts=hosts))
