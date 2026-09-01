@@ -170,23 +170,42 @@ def daemon_health():
     return out
 
 
+def bridge_status():
+    """One finding: is the Windows interop bridge reachable right now?
+
+    Split out of visibility() so the scheduler can run it on a short interval
+    of its own. The Windows side going blind is the single blind spot that has
+    to page in seconds, not on the ten-minute self-audit cycle — every Windows
+    collector, including the injected-input/keylogger hook, reports nothing the
+    moment powershell.exe stops answering, and nothing else notices.
+
+    Category is "collectors" and the wording carries "is down" / "interop
+    bridge" on purpose: alert.py classifies that as an outage, so it bypasses
+    the min-severity filter and the persistence gate and mails immediately.
+    """
+    if collect_windows.available():
+        return [_finding(
+            "collectors", "ok", "Windows bridge is up",
+            f"powershell.exe reachable via {os.environ.get('WSL_INTEROP', '?')}",
+            collect_windows._PS or "", host="win")]
+    return [_finding(
+        "collectors", "critical",
+        "the Windows side is blind — interop bridge is down",
+        "powershell.exe is unreachable, so every Windows collector — firewall, "
+        "autostart, spyware, intrusion, evasion, hidden-process cross-view and "
+        "the injected-input/keylogger hook — reports nothing rather than "
+        "reporting a problem. Usually a WSL interop stall rather than tampering; "
+        "`wsl --shutdown` from Windows rebuilds it, and the daemon recovers on "
+        "its own once it is back.",
+        "WSL interop", host="win")]
+
+
 def visibility():
     """Which individual views are unavailable, and what each blind spot costs."""
     out = []
 
-    # -- the Windows bridge -----------------------------------------------
-    if collect_windows.available():
-        out.append(_finding("visibility", "ok", "Windows bridge is up",
-                            f"powershell.exe reachable via {os.environ.get('WSL_INTEROP', '?')}",
-                            collect_windows._PS or "", host="win"))
-    else:
-        out.append(_finding(
-            "visibility", "critical", "Windows bridge is down",
-            "powershell.exe is unreachable, so every Windows collector — "
-            "firewall, autostart, spyware, intrusion, evasion, hidden-process "
-            "cross-view — is blind. They will report nothing rather than "
-            "reporting a problem.",
-            "WSL interop", host="win"))
+    # -- the Windows bridge (also run standalone on a fast interval) ------
+    out.extend(bridge_status())
 
     # -- elevation ---------------------------------------------------------
     if os.geteuid() != 0:

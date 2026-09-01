@@ -5,6 +5,11 @@
 #   ./install.sh --service    ...and run the daemon under systemd, always on
 #   ./install.sh --priority   ...and give it top CPU/IO priority + OOM immunity
 #                             (writes a system drop-in; needs sudo once)
+#   ./install.sh --seal       ...and make it as hard to stop as this machine
+#                             allows: systemd watchdog, no restart rate limit,
+#                             and an out-of-daemon timer that restarts and
+#                             emails if the daemon ever stops producing
+#                             (needs sudo once)
 #   ./install.sh --windows    ...and print the one Windows command that keeps
 #                             WSL itself alive across reboots
 set -euo pipefail
@@ -26,11 +31,12 @@ case ":$PATH:" in
   *) echo "note: add $BIN to PATH — echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc" ;;
 esac
 
-want_service=false; want_windows=false; want_priority=false
+want_service=false; want_windows=false; want_priority=false; want_seal=false
 for arg in "$@"; do
   case "$arg" in
     --service) want_service=true ;;
     --priority) want_service=true; want_priority=true ;;
+    --seal) want_service=true; want_priority=true; want_seal=true ;;
     --windows) want_windows=true ;;
   esac
 done
@@ -124,6 +130,47 @@ EOF
   sudo systemctl enable --now sentry.service
   echo "now managed by:  sudo systemctl status sentry"
   echo "verify:          systemctl show sentry -p Nice -p OOMScoreAdjust -p CPUWeight"
+fi
+
+if $want_seal; then
+  echo
+  echo "Sealing: watchdog, no restart rate limit, out-of-daemon self-check."
+  echo "This needs sudo once."
+
+  # 1. Drop-in on sentry.service: WatchdogSec + StartLimitIntervalSec=0.
+  sudo mkdir -p /etc/systemd/system/sentry.service.d
+  sudo cp "$HERE/systemd/hardening.conf" \
+          /etc/systemd/system/sentry.service.d/hardening.conf
+  sudo systemctl daemon-reload
+  sudo systemctl restart sentry.service
+  echo "  drop-in:  /etc/systemd/system/sentry.service.d/hardening.conf"
+
+  # 2. Let the unprivileged self-check restart the system-scoped unit, and
+  #    nothing else. Validated before install so a typo cannot break sudo.
+  TMP_SUDO="$(mktemp)"
+  sed "s/^chris /$USER /" "$HERE/systemd/sentry-restart.sudoers" > "$TMP_SUDO"
+  if sudo visudo -cqf "$TMP_SUDO"; then
+    sudo install -m 0440 -o root -g root "$TMP_SUDO" \
+         /etc/sudoers.d/sentry-restart
+    echo "  sudoers:  /etc/sudoers.d/sentry-restart (restart + reset-failed, this unit only)"
+  else
+    echo "  WARNING: sudoers rule failed validation and was NOT installed;"
+    echo "           the self-check will report but not restart."
+  fi
+  rm -f "$TMP_SUDO"
+
+  # 3. The watchdog that lives outside the daemon.
+  UNIT="$HOME/.config/systemd/user"
+  mkdir -p "$UNIT"
+  cp "$HERE/systemd/sentry-selfcheck.service" "$UNIT/"
+  cp "$HERE/systemd/sentry-selfcheck.timer"   "$UNIT/"
+  systemctl --user daemon-reload
+  systemctl --user enable --now sentry-selfcheck.timer
+  echo "  timer:    sentry-selfcheck.timer, every 2 min"
+  echo
+  echo "verify:  systemctl show sentry -p WatchdogUSec -p StartLimitIntervalUSec"
+  echo "         systemctl --user list-timers sentry-selfcheck.timer"
+  echo "         sentry selfcheck"
 fi
 
 if $want_windows; then

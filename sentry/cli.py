@@ -9,7 +9,8 @@ from . import (alert, asep, auditd, backdoor, bruteforce, collect_windows,
                control, coverage, detect, feeds,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               sniffing, spyware, startup, sysmon, sysmon_linux, webshell)
+               selfcheck, sniffing, spyware, startup, sysmon, sysmon_linux,
+               webshell)
 from .store import DEFAULT_DB, Store
 from .util import iso, now, short
 
@@ -767,8 +768,22 @@ def cmd_alert(args, store):
     print(f"to            {', '.join(s['to']) or '—'}")
     print(f"min severity  {s['min_severity']}  (outage findings always page)")
     print(f"resend after  {s['resend_after'] // 3600}h while still firing")
+    print(f"outage resend every {s['outage_resend_after'] // 60}m, widening to "
+          f"{alert.OUTAGE_RESEND_CAP // 60}m")
     print(f"on clear      {'yes' if s['on_clear'] else 'no'}")
-    print(f"hourly cap    {s['hourly_cap']}   ({s['sent_last_hour']} sent in the last hour)")
+    print(f"retries       {s['send_attempts']} attempts per email")
+    cap = s["hourly_cap"] or "unlimited"
+    print(f"hourly cap    {cap}  (outages: {s['outage_hourly_cap']}) — "
+          f"{s['sent_last_hour']} sent in the last hour")
+    print(f"last sent ok  {iso(s['last_ok']) if s['last_ok'] else '—'}")
+    if s["last_error"]:
+        print(color(f"last error    {s['last_error']}", "high", t))
+    if s["capped_at"]:
+        print(color(f"last capped   {iso(s['capped_at'])}", "medium", t))
+    if s["outages"]:
+        print(color("ACTIVE OUTAGES — sentry is not watching something:", "high", t))
+        for k in s["outages"]:
+            print(color(f"  ! {k.replace('|', ' — ')}", "high", t))
     if s["active"]:
         print("active alerts:")
         for k in s["active"]:
@@ -777,6 +792,42 @@ def cmd_alert(args, store):
         print(f"\nSet resend_api_key, alert_from and alert_to in "
               f"{alert.CONFIG_PATH} (0600). alert_from must be a "
               f"Resend-verified sender.")
+
+
+def cmd_selfcheck(args, store):
+    """Is the daemon actually monitoring? Run from a timer outside it."""
+    t = _tty()
+    store.close()          # selfcheck opens its own handles
+    res = selfcheck.run(db_path=args.db, do_restart=args.restart,
+                        notify=not args.no_mail, attempts=args.attempts)
+    if args.json:
+        print(json.dumps(res, indent=2))
+        return 0 if res["healthy"] else 1
+    if args.quiet:
+        return 0 if res["healthy"] else 1
+
+    if res["healthy"]:
+        print(color("  sentry is monitoring", "ok", t)
+              + f" — {selfcheck.UNIT} active, newest snapshot "
+                f"{res['newest_kind']} {res['age']}s ago")
+        return 0
+    print(color("  sentry is NOT monitoring this machine", "critical", t))
+    for p in res["problems"]:
+        print(color(f"    - {p}", "high", t))
+    if res["restarted"]:
+        print(f"    restart: "
+              + (color(res["restart_error"], "high", t) if res["restart_error"]
+                 else color("issued", "ok", t)))
+        after = res.get("after_restart")
+        if after:
+            print(f"    after restart: "
+                  + (color("healthy", "ok", t) if after["healthy"]
+                     else color("still unhealthy", "high", t)))
+    if res["mail_error"]:
+        print(color(f"    alert mail failed: {res['mail_error']}", "high", t))
+    elif not args.no_mail:
+        print("    alert mailed")
+    return 1
 
 
 def cmd_status(args, store):
@@ -1084,6 +1135,22 @@ def build_parser():
     al.add_argument("--test", action="store_true",
                     help="send a test alert to the configured recipients")
     al.set_defaults(fn=cmd_alert)
+
+    sk = sub.add_parser(
+        "selfcheck",
+        help="is the daemon actually monitoring? run from a timer outside it")
+    sk.add_argument("--restart", action="store_true",
+                    help="restart sentry.service if it is not healthy")
+    sk.add_argument("--attempts", type=int, default=selfcheck.ATTEMPTS,
+                    metavar="N",
+                    help=f"re-check up to N times before declaring it down "
+                         f"(default {selfcheck.ATTEMPTS})")
+    sk.add_argument("--no-mail", action="store_true",
+                    help="do not send an alert, just report")
+    sk.add_argument("--quiet", action="store_true",
+                    help="exit status only")
+    sk.add_argument("--json", action="store_true")
+    sk.set_defaults(fn=cmd_selfcheck)
     return p
 
 

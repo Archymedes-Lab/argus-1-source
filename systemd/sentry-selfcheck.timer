@@ -1,0 +1,24 @@
+# Fire the out-of-daemon watchdog every two minutes, forever.
+#
+# Two minutes is chosen against STALE_AFTER (300s) in selfcheck.py: a wedged or
+# dead daemon is detected on the first tick after it crosses five minutes of
+# silence, so the worst case between "sentry stopped monitoring" and "an email
+# about it" is about seven minutes — and the restart is attempted immediately,
+# so in the common case the gap in coverage is under a minute.
+
+[Unit]
+Description=Run the sentry self-check every two minutes
+
+[Timer]
+# Start checking shortly after login/boot, then every two minutes.
+OnBootSec=2min
+OnStartupSec=2min
+OnUnitInactiveSec=2min
+AccuracySec=10s
+# If the machine was asleep or WSL was shut down, run as soon as it is back
+# rather than silently skipping the missed ticks.
+Persistent=true
+Unit=sentry-selfcheck.service
+
+[Install]
+WantedBy=timers.target

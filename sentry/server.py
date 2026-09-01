@@ -29,7 +29,8 @@ from urllib.parse import parse_qs, urlparse
 from . import (alert, auditd, backdoor, bruteforce, control, feeds, firewall,
                hidden, hunt, implant, intel,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
-               sniffing, spyware, startup, sysmon, sysmon_linux, webshell)
+               sdnotify, sniffing, spyware, startup, sysmon, sysmon_linux,
+               webshell)
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
@@ -63,9 +64,16 @@ PAGE = os.path.join(HERE, "static", "dashboard.html")
 # last run instead of re-reading a day of log every time.
 JOBS = {
     "scan":     (60,    "Processes & network"),
-    # Early in the dict so that on a cold start the input-hook watchdog runs
-    # before the long Windows audits, not after them. Its healthy path is
-    # local-only (~25ms), so its position costs the others nothing.
+    # Early in the dict so that on a cold start these two watchdogs run before
+    # the long Windows audits, not after them. Both healthy paths are
+    # local-only (well under a second), so their position costs nothing.
+    #
+    # "bridge" is a standalone, fast copy of coverage.py's Windows-bridge
+    # check: available() only stats a socket, so at 45s it can page within a
+    # minute of the interop link dying instead of waiting for the 10-minute
+    # coverage cycle. Its finding is classed as an outage, so it mails
+    # immediately regardless of alert_min_severity.
+    "bridge":   (45,    "Windows bridge reachability"),
     "input_hook":(45,   "Input monitor watchdog"),
     "hidden":   (300,   "Hidden processes"),
     "firewall": (2400,  "Firewall & inbound"),
@@ -166,6 +174,8 @@ def _run_job(name, hosts):
         return intrusion_mod.sort_findings(intrusion_mod.audit())
     if name == "evasion":
         return evasion_mod.sort_findings(evasion_mod.audit())
+    if name == "bridge":
+        return coverage_mod.bridge_status()
     if name == "coverage":
         return coverage_mod.sort_findings(
             coverage_mod.audit(db_path=_run_job.db_path, hosts=hosts))
@@ -295,6 +305,13 @@ class Scheduler(threading.Thread):
         self.next_run = {name: 0.0 for name in JOBS}   # 0 => run immediately
         self.forced = []
         self.current = None
+        # Bumped at the top of every loop iteration. The systemd watchdog pings
+        # only while this keeps advancing, so a wedged scheduler — alive process,
+        # frozen snapshots — gets the service restarted instead of going
+        # unnoticed. It is deliberately not touched mid-job: the longest job
+        # (~106s) must not look like a hang, but a multi-minute stall must.
+        self.heartbeat = time.time()
+        self.started_at = time.time()
         self.lock = threading.Lock()
         _run_job.db_path = db_path
 
@@ -319,6 +336,7 @@ class Scheduler(threading.Thread):
         store = Store(self.db_path)
         try:
             while True:
+                self.heartbeat = time.time()
                 name = self._due()
                 if name is None:
                     time.sleep(1)
@@ -345,6 +363,33 @@ class Scheduler(threading.Thread):
                     pass
         finally:
             store.close()
+
+
+def _watchdog_loop(scheduler):
+    """Feed the systemd hardware-style watchdog, but only while healthy.
+
+    Healthy == the scheduler thread is alive and has looped within
+    STALL_LIMIT seconds. If it has wedged or died we simply stop pinging;
+    systemd then hits WatchdogSec, kills the process and starts it clean.
+    A monitor that quietly stops monitoring is the exact failure this whole
+    module exists to prevent, so the watchdog treats "no progress" as death.
+    """
+    usec = sdnotify.watchdog_usec()
+    if not usec:
+        return
+    interval = max(5.0, usec / 1_000_000 / 3)
+    # A job may honestly run for minutes — `intel` does networked LLM calls —
+    # so the bar for "wedged" is deliberately high. Killing a healthy daemon
+    # mid-refresh would make this hardening an outage of its own. The
+    # out-of-daemon selfcheck timer is the fast detector; this is the backstop.
+    stall_limit = max(600.0, usec / 1_000_000 * 0.8)
+    while True:
+        time.sleep(interval)
+        alive = scheduler.is_alive()
+        progressed = (time.time() - scheduler.heartbeat) < stall_limit
+        if alive and progressed:
+            sdnotify.watchdog()
+        # else: withhold the ping and let systemd restart us.
 
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -566,6 +611,15 @@ class Handler(BaseHTTPRequestHandler):
 def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
     scheduler = Scheduler(db_path, hosts)
     scheduler.start()
+
+    # Tell systemd we are up, then keep the watchdog fed for as long as the
+    # scheduler is actually making progress. Both are no-ops when not run under
+    # a systemd unit that asked for them.
+    sdnotify.ready()
+    sdnotify.status(f"scheduling {len(JOBS)} jobs")
+    wd = threading.Thread(target=_watchdog_loop, args=(scheduler,),
+                          name="sentry-watchdog", daemon=True)
+    wd.start()
 
     Handler.db_path = db_path
     Handler.scheduler = scheduler
