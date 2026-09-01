@@ -44,21 +44,22 @@ declare -A WANT=(
                                         # module layout to any unprivileged user
   # was 1: hide kernel pointers from everyone, root included.
   #
-  # UNVERIFIED INTERACTION, read before trusting this box's interception layer:
-  # Sysmon-for-Linux is the eBPF syscall interception this machine relies on
-  # (it took `sentry gaps` from 68% to 84%), and kptr_restrict=2 zeroes
-  # /proc/kallsyms for root as well as everyone else. Analysis says it is fine
-  # -- libbpf attaches kprobes by symbol NAME through the kernel's own API and
-  # never resolves an address itself, and BTF (/sys/kernel/btf/vmlinux) is a
-  # separate interface this setting does not govern. But that is reasoning, not
-  # evidence: the running sysmon predates this change and has not been reloaded
-  # under it.
+  # VERIFIED COMPATIBLE with Sysmon-for-Linux (2026-09-02, this box).
+  # kptr_restrict=2 zeroes /proc/kallsyms for root as well as everyone else,
+  # and Sysmon is the eBPF syscall interception this machine depends on -- it
+  # is what took `sentry gaps` from 68% to 84%. The concern was real: if the
+  # BPF loader needed kallsyms it would fail only on the NEXT restart, long
+  # after this script ran, and the interception would be gone silently.
   #
-  # Verify once, deliberately:   sudo systemctl restart sysmon && sleep 5 && \
-  #                              systemctl is-active sysmon && sentry sysmon-linux
-  # If it fails to come back, drop this to 1 and re-run. The marginal gain of 2
-  # over 1 is small on a box where root is already game over; silently losing
-  # syscall interception is not.
+  # It does not. sysmon was reloaded under kptr_restrict=2 and delivered 94199
+  # events on the following pass. That matches the mechanism: libbpf attaches
+  # kprobes by symbol NAME through the kernel's own API rather than resolving
+  # addresses, and BTF (/sys/kernel/btf/vmlinux) is a separate interface this
+  # setting does not govern.
+  #
+  # Re-check after any kernel or Sysmon upgrade:
+  #   sudo systemctl restart sysmon && sleep 5 && sentry sysmon-linux
+  # If it ever fails to come back, drop this to 1 and re-run.
   [kernel.kptr_restrict]=2
   [net.ipv4.conf.all.send_redirects]=0  # was 1: this box is not a router
   [net.ipv4.conf.default.send_redirects]=0

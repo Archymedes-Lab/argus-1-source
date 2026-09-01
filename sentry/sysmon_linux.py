@@ -47,11 +47,33 @@ PERSIST_PATHS = re.compile(
     r"/etc/systemd/system/|/\.config/systemd/user/|/etc/init\.d/|"
     r"/etc/ld\.so\.preload$|/etc/sudoers|/\.bashrc$|/\.bash_profile$|"
     r"/\.profile$|/etc/profile\.d/|/etc/rc\.local$")
+# What makes this dangerous is fetched content reaching an interpreter, not the
+# mere presence of curl. The old second alternative was `sh -c .* (curl|...)`,
+# where `.*` matched a fetch used for anything at all -- an ordinary
+# `bash -c '... curl -s https://api/health ...'` tripped it every time. Each
+# alternative below now requires the download and the execution to be joined.
 DOWNLOAD_RUN = re.compile(
-    r"(curl|wget|fetch)\b[^|]*\|\s*(sudo\s+)?(ba)?sh|"
-    r"\b(ba)?sh\b\s+-c\b.*(curl|wget|base64\s+-d|/dev/tcp/)|"
-    r"base64\s+-d[^|]*\|\s*(ba)?sh|python[0-9.]*\s+-c\s+.{0,40}(socket|exec)",
+    # fetch piped straight into an interpreter
+    r"(curl|wget|fetch)\b[^|;&]*\|\s*(sudo\s+)?(ba|z|k|da)?sh\b|"
+    # fetch inside a substitution that is then evaluated
+    r"\b(eval|exec|source)\b[^\n]{0,30}\$\(\s*(curl|wget|fetch)\b|"
+    # base64 payload decoded into a shell
+    r"base64\s+(-d|--decode)\b[^|]*\|\s*(sudo\s+)?(ba)?sh\b|"
+    # a shell reaching for a raw TCP socket
+    r"\b(ba)?sh\b\s+-c\b[^\n]*/dev/tcp/|"
+    # python one-liner opening a socket or exec'ing fetched code
+    r"python[0-9.]*\s+-c\s+[^\n]{0,80}\b(socket|exec)\b",
     re.I)
+
+# Package-manager layouts under a world-writable root. A JS or Python project
+# checked out in /tmp runs binaries out of its own dependency tree constantly;
+# that is a dev habit, not a dropper. Still reported -- node_modules is a fine
+# place to hide a payload -- but one severity lower, so the genuinely odd case
+# of an unparented binary in /tmp stays visible above the noise.
+DEV_PKG_PATH = re.compile(
+    r"/(node_modules|site-packages|\.venv|venv|\.pnpm|\.cargo|vendor)/")
+DEV_PARENTS = ("node", "npm", "npx", "pnpm", "yarn", "bun", "deno", "tsx",
+               "python", "python3", "pip", "pip3", "cargo", "go", "make")
 
 
 def _finding(category, severity, title, detail, where="", host="wsl"):
@@ -213,10 +235,14 @@ def _rules(events, store=None):
             # an argument (runc/containerd pass plenty) is not execution from
             # there.
             if img and img.startswith(WORLD_WRITABLE):
+                dev = bool(DEV_PKG_PATH.search(img)) and pbase in DEV_PARENTS
                 out.append(_finding(
-                    "sysmon-linux", "high",
+                    "sysmon-linux", "medium" if dev else "high",
                     "process executed from a world-writable directory",
-                    f"{img}  «{cmd[:120]}»  parent {pbase or '?'}", CHANNEL))
+                    f"{img}  «{cmd[:120]}»  parent {pbase or '?'}"
+                    + ("  — dependency-tree binary run by its own package "
+                       "manager, which is normal for a project under /tmp"
+                       if dev else ""), CHANNEL))
             if DOWNLOAD_RUN.search(cmd):
                 out.append(_finding(
                     "sysmon-linux", "high", "download-and-run in a command line",
