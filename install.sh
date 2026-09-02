@@ -178,9 +178,12 @@ if $want_seal; then
     if cp "$HERE/wake-sentry.ps1" "$LOCAL_WAKE/" 2>/dev/null; then
       # Run it from a local Windows path, not the \\wsl.localhost UNC share:
       # scripts on a network path are treated as remote-zone and refused by
-      # any execution policy stricter than Bypass.
+      # any execution policy stricter than Bypass. -RepoRoot lets each run
+      # reconcile that staged copy against this checkout, so a later `git pull`
+      # reaches the task without re-running install.
       powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-        -File "$(wslpath -w "$LOCAL_WAKE/wake-sentry.ps1")" -Install 2>&1 \
+        -File "$(wslpath -w "$LOCAL_WAKE/wake-sentry.ps1")" -Install \
+        -RepoRoot "$HERE" 2>&1 \
         | tr -d '\r' | sed 's/^/  /'
     else
       echo "  WARNING: could not stage wake-sentry.ps1 to the Windows side"
