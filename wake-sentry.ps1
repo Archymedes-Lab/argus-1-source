@@ -128,15 +128,38 @@ if ($running -notmatch [regex]::Escape($Distro)) {
 }
 
 # The distro is up. Is the unit?
-$state = (& wsl.exe -d $Distro --exec systemctl is-active sentry.service 2>&1) -join ''
-$state = $state.Trim()
-if ($state -eq 'active') {
+#
+# `systemctl is-active` is read via its own output, not `2>&1`: merging stderr
+# folds any stray warning line into the value and makes a healthy unit read as
+# "not active", and this task runs every five minutes -- a false negative here
+# is a restart loop that kills every in-flight collector and leaves them
+# permanently "stale" while the unit itself never actually stopped. Take the
+# last non-empty line, and treat the transient states systemd passes through
+# during a legitimate restart as healthy so we do not race our own backstop.
+function Get-UnitState {
+    $raw = (& wsl.exe -d $Distro --exec systemctl is-active sentry.service 2>$null)
+    $lines = @($raw) | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' }
+    if ($lines.Count -eq 0) { return '' }
+    return $lines[-1].ToLower()
+}
+
+$healthy = @('active', 'activating', 'reloading')
+$state = Get-UnitState
+if ($healthy -contains $state) {
+    exit 0
+}
+
+# One bad read is not enough. Confirm it 5s later before acting, so a restart
+# we (or sentry-selfcheck.timer) triggered a moment ago is not counted twice.
+Start-Sleep -Seconds 5
+$state = Get-UnitState
+if ($healthy -contains $state) {
     exit 0
 }
 
 Say "sentry.service is '$state' -- restarting"
 & wsl.exe -d $Distro --exec bash -lc 'systemctl restart sentry.service 2>/dev/null || sudo -n systemctl restart sentry.service' 2>&1 | Out-Null
 Start-Sleep -Seconds 5
-$state2 = ((& wsl.exe -d $Distro --exec systemctl is-active sentry.service 2>&1) -join '').Trim()
-if ($state2 -eq 'active') { Say "sentry.service is active again" }
+$state2 = Get-UnitState
+if ($healthy -contains $state2) { Say "sentry.service is '$state2' again" }
 else { Say "sentry.service still '$state2' after restart -- needs a human"; exit 1 }
