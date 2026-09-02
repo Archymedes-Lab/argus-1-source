@@ -6,7 +6,7 @@ import sys
 import time
 
 from . import (alert, asep, auditd, backdoor, bruteforce, collect_windows,
-               control, coverage, detect, feeds,
+               control, coverage, detect, feeds, fixit,
                firewall, hidden, evasion, hunt, implant, intel, intrusion,
                inputwatch, memscan, monitor, netwatch, posture, secrets,
                selfcheck, sniffing, spyware, startup, sysmon, sysmon_linux,
@@ -165,6 +165,9 @@ def cmd_control(args, store):
         print(f"  {tag} [{f['host']}] {f['title']}: {f['detail']}")
         if args.verbose and f["where"]:
             print(f"          {color(f['where'], 'dim', t)}")
+        fix = fixit.suggest(f)
+        if fix:
+            print(f"          {color('fix: ' + fix, 'ok', t)}")
 
     tally = "  ".join(f"{k}={counts[k]}" for k in
                       ("critical", "high", "medium", "low") if k in counts)
@@ -235,6 +238,9 @@ def _report(findings, verbose=False, severity=None, sev_order=None,
         where = f.get("where") or f.get("evidence") or ""
         if verbose and where:
             print(f"          {color(where, 'dim', t)}")
+        fix = fixit.suggest(f)
+        if fix:
+            print(f"          {color('fix: ' + fix, 'ok', t)}")
 
     if not findings:
         print(color(f"  {empty}", "ok", t))

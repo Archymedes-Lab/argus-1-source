@@ -41,6 +41,8 @@ import time
 import urllib.error
 import urllib.request
 
+from . import fixit
+
 CONFIG_PATH = os.path.expanduser("~/.sentry/config.json")
 API_URL = "https://api.resend.com/emails"
 
@@ -417,9 +419,13 @@ def _dispatch(store, conf, job, findings, error):
         sev = f.get("severity", "?")
         if SEV_RANK.get(sev, 9) < SEV_RANK.get(worst, 9):
             worst = sev
-        lines.append(f"[{sev.upper()}] {tag}: {f.get('title', '')}\n"
-                     f"    {f.get('detail', '')}\n"
-                     f"    where: {f.get('where', '') or '—'}  (job: {job})")
+        line = (f"[{sev.upper()}] {tag}: {f.get('title', '')}\n"
+               f"    {f.get('detail', '')}\n"
+               f"    where: {f.get('where', '') or '—'}  (job: {job})")
+        fix = fixit.suggest(f)
+        if fix:
+            line += f"\n    fix: {fix}"
+        lines.append(line)
     for k in cleared:
         lines.append(f"[CLEARED] {k.split('|', 1)[1].replace('|', ' — ')}")
 
