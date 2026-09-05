@@ -609,14 +609,17 @@ function renderOps() {
   const port = location.port || "8787";
   const url = location.origin;
   const groups = [
-    ["Quickstart (Linux / WSL)", [
-      ["Install + run 24/7, sealed, verify", "./quickstart.sh"],
-      ["Same, without sudo hardening", "./quickstart.sh --no-priority"],
-      ["Just put `jarvis` on PATH", "./install.sh"],
+    ["Quickstart — one command (run in WSL)", [
+      ["Everything: service, seal, cleanup, browser + firewall + ASR (pops one UAC)", "./quickstart.sh"],
+      ["Linux side only, no Windows bridge calls", "./quickstart.sh --no-windows"],
+      ["Skip the sudo hardening", "./quickstart.sh --no-priority"],
+      ["Health summary only", "./quickstart.sh --check"],
     ]],
-    ["Quickstart (Windows PowerShell)", [
-      ["Keep WSL + bridge alive across reboot", "powershell -ExecutionPolicy Bypass -File .\\quickstart.ps1"],
-      ["Browser + firewall logging hardening (elevated)", ".\\secure-internet.ps1 -Firewall; .\\secure-internet.ps1 -Browsers"],
+    ["Windows hardening (if you skipped the UAC prompt)", [
+      ["Firewall logging + ASR rules — elevated PowerShell", "powershell -ExecutionPolicy Bypass -File \"%LOCALAPPDATA%\\Jarvis\\harden-elevated.ps1\""],
+      ["Flip ASR from audit to enforce", "powershell -ExecutionPolicy Bypass -File \"%LOCALAPPDATA%\\Jarvis\\harden-elevated.ps1\" -Enforce"],
+      ["Undo firewall + ASR", "powershell -ExecutionPolicy Bypass -File \"%LOCALAPPDATA%\\Jarvis\\harden-elevated.ps1\" -Undo"],
+      ["Keep WSL alive across reboot (already done by quickstart)", "powershell -ExecutionPolicy Bypass -File .\\quickstart.ps1"],
     ]],
     ["Service control", [
       ["Status", "systemctl status jarvis.service --no-pager"],
