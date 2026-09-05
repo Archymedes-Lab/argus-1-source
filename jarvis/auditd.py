@@ -114,6 +114,35 @@ def _service_failed():
     return out.strip() == "failed"
 
 
+def _auditd_start_rejected_by_kernel():
+    """Durable evidence that this kernel refuses the audit daemon.
+
+    `systemctl is-failed` only reports the current state, so it goes back to
+    'inactive' the moment auditd is disabled or `reset-failed` is run — which
+    is the remediation this module recommends. The journal keeps the actual
+    error, so a WSL2 machine that has ever tried and failed stays diagnosed.
+    """
+    out, _ = _run(["journalctl", "-u", "auditd.service", "--no-pager",
+                   "-n", "200"])
+    low = out.lower()
+    return ("error setting audit daemon pid" in low
+            or "audit_set_pid" in low
+            or ("auditd" in low and "operation not permitted" in low))
+
+
+def _sysmon_linux_running():
+    try:
+        from . import sysmon_linux
+        installed, running = sysmon_linux.state()
+        if running:
+            return " Sysmon for Linux (eBPF) is running and covers this."
+        if installed:
+            return " Sysmon for Linux is installed but not running — start it."
+    except Exception:
+        pass
+    return " Install Sysmon for Linux (eBPF) for syscall visibility here."
+
+
 def _recent_notable():
     if not shutil.which("ausearch"):
         return []
@@ -146,16 +175,28 @@ def audit(hosts=("wsl", "win")):
 
     out = []
     if not running:
-        if _is_wsl() and _service_failed():
-            return [_finding(
-                "auditd", "medium",
-                "auditd cannot run on this WSL2 kernel",
-                "the service fails at start with 'audit_set_pid: Operation not "
-                "permitted' — Microsoft's WSL2 kernel rejects the audit daemon "
-                "over the netlink socket, and no userland change fixes it. "
-                "Syscall interception here needs eBPF tooling (Sysmon for "
-                "Linux; BTF is present). `sudo systemctl disable --now auditd` "
-                "to stop the restart loop", "auditd.service")]
+        if _is_wsl():
+            # On WSL2 the audit daemon effectively never starts — the MS kernel
+            # rejects audit_set_pid over netlink. Recommending `enable --now`
+            # here just walks the user into a failed-restart loop, so this is a
+            # MEDIUM with the eBPF substitute, and it stays MEDIUM whether the
+            # unit is inactive, disabled or failed (the journal is the tell).
+            proven = _auditd_start_rejected_by_kernel()
+            _, enabled_rc = _run(["systemctl", "is-enabled", "auditd"])
+            still_enabled = enabled_rc == 0
+            title = ("auditd cannot run on this WSL2 kernel" if proven
+                     else "auditd is not running (WSL2 kernels usually block it)")
+            detail = (
+                ("the service has failed to start with 'Error setting audit "
+                 "daemon pid (Operation not permitted)' — " if proven else
+                 "Microsoft's WSL2 kernel normally rejects the audit daemon "
+                 "over the netlink socket, so ")
+                + "no userland change fixes it."
+                + _sysmon_linux_running()
+                + (" `sudo systemctl disable --now auditd && sudo systemctl "
+                   "reset-failed auditd` to stop it retrying." if still_enabled
+                   or _service_failed() else ""))
+            return [_finding("auditd", "medium", title, detail, "auditd.service")]
         out.append(_finding(
             "auditd", "high", f"auditd is installed but not running{caveat}",
             "the kernel is not recording syscalls — nothing between two "
