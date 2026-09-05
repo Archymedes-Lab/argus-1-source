@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-CONF=/etc/sysctl.d/99-sentry-hardening.conf
+CONF=/etc/sysctl.d/99-jarvis-hardening.conf
 DRY=false
 [ "${1:-}" = "--dry" ] && DRY=true
 
@@ -47,7 +47,7 @@ declare -A WANT=(
   # VERIFIED COMPATIBLE with Sysmon-for-Linux (2026-09-02, this box).
   # kptr_restrict=2 zeroes /proc/kallsyms for root as well as everyone else,
   # and Sysmon is the eBPF syscall interception this machine depends on -- it
-  # is what took `sentry gaps` from 68% to 84%. The concern was real: if the
+  # is what took `jarvis gaps` from 68% to 84%. The concern was real: if the
   # BPF loader needed kallsyms it would fail only on the NEXT restart, long
   # after this script ran, and the interception would be gone silently.
   #
@@ -58,7 +58,7 @@ declare -A WANT=(
   # setting does not govern.
   #
   # Re-check after any kernel or Sysmon upgrade:
-  #   sudo systemctl restart sysmon && sleep 5 && sentry sysmon-linux
+  #   sudo systemctl restart sysmon && sleep 5 && jarvis sysmon-linux
   # If it ever fails to come back, drop this to 1 and re-run.
   [kernel.kptr_restrict]=2
   [net.ipv4.conf.all.send_redirects]=0  # was 1: this box is not a router
@@ -73,7 +73,7 @@ declare -A WANT=(
   [net.ipv6.conf.default.accept_redirects]=0
 )
 
-echo "=== sentry linux hardening ==="
+echo "=== jarvis linux hardening ==="
 changed=0; skipped=0
 
 TMP="$(mktemp)"
@@ -133,8 +133,8 @@ X11 (/tmp/.X11-unix/X0 is mode srwxrwxrwx)
     that has no business drawing a window:  env -u DISPLAY <command>
 
 Running unprivileged
-    sentry cannot read other users' command lines, kernel module details or
+    jarvis cannot read other users' command lines, kernel module details or
     eBPF map contents as `chris`. That is a deliberate trade: running the
     monitor as root would make the monitor itself the best target on the box.
-    Use `sudo sentry <cmd>` for a one-off deep look instead.
+    Use `sudo jarvis <cmd>` for a one-off deep look instead.
 EOF

@@ -1,4 +1,4 @@
-# sentry
+# JARVIS
 
 Monitors what runs on this machine — both the WSL2 Linux side and the Windows
 host — and audits the ways something could take or keep control of it.
@@ -10,14 +10,14 @@ have put a Resend key in the config.
 ## Start here
 
 ```bash
-cd ~/sentry
+cd ~/jarvis
 ./install.sh --service   # run it 24/7, dashboard at http://127.0.0.1:8787
-sentry investigate       # or a one-off report in the terminal
+jarvis investigate       # or a one-off report in the terminal
 ```
 
 ## The dashboard
 
-`sentry serve` runs a scheduler and a local web page. It is plain
+`jarvis serve` runs a scheduler and a local web page. It is plain
 `http.server` + SQLite + one self-contained HTML file — no framework, no build
 step, no CDN, and no dependency beyond the Python standard library. For a
 security tool that is the point: every dependency is code you have to trust, and
@@ -54,6 +54,41 @@ read.
    `./install.sh --windows` for the one-time PowerShell command that registers a
    hidden logon task to start WSL; systemd and linger take it from there.
 
+### Learning and protecting daily Windows apps
+
+`secure-daily-apps.ps1` counts top-level application launches so security work
+can follow actual use instead of a guessed software list. Its privacy boundary
+is narrow: executable name, executable path and launch time only — never command
+lines, window titles, URLs, documents or input. Chromium child processes are
+deduplicated, and all data remains under `%LOCALAPPDATA%\Jarvis\AppGuard`.
+
+Run from Windows PowerShell:
+
+```powershell
+.\secure-daily-apps.ps1 -Install                 # learn, report only
+.\secure-daily-apps.ps1 -Install -AutoHarden     # harden after 7 learning days
+.\secure-daily-apps.ps1 -Report                  # counts + publisher signatures
+.\secure-daily-apps.ps1 -Harden                  # harden learned browsers now
+.\secure-daily-apps.ps1 -Undo                    # restore prior browser policies
+.\secure-daily-apps.ps1 -Remove                  # remove task; preserve usage data
+```
+
+An app becomes "essential" after at least three launches on two separate days
+(configurable at install). Every essential executable gets an Authenticode
+publisher check. Recognized browsers get reversible, user-overridable safe
+defaults: standard Safe Browsing/SmartScreen, password-leak detection where
+supported, and balanced HTTPS-only navigation. Unknown software is reported but
+never modified merely because it was opened often.
+
+Hardening is applied only after the executable has a valid expected publisher
+signature; a lookalike named `chrome.exe` is reported, not trusted. `-Report`
+also writes `browser-protection.json`. Registry values mean *configured*, not
+necessarily *enforced*: confirm them in `chrome://policy`, `edge://policy`,
+`brave://policy`, or Firefox `about:policies`. The elevated
+`harden-windows.ps1` supplies the system-wide internet edge beneath browsers:
+Defender download/script/PUA/network blocking, enabled firewalls with
+default-deny inbound, and non-bypassable Windows/Edge SmartScreen.
+
 ## The commands
 
 | command | question it answers |
@@ -89,29 +124,29 @@ read.
 | `alert` | Email me when a collector stops recording or something critical fires. |
 
 ```bash
-sentry baseline          # learn the current state as known-good (do this once)
-sentry scan              # what drifted, what looks wrong, who it talks to
-sentry scan --enrich     # ...and reverse-DNS the public IPs
-sentry watch -i 120      # keep scanning, print only medium-and-worse
-sentry hidden            # cross-view scan (--deep sweeps the full pid range)
-sentry boot              # reconstruct startup from the event logs
-sentry spy               # monitoring software, capability use, input devices
-sentry evasion           # kernel integrity, hidden streams, shortcuts, dead drops
-sentry firewall          # posture, inbound rules, inbound connections, logons
-sentry control -v        # persistence / remote access / defenses
-sentry peers --scope public   # every external IP seen, and which process reached it
-sentry events --since 24      # alert history
-sentry procs --approved 0     # fingerprints not yet approved
-sentry approve <fp> --note "my build script"
-sentry status
+jarvis baseline          # learn the current state as known-good (do this once)
+jarvis scan              # what drifted, what looks wrong, who it talks to
+jarvis scan --enrich     # ...and reverse-DNS the public IPs
+jarvis watch -i 120      # keep scanning, print only medium-and-worse
+jarvis hidden            # cross-view scan (--deep sweeps the full pid range)
+jarvis boot              # reconstruct startup from the event logs
+jarvis spy               # monitoring software, capability use, input devices
+jarvis evasion           # kernel integrity, hidden streams, shortcuts, dead drops
+jarvis firewall          # posture, inbound rules, inbound connections, logons
+jarvis control -v        # persistence / remote access / defenses
+jarvis peers --scope public   # every external IP seen, and which process reached it
+jarvis events --since 24      # alert history
+jarvis procs --approved 0     # fingerprints not yet approved
+jarvis approve <fp> --note "my build script"
+jarvis status
 
-sentry intel --set-key <exa-key>   # once
-sentry intel                      # refresh the least-recently-updated topic
-sentry intel --all                # refresh the whole corpus
-sentry intel --show               # what the knowledge base holds
-sentry intel --revet              # re-judge stored indicators after a rules change
-sentry hunt                       # match every indicator against this machine
-sentry gaps -v                    # techniques in current intel that nothing checks
+jarvis intel --set-key <exa-key>   # once
+jarvis intel                      # refresh the least-recently-updated topic
+jarvis intel --all                # refresh the whole corpus
+jarvis intel --show               # what the knowledge base holds
+jarvis intel --revet              # re-judge stored indicators after a rules change
+jarvis hunt                       # match every indicator against this machine
+jarvis gaps -v                    # techniques in current intel that nothing checks
 ```
 
 Add `--host wsl` or `--host win` to either side alone; the default is both.
@@ -120,7 +155,7 @@ Every audit command takes `--severity`, `-v` and `--json`.
 ## Finding hidden processes
 
 No single process list is trusted, because anything with enough privilege can
-lie to the API behind it. `sentry hidden` collects several enumerations that
+lie to the API behind it. `jarvis hidden` collects several enumerations that
 reach the kernel by different routes and diffs them:
 
 *Linux* — libc `readdir`, the raw `getdents64` syscall via ctypes (which an
@@ -197,7 +232,7 @@ it:
 
 Every candidate from every view is then re-tested against a fresh enumeration
 and re-probed for life, so a process that merely started or exited mid-scan is
-never called a rootkit. `sentry asep` adds **masquerade detection** (a `svchost.exe`
+never called a rootkit. `jarvis asep` adds **masquerade detection** (a `svchost.exe`
 outside System32 is not svchost) and **parentage analysis** (Office or a browser
 spawning a script host, WMI spawning a shell, `lsass` having children at all).
 
@@ -218,12 +253,12 @@ The knowledge comes from Exa's search API, restricted to a list of publishers
 that do primary host-based research. Each result is passed back through the
 same API with a JSON schema attached, so what returns is structured artefacts —
 paths, hashes, domains, registry keys, ATT&CK technique ids — rather than
-article text to parse. The API key lives in `~/.sentry/config.json` at mode
+article text to parse. The API key lives in `~/.jarvis/config.json` at mode
 0600, never in the repository.
 
 ### Why none of it is trusted
 
-This is the only part of sentry that takes input from the internet, and it does
+This is the only part of JARVIS that takes input from the internet, and it does
 so in a security tool whose entire value is being right about what is running.
 Two things are wrong with the input by construction: the articles are written by
 strangers, and the extraction is done by a language model that fills empty
@@ -251,13 +286,13 @@ Two invariants hold no matter what the feed says:
 - **Nothing fetched is ever executed.** Indicators are compared as data — never
   interpolated into a shell, never used to build a command.
 
-When the rules get tighter, `sentry intel --revet` re-judges everything already
+When the rules get tighter, `jarvis intel --revet` re-judges everything already
 stored, so the knowledge base is never stuck at the quality of the rules that
 were in force the day it was fetched.
 
 ### Turning knowledge into a check
 
-`hunt` only compares against state sentry already collects, so it is cheap
+`hunt` only compares against state JARVIS already collects, so it is cheap
 enough to run every half hour:
 
 | indicator | checked against | severity on match |
@@ -283,12 +318,12 @@ drops.
 
 ATT&CK technique ids cannot be "found" on a host, so they are used differently.
 `gaps` compares the techniques current research is discussing against the
-techniques sentry's collectors actually cover, and reports the difference,
+techniques JARVIS's collectors actually cover, and reports the difference,
 weighted by how many independent writeups raised each one. A technique three
 teams wrote about this year is a better use of an afternoon than one mentioned
 once.
 
-This is the counterpart to `coverage`. `coverage` asks whether sentry is
+This is the counterpart to `coverage`. `coverage` asks whether JARVIS is
 running; `gaps` asks whether it is looking at the right things — and answers
 with a work queue rather than a warning.
 
@@ -297,7 +332,7 @@ with a work queue rather than a warning.
 Searches are metered. One topic refresh is roughly five cents; the full corpus
 is under forty. The daemon refreshes one topic at a time on a six-hour timer, so
 the corpus rotates itself over about two days. A daily budget, default `$0.50`
-and settable as `daily_budget` in `~/.sentry/config.json`, is enforced before
+and settable as `daily_budget` in `~/.jarvis/config.json`, is enforced before
 each query rather than reported after it — a metered API on a 24/7 timer is
 otherwise a standing invitation to a surprise bill.
 
@@ -474,6 +509,14 @@ Injected events store a coarse class (`enter`, `character`, `navigation`), the
 flags, and the focused window. Enough to say *something typed Enter into your
 terminal at 03:14*; not enough to reconstruct a sentence.
 
+Real typing is retained only as one aggregate SQLite row per minute: total
+key-downs, cadence buckets, and counts for the `=/+`, `/?`, and `./>` physical
+key families. There is no order, shift state or surrounding text, so a password
+cannot be reconstructed. The daemon uses those 90 days of bounded history as a
+personal baseline and reports volume spikes, machine-fast cadence, or unusual
+concentration on those punctuation keys. Injected presses of the same keys are
+stored as coarse classes and remain high-signal events.
+
 **Injected does not mean malicious.** Password-manager auto-type, AutoHotkey,
 on-screen keyboards, RDP, screen sharing and some IDE features all inject
 legitimately, and the flag says nothing about *which* process did it — the
@@ -489,7 +532,7 @@ as milliseconds on every movement.
 
 So the hook measures it rather than guessing — the delta between when Windows
 generated an event and when this hook received it, reported as average, peak,
-and the share of events over 50 ms. Sentry's own hook is in that chain and
+and the share of events over 50 ms. JARVIS's own hook is in that chain and
 contributes part of the figure, which is why the finding says so and tells you
 to stop it and re-measure.
 
@@ -523,43 +566,68 @@ age — so running it every 45 s costs about 25 ms and no interop round trip.
 
 ## Alerts: being told when it stops
 
-The dashboard is only useful when you are looking at it. `sentry alert` adds an
+The dashboard is only useful when you are looking at it. `jarvis alert` adds an
 outbound path for the findings that matter when you are not — a collector that
 crashed, a monitor that stopped recording, anything `critical`.
 
 It is off until you configure it, and it is the one component besides `intel`
 that reaches the network on its own. It sends through [Resend](https://resend.com)
-over HTTPS, standard library only. Put this in `~/.sentry/config.json` (kept
+over HTTPS, standard library only. Put this in `~/.jarvis/config.json` (kept
 `0600`):
 
 ```json
 {
   "resend_api_key": "re_...",
-  "alert_from": "sentry@yourdomain.com",
+  "alert_from": "JARVIS <jarvis@yourdomain.com>",
   "alert_to": "you@example.com",
   "alert_min_severity": "high",
   "alert_resend_after": 21600,
   "alert_on_clear": true,
-  "alert_hourly_cap": 12
+  "alert_hourly_cap": 12,
+  "advisory_model": "gpt-5.6-luna",
+  "openai_api_key": "sk-...",
+  "intel_topics_per_run": 2,
+  "intel_results_per_query": 6,
+  "intel_lookback_days": 365,
+  "daily_budget": 2.0
 }
 ```
 
 `alert_from` must be a sender Resend has verified for your domain; `alert_to`
-takes a string or a list. The key may also come from `$SENTRY_RESEND_KEY`, and
+takes a string or a list. The key may also come from `$JARVIS_RESEND_KEY`, and
 it is only ever sent in the `Authorization` header of the one request to
 `api.resend.com` — never logged, never in the body.
 
 Every finding has a stable key, so an alert pages you once when it fires, again
 after `alert_resend_after` if it is *still* firing, and once when it clears —
-not on every 45-second watchdog tick. Findings that mean "sentry itself is not
+not on every 45-second watchdog tick. Findings that mean "JARVIS itself is not
 watching something" page regardless of `alert_min_severity`, because a
 monitoring gap is the one class of finding whose whole point is that nothing
 else will tell you. `alert_hourly_cap` is a hard ceiling; anything past it is
 suppressed and noted in the next mail.
 
+Independently of event alerts, `jarvis serve` sends a detailed posture advisory
+every five hours through the same configured Resend recipient. It reports which
+collectors are current, stale, failing, or missing; ranks active findings by
+severity; attaches a concrete safe next action where one is known; names
+visibility gaps and design limits; and lists explicit clean/protected checks.
+Volatile process command lines and peer details remain local rather than being
+copied into routine email.
+
+The HTML report is deterministic by default. For an additional evidence-bound
+AI assessment, add paid OpenAI API credits and configure `advisory_model` plus
+`openai_api_key` (or provide `JARVIS_OPENAI_KEY` to the service). JARVIS uses
+the Responses API with storage disabled and sends only redacted findings—never
+credential values or raw process command lines. If credits, model access, or
+the API are unavailable, the report says so and the deterministic report still
+sends. Exa breadth is separately bounded by `intel_topics_per_run`,
+`intel_results_per_query`, `intel_lookback_days`, and the hard `daily_budget`.
+Complete security cannot be guaranteed; each report distinguishes verified
+controls from recommendations and blind spots.
+
 ```bash
-sentry alert            # show configuration and any active alerts
-sentry alert --test     # send a test message to the configured recipients
+jarvis alert            # show configuration and any active alerts
+jarvis alert --test     # send a test message to the configured recipients
 ```
 
 **On screen scraping**: the modern capture APIs go through the capability
@@ -589,7 +657,7 @@ guess that stays under the threshold — and it says so.
 
 ## Closing the gaps `gaps` names
 
-`sentry gaps` measures itself against the ATT&CK techniques in the current
+`jarvis gaps` measures itself against the ATT&CK techniques in the current
 intel corpus. Three collectors were added to close its highest-signal misses:
 
 - **`sniffing`** (T1040) — a promiscuous physical NIC, a process holding an
@@ -611,8 +679,14 @@ intel corpus. Three collectors were added to close its highest-signal misses:
   command line, a write to `authorized_keys` / cron / a systemd unit, one
   process reading another's memory, a deleted log file, a recon burst — and
   correlates observed destinations against the indicator corpus. Install steps
-  are in `sentry/sysmon_linux.py`. Once it is recording, `gaps` counts the
-  behavioural techniques covered.
+  are in `jarvis/sysmon_linux.py`; `sysmon/config.xml` is a tightened policy
+  that turns on the network, memory-access and persistence-write events those
+  rules need without a volume blow-up, and the collector flags it if they are
+  missing. Under heavy event load the journal rotates events out in hours —
+  faster than a suspended VM's downtime — so the collector also reports when a
+  window rotated away before it was read; `systemd/journald-sysmon.conf` is an
+  opt-in drop-in that buys ~2 days of retention. Once it is recording, `gaps`
+  counts the behavioural techniques covered.
 
 BITS transfer jobs (T1197) folded into `intrusion`, and several techniques that
 existing modules already answered (`secrets` → T1552, `intrusion` → T1539 /
@@ -644,7 +718,7 @@ wrong. That distinction is the whole reason `coverage.py` exists.
 
 ## Detecting how machines actually get broken into now
 
-`sentry intrusion` targets current initial-access tradecraft rather than
+`jarvis intrusion` targets current initial-access tradecraft rather than
 classic malware, because the modern shape is a thing that runs **once** and
 leaves no persistent process for a behavioural rule to catch:
 
@@ -667,7 +741,7 @@ leaves no persistent process for a behavioural rule to catch:
 ## Checking whether anything can lie to the other checks
 
 Every collector above reads the machine from userland, so each one is only as
-honest as the layer beneath it. `sentry evasion` asks the prior question — is
+honest as the layer beneath it. `jarvis evasion` asks the prior question — is
 anything in a position to lie? — by targeting the techniques that specifically
 defeat userland inspection:
 
@@ -703,7 +777,7 @@ defeat userland inspection:
 
 ## Auditing the monitor itself
 
-`sentry coverage` answers the question that decides what every other module's
+`jarvis coverage` answers the question that decides what every other module's
 silence is worth: *can this system currently see?*
 
 The failure it exists to prevent has already happened here once. The daemon ran
@@ -765,7 +839,7 @@ external peers. So:
 ## Finding commodity spyware
 
 The sophisticated end of this needs a kernel driver to catch. The unsophisticated
-end — which is most of it — leaves traces that `sentry spy` reads directly:
+end — which is most of it — leaves traces that `jarvis spy` reads directly:
 
 - **The capability ledger.** Windows records which application used the
   microphone, camera or location and exactly when, in
@@ -793,7 +867,7 @@ end — which is most of it — leaves traces that `sentry spy` reads directly:
   full USB enumeration history are checked — the latter catches a device that
   was attached once and taken away.
 
-`sentry asep` covers the persistence surface past Run keys, which is where
+`jarvis asep` covers the persistence surface past Run keys, which is where
 anything trying to stay quiet actually lives: `AppInit_DLLs` and Image File
 Execution Options debuggers (which inject into *other* processes rather than
 starting one of their own), the Winlogon chain, Active Setup, per-user COM
@@ -814,7 +888,7 @@ doesn't exist at all (an empty slot anything could fill).
 A console window that appears for a fraction of a second is a process with a
 console attached that exited immediately — `cmd.exe /c`, `wscript`, a `.bat`, or
 PowerShell without `-WindowStyle Hidden`. Interval sampling will never reliably
-catch one, so `sentry boot` does not try. It reconstructs the event afterwards
+catch one, so `jarvis boot` does not try. It reconstructs the event afterwards
 from Task Scheduler's operational log, the autostart inventory filtered to
 entries that *would* show a window, and the Application log. Cross-referencing
 those usually names the culprit outright.
@@ -857,21 +931,21 @@ A trait on an approved process still gets flagged.
 
 | path | purpose |
 |---|---|
-| `sentry/collect_linux.py` | `/proc` walker: processes, fds, socket inode → connection |
-| `sentry/collect_windows.py` | one-shot PowerShell collector over WSL interop |
-| `sentry/detect.py` | trait rules, scoring, severity |
-| `sentry/hidden.py` | cross-view enumeration, hidden-process detection |
-| `sentry/spyware.py` | capability ledger, autostart signatures, input devices |
-| `sentry/startup.py` | boot reconstruction, window-flash attribution |
-| `sentry/firewall.py` | firewall posture, inbound rules and connections, logons |
-| `sentry/asep.py` | autostart extensibility points, masquerade + parentage |
-| `sentry/evasion.py` | kernel integrity, ADS, LNK abuse, dead-drop C2, Unicode |
-| `sentry/coverage.py` | self-audit: collector health, blind spots, continuity |
-| `sentry/control.py` | persistence / remote-access / defense audit |
-| `sentry/monitor.py` | scan orchestration |
-| `sentry/server.py` | scheduler + localhost dashboard server |
-| `sentry/static/dashboard.html` | the dashboard, self-contained |
-| `sentry/store.py` | SQLite baseline, peers, events |
-| `sentry/cli.py` | command-line interface |
+| `jarvis/collect_linux.py` | `/proc` walker: processes, fds, socket inode → connection |
+| `jarvis/collect_windows.py` | one-shot PowerShell collector over WSL interop |
+| `jarvis/detect.py` | trait rules, scoring, severity |
+| `jarvis/hidden.py` | cross-view enumeration, hidden-process detection |
+| `jarvis/spyware.py` | capability ledger, autostart signatures, input devices |
+| `jarvis/startup.py` | boot reconstruction, window-flash attribution |
+| `jarvis/firewall.py` | firewall posture, inbound rules and connections, logons |
+| `jarvis/asep.py` | autostart extensibility points, masquerade + parentage |
+| `jarvis/evasion.py` | kernel integrity, ADS, LNK abuse, dead-drop C2, Unicode |
+| `jarvis/coverage.py` | self-audit: collector health, blind spots, continuity |
+| `jarvis/control.py` | persistence / remote-access / defense audit |
+| `jarvis/monitor.py` | scan orchestration |
+| `jarvis/server.py` | scheduler + localhost dashboard server |
+| `jarvis/static/dashboard.html` | the dashboard, self-contained |
+| `jarvis/store.py` | SQLite baseline, peers, events |
+| `jarvis/cli.py` | command-line interface |
 
-State lives in `~/.sentry/sentry.db`.
+State lives in `~/.jarvis/jarvis.db`.

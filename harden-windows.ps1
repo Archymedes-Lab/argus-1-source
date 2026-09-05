@@ -1,5 +1,5 @@
-# Deep OS hardening for the findings `sentry posture`, `sentry firewall` and
-# `sentry backdoor` report that remediate-windows.ps1 does not already cover.
+# Deep OS hardening for the findings `jarvis posture`, `jarvis firewall` and
+# `jarvis backdoor` report that remediate-windows.ps1 does not already cover.
 #
 # The two scripts are additive, not alternatives:
 #   remediate-windows.ps1  removes specific exposures that were found (orphaned
@@ -42,17 +42,27 @@ if (-not $admin) {
 }
 
 $mode = if ($Enforce) { 'Enabled' } else { 'AuditMode' }
-Say "=== sentry deep hardening  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
+Say "=== jarvis deep hardening  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
 Say "    ASR/CFA mode: $mode$(if (-not $Enforce) { '  (re-run with -Enforce to block)' })"
 
-# --- 1. Network Protection -------------------------------------------------
+# --- 1. Defender internet/download baseline -------------------------------
 # Blocks outbound connections to known-malicious hosts at the OS level, below
-# the browser. sentry's `hunt` can only tell you a C2 address was contacted
+# the browser. jarvis's `hunt` can only tell you a C2 address was contacted
 # after the fact; this refuses the connection.
-if ($PSCmdlet.ShouldProcess('Defender', 'enable Network Protection')) {
+if ($PSCmdlet.ShouldProcess('Defender', 'enable real-time, download, script, PUA and Network Protection')) {
+    Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
+    Set-MpPreference -DisableBehaviorMonitoring $false -ErrorAction SilentlyContinue
+    Set-MpPreference -DisableIOAVProtection $false -ErrorAction SilentlyContinue
+    Set-MpPreference -DisableScriptScanning $false -ErrorAction SilentlyContinue
+    Set-MpPreference -PUAProtection Enabled -ErrorAction SilentlyContinue
     Set-MpPreference -EnableNetworkProtection Enabled -ErrorAction SilentlyContinue
-    $v = (Get-MpPreference).EnableNetworkProtection
-    Say "[1] Network Protection = $v  (1=Enabled, 2=Audit)"
+    $mp = Get-MpPreference
+    Say "[1] Defender: realtime=$(-not $mp.DisableRealtimeMonitoring) behavior=$(-not $mp.DisableBehaviorMonitoring) downloads=$(-not $mp.DisableIOAVProtection) scripts=$(-not $mp.DisableScriptScanning) PUA=$($mp.PUAProtection) network=$($mp.EnableNetworkProtection)"
+    if ($mp.DisableRealtimeMonitoring -or $mp.DisableBehaviorMonitoring -or
+        $mp.DisableIOAVProtection -or $mp.DisableScriptScanning -or
+        $mp.PUAProtection -ne 1 -or $mp.EnableNetworkProtection -ne 1) {
+        Warn 'one or more Defender internet/download protections did not enter blocking mode; Tamper Protection, another antivirus, or organization policy may own the setting'
+    }
 }
 
 # --- 2. Attack Surface Reduction ------------------------------------------
@@ -124,7 +134,7 @@ if ($PSCmdlet.ShouldProcess('LSA', 'enable RunAsPPL')) {
 # program no longer exists is a pre-authorised hole: drop any binary at that
 # exact path and it is reachable from any address with no prompt.
 if ($PSCmdlet.ShouldProcess('Firewall', 'export policy and remove orphaned inbound rules')) {
-    $bk = "$env:USERPROFILE\Documents\sentry-firewall-backup-$(Get-Date -Format yyyyMMdd-HHmmss).wfw"
+    $bk = "$env:USERPROFILE\Documents\jarvis-firewall-backup-$(Get-Date -Format yyyyMMdd-HHmmss).wfw"
     netsh advfirewall export "$bk" | Out-Null
     if (-not (Test-Path $bk)) {
         Warn "firewall export failed; skipping rule removal rather than deleting without a backup"
@@ -145,32 +155,67 @@ if ($PSCmdlet.ShouldProcess('Firewall', 'export policy and remove orphaned inbou
     }
 }
 
-# --- 7. firewall logging ---------------------------------------------------
+# --- 7. firewall edge and logging -----------------------------------------
 # Dropped inbound packets leaving no record means there is nothing to look at
-# after the fact.
-if ($PSCmdlet.ShouldProcess('Firewall', 'enable dropped-packet logging')) {
+# after the fact. Default-deny inbound still preserves explicit allow rules;
+# outbound remains allowed so this does not silently break ordinary apps.
+if ($PSCmdlet.ShouldProcess('Firewall', 'enable every profile, default-deny inbound and log dropped packets')) {
+    Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True `
+        -DefaultInboundAction Block -DefaultOutboundAction Allow
     foreach ($p in 'domainprofile','privateprofile','publicprofile') {
         netsh advfirewall set $p logging droppedconnections enable | Out-Null
         netsh advfirewall set $p logging maxfilesize 16384 | Out-Null
     }
-    Say "[7] dropped-connection logging on for all three profiles"
+    $profiles = @(Get-NetFirewallProfile)
+    $bad = @($profiles | Where-Object {
+        -not $_.Enabled -or [string]$_.DefaultInboundAction -ne 'Block'
+    })
+    Say "[7] firewall enabled/default-deny inbound; outbound allowed; dropped-packet logging on all profiles"
+    if ($bad.Count) {
+        Warn "firewall verification failed for: $($bad.Name -join ', ')"
+    }
 }
 
-# --- 8. SMBv1 --------------------------------------------------------------
+# --- 8. SmartScreen from browser to downloaded file -----------------------
+# Edge's user-overridable defaults live in secure-daily-apps.ps1. These are
+# the machine boundary: known-dangerous sites/downloads and shell-launched
+# internet files cannot bypass the warning. Automatic HTTPS upgrades do not
+# block legacy HTTP sites; HTTPS-Only remains a per-user browser default.
+if ($PSCmdlet.ShouldProcess('Windows and Edge', 'enable non-bypassable SmartScreen protection')) {
+    $shell = 'HKLM:\Software\Policies\Microsoft\Windows\System'
+    New-Item -Path $shell -Force | Out-Null
+    New-ItemProperty -Path $shell -Name EnableSmartScreen -Value 1 `
+        -PropertyType DWord -Force | Out-Null
+    New-ItemProperty -Path $shell -Name ShellSmartScreenLevel -Value 'Block' `
+        -PropertyType String -Force | Out-Null
+
+    $edge = 'HKLM:\Software\Policies\Microsoft\Edge'
+    New-Item -Path $edge -Force | Out-Null
+    foreach ($name in 'SmartScreenEnabled','SmartScreenPuaEnabled',
+                          'PreventSmartScreenPromptOverride',
+                          'PreventSmartScreenPromptOverrideForFiles',
+                          'HttpsUpgradesEnabled') {
+        New-ItemProperty -Path $edge -Name $name -Value 1 `
+            -PropertyType DWord -Force | Out-Null
+    }
+    Say '[8] Windows shell + Edge SmartScreen enabled; unsafe site/download bypass blocked; Edge HTTPS upgrades enabled'
+}
+
+# --- 9. SMBv1 --------------------------------------------------------------
 # A 1980s protocol with no modern reason to be present. Reported as "not
 # readable" without elevation, so check it properly now that we have it.
 if ($PSCmdlet.ShouldProcess('SMBv1', 'disable if present')) {
     $f = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue
     if ($f -and $f.State -eq 'Enabled') {
         Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart | Out-Null
-        Say "[8] SMBv1 was ENABLED -- now disabled (reboot to complete)"
+        Say "[9] SMBv1 was ENABLED -- now disabled (reboot to complete)"
     } else {
-        Say "[8] SMBv1 state: $(if ($f) { $f.State } else { 'not present' }) -- nothing to do"
+        Say "[9] SMBv1 state: $(if ($f) { $f.State } else { 'not present' }) -- nothing to do"
     }
 }
 
-# --- 9. read what needed elevation ----------------------------------------
-# Not changes: these are the three things sentry reported as "not readable"
+# --- 10. read what needed elevation ---------------------------------------
+# Not changes: these are the three things jarvis reported as "not readable"
 # rather than "bad", and the difference matters.
 Say "--- state that only an elevated shell can read ---"
 try {
@@ -187,7 +232,7 @@ try {
 } catch { Warn "Defender exclusions unreadable" }
 Say "    Secure Boot: $(try { Confirm-SecureBootUEFI } catch { 'unreadable (legacy/BIOS boot)' })"
 
-# --- 10. what this script deliberately does NOT do -------------------------
+# --- 11. what this script deliberately does NOT do -------------------------
 Say "--- left for you, on purpose ---"
 Say "    Credential Guard: needs VBS policy + reboot and can break some VPN and"
 Say "      virtualisation drivers. Enable via Settings > Privacy & security >"
@@ -197,5 +242,5 @@ Say "    The two CodexSandbox* accounts are enabled, non-admin, hidden from the"
 Say "      sign-in screen. Legitimate Codex CLI sandbox accounts -- disable them"
 Say "      only if you no longer use Codex:  Disable-LocalUser -Name CodexSandboxOffline"
 
-Say "=== done. $(@($script:log).Count) lines. Re-run `sentry posture` to confirm. ==="
-$script:log | Set-Content "$env:USERPROFILE\Documents\sentry-harden-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+Say "=== done. $(@($script:log).Count) lines. Re-run `jarvis posture` to confirm. ==="
+$script:log | Set-Content "$env:USERPROFILE\Documents\jarvis-harden-$(Get-Date -Format yyyyMMdd-HHmmss).log"

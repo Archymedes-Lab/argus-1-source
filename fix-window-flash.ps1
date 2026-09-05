@@ -11,7 +11,7 @@
 
 $ErrorActionPreference = 'Continue'
 $stamp   = Get-Date -Format yyyyMMdd-HHmmss
-$backups = "$env:USERPROFILE\Documents\sentry-task-backup-$stamp"
+$backups = "$env:USERPROFILE\Documents\jarvis-task-backup-$stamp"
 $log     = @()
 function Say($m) { $script:log += $m; Write-Host $m }
 
@@ -19,7 +19,7 @@ $elevated = (New-Object Security.Principal.WindowsPrincipal(
     [Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 
-Say "=== sentry window-flash remediation  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
+Say "=== jarvis window-flash remediation  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
 Say "    elevated: $elevated"
 
 # ===========================================================================
@@ -160,7 +160,7 @@ if (-not $elevated) {
     Say "[B] SKIPPED -- Remote Assistance needs an elevated shell."
     Say "[B] Re-run this script from an elevated PowerShell to apply Part B."
 } else {
-    $bk = "$env:USERPROFILE\Documents\sentry-firewall-backup-$stamp.wfw"
+    $bk = "$env:USERPROFILE\Documents\jarvis-firewall-backup-$stamp.wfw"
     netsh advfirewall export "$bk" | Out-Null
     if (Test-Path $bk) {
         Say "[B] firewall policy exported -> $bk"
@@ -188,5 +188,5 @@ if (-not $elevated) {
 }
 
 Say "=== done ==="
-$log | Set-Content -Path "$env:USERPROFILE\Documents\sentry-window-flash-log-$stamp.txt" -Encoding UTF8
-$log | Set-Content -Path "$env:TEMP\sentry-window-flash-last.txt" -Encoding UTF8
+$log | Set-Content -Path "$env:USERPROFILE\Documents\jarvis-window-flash-log-$stamp.txt" -Encoding UTF8
+$log | Set-Content -Path "$env:TEMP\jarvis-window-flash-last.txt" -Encoding UTF8

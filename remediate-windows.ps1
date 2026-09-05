@@ -1,4 +1,4 @@
-# Remediation for the critical/high findings sentry reported.
+# Remediation for the critical/high findings jarvis reported.
 #
 # Requires elevation: firewall writes and Defender history writes both do.
 # Every step is scoped and re-derives its own targets at runtime rather than
@@ -9,10 +9,10 @@ $ErrorActionPreference = 'Continue'
 $log = @()
 function Say($m) { $script:log += $m; Write-Host $m }
 
-Say "=== sentry remediation  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
+Say "=== jarvis remediation  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
 
 # --- 0. backup -------------------------------------------------------------
-$bk = "$env:USERPROFILE\Documents\sentry-firewall-backup-$(Get-Date -Format yyyyMMdd-HHmmss).wfw"
+$bk = "$env:USERPROFILE\Documents\jarvis-firewall-backup-$(Get-Date -Format yyyyMMdd-HHmmss).wfw"
 netsh advfirewall export "$bk" | Out-Null
 if (Test-Path $bk) { Say "[0] firewall policy exported -> $bk" }
 else { Say "[0] WARNING: firewall export failed; aborting."; return }
@@ -84,7 +84,7 @@ if (Test-Path $inst) { Remove-Item $inst -Force -ErrorAction SilentlyContinue; S
 else { Say "[6] installer already gone" }
 # Remove-MpThreat only acts on threats Defender still considers active. These
 # two are inactive, so the names will most likely persist in Get-MpThreat --
-# that is a stale record, not a live infection, and sentry now grades it that
+# that is a stale record, not a live infection, and jarvis now grades it that
 # way rather than reporting critical forever.
 Remove-MpThreat -ErrorAction SilentlyContinue
 Say "[6] Defender threat entries remaining: $(@(Get-MpThreat).Count) (inactive entries are historical)"
@@ -111,4 +111,4 @@ foreach ($name in $ka.Keys) {
 }
 
 Say "=== done ==="
-$log | Set-Content -Path "$env:USERPROFILE\Documents\sentry-remediation-log.txt" -Encoding UTF8
+$log | Set-Content -Path "$env:USERPROFILE\Documents\jarvis-remediation-log.txt" -Encoding UTF8

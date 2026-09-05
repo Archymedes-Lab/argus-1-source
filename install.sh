@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Install sentry, and optionally run it 24/7.
+# Install jarvis, and optionally run it 24/7.
 #
-#   ./install.sh              put `sentry` on PATH
+#   ./install.sh              put `jarvis` on PATH
 #   ./install.sh --service    ...and run the daemon under systemd, always on
 #   ./install.sh --priority   ...and give it top CPU/IO priority + OOM immunity
 #                             (writes a system drop-in; needs sudo once)
@@ -16,15 +16,34 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.local/bin"
-PORT="${SENTRY_PORT:-8787}"
+PORT="${JARVIS_PORT:-8787}"
 mkdir -p "$BIN"
 
-cat > "$BIN/sentry" <<EOF
+# One-time namespace migration. The database is copied through SQLite's online
+# backup command so a still-running legacy daemon cannot leave a torn WAL
+# snapshot. Keep the original directory as a rollback copy; JARVIS writes only
+# to the new namespace after this point.
+STATE_DIR="$HOME/.jarvis"
+LEGACY_STATE_DIR="$HOME/.sentry"
+mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR"
+if [ ! -e "$STATE_DIR/config.json" ] && [ -f "$LEGACY_STATE_DIR/config.json" ]; then
+  install -m 0600 "$LEGACY_STATE_DIR/config.json" "$STATE_DIR/config.json"
+  echo "migrated:  configuration -> $STATE_DIR/config.json"
+fi
+if [ ! -e "$STATE_DIR/jarvis.db" ] && [ -f "$LEGACY_STATE_DIR/sentry.db" ]; then
+  python3 -c 'import sqlite3, sys; src = sqlite3.connect(sys.argv[1]); dst = sqlite3.connect(sys.argv[2]); src.backup(dst); dst.close(); src.close()' \
+      "$LEGACY_STATE_DIR/sentry.db" "$STATE_DIR/jarvis.db"
+  chmod 600 "$STATE_DIR/jarvis.db"
+  echo "migrated:  monitoring state -> $STATE_DIR/jarvis.db"
+fi
+
+cat > "$BIN/jarvis" <<EOF
 #!/usr/bin/env bash
-cd "$HERE" && exec python3 -m sentry "\$@"
+cd "$HERE" && exec python3 -m jarvis "\$@"
 EOF
-chmod +x "$BIN/sentry"
-echo "installed: $BIN/sentry"
+chmod +x "$BIN/jarvis"
+echo "installed: $BIN/jarvis"
 
 case ":$PATH:" in
   *":$BIN:"*) ;;
@@ -41,18 +60,34 @@ for arg in "$@"; do
   esac
 done
 
+stop_legacy_windows_hook() {
+  command -v powershell.exe >/dev/null 2>&1 || return 0
+  powershell.exe -NoProfile -NonInteractive -Command '
+    $pidFile = Join-Path $env:LOCALAPPDATA "Sentry\input.pid"
+    if (Test-Path -LiteralPath $pidFile) {
+      try {
+        $oldPid = [int](Get-Content -LiteralPath $pidFile -Raw)
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$oldPid"
+        if ($proc.Name -eq "powershell.exe" -and
+            $proc.CommandLine -like "*\Sentry\inputhook.ps1*") {
+          Stop-Process -Id $oldPid -Force
+        }
+      } catch { }
+    }' >/dev/null 2>&1 || true
+}
+
 if $want_service; then
   UNIT="$HOME/.config/systemd/user"
   mkdir -p "$UNIT"
-  cat > "$UNIT/sentry.service" <<EOF
+  cat > "$UNIT/jarvis.service" <<EOF
 [Unit]
-Description=sentry — continuous process, network and control-surface monitoring
+Description=JARVIS — continuous process, network and control-surface monitoring
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=$HERE
-ExecStart=/usr/bin/python3 -m sentry serve --port $PORT
+ExecStart=/usr/bin/python3 -m jarvis serve --port $PORT
 Restart=always
 RestartSec=15
 
@@ -74,9 +109,13 @@ TasksMax=4096
 WantedBy=default.target
 EOF
   systemctl --user daemon-reload
-  systemctl --user enable --now sentry.service
-  echo "service:   systemctl --user status sentry"
-  echo "logs:      journalctl --user -u sentry -f"
+  # Stop the previous namespace before binding the same dashboard port.
+  systemctl --user disable --now sentry.service 2>/dev/null || true
+  systemctl --user disable --now sentry-selfcheck.timer 2>/dev/null || true
+  stop_legacy_windows_hook
+  systemctl --user enable --now jarvis.service
+  echo "service:   systemctl --user status jarvis"
+  echo "logs:      journalctl --user -u jarvis -f"
   echo "dashboard: http://127.0.0.1:$PORT"
 
   # Without linger, systemd tears down the user manager when the last shell
@@ -92,13 +131,13 @@ fi
 if $want_priority; then
   # The user manager cannot grant a negative nice or a negative OOM score.
   # Moving the unit to the system manager (still running as this user) can.
-  SYS="/etc/systemd/system/sentry.service"
+  SYS="/etc/systemd/system/jarvis.service"
   echo
   echo "Installing $SYS (system manager, runs as $USER) for real priority."
   echo "This needs sudo once."
   sudo tee "$SYS" >/dev/null <<EOF
 [Unit]
-Description=sentry — continuous monitoring (top priority)
+Description=JARVIS — continuous monitoring (top priority)
 After=network.target
 
 [Service]
@@ -106,7 +145,7 @@ Type=simple
 User=$USER
 Group=$(id -gn)
 WorkingDirectory=$HERE
-ExecStart=/usr/bin/python3 -m sentry serve --port $PORT
+ExecStart=/usr/bin/python3 -m jarvis serve --port $PORT
 Restart=always
 RestartSec=15
 
@@ -125,11 +164,14 @@ TasksMax=4096
 [Install]
 WantedBy=multi-user.target
 EOF
-  systemctl --user disable --now sentry.service 2>/dev/null || true
+  systemctl --user disable --now jarvis.service 2>/dev/null || true
   sudo systemctl daemon-reload
-  sudo systemctl enable --now sentry.service
-  echo "now managed by:  sudo systemctl status sentry"
-  echo "verify:          systemctl show sentry -p Nice -p OOMScoreAdjust -p CPUWeight"
+  # The old and new units share one port and must never run together.
+  sudo systemctl disable --now sentry.service 2>/dev/null || true
+  stop_legacy_windows_hook
+  sudo systemctl enable --now jarvis.service
+  echo "now managed by:  sudo systemctl status jarvis"
+  echo "verify:          systemctl show jarvis -p Nice -p OOMScoreAdjust -p CPUWeight"
 fi
 
 if $want_seal; then
@@ -137,22 +179,22 @@ if $want_seal; then
   echo "Sealing: watchdog, no restart rate limit, out-of-daemon self-check."
   echo "This needs sudo once."
 
-  # 1. Drop-in on sentry.service: WatchdogSec + StartLimitIntervalSec=0.
-  sudo mkdir -p /etc/systemd/system/sentry.service.d
+  # 1. Drop-in on jarvis.service: WatchdogSec + StartLimitIntervalSec=0.
+  sudo mkdir -p /etc/systemd/system/jarvis.service.d
   sudo cp "$HERE/systemd/hardening.conf" \
-          /etc/systemd/system/sentry.service.d/hardening.conf
+          /etc/systemd/system/jarvis.service.d/hardening.conf
   sudo systemctl daemon-reload
-  sudo systemctl restart sentry.service
-  echo "  drop-in:  /etc/systemd/system/sentry.service.d/hardening.conf"
+  sudo systemctl restart jarvis.service
+  echo "  drop-in:  /etc/systemd/system/jarvis.service.d/hardening.conf"
 
   # 2. Let the unprivileged self-check restart the system-scoped unit, and
   #    nothing else. Validated before install so a typo cannot break sudo.
   TMP_SUDO="$(mktemp)"
-  sed "s/^chris /$USER /" "$HERE/systemd/sentry-restart.sudoers" > "$TMP_SUDO"
+  sed "s/^chris /$USER /" "$HERE/systemd/jarvis-restart.sudoers" > "$TMP_SUDO"
   if sudo visudo -cqf "$TMP_SUDO"; then
     sudo install -m 0440 -o root -g root "$TMP_SUDO" \
-         /etc/sudoers.d/sentry-restart
-    echo "  sudoers:  /etc/sudoers.d/sentry-restart (restart + reset-failed, this unit only)"
+         /etc/sudoers.d/jarvis-restart
+    echo "  sudoers:  /etc/sudoers.d/jarvis-restart (restart + reset-failed, this unit only)"
   else
     echo "  WARNING: sudoers rule failed validation and was NOT installed;"
     echo "           the self-check will report but not restart."
@@ -162,11 +204,12 @@ if $want_seal; then
   # 3. The watchdog that lives outside the daemon.
   UNIT="$HOME/.config/systemd/user"
   mkdir -p "$UNIT"
-  cp "$HERE/systemd/sentry-selfcheck.service" "$UNIT/"
-  cp "$HERE/systemd/sentry-selfcheck.timer"   "$UNIT/"
+  sed "s|@REPO_ROOT@|$HERE|g" \
+      "$HERE/systemd/jarvis-selfcheck.service" > "$UNIT/jarvis-selfcheck.service"
+  cp "$HERE/systemd/jarvis-selfcheck.timer"   "$UNIT/"
   systemctl --user daemon-reload
-  systemctl --user enable --now sentry-selfcheck.timer
-  echo "  timer:    sentry-selfcheck.timer, every 2 min"
+  systemctl --user enable --now jarvis-selfcheck.timer
+  echo "  timer:    jarvis-selfcheck.timer, every 2 min"
 
   # 4. The outermost ring. Everything above lives inside the distro and is gone
   #    the moment the WSL VM stops -- and nothing inside a stopped VM can start
@@ -175,28 +218,28 @@ if $want_seal; then
   if command -v powershell.exe >/dev/null 2>&1; then
     LOCAL_WAKE="/mnt/c/Users/$(powershell.exe -NoProfile -NonInteractive -Command '$env:USERNAME' 2>/dev/null | tr -d '\r')/AppData/Local/WSLKeepalive"
     mkdir -p "$LOCAL_WAKE" 2>/dev/null || true
-    if cp "$HERE/wake-sentry.ps1" "$LOCAL_WAKE/" 2>/dev/null; then
+    if cp "$HERE/wake-jarvis.ps1" "$LOCAL_WAKE/" 2>/dev/null; then
       # Run it from a local Windows path, not the \\wsl.localhost UNC share:
       # scripts on a network path are treated as remote-zone and refused by
       # any execution policy stricter than Bypass. -RepoRoot lets each run
       # reconcile that staged copy against this checkout, so a later `git pull`
       # reaches the task without re-running install.
       powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-        -File "$(wslpath -w "$LOCAL_WAKE/wake-sentry.ps1")" -Install \
+        -File "$(wslpath -w "$LOCAL_WAKE/wake-jarvis.ps1")" -Install \
         -RepoRoot "$HERE" 2>&1 \
         | tr -d '\r' | sed 's/^/  /'
     else
-      echo "  WARNING: could not stage wake-sentry.ps1 to the Windows side"
+      echo "  WARNING: could not stage wake-jarvis.ps1 to the Windows side"
     fi
   else
     echo "  skipped wake watchdog: powershell.exe unreachable from here"
   fi
 
   echo
-  echo "verify:  systemctl show sentry -p WatchdogUSec -p StartLimitIntervalUSec"
-  echo "         systemctl --user list-timers sentry-selfcheck.timer"
-  echo "         sentry selfcheck"
-  echo "         powershell.exe -Command \"Get-ScheduledTask 'sentry wake watchdog'\""
+  echo "verify:  systemctl show jarvis -p WatchdogUSec -p StartLimitIntervalUSec"
+  echo "         systemctl --user list-timers jarvis-selfcheck.timer"
+  echo "         jarvis selfcheck"
+  echo "         powershell.exe -Command \"Get-ScheduledTask 'jarvis wake watchdog'\""
 fi
 
 if $want_windows; then
@@ -206,11 +249,13 @@ if $want_windows; then
 Keeping it running across Windows reboots
 --------------------------------------------------------------------
 WSL only runs while Windows keeps it running. Enabling linger (above)
-keeps sentry alive inside WSL; this task makes sure WSL itself starts
+keeps jarvis alive inside WSL; this task makes sure WSL itself starts
 at logon, with no visible window.
 
 Run this ONCE in Windows PowerShell (no elevation needed):
 
+  Unregister-ScheduledTask -TaskName "WSL sentry 24x7" `
+       -Confirm:$false -ErrorAction SilentlyContinue
   $a = New-ScheduledTaskAction -Execute "wsl.exe" `
        -Argument "-d Ubuntu --exec /bin/true"
   $t = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
@@ -219,18 +264,18 @@ Run this ONCE in Windows PowerShell (no elevation needed):
   $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
        -DontStopIfGoingOnBatteries -StartWhenAvailable `
        -ExecutionTimeLimit ([TimeSpan]::Zero)
-  Register-ScheduledTask -TaskName "WSL sentry 24x7" -Action $a `
+  Register-ScheduledTask -TaskName "WSL jarvis 24x7" -Action $a `
        -Trigger $t -Principal $p -Settings $s `
-       -Description "Starts WSL so sentry keeps running"
+       -Description "Starts WSL so jarvis keeps running"
 
 RunLevel Limited is load-bearing: asking for -RunLevel Highest makes
 registration itself require an elevated shell and fails with 0x80070005.
 The task does not need admin — it only has to start WSL.
 
-Starting WSL is enough: systemd then starts sentry.service on its own,
+Starting WSL is enough: systemd then starts jarvis.service on its own,
 and linger keeps it up with no session attached.
 
-To undo:  Unregister-ScheduledTask -TaskName "WSL sentry 24x7"
+To undo:  Unregister-ScheduledTask -TaskName "WSL jarvis 24x7"
 --------------------------------------------------------------------
 EOF
 fi
