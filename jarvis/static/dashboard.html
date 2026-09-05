@@ -151,6 +151,7 @@
   <span id="status" class="status s-ok">—</span>
   <span class="live"><span id="beat" class="beat on"></span><span id="livetxt">live</span></span>
   <button id="pause" onclick="togglePause()">pause</button>
+  <button id="voice" onclick="toggleVoice()" title="Spoken security briefing (press v to re-brief)">🔊 voice</button>
   <button onclick="runAll()">run all</button>
   <span class="spacer"></span>
   <input type="search" id="q" placeholder="search findings…  ( / )" oninput="onSearch()">
@@ -283,6 +284,7 @@ function render(s) {
   renderFindings();
   renderChecks(s);
   renderSide(s);
+  voiceBrief(s, false);
 
   const b = s.baseline_at ? ago(Number(s.baseline_at)) : "never";
   document.getElementById("dbinfo").innerHTML =
@@ -292,7 +294,7 @@ function render(s) {
     `${s.stats.events} alerts recorded` +
     `<br><span style="color:var(--faint)">shortcuts: ` +
     `<kbd>/</kbd> search &nbsp; <kbd>r</kbd> refresh &nbsp; <kbd>space</kbd> pause ` +
-    `&nbsp; <kbd>esc</kbd> clear filters</span>`;
+    `&nbsp; <kbd>v</kbd> speak briefing &nbsp; <kbd>esc</kbd> clear filters</span>`;
 }
 
 function renderTiles(s) {
@@ -675,6 +677,148 @@ async function runAll() {
   setTimeout(tick, 400);
 }
 
+/* ---------- spoken security briefing ----------
+   Speaks what a person watching this dashboard would want to hear without
+   reading it: threats that need action now, monitoring that broke, and new
+   high findings. Diffed against what was already said, so it stays quiet
+   until something changes. Press v to re-brief the full status on demand. */
+let voice = false, voicePrimed = false, spokenKeys = new Set(), lostConn = false;
+try { voice = localStorage.getItem("jarvis.voice") === "1"; } catch (e) {}
+
+function say(text) {
+  if (!voice || !text || !window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1.06; u.lang = "en-US";
+  window.speechSynthesis.speak(u);
+}
+function firstClause(s) {
+  return String(s || "").split(/[—;]| - /)[0].trim().slice(0, 150);
+}
+/* Never voiced: coverage-gap accounting and standing config issues belong on
+   the screen, not read aloud every time the tab opens. */
+function isNoise(f) {
+  const c = (f.category || "").toLowerCase();
+  return f.job === "gaps" || f.job === "scan" ||
+    c === "coverage gap" || c === "not observable" || c === "visibility" || c === "limits" ||
+    /named in threat intelligence exists|deprecated or unrecognised/i.test(f.title || "");
+}
+/* Live, host-local, do-something-now. Matched by explicit job+pattern, not by
+   severity alone (a critical plaintext-secret finding is real but not urgent). */
+function tier1(f) {
+  const t = (f.title || "").toLowerCase(), c = (f.category || "").toLowerCase();
+  if (f.job === "input" && /inject|synthetic/.test(t) && f.severity !== "ok" && f.severity !== "low")
+    return "Synthetic input detected. " + firstClause(f.detail);
+  if (f.job === "controls" && /in use right now/.test(t))
+    return f.title + ". " + firstClause(f.detail);
+  if (c === "intel match" && f.severity === "critical")
+    return "Known-attacker indicator. " + f.title;
+  if (/\bspawned a shell\b|connect-back argument|reverse shell/.test(t))
+    return "Possible post-exploitation. " + f.title;
+  if (/owned by an invisible process|process is hidden from|invisible from the process/.test(t))
+    return "Hidden process. " + f.title + ". " + firstClause(f.detail);
+  if (c === "credential access")
+    return "Credential access. " + f.title;
+  if (/defender detected a threat/.test(t) && !/not active/i.test(f.detail || ""))
+    return "Active malware detection. " + firstClause(f.detail);
+  return null;
+}
+
+function voiceItems(s) {
+  const out = [], F = (s.findings || []).filter(f => !isNoise(f));
+  for (const f of F) {
+    const key = (f.job || "") + "|" + (f.title || "") + "|" + (f.where || "");
+    const a = tier1(f);
+    if (a) { out.push({ key, tier: 1, text: a }); continue; }
+    const t = (f.title || "").toLowerCase();
+    if (f.job === "controls" && /(changed|appeared|removed)/.test(t))
+      out.push({ key, tier: 3, text: "Control surface. " + f.title + ". " + firstClause(f.detail) });
+    else if (f.severity === "critical")
+      out.push({ key, tier: 3, kind: "crit", text: f.title || "" });
+    else if (f.severity === "high")
+      out.push({ key, tier: 3, kind: "high", text: f.title || "" });
+  }
+  for (const j of (s.jobs || [])) {
+    if (j.error) out.push({ key: "err|" + j.name, tier: 2,
+      text: "The " + j.name + " collector errored and is not reporting." });
+    else if (j.stale) out.push({ key: "stale|" + j.name, tier: 2,
+      text: "The " + j.name + " collector went stale and stopped producing results." });
+  }
+  const bridge = (s.jobs || []).find(j => j.name === "bridge");
+  if (bridge && (bridge.stale || bridge.error))
+    out.push({ key: "bridge-down", tier: 2, text: "Windows monitoring is offline. The bridge is down." });
+  if ((s.findings || []).some(f => /injected-input monitor is (down|not running|quiet)/i.test(f.title || "")))
+    out.push({ key: "hook-down", tier: 2, text: "The keystroke monitor is down. Synthetic input is not being watched." });
+  return out;
+}
+
+function statusLine(s) {
+  const jobs = s.jobs || [], F = (s.findings || []).filter(f => !isNoise(f));
+  const cur = jobs.filter(j => j.ts && !j.stale && !j.error).length;
+  const bad = jobs.filter(j => j.stale || j.error).map(j => j.name);
+  const crit = F.filter(f => f.severity === "critical").length;
+  const high = F.filter(f => f.severity === "high").length;
+  const acts = F.filter(f => tier1(f)).length;
+  const bridge = jobs.some(j => j.name === "bridge" && !j.stale && !j.error) ? "up" : "down";
+  const hook = F.some(f => /injected-input monitor is (down|not running|quiet)/i.test(f.title || "")) ? "down"
+             : (s.checks || []).some(f => /injected-input monitor is healthy/i.test(f.title || "")) ? "healthy" : "unknown";
+  const live = F.filter(f => /in use right now/i.test(f.title || ""))
+                .map(f => (f.title || "").replace(/ in use right now/i, "").trim());
+  let out = "Security status " + (s.worst === "ok" ? "all clear" : s.worst) + ". " +
+            cur + " of " + jobs.length + " collectors current";
+  if (bad.length) out += ", not reporting: " + bad.join(", ");
+  out += ". ";
+  out += acts ? (acts + " item" + (acts > 1 ? "s" : "") + " needing attention. ") : "Nothing live needs action. ";
+  out += crit + " critical, " + high + " high findings on the board. ";
+  out += "Windows bridge " + bridge + ". Keystroke monitor " + hook + ".";
+  if (live.length) out += " In use now: " + live.join(", ") + ".";
+  return out;
+}
+
+function voiceBrief(s, force) {
+  if (!voice || !s) return;
+  const items = voiceItems(s);
+  const present = new Set(items.map(i => i.key));
+  for (const k of [...spokenKeys]) if (!present.has(k)) spokenKeys.delete(k);
+
+  if (!voicePrimed && !force) {           // page opened with voice already on
+    items.forEach(i => spokenKeys.add(i.key));
+    voicePrimed = true;
+    return;
+  }
+  voicePrimed = true;
+  if (force) { window.speechSynthesis && window.speechSynthesis.cancel(); say(statusLine(s)); }
+
+  const fresh = items.filter(i => !spokenKeys.has(i.key)).sort((a, b) => a.tier - b.tier);
+  fresh.filter(i => i.tier < 3).forEach(i => say(i.text));
+
+  const ctl = fresh.filter(i => i.tier === 3 && !i.kind);
+  ctl.slice(0, 3).forEach(i => say(i.text));
+  if (ctl.length > 3) say((ctl.length - 3) + " more control-surface changes.");
+
+  const nc = fresh.filter(i => i.kind === "crit").length;
+  const nh = fresh.filter(i => i.kind === "high").length;
+  if (nc) say(nc + " new critical finding" + (nc > 1 ? "s" : "") + ". Check the dashboard.");
+  if (nh) say(nh + " new high finding" + (nh > 1 ? "s" : "") + ".");
+
+  fresh.forEach(i => spokenKeys.add(i.key));
+}
+
+function toggleVoice() {
+  voice = !voice;
+  try { localStorage.setItem("jarvis.voice", voice ? "1" : "0"); } catch (e) {}
+  const b = document.getElementById("voice");
+  b.className = voice ? "on" : "";
+  b.textContent = voice ? "🔊 voice on" : "🔊 voice";
+  if (!voice) { window.speechSynthesis && window.speechSynthesis.cancel(); return; }
+  spokenKeys.clear(); voicePrimed = true;
+  if (state) voiceBrief(state, true);
+  else say("Voice briefing on. Waiting for data.");
+}
+(function () {
+  const b = document.getElementById("voice");
+  if (b && voice) { b.className = "on"; b.textContent = "🔊 voice on"; }
+})();
+
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") {
     if (e.key === "Escape") { e.target.blur(); clearAll(); }
@@ -682,6 +826,7 @@ document.addEventListener("keydown", e => {
   }
   if (e.key === "/") { e.preventDefault(); document.getElementById("q").focus(); }
   else if (e.key === "r") tick();
+  else if (e.key === "v") { if (!voice) toggleVoice(); else voiceBrief(state, true); }
   else if (e.key === " ") { e.preventDefault(); togglePause(); }
   else if (e.key === "Escape") clearAll();
 });
@@ -692,9 +837,11 @@ async function tick() {
     const r = await fetch("/api/state", { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
     render(await r.json());
+    if (lostConn) { lostConn = false; say("Reconnected to the JARVIS daemon."); }
   } catch (e) {
     document.getElementById("meta").textContent = "daemon unreachable — retrying";
     document.getElementById("beat").className = "beat off";
+    if (!lostConn) { lostConn = true; say("Lost connection to the JARVIS daemon."); }
   }
 }
 tick();
