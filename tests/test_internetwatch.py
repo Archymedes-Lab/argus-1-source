@@ -45,7 +45,7 @@ class InternetWatchTests(unittest.TestCase):
     def test_windows_failure_is_not_clean_or_history_overwrite(self):
         store = self.store()
         store.set_meta('internetwatch_history_v1_win', '[{"ts": 1}]')
-        with patch('jarvis.internetwatch._ps_json', return_value=None):
+        with patch('jarvis.internetwatch.ps_json', return_value=None):
             findings = audit(store, hosts=('win',))
         self.assertEqual(findings[0]['category'], 'collectors')
         self.assertEqual(store.get_meta('internetwatch_history_v1_win'), '[{"ts": 1}]')
@@ -64,7 +64,7 @@ class InternetWatchTests(unittest.TestCase):
                     {'fields': '#Fields: action path', 'lines': None}):
             with self.subTest(log=log):
                 store = self.store()
-                with patch('jarvis.internetwatch._ps_json', return_value={
+                with patch('jarvis.internetwatch.ps_json', return_value={
                     'logs': [log], 'connections': [dict(pid=1, state='BOUND', proto='udp')]}):
                     findings = audit(store, hosts=('win',))
                 self.assertEqual(latest(store)['win']['status'], 'partial')
@@ -74,7 +74,7 @@ class InternetWatchTests(unittest.TestCase):
     def test_failed_tcp_query_preserves_saved_sample(self):
         store = self.store()
         store.set_meta('internetwatch_history_v1_win', '[{"ts": 1, "connections": []}]')
-        with patch('jarvis.internetwatch._ps_json', return_value={
+        with patch('jarvis.internetwatch.ps_json', return_value={
             'errors': ['TCP socket inventory unavailable'], 'connections': []}):
             audit(store, hosts=('win',))
         self.assertEqual(latest(store)['win']['ts'], 1)
@@ -82,7 +82,7 @@ class InternetWatchTests(unittest.TestCase):
 
     def test_logging_failure_labels_socket_data_partial(self):
         store = self.store()
-        with patch('jarvis.internetwatch._ps_json', return_value={
+        with patch('jarvis.internetwatch.ps_json', return_value={
             'errors': ['Firewall traffic log unreadable'], 'connections': []}):
             audit(store, hosts=('win',))
         self.assertEqual(latest(store)['win']['status'], 'partial')

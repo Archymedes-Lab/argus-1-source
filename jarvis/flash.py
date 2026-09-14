@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime
 
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 from .evidence.manifest import Manifest, sha256_file
 from .evidence.paths import case_dir
 from .paths import win_script
@@ -36,7 +36,7 @@ def _configured_tasks(process, tasks):
     return [(t.get('path') or '') + (t.get('name') or '') for t in tasks
             if any(_base(a.get('execute')) == _base(process.get('Image'))
                    and (a.get('arguments') or '').strip() == _arguments(process.get('CommandLine'))
-                   for a in _aslist(t.get('actions')))]
+                   for a in aslist(t.get('actions')))]
 
 
 def analyze(data):
@@ -58,8 +58,8 @@ def analyze(data):
                              'Task attribution still requires process identity or corroborating evidence.')
         if visible.get('capped'):
             result['limitations'].append('Visible-window event capture capped at 10000 records.')
-    for task in _aslist(data.get('tasks')):
-        actions = _aslist(task.get('actions'))
+    for task in aslist(data.get('tasks')):
+        actions = aslist(task.get('actions'))
         if any(_base(a.get('execute')) in CONSOLES for a in actions):
             result['candidates'].append({
                 'task': (task.get('path') or '') + (task.get('name') or ''),
@@ -68,7 +68,7 @@ def analyze(data):
                 'lastResult': task.get('lastResult'),
                 'images': [a.get('execute') for a in actions]})
     events = {}
-    for window in _aslist(data.get('windows')):
+    for window in aslist(data.get('windows')):
         label = window.get('label'); channel = window.get('channel', '')
         if window.get('status') != 'ok':
             result['limitations'].append(f"{label}: {channel}: {window.get('status')}: {window.get('error', '')}")
@@ -77,7 +77,7 @@ def analyze(data):
         oldest, start = _stamp(window.get('oldestTime')), _stamp(window.get('start'))
         if oldest is not None and start is not None and oldest > start:
             result['limitations'].append(f"{label}: {channel}: retained log begins after requested start; history incomplete")
-        for event in _aslist(window.get('events')):
+        for event in aslist(window.get('events')):
             key = (channel, event.get('recordId'))
             if event.get('recordId') is None:
                 key += (event.get('id'), event.get('time'), json.dumps(event.get('data'), sort_keys=True))
@@ -92,7 +92,7 @@ def analyze(data):
         if len(matches) != 1:
             continue
         proc = matches[0]
-        tasks = _configured_tasks(proc['data'], _aslist(data.get('tasks')))
+        tasks = _configured_tasks(proc['data'], aslist(data.get('tasks')))
         result['windowAttributions'].append({
             'windowTime': window.get('time'), 'windowClass': window.get('windowClass'),
             'pid': window.get('pid'), 'image': proc['data'].get('Image'),
@@ -139,7 +139,7 @@ def analyze(data):
 
 def collect():
     script = win_script('startup_trace.ps1').read_text()
-    data = _ps_json(script, timeout=180)
+    data = ps_json(script, timeout=180)
     if not isinstance(data, dict):
         return {'errors': ['Windows bridge returned no usable trace; attribution unavailable.']}
     return data
@@ -150,7 +150,7 @@ def capture_windows(seconds=360):
     if not 1 <= seconds <= 600:
         raise ValueError('seconds must be between 1 and 600')
     script = win_script('window_trace.ps1').read_text()
-    return _ps_json(script.replace('__SECONDS__', str(int(seconds))), timeout=seconds + 45)
+    return ps_json(script.replace('__SECONDS__', str(int(seconds))), timeout=seconds + 45)
 
 
 def save(data, name):

@@ -17,11 +17,11 @@ def color(text, key, on=True):
     return f"{C[key]}{text}{C['reset']}" if on and key in C else text
 
 
-def _tty():
+def is_tty():
     return sys.stdout.isatty()
 
 
-def _hosts(args):
+def selected_hosts(args):
     if args.host == "all":
         return ("wsl", "win")
     return (args.host,)
@@ -65,8 +65,8 @@ SECTION = {
 }
 
 
-def _print_finding(f):
-    t = _tty()
+def print_process_finding(f):
+    t = is_tty()
     sev = f["severity"]
     tag = color(f" {sev.upper():8} ", sev, t)
     flag = "NEW" if f["unknown"] else "   "
@@ -84,10 +84,10 @@ def _print_finding(f):
     print(f"          fp    {f['fp']}")
 
 
-def _report(findings, verbose=False, severity=None, sev_order=None,
+def render_findings(findings, verbose=False, severity=None, sev_order=None,
             show_ok=False, empty="nothing found"):
     """Shared renderer for the audit-style commands."""
-    t = _tty()
+    t = is_tty()
     sev_order = sev_order or {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
     if severity:
         findings = [f for f in findings
@@ -125,13 +125,13 @@ def _report(findings, verbose=False, severity=None, sev_order=None,
     return counts
 
 
-def _simple_cmd(mod, empty):
+def simple_command(mod, empty):
     def run(args, store):
-        findings = mod.audit(hosts=_hosts(args))
+        findings = mod.audit(hosts=selected_hosts(args))
         if args.json:
             print(json.dumps(findings, indent=2))
             return
-        _report(findings, verbose=args.verbose, severity=args.severity,
+        render_findings(findings, verbose=args.verbose, severity=args.severity,
                 sev_order=mod.SEV_ORDER, show_ok=True, empty=empty)
     return run
 

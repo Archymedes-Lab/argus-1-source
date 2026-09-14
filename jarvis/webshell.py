@@ -21,7 +21,7 @@ import re
 import subprocess
 
 from . import collect_windows
-from .control import _ps_json
+from .collect_windows import ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
@@ -224,7 +224,7 @@ else {
 def _windows():
     if not collect_windows.available():
         return []
-    d = _ps_json(_WIN_PS, timeout=180)
+    d = ps_json(_WIN_PS, timeout=180)
     if not d:
         return []
     if not d.get("listening"):

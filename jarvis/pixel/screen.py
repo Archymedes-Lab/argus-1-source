@@ -13,7 +13,8 @@ whether the ones that must stay open are at least protected.
 
 import os
 
-from .common import aslist, finding
+from ..collect_windows import aslist
+from .common import finding
 
 # Remote-access and capture products, by executable name. Presence is a
 # prompt to confirm the session is yours, never a verdict on its own.
@@ -217,6 +218,6 @@ def audit(hosts=("wsl", "win")):
     if "wsl" in hosts:
         out.extend(rules_linux())
     if "win" in hosts:
-        from ..control import _ps_json
-        out.extend(rules_windows(_ps_json(PS_SCREEN)))
+        from ..collect_windows import ps_json
+        out.extend(rules_windows(ps_json(PS_SCREEN)))
     return out

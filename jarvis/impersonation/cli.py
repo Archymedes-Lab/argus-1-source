@@ -4,8 +4,8 @@ from . import run
 
 
 def cmd_impersonation(args, store):
-    from ..cli.output import _hosts, _report
-    _report(run.audit(store, hosts=_hosts(args)), verbose=args.verbose,
+    from ..cli.output import selected_hosts, render_findings
+    render_findings(run.audit(store, hosts=selected_hosts(args)), verbose=args.verbose,
             severity=args.severity or "medium")
     return 0
 

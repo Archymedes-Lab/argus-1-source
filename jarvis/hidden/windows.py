@@ -1,6 +1,6 @@
 """The Windows half of the hidden-process audit."""
 
-from ..control import _ps_json
+from ..collect_windows import aslist, ps_json
 from .common import _finding
 
 
@@ -184,19 +184,19 @@ $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 
 
 def audit_windows():
-    data = _ps_json(PS_HIDDEN, timeout=120)
+    data = ps_json(PS_HIDDEN, timeout=120)
     if data is None:
         return [_finding("medium", "Windows cross-view unavailable",
                          "powershell.exe returned no data", "interop")]
     out = []
 
-    wmi = {p["pid"]: p for p in _aslist(data.get("wmi")) if p.get("pid") is not None}
-    api = {p["pid"]: p for p in _aslist(data.get("api")) if p.get("pid") is not None}
-    tl = {p["pid"]: p for p in _aslist(data.get("tasklist")) if p.get("pid") is not None}
-    netpids = {p for p in _aslist(data.get("netpids")) if isinstance(p, int) and p > 4}
+    wmi = {p["pid"]: p for p in aslist(data.get("wmi")) if p.get("pid") is not None}
+    api = {p["pid"]: p for p in aslist(data.get("api")) if p.get("pid") is not None}
+    tl = {p["pid"]: p for p in aslist(data.get("tasklist")) if p.get("pid") is not None}
+    netpids = {p for p in aslist(data.get("netpids")) if isinstance(p, int) and p > 4}
     # Only owners still running and absent from the fresh verification listing;
     # a process that exits mid-scan otherwise reads as invisible.
-    netpids &= {g.get("pid") for g in _aslist(data.get("ghostNet")) if isinstance(g, dict)}
+    netpids &= {g.get("pid") for g in aslist(data.get("ghostNet")) if isinstance(g, dict)}
 
     def label(pid):
         for src in (wmi, api, tl):
@@ -228,9 +228,9 @@ def audit_windows():
     # reach process objects by other routes, so a pid they can see while the
     # enumerations cannot is the signature of a process unlinked from that list.
     enumerated = set(wmi) | set(api) | set(tl)
-    threads = {p for p in _aslist(data.get("threadOwners")) if isinstance(p, int)}
-    perf = {p for p in _aslist(data.get("perfpids")) if isinstance(p, int)}
-    svc = {p for p in _aslist(data.get("svcpids")) if isinstance(p, int)}
+    threads = {p for p in aslist(data.get("threadOwners")) if isinstance(p, int)}
+    perf = {p for p in aslist(data.get("perfpids")) if isinstance(p, int)}
+    svc = {p for p in aslist(data.get("svcpids")) if isinstance(p, int)}
 
     # pid 0 and 4 are the System process and have no ordinary listing entry.
     IGNORE = {0, 4}
@@ -238,7 +238,7 @@ def audit_windows():
     # The handle-table suspects are already triple-verified inside PowerShell
     # (see PS_HIDDEN), so anything still here survived two bracketing
     # enumerations, a third fresh listing and a re-opened handle.
-    for s in _aslist(data.get("openable")):
+    for s in aslist(data.get("openable")):
         pid = s.get("pid") if isinstance(s, dict) else None
         if pid is None or pid in IGNORE:
             continue
@@ -251,7 +251,7 @@ def audit_windows():
             f"unlinking an EPROCESS from ActiveProcessLinks (DKOM) leaves behind",
             image or "OpenProcess vs WMI/Get-Process/tasklist"))
 
-    opaque = {p for p in _aslist(data.get("opaque")) if isinstance(p, int)} - IGNORE
+    opaque = {p for p in aslist(data.get("opaque")) if isinstance(p, int)} - IGNORE
     if opaque:
         out.append(_finding(
             "low", "some pids could not be qualified",
@@ -275,7 +275,7 @@ def audit_windows():
                                 "this cross-check was skipped", "Windows"))
             continue
         # Already re-verified against a fourth enumeration inside PowerShell.
-        ghosts = [g for g in _aslist(data.get(ghost_key))
+        ghosts = [g for g in aslist(data.get(ghost_key))
                   if isinstance(g, dict) and g.get("pid") not in IGNORE]
         for g in ghosts:
             image = (g.get("image") or "").strip()
@@ -297,9 +297,3 @@ def audit_windows():
     for f in out:
         f["host"] = "win"
     return out, data
-
-
-def _aslist(v):
-    if v is None:
-        return []
-    return v if isinstance(v, list) else [v]

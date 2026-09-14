@@ -18,7 +18,7 @@ Cross-referencing 1 against 2 usually names the culprit outright.
 
 import re
 
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 
 # Things that get a console window unless explicitly hidden.
 CONSOLE_HOST = re.compile(
@@ -242,7 +242,7 @@ def _flash_note(it):
 
 
 def audit():
-    data = _ps_json(PS_BOOT, timeout=240)
+    data = ps_json(PS_BOOT, timeout=240)
     if data is None:
         return [_finding("boot", "medium", "startup analysis unavailable",
                          "powershell.exe returned no data", "interop")]
@@ -252,7 +252,7 @@ def audit():
 
     # -- autostart entries that would visibly flash ------------------------
     flashers = []
-    for it in _aslist(data.get("autostart")):
+    for it in aslist(data.get("autostart")):
         cmd = it.get("cmd") or ""
         if CONSOLE_HOST.search(cmd) and not HIDDEN_FLAG.search(cmd):
             flashers.append(it)
@@ -270,7 +270,7 @@ def audit():
                             "tasks launches a visible console host", ""))
 
     # -- what actually ran this boot ---------------------------------------
-    runs = [r for r in _aslist(data.get("taskRuns")) if r.get("task")]
+    runs = [r for r in aslist(data.get("taskRuns")) if r.get("task")]
     seen = {}
     for r in runs:
         seen.setdefault(r.get("task"), r)
@@ -291,7 +291,7 @@ def audit():
                             "Show All Tasks History to capture the next boot",
                             "Microsoft-Windows-TaskScheduler/Operational"))
 
-    for c in _aslist(data.get("crashes"))[:15]:
+    for c in aslist(data.get("crashes"))[:15]:
         out.append(_finding("ran", "low", "error logged since boot",
                             f"{c.get('src')}: {(c.get('msg') or '')[:100]}",
                             (c.get("time") or "").replace("T", " ")[:19]))

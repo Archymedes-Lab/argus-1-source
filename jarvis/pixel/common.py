@@ -13,8 +13,3 @@ def sort_findings(findings):
                                            f["category"], f["title"]))
 
 
-def aslist(value):
-    """PowerShell emits a bare object for one result and an array for many."""
-    if value is None:
-        return []
-    return value if isinstance(value, list) else [value]

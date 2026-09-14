@@ -14,6 +14,8 @@ Neither is a verdict. Each names what was observed and what would distinguish
 a legitimate cause from an impersonation.
 """
 
+from ..collect_windows import aslist
+
 # Win32_LogonSession logon types. 2/11 are someone at the keyboard, 3 is a
 # network authentication, 10 is Remote Desktop, 5 is a service.
 LOGON_TYPES = {
@@ -39,17 +41,11 @@ def _finding(severity, title, detail, where="", host="win"):
             "detail": detail, "where": where, "host": host}
 
 
-def _aslist(v):
-    if v is None:
-        return []
-    return v if isinstance(v, list) else [v]
-
-
 def sessions(data):
     """Who holds a logon session, and is any of it not you?"""
     me = (data.get("me") or "").lower()
     out, others, remote = [], [], []
-    for s in _aslist(data.get("logons")):
+    for s in aslist(data.get("logons")):
         if not isinstance(s, dict):
             continue
         t = int(s.get("type", -1))
@@ -139,7 +135,7 @@ def automation(data):
     """Software able to drive the desktop without producing input events."""
     out = []
     programs = []
-    for a in _aslist(data.get("atServices")):
+    for a in aslist(data.get("atServices")):
         if not isinstance(a, dict):
             continue
         exe = _at_executable(a)
@@ -174,7 +170,7 @@ def automation(data):
 def credentials(data):
     """Stored secrets that let software authenticate as you with no prompt."""
     out = []
-    creds = [c for c in _aslist(data.get("creds")) if isinstance(c, str)]
+    creds = [c for c in aslist(data.get("creds")) if isinstance(c, str)]
     interesting = [c for c in creds
                    if not c.lower().startswith(BENIGN_CRED_PREFIXES)]
     if interesting:
@@ -210,7 +206,7 @@ def audit_data(data, real_keys=0, real_clicks=0, window_label="the last sample")
     out.extend(input_while_locked(data, real_keys, real_clicks, window_label))
     out.extend(automation(data))
     out.extend(credentials(data))
-    for err in _aslist(data.get("errors")):
+    for err in aslist(data.get("errors")):
         out.append(_finding("low", "part of the identity sample is unavailable",
                             str(err), ""))
     return out

@@ -34,7 +34,7 @@ wrong.
 import json
 
 from . import vet
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 from .util import iso, now
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -77,7 +77,7 @@ def _finding(category, severity, title, detail, where="", host="win"):
 
 
 def _ps(script, timeout=240):
-    return _ps_json(
+    return ps_json(
         script + "\n$json = [pscustomobject]$o | ConvertTo-Json -Depth 6 -Compress\n"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))",
         timeout=timeout)
@@ -244,7 +244,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
         collection.failed('sysmon', 'event query incomplete; cursor retained')
         return [_finding('visibility', 'high', 'Sysmon event query failed',
                          'Previous cursor retained; missing events are not a clean result.', CHANNEL)]
-    events = _aslist(data.get("events"))
+    events = aslist(data.get("events"))
     out = []
     if not data.get('complete', False):
         collection.failed('sysmon', 'event query capped or completeness unverified; cursor retained')

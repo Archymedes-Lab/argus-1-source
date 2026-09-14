@@ -19,7 +19,7 @@ import datetime
 import os
 import re
 
-from .control import _ps_json, _aslist
+from .collect_windows import aslist, ps_json
 
 # Names used by consumer monitoring, parental-control and stalkerware products.
 # Matching one is a prompt to look, not a verdict.
@@ -281,7 +281,7 @@ def audit(now_iso=None, hosts=("wsl", "win")):
 
 
 def audit_windows(now_iso=None):
-    data = _ps_json(PS_SPY, timeout=180)
+    data = ps_json(PS_SPY, timeout=180)
     if data is None:
         return [_finding("access", "medium", "spyware audit unavailable",
                          "powershell.exe returned no data", "interop")]
@@ -289,7 +289,7 @@ def audit_windows(now_iso=None):
 
     # -- 1. capability ledger ---------------------------------------------
     # Most recent first: "what touched the mic last" is the question being asked.
-    caps = sorted(_aslist(data.get("caps")),
+    caps = sorted(aslist(data.get("caps")),
                   key=lambda c: c.get("start") or "", reverse=True)
     routine = {}
     for c in caps:
@@ -345,7 +345,7 @@ def audit_windows(now_iso=None):
             "CapabilityAccessManager"))
 
     # -- 2. autostart signatures ------------------------------------------
-    for s in _aslist(data.get("sigs")):
+    for s in aslist(data.get("sigs")):
         path, status = s.get("path", ""), s.get("status", "")
         signer = s.get("signer") or ""
         name = path.split("\\")[-1]
@@ -377,7 +377,7 @@ def audit_windows(now_iso=None):
     # keyboard or headset shows up several times. Collapse them, and report the
     # count -- a device with a stuck or oversensitive volume control is by far
     # the most common cause of volume changing on its own.
-    hid = _aslist(data.get("hid"))
+    hid = aslist(data.get("hid"))
     grouped = {}
     for h in hid:
         key = (h.get("name") or "", h.get("mfr") or "")
@@ -396,7 +396,7 @@ def audit_windows(now_iso=None):
             f"unplug them one at a time to rule out a stuck media key before "
             f"suspecting software", "physical-first triage"))
 
-    procs = _aslist(data.get("procs"))
+    procs = aslist(data.get("procs"))
     for p in procs:
         blob = f"{p.get('name')} {p.get('path') or ''}"
         if STALKERWARE.search(blob):
@@ -408,7 +408,7 @@ def audit_windows(now_iso=None):
                                 f"{p.get('name')} [pid {p.get('pid')}]",
                                 p.get("path") or ""))
 
-    for a in _aslist(data.get("audio")):
+    for a in aslist(data.get("audio")):
         if a.get("status") not in ("OK", None):
             out.append(_finding("input", "medium", "audio device not healthy",
                                 f"{a.get('name')} — {a.get('status')}", ""))
@@ -444,7 +444,7 @@ def _keyboard_findings(data):
     # -- 1. filter drivers -------------------------------------------------
     for label, key, stock in (("keyboard", "kbdUpperFilters", STOCK_KBD_FILTERS),
                               ("mouse", "mouUpperFilters", STOCK_MOU_FILTERS)):
-        filters = [f for f in _aslist(data.get(key)) if isinstance(f, str) and f]
+        filters = [f for f in aslist(data.get(key)) if isinstance(f, str) and f]
         extra = [f for f in filters if f.lower() not in stock]
         for f in extra:
             known = KNOWN_FILTERS.match(f)
@@ -464,7 +464,7 @@ def _keyboard_findings(data):
                 f"UpperFilters = {', '.join(filters) or '(empty)'} — nothing is "
                 f"layered above the class driver", f"{label} class UpperFilters"))
 
-    lower = [f for f in _aslist(data.get("kbdLowerFilters")) if isinstance(f, str) and f]
+    lower = [f for f in aslist(data.get("kbdLowerFilters")) if isinstance(f, str) and f]
     if lower:
         out.append(_finding(
             "input", "critical", "keyboard lower filter driver present",
@@ -486,7 +486,7 @@ def _keyboard_findings(data):
                             "Scancode Map is not set", "Keyboard Layout"))
 
     # -- 3. what is physically plugged in ----------------------------------
-    kbs = _aslist(data.get("keyboards"))
+    kbs = aslist(data.get("keyboards"))
     external = [k for k in kbs if not INTERNAL_BUS.match(k.get("id") or "")]
     for k in external:
         out.append(_finding(
@@ -502,7 +502,7 @@ def _keyboard_findings(data):
 
     # A hardware keylogger has to enumerate to work. Anything that ever did is
     # still recorded, so this covers devices attached once and taken away.
-    usb_kb = [u for u in _aslist(data.get("usbHistory"))
+    usb_kb = [u for u in aslist(data.get("usbHistory"))
               if re.search(r"keyboard|keypad", u.get("desc") or "", re.I)]
     for u in usb_kb:
         out.append(_finding(
@@ -512,12 +512,12 @@ def _keyboard_findings(data):
     if not usb_kb:
         out.append(_finding(
             "input", "ok", "no USB keyboard has ever been attached",
-            f"{len(_aslist(data.get('usbHistory')))} USB devices in this "
+            f"{len(aslist(data.get('usbHistory')))} USB devices in this "
             f"machine's history, none of them a keyboard or keypad",
             "USB enum history"))
 
     # -- 4. accessibility backdoor -----------------------------------------
-    for h in _aslist(data.get("ifeoAccessibility")):
+    for h in aslist(data.get("ifeoAccessibility")):
         out.append(_finding(
             "input", "critical", "accessibility binary is hijacked",
             f"{h.get('file')} → {h.get('debugger')} — these run as SYSTEM from "

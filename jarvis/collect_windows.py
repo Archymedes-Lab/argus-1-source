@@ -219,3 +219,57 @@ def collect(timeout: int = 45):
         })
 
     return procs
+
+
+def ps_json(script, timeout=120):
+    """Run a PowerShell script and decode its base64 JSON payload.
+
+    Retries once after forcing interop re-resolution: the socket named in
+    WSL_INTEROP can go stale between calls when the session that created it
+    ends, and the only symptom is empty output.
+    """
+    if not available():
+        collection.failed('windows', 'interop unavailable')
+        return None
+
+    for attempt in (1, 2):
+        try:
+            r = subprocess.run(
+                [_PS, "-NoProfile", "-NonInteractive",
+                 "-Command", script],
+                capture_output=True, timeout=timeout, cwd="/",
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            collection.failed('windows', 'PowerShell failed or timed out')
+            return None
+
+        blob = (r.stdout.decode("ascii", "ignore")
+                .strip().replace("\r", "").replace("\n", ""))
+        if blob:
+            try:
+                value = json.loads(base64.b64decode(blob).decode("utf-8", "replace"))
+                if value is None:
+                    collection.failed('windows', 'PowerShell returned null')
+                else:
+                    collection.succeeded('windows')
+                return value
+            except Exception:
+                collection.failed('windows', 'invalid PowerShell payload')
+                return None
+
+        if attempt == 1:
+            # No output at all: most likely a dead interop socket. Drop the
+            # cached value so ensure_interop() picks a fresh one, and retry.
+            os.environ.pop("WSL_INTEROP", None)
+            if not ensure_interop():
+                collection.failed('windows', 'interop retry unavailable')
+                return None
+    collection.failed('windows', 'PowerShell returned no payload')
+    return None
+
+
+def aslist(v):
+    """PowerShell collapses single-element arrays; normalize back to a list."""
+    if v is None:
+        return []
+    return v if isinstance(v, list) else [v]

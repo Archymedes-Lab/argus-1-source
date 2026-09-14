@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from jarvis import collection, control, sysmon
+from jarvis import collect_windows, collection, control, sysmon
 from jarvis.protection import health
 from jarvis.store import Store
 
@@ -21,7 +21,7 @@ class CollectionTests(unittest.TestCase):
 
     def test_bridge_failure_is_explicit_even_when_helper_returns_none(self):
         with collection.observe() as observation, patch.object(control.collect_windows, 'available', return_value=False):
-            self.assertIsNone(control._ps_json('unused'))
+            self.assertIsNone(collect_windows.ps_json('unused'))
         self.assertEqual(observation.status, 'unavailable')
 
     def test_failed_sysmon_query_preserves_cursor(self):

@@ -120,7 +120,7 @@ $json = $o | ConvertTo-Json -Depth 5 -Compress
 
 
 def rules_outlook(data):
-    from .common import aslist
+    from ..collect_windows import aslist
     out = []
     entries = aslist((data or {}).get("outlook"))
     if data is not None and not entries:
@@ -165,6 +165,6 @@ def audit(hosts=("wsl", "win"), home=None):
                                "no Thunderbird profile on the Linux side",
                                "nothing to configure here", "", host="wsl"))
     if "win" in hosts:
-        from ..control import _ps_json
-        out.extend(rules_outlook(_ps_json(PS_MAIL)))
+        from ..collect_windows import ps_json
+        out.extend(rules_outlook(ps_json(PS_MAIL)))
     return out

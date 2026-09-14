@@ -14,8 +14,9 @@ way down the wire:
 
 import re
 
-from .collect_linux import _read, _socket_table
-from .control import REMOTE_AGENTS, _aslist, _ps_json
+from .collect_linux import read_file, socket_table
+from .control import REMOTE_AGENTS
+from .collect_windows import aslist, ps_json
 from .util import classify_ip
 
 USER_WRITABLE = re.compile(r"\\appdata\\|\\temp\\|\\users\\public\\|\\downloads\\|"
@@ -57,7 +58,7 @@ def _finding(category, severity, title, detail, where="", host="win"):
 
 def audit_linux():
     out = []
-    table = _socket_table()
+    table = socket_table()
 
     listening = {c["local_port"] for c in table.values() if c["state"] == "LISTEN"}
     for conn in table.values():
@@ -77,8 +78,8 @@ def audit_linux():
 
     # WSL's own firewall state is mostly advisory — Windows filters the NAT — but
     # a local rule set that blocks nothing is still worth stating plainly.
-    nft = _read("/proc/net/nf_conntrack")
-    if not _read("/proc/net/ip_tables_names").strip() and not nft:
+    nft = read_file("/proc/net/nf_conntrack")
+    if not read_file("/proc/net/ip_tables_names").strip() and not nft:
         out.append(_finding("posture", "low", "no netfilter rules loaded in WSL",
                             "the Windows host firewall is what actually protects "
                             "this machine's network edge", "/proc/net", host="wsl"))
@@ -180,14 +181,14 @@ $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 
 
 def audit_windows():
-    data = _ps_json(PS_FW, timeout=240)
+    data = ps_json(PS_FW, timeout=240)
     if data is None:
         return [_finding("posture", "medium", "firewall audit unavailable",
                          "powershell.exe returned no data", "interop")]
     out = []
 
     # -- posture -----------------------------------------------------------
-    for p in _aslist(data.get("profiles")):
+    for p in aslist(data.get("profiles")):
         nm = p.get("name")
         if not p.get("enabled"):
             out.append(_finding("posture", "critical",
@@ -206,7 +207,7 @@ def audit_windows():
                                 "turned away", p.get("logFile") or ""))
 
     # -- inbound allow rules ----------------------------------------------
-    rules = _aslist(data.get("rules"))
+    rules = aslist(data.get("rules"))
     for r in rules:
         app = r.get("app") or ""
         remote = r.get("remote") or "Any"
@@ -265,8 +266,8 @@ def audit_windows():
                         f"{len(rules)} enabled", "Get-NetFirewallRule"))
 
     # -- inbound connections ----------------------------------------------
-    conns = _aslist(data.get("conns"))
-    procs = {p.get("pid"): p for p in _aslist(data.get("procs"))}
+    conns = aslist(data.get("conns"))
+    procs = {p.get("pid"): p for p in aslist(data.get("procs"))}
     listening = {c.get("lport") for c in conns if c.get("state") == "Listen"}
 
     for c in conns:
@@ -288,7 +289,7 @@ def audit_windows():
                                        if c.get("created") else "")))
 
     # -- who actually logged in remotely ----------------------------------
-    logons = _aslist(data.get("logons"))
+    logons = aslist(data.get("logons"))
     for l in logons:
         kind = "RDP" if str(l.get("type")) == "10" else "network"
         scope = classify_ip(l.get("ip") or "")
@@ -297,7 +298,7 @@ def audit_windows():
                             f"{l.get('user')} from {l.get('ip')} ({scope})",
                             l.get("time") or ""))
 
-    failed = _aslist(data.get("failed"))
+    failed = aslist(data.get("failed"))
     if failed:
         by_ip = {}
         for f in failed:
@@ -316,7 +317,7 @@ def audit_windows():
                             "an empty result here does not mean nobody logged in",
                             "Security event log"))
 
-    for s in _aslist(data.get("smb")):
+    for s in aslist(data.get("smb")):
         out.append(_finding("access", "high", "active file-share session",
                             f"{s.get('client')} as {s.get('user')} "
                             f"({s.get('numOpen')} files open)", "Get-SmbSession"))
@@ -325,7 +326,7 @@ def audit_windows():
     # each field has to be bounded by the label that follows it. The same
     # service reinstalls on every update, so collapse repeats into a count.
     installs = {}
-    for s in _aslist(data.get("newsvc")):
+    for s in aslist(data.get("newsvc")):
         msg = s.get("msg") or ""
         name = re.search(r"Service Name:\s*(.*?)\s*Service File Name:", msg)
         file = re.search(r"Service File Name:\s*(.*?)\s*Service Type:", msg)

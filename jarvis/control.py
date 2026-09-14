@@ -23,6 +23,7 @@ import re
 import subprocess
 
 from . import collect_windows
+from .collect_windows import aslist, ps_json
 from . import collection
 from .paths import REPO_ROOT
 from .util import short
@@ -316,58 +317,6 @@ $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 """
 
 
-def _ps_json(script, timeout=120):
-    """Run a PowerShell script and decode its base64 JSON payload.
-
-    Retries once after forcing interop re-resolution: the socket named in
-    WSL_INTEROP can go stale between calls when the session that created it
-    ends, and the only symptom is empty output.
-    """
-    if not collect_windows.available():
-        collection.failed('windows', 'interop unavailable')
-        return None
-
-    for attempt in (1, 2):
-        try:
-            r = subprocess.run(
-                [collect_windows._PS, "-NoProfile", "-NonInteractive",
-                 "-Command", script],
-                capture_output=True, timeout=timeout, cwd="/",
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            collection.failed('windows', 'PowerShell failed or timed out')
-            return None
-
-        blob = (r.stdout.decode("ascii", "ignore")
-                .strip().replace("\r", "").replace("\n", ""))
-        if blob:
-            try:
-                value = json.loads(base64.b64decode(blob).decode("utf-8", "replace"))
-                if value is None:
-                    collection.failed('windows', 'PowerShell returned null')
-                else:
-                    collection.succeeded('windows')
-                return value
-            except Exception:
-                collection.failed('windows', 'invalid PowerShell payload')
-                return None
-
-        if attempt == 1:
-            # No output at all: most likely a dead interop socket. Drop the
-            # cached value so ensure_interop() picks a fresh one, and retry.
-            os.environ.pop("WSL_INTEROP", None)
-            if not collect_windows.ensure_interop():
-                collection.failed('windows', 'interop retry unavailable')
-                return None
-    collection.failed('windows', 'PowerShell returned no payload')
-    return None
-
-
-def _aslist(v):
-    """PowerShell collapses single-element arrays; normalize back to a list."""
-    if v is None:
-        return []
-    return v if isinstance(v, list) else [v]
 
 
 _TRUSTED_IDE_TASKS = {
@@ -397,7 +346,7 @@ def _normalized_text_hash(path):
 def _task_action_text(task):
     return " ; ".join(
         " ".join(filter(None, (a.get("execute"), a.get("arguments"))))
-        for a in _aslist(task.get("actions")) if isinstance(a, dict)
+        for a in aslist(task.get("actions")) if isinstance(a, dict)
     )
 
 
@@ -413,7 +362,7 @@ def _verified_maintenance_task(task, data):
     if name not in _TRUSTED_IDE_TASKS and name not in ("jarvis wake watchdog", "jarvis independent health monitor", "jarvis connectivity guard"):
         return False, "not a known maintenance task"
 
-    actions = _aslist(task.get("actions"))
+    actions = aslist(task.get("actions"))
     if len(actions) != 1 or not isinstance(actions[0], dict):
         return False, "expected exactly one action"
     action = actions[0]
@@ -483,14 +432,14 @@ def _verified_maintenance_task(task, data):
 
 
 def audit_windows():
-    data = _ps_json(PS_CONTROL)
+    data = ps_json(PS_CONTROL)
     if data is None:
         return [_finding("defense", "medium", "Windows audit unavailable",
                          "powershell.exe did not return data; some checks need an "
                          "elevated shell", "interop")]
     out = []
 
-    for t in _aslist(data.get("tasks")):
+    for t in aslist(data.get("tasks")):
         action = _task_action_text(t)
         trusted, trust_detail = _verified_maintenance_task(t, data)
         if trusted:
@@ -510,7 +459,7 @@ def audit_windows():
                             f"{t.get('name')} → {short(action, 90)}",
                             (t.get("path") or "") + str(t.get("name"))))
 
-    for k in _aslist(data.get("runkeys")):
+    for k in aslist(data.get("runkeys")):
         val = k.get("value") or ""
         sev = "high" if REMOTE_AGENTS.search(val) else "medium"
         if OBFUSCATED.search(val) or re.search(r"\\temp\\|\\downloads\\", val, re.I):
@@ -518,11 +467,11 @@ def audit_windows():
         out.append(_finding("persistence", sev, "autostart registry entry",
                             f"{k.get('name')} = {short(val, 90)}", k.get("key", "")))
 
-    for s in _aslist(data.get("startup")):
+    for s in aslist(data.get("startup")):
         out.append(_finding("persistence", "medium", "startup folder item",
                             s.get("name", ""), s.get("path", "")))
 
-    for s in _aslist(data.get("services")):
+    for s in aslist(data.get("services")):
         path = s.get("path") or ""
         sev = "high" if REMOTE_AGENTS.search(path + (s.get("disp") or "")) else "low"
         if re.search(r"\\temp\\|\\users\\public\\|\\appdata\\", path, re.I):
@@ -531,7 +480,7 @@ def audit_windows():
                             f"{s.get('disp') or s.get('name')} [{s.get('state')}] "
                             f"{short(path, 80)}", s.get("name", "")))
 
-    for w in _aslist(data.get("wmi")):
+    for w in aslist(data.get("wmi")):
         pair = f"{w.get('filter')} {w.get('consumer')}"
         # Windows ships one of these out of the box; the rest deserve alarm.
         stock = "SCM Event Log" in pair
@@ -553,7 +502,7 @@ def audit_windows():
     if (remote.get("sshd") or "") == "Running":
         out.append(_finding("remote", "high", "OpenSSH server running",
                             "accepts inbound SSH", "Service: sshd"))
-    for line in _aslist(remote.get("sessions")):
+    for line in aslist(remote.get("sessions")):
         if isinstance(line, str) and line.strip() and "USERNAME" not in line:
             out.append(_finding("remote", "medium", "logon session",
                                 short(line.strip(), 90), "query user"))
@@ -577,7 +526,7 @@ def audit_windows():
                                 f"{age} days old", "Get-MpComputerStatus"))
         denied = False
         for kind, key in (("path", "exclusionPaths"), ("process", "exclusionProcs")):
-            for p in _aslist(d.get(key)):
+            for p in aslist(d.get(key)):
                 if not p:
                     continue
                 if str(p).startswith("N/A"):
@@ -596,18 +545,18 @@ def audit_windows():
                             "run the audit from an elevated shell for defense checks",
                             "Get-MpComputerStatus"))
 
-    for fw in _aslist(data.get("firewall")):
+    for fw in aslist(data.get("firewall")):
         if fw.get("enabled") in (False, 0, "False"):
             out.append(_finding("defense", "critical",
                                 f"firewall disabled on {fw.get('name')} profile",
                                 "inbound traffic unfiltered", "Get-NetFirewallProfile"))
 
-    for r in _aslist(data.get("fwrules")):
+    for r in aslist(data.get("fwrules")):
         out.append(_finding("remote", "low", "inbound firewall allow rule",
                             short(str(r.get("DisplayName")), 80),
                             str(r.get("Profile"))))
 
-    for a in _aslist(data.get("admins")):
+    for a in aslist(data.get("admins")):
         out.append(_finding("defense", "low", "local administrator", str(a),
                             "Administrators group"))
 

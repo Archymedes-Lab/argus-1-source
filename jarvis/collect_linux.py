@@ -21,7 +21,7 @@ INTERPRETERS = re.compile(
 SCRIPT_EXT = re.compile(r"\.(py|sh|pl|rb|js|mjs|cjs|ts|php|lua|R|bash|zsh)$", re.I)
 
 
-def _read(path, binary=False):
+def read_file(path, binary=False):
     try:
         if binary:
             with open(path, "rb") as fh:
@@ -66,11 +66,11 @@ TCP_STATES = {
 }
 
 
-def _socket_table():
+def socket_table():
     """inode -> connection detail, built from all four /proc/net socket tables."""
     table = {}
     for fname, proto in (("tcp", "tcp"), ("tcp6", "tcp6"), ("udp", "udp"), ("udp6", "udp6")):
-        text = _read(f"{PROC}/net/{fname}")
+        text = read_file(f"{PROC}/net/{fname}")
         for line in text.splitlines()[1:]:
             f = line.split()
             if len(f) < 10:
@@ -127,7 +127,7 @@ def _script_target(argv, exe_base):
 
 def collect(with_sockets=True):
     """Return a list of process records for the Linux side."""
-    table = _socket_table() if with_sockets else {}
+    table = socket_table() if with_sockets else {}
     procs = []
     self_pid = os.getpid()
     try:
@@ -143,9 +143,9 @@ def collect(with_sockets=True):
             continue
         base = f"{PROC}/{pid}"
 
-        raw = _read(f"{base}/cmdline", binary=True)
+        raw = read_file(f"{base}/cmdline", binary=True)
         argv = [a.decode("utf-8", "replace") for a in raw.split(b"\x00") if a]
-        status = _read(f"{base}/status")
+        status = read_file(f"{base}/status")
         if not status:
             continue  # process exited mid-scan
 
@@ -167,7 +167,7 @@ def collect(with_sockets=True):
                     pass
 
         cpu_seconds = 0.0
-        stat_line = _read(f"{base}/stat")
+        stat_line = read_file(f"{base}/stat")
         try:
             stat_fields = stat_line.rsplit(") ", 1)[1].split()
             cpu_seconds = (int(stat_fields[11]) + int(stat_fields[12])) / clock_ticks

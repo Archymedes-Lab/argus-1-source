@@ -25,7 +25,7 @@ import os
 import subprocess
 
 from . import collect_windows
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"malware defense": 0, "platform integrity": 1, "data at rest": 2,
@@ -189,7 +189,7 @@ def _unreadable(v):
 
 def _win_temp():
     r"""%LOCALAPPDATA%\Temp as both a Windows path and a WSL path."""
-    out = _ps_json(
+    out = ps_json(
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(ConvertTo-Json @{t=$env:TEMP})))", timeout=60)
     win = (out or {}).get("t") or r"C:\Windows\Temp"
@@ -278,7 +278,7 @@ def audit(hosts=("win",), elevate=False):
     if elevate:
         d, elev_err = elevated_data()
     if d is None:
-        d = _ps_json(PS_POSTURE, timeout=400)
+        d = ps_json(PS_POSTURE, timeout=400)
     if not d:
         return [_finding("visibility", "medium", "posture audit unavailable",
                          "powershell.exe returned no data")]
@@ -345,7 +345,7 @@ def audit(hosts=("win",), elevate=False):
             "this is the anti-ransomware guard on Documents and similar folders",
             "Set-MpPreference -EnableControlledFolderAccess Enabled"))
 
-    excl = _aslist(pref.get("ExclusionPath")) + _aslist(pref.get("ExclusionProcess"))
+    excl = aslist(pref.get("ExclusionPath")) + aslist(pref.get("ExclusionProcess"))
     real_excl = [e for e in excl if not _unreadable(e)]
     if excl and not real_excl:
         out.append(_finding(
@@ -359,8 +359,8 @@ def audit(hosts=("win",), elevate=False):
             "an excluded path is not scanned at all; malware that finds an "
             "exclusion list will use it"))
 
-    ids = [str(x).lower() for x in _aslist(pref.get("AttackSurfaceReductionRules_Ids"))]
-    actions = _aslist(pref.get("AttackSurfaceReductionRules_Actions"))
+    ids = [str(x).lower() for x in aslist(pref.get("AttackSurfaceReductionRules_Ids"))]
+    actions = aslist(pref.get("AttackSurfaceReductionRules_Actions"))
     enabled = {i for i, a in zip(ids, actions) if str(a) == "1"}
     missing = [(g, n) for g, n in ASR_KEY.items() if g not in enabled]
     if missing:
@@ -399,7 +399,7 @@ def audit(hosts=("win",), elevate=False):
                             "present but not initialised"))
 
     dg = d.get("deviceguard") or {}
-    running = {str(x) for x in _aslist(dg.get("running"))}
+    running = {str(x) for x in aslist(dg.get("running"))}
     if str(dg.get("vbs")) not in ("2",):
         out.append(_finding(
             "platform integrity", "medium",
@@ -427,7 +427,7 @@ def audit(hosts=("win",), elevate=False):
             r"/v RunAsPPL /t REG_DWORD /d 1"))
 
     # ── data at rest ──────────────────────────────────────────────────────
-    vols = _aslist(d.get("bitlocker"))
+    vols = aslist(d.get("bitlocker"))
     if not vols:
         out.append(_finding(
             "visibility", "medium", "BitLocker status is not readable",
@@ -469,7 +469,7 @@ def audit(hosts=("win",), elevate=False):
                             "automatic logon is enabled", detail,
                             "remove AutoAdminLogon and DefaultPassword"))
 
-    for u in _aslist(d.get("users")):
+    for u in aslist(d.get("users")):
         # PasswordRequired is False for any account backed by a Microsoft
         # account or signing in with a PIN, which is the normal case on a
         # personal Windows 11 machine — it does not mean there is no password.
@@ -479,7 +479,7 @@ def audit(hosts=("win",), elevate=False):
                 f"account '{u.get('name')}' has no local password set",
                 "normal for a Microsoft-account or PIN login; a real finding "
                 "only if this is a local-only account"))
-    admins = [a.get("name", "") for a in _aslist(d.get("admins"))]
+    admins = [a.get("name", "") for a in aslist(d.get("admins"))]
     if len(admins) > 3:
         out.append(_finding(
             "account & access", "low",
@@ -545,7 +545,7 @@ def audit(hosts=("win",), elevate=False):
             r"powershell -ExecutionPolicy Bypass -File fix-console-host.ps1"))
 
     upd = d.get("updates") or {}
-    hot = _aslist(d.get("hotfix"))
+    hot = aslist(d.get("hotfix"))
     if hot:
         out.append(_finding(
             "visibility", "ok",
@@ -557,7 +557,7 @@ def audit(hosts=("win",), elevate=False):
                             "update history is unreadable"))
 
     # ── licensing ─────────────────────────────────────────────────────────
-    for lic in _aslist(d.get("license")):
+    for lic in aslist(d.get("license")):
         status = lic.get("status")
         name = (lic.get("name") or "Windows")[:60]
         if status == 1:

@@ -74,7 +74,7 @@ class ControlWatchTests(unittest.TestCase):
                       'audioCapture': [{'id': 'mic-a', 'status': 'OK'}],
                       'errors': []}
             import unittest.mock as mock
-            with mock.patch('jarvis.controlwatch._ps_json', return_value=sample):
+            with mock.patch('jarvis.controlwatch.ps_json', return_value=sample):
                 audit(store, hosts=('win',))
             self.assertIn('mic-a',
                           json.loads(store.get_meta('controlwatch_seen_v1')))

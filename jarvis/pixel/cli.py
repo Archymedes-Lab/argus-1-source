@@ -4,9 +4,9 @@ from . import run
 
 
 def cmd_pixel(args, store):
-    from ..cli.output import _hosts, _report
-    findings = run.audit(hosts=_hosts(args))
-    _report(findings, verbose=args.verbose,
+    from ..cli.output import selected_hosts, render_findings
+    findings = run.audit(hosts=selected_hosts(args))
+    render_findings(findings, verbose=args.verbose,
             severity=args.severity or "medium")
     return 0
 

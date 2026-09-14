@@ -24,7 +24,7 @@ import re
 import subprocess
 
 from . import collect_windows
-from .control import _ps_json
+from .collect_windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
@@ -158,20 +158,14 @@ try {
 """
 
 
-def _aslist(v):
-    if v is None:
-        return []
-    return v if isinstance(v, list) else [v]
-
-
 def _windows():
     if not collect_windows.available():
         return []
-    d = _ps_json(_WIN_PS, timeout=120)
+    d = ps_json(_WIN_PS, timeout=120)
     if not d:
         return []
     out = []
-    for drv in _aslist(d.get("drivers")):
+    for drv in aslist(d.get("drivers")):
         name = (drv or {}).get("name", "?")
         status = (drv or {}).get("status", "?")
         if name == "pktmon":
@@ -182,13 +176,13 @@ def _windows():
             "Npcap/WinPcap is not present on a stock machine — something "
             "installed it to capture traffic. Fine if that was you",
             "services", host="win"))
-    for t in _aslist(d.get("tools")):
+    for t in aslist(d.get("tools")):
         out.append(_finding(
             "sniffing", "high",
             f"a capture tool is running: {(t or {}).get('name', '?')}",
             f"pid {(t or {}).get('id', '?')} — confirm this capture is yours",
             "processes", host="win"))
-    for name in _aslist(d.get("promisc")):
+    for name in aslist(d.get("promisc")):
         out.append(_finding(
             "sniffing", "high", f"adapter {name} is in promiscuous mode",
             "an adapter reading every frame on the segment", "netadapter",

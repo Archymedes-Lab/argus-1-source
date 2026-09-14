@@ -38,7 +38,7 @@ import re
 import subprocess
 
 from .util import dpkg_owns
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"interception": 0, "boundary": 1, "trust": 2, "implant": 3}
@@ -137,7 +137,7 @@ DEV_CA = re.compile(r"(localhost|mkcert|\bdev\b|charles|fiddler|burp|"
 
 
 def audit_windows():
-    data = _ps_json(PS_IMPLANT, timeout=300)
+    data = ps_json(PS_IMPLANT, timeout=300)
     if not data:
         return [_finding("interception", "medium",
                          "windows implant audit unavailable",
@@ -146,7 +146,7 @@ def audit_windows():
 
     # -- root certificates --------------------------------------------------
     seen = set()
-    for c in _aslist(data.get("roots")):
+    for c in aslist(data.get("roots")):
         subject = (c.get("subject") or "").strip()
         issuer = (c.get("issuer") or "").strip()
         thumb = c.get("thumb") or ""
@@ -215,8 +215,8 @@ def audit_windows():
             f"pointed somewhere by hand", "drivers/etc/hosts"))
 
     # -- DNS overrides ------------------------------------------------------
-    for d in _aslist(data.get("dns")):
-        servers = [s for s in _aslist(d.get("servers")) if s]
+    for d in aslist(data.get("dns")):
+        servers = [s for s in aslist(d.get("servers")) if s]
         odd = [s for s in servers
                if not s.startswith(("127.", "192.168.", "10.", "172.", "fe80"))]
         if odd:
@@ -227,7 +227,7 @@ def audit_windows():
                 f"off-network", "Get-DnsClientServerAddress"))
 
     # -- driver signing -----------------------------------------------------
-    for drv in _aslist(data.get("drivers")):
+    for drv in aslist(data.get("drivers")):
         status = (drv.get("status") or "").strip()
         signer = (drv.get("signer") or "")
         if status in ("Valid", ""):

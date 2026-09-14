@@ -27,7 +27,7 @@ What this is not:
 import json
 import time
 
-from .control import _ps_json
+from .collect_windows import ps_json
 
 # One PowerShell round-trip. Every block is independently guarded so a single
 # unavailable provider degrades that row instead of losing the whole sample.
@@ -235,7 +235,7 @@ def audit(store, hosts=("wsl", "win")):
     if "win" not in hosts:
         return [_finding("medium", "Windows controls are not monitored",
                          "Windows collection is disabled.", "visibility")]
-    data = _ps_json(PS_CONTROLS, timeout=30)
+    data = ps_json(PS_CONTROLS, timeout=30)
     if not data:
         return [_finding("high", "Windows controls collector is failing",
                          "No fresh control-surface state returned; the previous "

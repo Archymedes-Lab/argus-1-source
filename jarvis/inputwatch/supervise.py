@@ -3,7 +3,7 @@
 import json
 import os
 from .. import collect_windows
-from ..control import _ps_json
+from ..collect_windows import ps_json
 from ..util import iso, now
 from .common import HOOK_PS1, READ_CAP, _M_DUPES, _M_OVERSIZE, _finding, _mget_int, _sha256
 from .common import _finding, _mget_int, _sha256
@@ -128,7 +128,7 @@ def _helper_count():
     name too, which is the trap the pid-file approach in `running()` was
     written to avoid.
     """
-    d = _ps_json(
+    d = ps_json(
         "$n = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\""
         " | Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and "
         "$_.ProcessId -ne $PID }).Count;"

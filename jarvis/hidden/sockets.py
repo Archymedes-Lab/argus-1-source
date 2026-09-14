@@ -9,9 +9,9 @@ def orphan_sockets():
     """Socket inodes bound to a connection that no visible process holds an fd
     for. Under-privileged scans see plenty of these (you cannot read another
     user's fd table), so this is only reported when we are root."""
-    from ..collect_linux import _socket_table
+    from ..collect_linux import socket_table
 
-    table = _socket_table()
+    table = socket_table()
     claimed = set()
     for entry in os.listdir(PROC):
         if not entry.isdigit():
@@ -105,8 +105,8 @@ def _visible_tcp_ports():
 
 
 def _socket_table_safe():
-    from ..collect_linux import _socket_table
+    from ..collect_linux import socket_table
     try:
-        return _socket_table()
+        return socket_table()
     except Exception:
         return {}

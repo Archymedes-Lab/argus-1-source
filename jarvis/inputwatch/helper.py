@@ -4,7 +4,7 @@ paths and pids that describe it."""
 import os
 import subprocess
 from .. import collect_windows
-from ..control import _ps_json
+from ..collect_windows import ps_json
 from ..util import iso, now
 from .common import HOOK_PS1
 
@@ -24,7 +24,7 @@ def _paths():
     global _PATHS_CACHE
     if _PATHS_CACHE:
         return _PATHS_CACHE
-    out = _ps_json(
+    out = ps_json(
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(ConvertTo-Json @{t=$env:LOCALAPPDATA})))", timeout=60)
     base = (out or {}).get("t")
@@ -76,7 +76,7 @@ def running():
             pid = int(fh.read().strip())
     except (OSError, ValueError):
         return []
-    d = _ps_json(
+    d = ps_json(
         "$ok = 0; try { $p = Get-Process -Id %d -ErrorAction Stop; "
         "if ($p.ProcessName -eq 'powershell') { $ok = 1 } } catch { };"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
@@ -139,7 +139,7 @@ def stop():
     pids = running()
     if not pids:
         return "not running"
-    _ps_json("Stop-Process -Id " + ",".join(str(p) for p in pids)
+    ps_json("Stop-Process -Id " + ",".join(str(p) for p in pids)
              + " -Force; [Convert]::ToBase64String([Text.Encoding]::UTF8"
                ".GetBytes((ConvertTo-Json @{ok=1})))", timeout=90)
     for p in (_pid_path(), _alive_path()):
@@ -157,7 +157,7 @@ def _stop_all():
     the same file and double-counting. Reconciliation is: stop them all, clear
     the state files, and let the caller start exactly one.
     """
-    _ps_json(
+    ps_json(
         "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
         "Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and "
         "$_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id "

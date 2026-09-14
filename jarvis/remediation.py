@@ -33,9 +33,9 @@ def action_for(job, finding):
 
 def execute(action):
     if action == 'orphan_firewall':
-        from .control import _ps_json
+        from .collect_windows import ps_json
         script = win_script('repair_orphan_firewall.ps1').read_text()
-        result = _ps_json(script, timeout=30)
+        result = ps_json(script, timeout=30)
         return bool(isinstance(result, dict) and result.get('ok') is True)
     if action not in ('telemetry', 'mount'):
         return False

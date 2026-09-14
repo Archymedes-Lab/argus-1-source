@@ -22,7 +22,7 @@ masquerading -- a "svchost.exe" that is not in System32 is not svchost.
 
 import re
 
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 
 # Names an implant borrows to blend into a process list. Each one has exactly
 # one legitimate home directory.
@@ -244,20 +244,20 @@ STOCK_ACTIVE_SETUP = re.compile(r"mscories\.dll|ie4uinit|shell32\.dll|"
 
 
 def audit():
-    data = _ps_json(PS_ASEP, timeout=240)
+    data = ps_json(PS_ASEP, timeout=240)
     if data is None:
         return [_finding("asep", "medium", "ASEP audit unavailable",
                          "powershell.exe returned no data", "interop")]
     out = []
 
     # -- loader abuse ------------------------------------------------------
-    for a in _aslist(data.get("appinit")):
+    for a in aslist(data.get("appinit")):
         out.append(_finding("loader", "critical", "AppInit_DLLs is set",
                             f"{a.get('dlls')} (LoadAppInit_DLLs={a.get('enabled')}) — "
                             f"this DLL loads into nearly every process that uses "
                             f"user32", a.get("key", "")))
 
-    for i in _aslist(data.get("ifeo")):
+    for i in aslist(data.get("ifeo")):
         target, dbg = i.get("target", ""), i.get("debugger", "")
         if dbg:
             out.append(_finding("loader", "critical",
@@ -277,7 +277,7 @@ def audit():
                                 f"{val[:100]} — this runs at every logon",
                                 "Winlogon"))
 
-    for a in _aslist(data.get("activeSetup")):
+    for a in aslist(data.get("activeSetup")):
         stub = a.get("stub") or ""
         if STOCK_ACTIVE_SETUP.search(stub):
             continue
@@ -292,7 +292,7 @@ def audit():
     # What matters is a registration whose DLL is somewhere untrustworthy, is a
     # scripting host, or does not exist at all (a hijack waiting to be filled).
     benign_com = 0
-    for c in _aslist(data.get("comHijack")):
+    for c in aslist(data.get("comHijack")):
         dll = c.get("dll") or ""
         path = c.get("path") or dll
         why = None
@@ -328,7 +328,7 @@ def audit():
     # Printer vendors ship monitors and Windows ships several; a bare DLL name
     # loads from System32, which is not something a normal user can write to.
     # Only a monitor pointing at an explicit path outside System32 is notable.
-    for m in _aslist(data.get("printMonitors")):
+    for m in aslist(data.get("printMonitors")):
         dll = m.get("dll") or ""
         if not dll:
             continue
@@ -337,19 +337,19 @@ def audit():
                                 f"{m.get('name')} → {dll} (loads into spoolsv as SYSTEM)",
                                 "Print\\Monitors"))
 
-    for n in _aslist(data.get("netsh")):
+    for n in aslist(data.get("netsh")):
         dll = n.get("dll") or ""
         if dll and OFF_SYSTEM32.search(dll):
             out.append(_finding("privileged", "high", "netsh helper loads from a path",
                                 f"{n.get('name')} → {dll}", "Microsoft\\Netsh"))
 
-    for t in _aslist(data.get("timeProviders")):
+    for t in aslist(data.get("timeProviders")):
         dll = t.get("dll") or ""
         if dll and not STOCK_TIME.search(dll):
             out.append(_finding("privileged", "high", "non-standard time provider",
                                 f"{t.get('name')} → {dll}", "W32Time\\TimeProviders"))
 
-    for s in _aslist(data.get("shellHooks")):
+    for s in aslist(data.get("shellHooks")):
         path = s.get("path") or s.get("dll") or ""
         if not path:
             continue
@@ -369,7 +369,7 @@ def audit():
         out.append(_finding("logon", "high", "screensaver runs a non-standard program",
                             ss[:100], "Control Panel\\Desktop"))
 
-    for a in _aslist(data.get("accessibility")):
+    for a in aslist(data.get("accessibility")):
         status, signer = a.get("status"), a.get("signer") or ""
         if status != "Valid" or not MS_SIGNER.search(signer):
             out.append(_finding(
@@ -379,7 +379,7 @@ def audit():
                 f"screen before anyone signs in.", "System32"))
 
     # -- masquerading + parentage -----------------------------------------
-    procs = _aslist(data.get("procs"))
+    procs = aslist(data.get("procs"))
     by_pid = {p.get("pid"): p for p in procs}
     for p in procs:
         name = (p.get("name") or "").lower()
@@ -404,7 +404,7 @@ def audit():
                 break
 
     # -- execution history -------------------------------------------------
-    for u in _aslist(data.get("userAssist"))[:25]:
+    for u in aslist(data.get("userAssist"))[:25]:
         nm = u.get("name") or ""
         last = (u.get("last") or "").replace("T", " ")[:19]
         # UEME_* rows are UserAssist's own session counters, not programs, and

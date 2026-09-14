@@ -6,24 +6,24 @@ import time
 from ... import (alert, collect_windows, control, deadman, fixit, monitor,
                  selfcheck)
 from ...util import iso
-from ..output import color, _tty, _hosts, _print_finding
+from ..output import color, is_tty, selected_hosts, print_process_finding
 
 
 def cmd_watch(args, store):
     print(f"Watching every {args.interval}s — Ctrl-C to stop.  "
-          f"(hosts: {'+'.join(_hosts(args))})")
-    if args.interval < 30 and "win" in _hosts(args):
+          f"(hosts: {'+'.join(selected_hosts(args))})")
+    if args.interval < 30 and "win" in selected_hosts(args):
         print(color("  note: Windows collection takes a few seconds per pass; "
-                    "intervals under 30s will lag.", "dim", _tty()))
+                    "intervals under 30s will lag.", "dim", is_tty()))
     try:
         while True:
-            res = monitor.scan(store, hosts=_hosts(args), enrich=args.enrich)
+            res = monitor.scan(store, hosts=selected_hosts(args), enrich=args.enrich)
             alerts = [f for f in res["findings"]
                       if monitor.SEV_ORDER[f["severity"]] <= 2]  # medium and worse
             if alerts or res["new_public_peers"]:
                 print("\n" + monitor.summarize(res))
                 for f in alerts[: args.limit]:
-                    _print_finding(f)
+                    print_process_finding(f)
                 for p in res["new_public_peers"][:10]:
                     print(f"          new peer {p['ip']}:{p['port']} ← "
                           f"{p['proc']['name']}")
@@ -35,8 +35,8 @@ def cmd_watch(args, store):
 
 
 def cmd_control(args, store):
-    print(f"Auditing control surfaces on {'+'.join(_hosts(args))}…\n")
-    findings = control.audit(hosts=_hosts(args))
+    print(f"Auditing control surfaces on {'+'.join(selected_hosts(args))}…\n")
+    findings = control.audit(hosts=selected_hosts(args))
 
     if args.json:
         print(json.dumps(findings, indent=2))
@@ -48,7 +48,7 @@ def cmd_control(args, store):
         keep = control.SEV_ORDER[args.severity]
         findings = [f for f in findings if control.SEV_ORDER[f["severity"]] <= keep]
 
-    t = _tty()
+    t = is_tty()
     counts = {}
     for f in findings:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
@@ -81,7 +81,7 @@ def cmd_control(args, store):
 def cmd_serve(args, store):
     from ... import server
     store.close()  # the daemon opens its own handles per thread
-    server.serve(db_path=args.db, port=args.port, hosts=_hosts(args))
+    server.serve(db_path=args.db, port=args.port, hosts=selected_hosts(args))
 
 
 def cmd_alert(args, store):
@@ -89,11 +89,11 @@ def cmd_alert(args, store):
     if args.test:
         print("Sending a test alert…")
         err = alert.test(store)
-        print(color(f"  {err}", "high", _tty()) if err
+        print(color(f"  {err}", "high", is_tty()) if err
               else "  sent — check the inbox")
         return 1 if err else 0
     s = alert.status(store)
-    t = _tty()
+    t = is_tty()
     on = color("enabled", "ok", t) if s["enabled"] else color(
         "not configured", "medium", t)
     print(f"alerts        {on}")
@@ -147,7 +147,7 @@ def _print_windows_monitor(t):
 
 def cmd_selfcheck(args, store):
     """Is the daemon actually monitoring? Run from a timer outside it."""
-    t = _tty()
+    t = is_tty()
     store.close()          # selfcheck opens its own handles
     res = selfcheck.run(db_path=args.db, do_restart=args.restart,
                         notify=not args.no_mail, attempts=args.attempts)

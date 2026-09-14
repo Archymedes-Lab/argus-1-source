@@ -23,7 +23,7 @@ import stat
 import subprocess
 
 from .util import dpkg_owns
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"remote access": 0, "privilege": 1, "persistence": 2,
@@ -361,11 +361,11 @@ $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 
 
 def check_windows():
-    d = _ps_json(PS_BACKDOOR, timeout=180)
+    d = ps_json(PS_BACKDOOR, timeout=180)
     if not d:
         return []
     out = []
-    for ak in _aslist(d.get("authkeys")):
+    for ak in aslist(d.get("authkeys")):
         for line in (ak.get("body") or "").splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
@@ -377,14 +377,14 @@ def check_windows():
                 f"Windows SSH key authorised: {comment}",
                 "grants passwordless SSH into this machine",
                 ak.get("path", ""), "win"))
-    for i in _aslist(d.get("ifeo")):
+    for i in aslist(d.get("ifeo")):
         out.append(_finding(
             "remote access", "critical",
             f"accessibility backdoor on {i.get('exe')}",
             f"debugger = {i.get('debugger')} — this yields a SYSTEM shell from "
             f"the logon screen with no credential",
             "IFEO", "win"))
-    for h in _aslist(d.get("hidden")):
+    for h in aslist(d.get("hidden")):
         if h.get("val") == 0:
             out.append(_finding(
                 "accounts", "high",

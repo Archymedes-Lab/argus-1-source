@@ -29,7 +29,7 @@ something and been ignored?
 import re
 from urllib.parse import urlsplit
 
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 
 # Command shapes that show up in ClickFix lures and in pasted-payload attacks.
 PASTE_ATTACK = re.compile(
@@ -346,7 +346,7 @@ def _history_severity(line: str) -> str:
 
 
 def _history_findings(data):
-    hist = _aslist(data.get("psHistory"))
+    hist = aslist(data.get("psHistory"))
     out = []
     for h in hist:
         if not isinstance(h, str) or not SUSPICIOUS_HISTORY.search(h):
@@ -379,14 +379,14 @@ STOCK_EXT = re.compile(r"^(Chrome Web Store Payments|Google Docs Offline|"
 
 
 def audit():
-    data = _ps_json(PS_INTRUSION, timeout=300)
+    data = ps_json(PS_INTRUSION, timeout=300)
     if data is None:
         return [_finding("clickfix", "medium", "intrusion audit unavailable",
                          "powershell.exe returned no data", "interop")]
     out = []
 
     # -- 1. ClickFix ------------------------------------------------------
-    runmru = _aslist(data.get("runmru"))
+    runmru = aslist(data.get("runmru"))
     for r in runmru:
         cmd = (r.get("cmd") or "").rstrip("\\1")
         if not cmd:
@@ -414,7 +414,7 @@ def audit():
     # whose file is still sitting on disk is a live risk waiting to be run
     # again; an inactive one whose file is gone is history, and reporting it
     # forever trains you to ignore the category.
-    for t in _aslist(data.get("threatNames")):
+    for t in aslist(data.get("threatNames")):
         active, on_disk = t.get("active"), t.get("onDisk")
         if active:
             sev, note = "critical", "still active"
@@ -430,7 +430,7 @@ def audit():
     # Defender logs one detection per scan, so the same file appears repeatedly.
     # Collapse by resource and keep the worst outcome and latest time.
     detections = {}
-    for d in _aslist(data.get("threats")):
+    for d in aslist(data.get("threats")):
         key = (d.get("resources") or "")[:200]
         clean = str(d.get("action")).lower() == "true"
         e = detections.setdefault(key, {"n": 0, "clean": True, "last": ""})
@@ -446,7 +446,7 @@ def audit():
             e["last"].replace("T", " ")[:19]))
 
     # -- 4. browser extensions --------------------------------------------
-    exts = _aslist(data.get("extensions"))
+    exts = aslist(data.get("extensions"))
     for e in exts:
         name = e.get("name") or e.get("id") or "?"
         if name.startswith("__MSG_") or STOCK_EXT.match(name):
@@ -477,7 +477,7 @@ def audit():
                         f"{len(exts)} installed across all browsers", ""))
 
     # -- 5. staged executables --------------------------------------------
-    recent_code = _aslist(data.get("recentExe"))[:250]
+    recent_code = aslist(data.get("recentExe"))[:250]
     for f in recent_code:
         path, sig = f.get("path") or "", f.get("sig") or ""
         in_temp = re.search(r"\\temp\\|\\public\\", path, re.I)
@@ -501,7 +501,7 @@ def audit():
         "Downloads, Temp, AppData and Public"))
 
     # -- 6. BITS transfer jobs (T1197) ----------------------------------
-    bits = _aslist(data.get("bits"))
+    bits = aslist(data.get("bits"))
     for j in bits:
         name = j.get("name") or "(unnamed)"
         url = j.get("url") or ""

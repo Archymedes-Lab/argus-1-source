@@ -335,7 +335,7 @@ def _microsoft_signed(paths):
         return set()
     import base64
     import json
-    from .control import _ps_json
+    from .collect_windows import ps_json
     blob = base64.b64encode(json.dumps(sorted(paths)).encode()).decode()
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
@@ -346,7 +346,7 @@ def _microsoft_signed(paths):
         "'O=Microsoft Corporation'){$x}});"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(ConvertTo-Json -InputObject $ok -Compress)))")
-    result = _ps_json(script, timeout=60)
+    result = ps_json(script, timeout=60)
     if isinstance(result, str):
         result = [result]
     return set(result) if isinstance(result, list) else set()

@@ -30,7 +30,7 @@ absence: a region can be allocated, executed and freed between two passes.
 
 import os
 
-from .control import _ps_json
+from .collect_windows import aslist, ps_json
 from .paths import win_script
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -93,7 +93,7 @@ def _run(timeout=420):
             script = fh.read()
     except OSError as exc:
         return None, f"could not read the scan helper: {exc}"
-    data = _ps_json(script, timeout=timeout)
+    data = ps_json(script, timeout=timeout)
     if not data:
         return None, "powershell.exe returned no data"
     return data, ""
@@ -108,12 +108,6 @@ def _human(n):
     return str(n)
 
 
-def _aslist(v):
-    if v is None:
-        return []
-    return v if isinstance(v, list) else [v]
-
-
 def audit(hosts=("win",)):
     if "win" not in hosts:
         return []
@@ -125,7 +119,7 @@ def audit(hosts=("win",)):
     mem = data.get("memory") or {}
     opened = int(mem.get("opened") or 0)
     denied = int(mem.get("denied") or 0)
-    procs = _aslist(mem.get("procs"))
+    procs = aslist(mem.get("procs"))
 
     if denied:
         out.append(_finding(
@@ -249,7 +243,7 @@ def audit(hosts=("win",)):
                 f"system-wide {label} is not enforced", why,
                 "Get-ProcessMitigation -System"))
 
-    for m in _aslist(data.get("mitigations")):
+    for m in aslist(data.get("mitigations")):
         weak = []
         if "OFF" in str(m.get("cfg") or "").upper():
             weak.append("CFG")

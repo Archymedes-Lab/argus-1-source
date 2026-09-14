@@ -23,7 +23,7 @@ import re
 import subprocess
 
 from . import collect_windows
-from .control import _ps_json
+from .collect_windows import ps_json
 from .util import now
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -168,7 +168,7 @@ def _windows():
     out = []
     if not collect_windows.available():
         return out
-    d = _ps_json(_WIN_PS, timeout=120)
+    d = ps_json(_WIN_PS, timeout=120)
     if not d:
         return [_finding(
             "bruteforce", "low", "could not read the Windows Security log",

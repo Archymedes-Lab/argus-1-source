@@ -73,5 +73,5 @@ $json = $o | ConvertTo-Json -Depth 6 -Compress
 
 
 def sample():
-    from ..control import _ps_json
-    return _ps_json(PS_IMPERSONATION)
+    from ..collect_windows import ps_json
+    return ps_json(PS_IMPERSONATION)

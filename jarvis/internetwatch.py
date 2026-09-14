@@ -10,7 +10,7 @@ import re
 import time
 
 from . import collect_linux
-from .control import _ps_json
+from .collect_windows import ps_json
 
 PS_SAMPLE = r"""
 $ErrorActionPreference = 'Stop'
@@ -188,7 +188,7 @@ def audit(store, hosts=('wsl', 'win')):
     for host in hosts:
         attempted = time.time()
         if host == 'win':
-            data = _ps_json(PS_SAMPLE, timeout=30)
+            data = ps_json(PS_SAMPLE, timeout=30)
             if not data:
                 out.append(finding(host, 'high', 'Windows traffic collector is failing',
                     'Windows query unavailable; no fresh traffic or browser state collected', category='collectors'))

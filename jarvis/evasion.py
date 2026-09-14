@@ -28,7 +28,7 @@ of implying a clean result.
 
 import re
 
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 
 # Where drivers legitimately live. Vendors with a real kernel component —
 # anti-cheat, virtualisation, backup, GPU tooling — do ship drivers outside
@@ -230,7 +230,7 @@ $payload = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 
 
 def audit():
-    data = _ps_json(PS_EVASION, timeout=300)
+    data = ps_json(PS_EVASION, timeout=300)
     if data is None:
         return [_finding("byovd", "medium", "evasion audit unavailable",
                          "powershell.exe returned no data", "interop")]
@@ -268,7 +268,7 @@ def audit():
 
     # -- 2. drivers in the wrong place ------------------------------------
     odd = 0
-    for d in _aslist(data.get("drivers")):
+    for d in aslist(data.get("drivers")):
         path = _normalize_driver_path(d.get("path"))
         base = path.replace("/", "\\").rsplit("\\", 1)[-1]
         if KNOWN_ABUSED_DRIVERS.match(base):
@@ -295,7 +295,7 @@ def audit():
                 f"driver; worth recognising the name",
                 path))
             odd += 1
-    total = len(_aslist(data.get("drivers")))
+    total = len(aslist(data.get("drivers")))
     if total:
         out.append(_finding("byovd", "ok", "kernel drivers",
                             f"{total} running, none on the abused-driver list"
@@ -303,7 +303,7 @@ def audit():
                             ""))
 
     # -- 3. alternate data streams ----------------------------------------
-    ads = _aslist(data.get("ads"))
+    ads = aslist(data.get("ads"))
     for a in ads[:20]:
         out.append(_finding(
             "ads", "high", "file carries a hidden alternate data stream",
@@ -317,7 +317,7 @@ def audit():
 
     # -- 4. shortcuts ------------------------------------------------------
     bad_lnk = 0
-    for l in _aslist(data.get("lnks")):
+    for l in aslist(data.get("lnks")):
         target, args = l.get("target") or "", l.get("args") or ""
         reasons = []
         if LNK_LOLBIN.search(target):
@@ -347,7 +347,7 @@ def audit():
                             "at a script host or fetches code", ""))
 
     # -- 5. dead-drop C2 ---------------------------------------------------
-    hits = sorted({e for e in _aslist(data.get("dns"))
+    hits = sorted({e for e in aslist(data.get("dns"))
                    if isinstance(e, str) and DEAD_DROP.search(e)})
     for h in hits[:15]:
         out.append(_finding(
@@ -363,14 +363,14 @@ def audit():
 
     # -- 6. invisible Unicode ---------------------------------------------
     suspect = []
-    for a in _aslist(data.get("autoruns")):
+    for a in aslist(data.get("autoruns")):
         cmd = a.get("cmd") or ""
         if INVISIBLE.search(cmd):
             suspect.append((f"{a.get('key')}\\{a.get('name')}", cmd))
-    for cmd in _aslist(data.get("runmru")):
+    for cmd in aslist(data.get("runmru")):
         if isinstance(cmd, str) and INVISIBLE.search(cmd):
             suspect.append(("RunMRU", cmd))
-    for l in _aslist(data.get("lnks")):
+    for l in aslist(data.get("lnks")):
         blob = f"{l.get('target') or ''} {l.get('args') or ''}"
         if INVISIBLE.search(blob):
             suspect.append((l.get("lnk", ""), blob))

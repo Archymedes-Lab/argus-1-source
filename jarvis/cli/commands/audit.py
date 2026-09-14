@@ -4,15 +4,15 @@ import json
 
 from ... import (asep, auditd, pixel, sniffing, webshell, backdoor, bruteforce, control, coverage, firewall, hidden, evasion, hunt, implant, intel, intrusion, inputwatch, memscan, monitor, netwatch, posture, secrets, spyware, startup, sysmon, sysmon_linux, toolchain)
 from ...util import iso, short
-from ..output import (color, _tty, _hosts, _print_finding, _report,
-                      _simple_cmd)
+from ..output import (color, is_tty, selected_hosts, print_process_finding, render_findings,
+                      simple_command)
 
 
 def cmd_scan(args, store):
     if not store.get_meta("baseline_at"):
         print(color("No baseline yet — everything will look new. "
-                    "Run `jarvis baseline` first.\n", "medium", _tty()))
-    res = monitor.scan(store, hosts=_hosts(args), enrich=args.enrich)
+                    "Run `jarvis baseline` first.\n", "medium", is_tty()))
+    res = monitor.scan(store, hosts=selected_hosts(args), enrich=args.enrich)
 
     if args.json:
         print(json.dumps(res, default=str, indent=2))
@@ -25,12 +25,12 @@ def cmd_scan(args, store):
         findings = [f for f in findings if monitor.SEV_ORDER[f["severity"]] <= keep]
 
     if not findings:
-        print(color("  no drift, no suspicious traits.", "ok", _tty()))
+        print(color("  no drift, no suspicious traits.", "ok", is_tty()))
     for f in findings[: args.limit]:
-        _print_finding(f)
+        print_process_finding(f)
 
     if res["new_public_peers"]:
-        print(f"\n{color('New external peers', 'bold', _tty())} "
+        print(f"\n{color('New external peers', 'bold', is_tty())} "
               f"({len(res['new_public_peers'])} first-time public IPs):")
         for p in res["new_public_peers"][: args.limit]:
             proc = p["proc"]
@@ -44,8 +44,8 @@ def cmd_scan(args, store):
 
 def cmd_investigate(args, store):
     """Everything at once, for when you think something is actually wrong."""
-    t = _tty()
-    hosts = _hosts(args)
+    t = is_tty()
+    hosts = selected_hosts(args)
     sections = [
         ("HIDDEN PROCESSES", lambda: hidden.audit(hosts=hosts, deep=args.deep)[0]),
         ("STARTUP", startup.audit),
@@ -80,7 +80,7 @@ def cmd_investigate(args, store):
             continue
         for f in findings:
             f.setdefault("category", "")
-        counts = _report(findings, verbose=args.verbose,
+        counts = render_findings(findings, verbose=args.verbose,
                          severity=args.severity or "medium")
         for k, v in counts.items():
             worst[k] = worst.get(k, 0) + v
@@ -92,19 +92,19 @@ def cmd_investigate(args, store):
 
 
 def cmd_hidden(args, store):
-    print(f"Cross-view process scan on {'+'.join(_hosts(args))} — comparing "
+    print(f"Cross-view process scan on {'+'.join(selected_hosts(args))} — comparing "
           f"independent enumerations…\n")
-    findings, _ = hidden.audit(hosts=_hosts(args), deep=args.deep)
+    findings, _ = hidden.audit(hosts=selected_hosts(args), deep=args.deep)
     if args.json:
         print(json.dumps(findings, indent=2))
         return
     for f in findings:
         f.setdefault("category", "")
-    counts = _report(findings, verbose=True, severity=args.severity,
+    counts = render_findings(findings, verbose=True, severity=args.severity,
                      sev_order=hidden.SEV_ORDER, show_ok=True,
                      empty="every view agrees — no processes hiding")
     if not any(k in counts for k in ("critical", "high")):
-        print(color("  all process views agree.", "ok", _tty()))
+        print(color("  all process views agree.", "ok", is_tty()))
 
 
 def cmd_spy(args, store):
@@ -113,7 +113,7 @@ def cmd_spy(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             empty="no monitoring software or capability abuse found")
 
 
@@ -127,19 +127,19 @@ def cmd_boot(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=startup.SEV_ORDER, show_ok=True,
             empty="nothing notable at boot")
 
 
 def cmd_firewall(args, store):
     print(f"Auditing firewall posture and inbound connections on "
-          f"{'+'.join(_hosts(args))}…\n")
-    findings = firewall.audit(hosts=_hosts(args))
+          f"{'+'.join(selected_hosts(args))}…\n")
+    findings = firewall.audit(hosts=selected_hosts(args))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=firewall.SEV_ORDER, show_ok=args.verbose,
             empty="no inbound exposure found")
 
@@ -151,7 +151,7 @@ def cmd_intrusion(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=intrusion.SEV_ORDER, show_ok=True,
             empty="no intrusion artifacts found")
 
@@ -162,7 +162,7 @@ def cmd_coverage(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=coverage.SEV_ORDER, show_ok=True,
             empty="coverage is complete")
 
@@ -174,7 +174,7 @@ def cmd_evasion(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=evasion.SEV_ORDER, show_ok=True,
             empty="no evasion artifacts found")
 
@@ -185,7 +185,7 @@ def cmd_asep(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=asep.SEV_ORDER, show_ok=True,
             empty="no autostart abuse found")
 
@@ -194,11 +194,11 @@ def cmd_implant(args, store):
     """Interception, boundary bypass and trust subversion."""
     print("Auditing interception, network-boundary bypass and trust "
           "subversion…\n")
-    findings = implant.audit(hosts=_hosts(args))
+    findings = implant.audit(hosts=selected_hosts(args))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=implant.SEV_ORDER, show_ok=True,
             empty="no interception or boundary-bypass artifacts found")
 
@@ -206,11 +206,11 @@ def cmd_implant(args, store):
 def cmd_sysmon(args, store):
     """Kernel-level telemetry: LSASS access, injection, tampering."""
     print("Reading Sysmon telemetry…\n")
-    findings = sysmon.audit(store=store, hours=args.hours, hosts=_hosts(args))
+    findings = sysmon.audit(store=store, hours=args.hours, hosts=selected_hosts(args))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=sysmon.SEV_ORDER, show_ok=True,
             empty="Sysmon reported nothing of interest")
 
@@ -226,7 +226,7 @@ def cmd_secrets(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=secrets.SEV_ORDER, show_ok=True,
             empty="no plaintext credentials found")
 
@@ -234,18 +234,18 @@ def cmd_secrets(args, store):
 def cmd_memscan(args, store):
     """Executable memory with no file behind it, and patched syscall stubs."""
     print("Scanning process memory for unbacked code and hooked stubs…\n")
-    findings = memscan.audit(hosts=_hosts(args))
+    findings = memscan.audit(hosts=selected_hosts(args))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=memscan.SEV_ORDER, show_ok=True,
             empty="no unbacked executable memory or patched stubs found")
 
 
 def cmd_inputwatch(args, store):
     """Synthetic keystrokes and clicks — input no hardware produced."""
-    t = _tty()
+    t = is_tty()
     if args.start:
         err = inputwatch.start()
         print(color(f"  {err}", "medium", t) if err
@@ -260,7 +260,7 @@ def cmd_inputwatch(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=inputwatch.SEV_ORDER, show_ok=True,
             empty="no synthetic input recorded")
 
@@ -269,11 +269,11 @@ def cmd_backdoor(args, store):
     """Ways back in: keys, grants, units, profiles, accounts."""
     print("Auditing remote-access grants, privilege grants and login "
           "persistence…\n")
-    findings = backdoor.audit(hosts=_hosts(args))
+    findings = backdoor.audit(hosts=selected_hosts(args))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=backdoor.SEV_ORDER, show_ok=True,
             empty="no backdoor mechanisms found")
 
@@ -282,11 +282,11 @@ def cmd_toolchain(args, store):
     """MCP servers, agent hooks, extensions, git hooks, package sources."""
     print("Auditing the developer trust surface — what runs because you "
           "opened an editor, a repo or a shell…\n")
-    findings = toolchain.audit(store, hosts=_hosts(args))
+    findings = toolchain.audit(store, hosts=selected_hosts(args))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=toolchain.SEV_ORDER, show_ok=True,
             empty="nothing in the developer toolchain executes on its own")
 
@@ -297,19 +297,19 @@ def cmd_posture(args, store):
     if args.elevate:
         print(color("  a UAC prompt will appear on the Windows desktop — "
                     "accept it to read BitLocker, TPM and Defender exclusions",
-                    "dim", _tty()))
-    findings = posture.audit(hosts=_hosts(args), elevate=args.elevate)
+                    "dim", is_tty()))
+    findings = posture.audit(hosts=selected_hosts(args), elevate=args.elevate)
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=posture.SEV_ORDER, show_ok=True,
             empty="posture could not be read")
 
 
 def cmd_netwatch(args, store):
     """Sample network state, then report what the history shows."""
-    t = _tty()
+    t = is_tty()
     if args.timeline:
         rows = netwatch.timeline(store, hours=args.hours)
         if not rows:
@@ -328,54 +328,54 @@ def cmd_netwatch(args, store):
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=netwatch.SEV_ORDER, show_ok=True,
             empty="no network changes recorded")
 
 
 def cmd_sysmon_linux(args, store):
     """eBPF syscall events from Sysmon for Linux."""
-    findings = sysmon_linux.audit(store=store, hosts=_hosts(args),
+    findings = sysmon_linux.audit(store=store, hosts=selected_hosts(args),
                                   incremental=False)
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=sysmon_linux.SEV_ORDER, show_ok=True,
             empty="no Sysmon-for-Linux events in the window")
 
 
 def cmd_bruteforce(args, store):
     """Failed-authentication volume across both sides."""
-    findings = bruteforce.audit(hosts=_hosts(args))
+    findings = bruteforce.audit(hosts=selected_hosts(args))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=bruteforce.SEV_ORDER, show_ok=True,
             empty="no failed-auth records to analyse")
 
 
 def cmd_hunt(args, store):
     """Check every stored indicator against this machine."""
-    t = _tty()
+    t = is_tty()
     info = intel.summary(store)
     if not info["total"]:
         print("no indicators yet — run `jarvis intel` first")
         return
     print(f"Hunting {info['total']} indicators from {info['docs']} writeups "
-          f"across {'+'.join(_hosts(args))}…\n")
-    findings = hunt.sort_findings(hunt.hunt(store, hosts=_hosts(args)))
+          f"across {'+'.join(selected_hosts(args))}…\n")
+    findings = hunt.sort_findings(hunt.hunt(store, hosts=selected_hosts(args)))
     if args.json:
         print(json.dumps(findings, indent=2))
         return
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             empty="no indicator matched anything on this machine")
 
 
 def cmd_gaps(args, store):
     """What current intel talks about that no collector checks."""
-    t = _tty()
+    t = is_tty()
     findings, covered, closeable = hunt.gaps(store, min_docs=args.min_docs)
     if args.json:
         print(json.dumps({"gaps": findings,
@@ -389,7 +389,7 @@ def cmd_gaps(args, store):
     pct = 100.0 * len(covered) / total
     print(f"of the techniques in current intel that leave host artifacts, "
           f"{len(covered)} of {total} are covered ({pct:.0f}%)\n")
-    _report(findings, verbose=args.verbose, severity=args.severity,
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
             empty="every technique in current intel is covered")
     if args.verbose and covered:
         print(color("\n  already covered:", "dim", t))
@@ -398,6 +398,6 @@ def cmd_gaps(args, store):
 
 
 # Collectors whose output needs no shaping beyond the standard report.
-cmd_sniffing = _simple_cmd(sniffing, "no packet-capture state to report")
-cmd_webshell = _simple_cmd(webshell, "no web server to audit")
-cmd_auditd = _simple_cmd(auditd, "syscall-interception posture unavailable")
+cmd_sniffing = simple_command(sniffing, "no packet-capture state to report")
+cmd_webshell = simple_command(webshell, "no web server to audit")
+cmd_auditd = simple_command(auditd, "syscall-interception posture unavailable")

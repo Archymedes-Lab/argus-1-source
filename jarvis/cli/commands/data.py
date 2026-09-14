@@ -5,7 +5,7 @@ import json
 from ... import (detect, feeds, intel, monitor)
 from ... import ledger as ledger_mod
 from ...util import iso, now, short
-from ..output import color, _tty, _hosts
+from ..output import color, is_tty, selected_hosts
 
 
 def cmd_baseline(args, store):
@@ -15,7 +15,7 @@ def cmd_baseline(args, store):
         store.commit()
         print("Cleared the previous baseline.")
     print("Learning the current state as your known-good baseline…")
-    res = monitor.scan(store, hosts=_hosts(args), enrich=False, learn=True)
+    res = monitor.scan(store, hosts=selected_hosts(args), enrich=False, learn=True)
     store.set_meta("baseline_at", now())
     total = len(store.known_fps())
     print(f"  {res['scanned']} processes captured, {total} unique fingerprints approved.")
@@ -48,7 +48,7 @@ def cmd_peers(args, store):
 def cmd_events(args, store):
     since = now() - args.since * 3600 if args.since else None
     rows = store.list_events(limit=args.limit, severity=args.severity, since=since)
-    t = _tty()
+    t = is_tty()
     for r in rows:
         tag = color(f" {r['severity'][:4].upper():4} ", r["severity"], t)
         print(f"{iso(r['ts'])} {tag} [{r['host']}/{r['pid']}] {r['name']} "
@@ -76,7 +76,7 @@ def cmd_outstanding(args, store):
         print(json.dumps(ledger_mod.classify(rows, job_ts=job_ts), indent=2))
         return
     states = ledger_mod.classify(rows, job_ts=job_ts)
-    t = _tty()
+    t = is_tty()
     if not rows:
         print(color("No alerts have been sent yet, so there is nothing to "
                     "chase. This is only meaningful once alerting is "
@@ -138,7 +138,7 @@ def cmd_outstanding(args, store):
 
 def cmd_intel(args, store):
     """Refresh the threat-intelligence knowledge base."""
-    t = _tty()
+    t = is_tty()
     if args.set_key:
         path = intel.save_key(args.set_key)
         print(f"key stored in {path} (mode 0600, outside the repository)")
@@ -195,7 +195,7 @@ def cmd_intel(args, store):
 
 def cmd_feeds(args, store):
     """Refresh the free bulk indicator feeds."""
-    t = _tty()
+    t = is_tty()
     if args.status:
         rows = feeds.status(store)
         if not rows:

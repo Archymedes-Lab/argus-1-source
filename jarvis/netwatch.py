@@ -34,7 +34,7 @@ import re
 import subprocess
 import time
 
-from .control import _aslist, _ps_json
+from .collect_windows import aslist, ps_json
 from .util import iso, now
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -157,13 +157,13 @@ def sample(since_ts=None):
     else:
         since = "(Get-Date).AddDays(-7)"
     script = PS_NET.replace("__SINCE__", since)
-    data = _ps_json(script, timeout=180)
+    data = ps_json(script, timeout=180)
     if not data:
         return None
     wlan = _parse_wlan(data.get("wlan"))
     iface = wlan.get("iface") or ""
 
-    adapters = _aslist(data.get("adapters"))
+    adapters = aslist(data.get("adapters"))
     wifi_ad = None
     for a in adapters:
         if iface and a.get("name") == iface:
@@ -177,7 +177,7 @@ def sample(since_ts=None):
                 break
 
     ipcfg = {}
-    for c in _aslist(data.get("ipcfg")):
+    for c in aslist(data.get("ipcfg")):
         if c.get("iface") == iface:
             ipcfg = c
             break
@@ -185,7 +185,7 @@ def sample(since_ts=None):
     gw = (ipcfg.get("gw") or "").split(",")[0].strip()
     gw_mac = ""
     if gw:
-        for n in _aslist(data.get("neighbors")):
+        for n in aslist(data.get("neighbors")):
             if n.get("ip") == gw:
                 gw_mac = (n.get("mac") or "").lower()
                 break
@@ -219,8 +219,8 @@ def sample(since_ts=None):
         "signal": wlan.get("signal", 0),
         "ipv4": ipcfg.get("ipv4", ""), "gateway": gw, "gw_mac": gw_mac,
         "dns": ipcfg.get("dns", ""),
-        "_wlanlog": _aslist(data.get("wlanlog")),
-        "_netprofile": _aslist(data.get("netprofile")),
+        "_wlanlog": aslist(data.get("wlanlog")),
+        "_netprofile": aslist(data.get("netprofile")),
         "_adapters": adapters,
     }
 

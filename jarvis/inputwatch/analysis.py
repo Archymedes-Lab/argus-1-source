@@ -1,7 +1,7 @@
 """Turning input telemetry into findings about synthetic input."""
 
 import statistics
-from ..control import _ps_json
+from ..collect_windows import ps_json
 from ..util import iso, now
 from .common import _finding
 from .common import _finding
@@ -138,7 +138,7 @@ def _latency_findings(store, beat, probe_registry=True):
     if not probe_registry:
         return out
 
-    d = _ps_json(
+    d = ps_json(
         "$v = (Get-ItemProperty 'HKCU:\\Control Panel\\Desktop' "
         "-Name LowLevelHooksTimeout -EA SilentlyContinue).LowLevelHooksTimeout;"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
