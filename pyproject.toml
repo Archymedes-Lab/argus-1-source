@@ -1,0 +1,19 @@
+# Development tooling only. Jarvis has no runtime dependencies beyond the
+# Python 3.12 standard library, and nothing here changes that.
+#
+#   uvx ruff check            lint (unused/undefined names, syntax)
+#   python3 -m unittest discover -s tests
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["docs", "windows-sensor"]
+
+[tool.ruff.lint]
+# Correctness only: pyflakes (F) and syntax errors (E9). Style is left to the
+# surrounding code; a formatter pass would bury real changes in churn.
+select = ["F", "E9"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ modules re-export their submodules' names.
+"**/__init__.py" = ["F401"]
