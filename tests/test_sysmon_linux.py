@@ -4,6 +4,7 @@ import tempfile
 from datetime import datetime, timezone
 
 from jarvis.collectors.telemetry import sysmon_linux
+from jarvis.core.util import now
 from jarvis.core.store import Store
 
 
@@ -77,7 +78,7 @@ class SysmonRawAccessTests(unittest.TestCase):
     def test_legacy_unresolved_hit_is_reclassified_without_refreshing_its_age(self):
         with tempfile.TemporaryDirectory() as directory:
             store = Store(os.path.join(directory, 'jarvis.db'))
-            ts = sysmon_linux.now() - 600
+            ts = now() - 600
             store.db.execute('''INSERT INTO sysmon_hits
                 (ts,category,severity,title,detail,where_) VALUES(?,?,?,?,?,?)''',
                 (ts, 'sysmon-linux', 'high', sysmon_linux.RAW_ACCESS_TITLE,
@@ -94,7 +95,7 @@ class SysmonRawAccessTests(unittest.TestCase):
             store = Store(os.path.join(directory, 'jarvis.db'))
             store.db.execute('''INSERT INTO sysmon_hits
                 (ts,category,severity,title,detail,where_) VALUES(?,?,?,?,?,?)''',
-                (sysmon_linux.now(), 'sysmon-linux', 'high', sysmon_linux.RAW_ACCESS_TITLE,
+                (now(), 'sysmon-linux', 'high', sysmon_linux.RAW_ACCESS_TITLE,
                  'tee opened /dev/sda' + sysmon_linux.RAW_LEGACY_SUFFIX, sysmon_linux.CHANNEL))
             store.commit()
             out = sysmon_linux._remember(store, [], 24)
