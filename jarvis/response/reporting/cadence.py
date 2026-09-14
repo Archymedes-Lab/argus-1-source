@@ -4,7 +4,7 @@ import time
 
 def daily_due(store, conf, now=None):
     now = int(time.time() if now is None else now)
-    from jarvis.response import alert
+    from .. import alert
     hour = min(23,max(0,alert._int(conf.get('report_hour'),9)))
     last = int(store.get_meta('report_daily_last_ok',0) or
                store.get_meta(alert._M_REPORT_OK,0) or 0)
@@ -15,7 +15,7 @@ def daily_due(store, conf, now=None):
 
 
 def run(store, jobs):
-    from jarvis.response import alert
+    from .. import alert
     from . import notifications
     conf = alert.load_conf()
     if not alert.enabled(conf):

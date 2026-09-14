@@ -1,6 +1,6 @@
 import unittest
 
-from jarvis.reporting import commands, diff
+from jarvis.response.reporting import commands, diff
 
 
 class CommandMapTests(unittest.TestCase):

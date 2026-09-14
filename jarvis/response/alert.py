@@ -35,8 +35,8 @@ import urllib.error
 import urllib.request
 
 from . import fixit
-from jarvis.reporting import commands as report_commands
-from jarvis.reporting import diff as report_diff
+from .reporting import commands as report_commands
+from .reporting import diff as report_diff
 
 CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
 API_URL = "https://api.resend.com/emails"
@@ -695,5 +695,5 @@ def dispatch(store, job, findings, error=""):
 
 
 def _dispatch(store, conf, job, findings, error=""):
-    from jarvis.reporting.notifications import dispatch as notify
+    from .reporting.notifications import dispatch as notify
     return notify(store, conf, job, findings, error)

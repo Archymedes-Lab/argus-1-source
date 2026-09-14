@@ -122,7 +122,7 @@ class InspectCommandTests(unittest.TestCase):
     """
 
     def test_the_watchdogs_job_points_at_selfcheck(self):
-        from jarvis.reporting.commands import command_for
+        from jarvis.response.reporting.commands import command_for
 
         self.assertEqual(command_for("watchdogs"), "jarvis selfcheck")
 

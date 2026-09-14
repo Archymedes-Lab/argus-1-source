@@ -82,7 +82,7 @@ class RemediationTests(unittest.TestCase):
         self.assertIn(threat, findings)
 
     def test_verified_repair_does_not_mail_original_outage(self):
-        from jarvis.reporting import notifications
+        from jarvis.response.reporting import notifications
         from jarvis.response import alert
         findings, error = self.run_repair()
         with patch.object(alert, 'send_email') as send:

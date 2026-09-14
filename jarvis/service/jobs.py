@@ -25,7 +25,7 @@ from jarvis.core import retention
 from jarvis.core.store import Store
 from jarvis.intel import feeds, hunt
 from jarvis.intel import research as intel
-from jarvis.reporting.cadence import run as report_due
+from jarvis.response.reporting.cadence import run as report_due
 from jarvis.response import ledger as ledger_mod
 from jarvis.service import connectivity, deadman, selfcheck
 from jarvis.service import coverage as coverage_mod
