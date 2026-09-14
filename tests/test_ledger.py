@@ -188,10 +188,10 @@ class AuditTests(unittest.TestCase):
         self.assertTrue(any("come back" in t for t in titles), titles)
 
     def test_every_ledger_finding_is_in_the_nopage_category(self):
-        from jarvis.response.alert import _NOPAGE_CATEGORIES
+        from jarvis.response.alert import NOPAGE_CATEGORIES
         # Structural: a ledger finding that paged would be mailed, recorded in
         # the ledger, and become another unresolved alert.
-        self.assertIn("ledger", _NOPAGE_CATEGORIES)
+        self.assertIn("ledger", NOPAGE_CATEGORIES)
         for f in ledger.audit(self.store):
             self.assertEqual(f["category"], "ledger")
 

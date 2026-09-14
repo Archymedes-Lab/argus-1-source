@@ -14,7 +14,8 @@ import traceback
 
 from jarvis.core import collection
 from jarvis.core.store import Store
-from jarvis.response import alert
+from jarvis.response import alert, remediation
+from jarvis.response.reporting import notifications
 from jarvis.service import sdnotify
 from jarvis.service.jobs import run_job
 from jarvis.service.schedule import JOBS
@@ -97,7 +98,6 @@ class Scheduler(threading.Thread):
                     with collection.observe() as observation:
                         findings = run_job(name, self.hosts, self.db_path)
                     err = observation.error
-                    from jarvis.response import remediation
                     findings, err = remediation.process(
                         store, alert.load_conf(), name, findings, err,
                         lambda: run_job(name, self.hosts, self.db_path))
@@ -114,7 +114,7 @@ class Scheduler(threading.Thread):
                 # that has stopped recording. Guarded so a mail failure can
                 # never take down the scheduler.
                 try:
-                    alert.dispatch(store, name, findings, error=err)
+                    notifications.deliver(store, name, findings, error=err)
                 except Exception:
                     pass
         finally:

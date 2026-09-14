@@ -1,13 +1,16 @@
 """Daily advisory eligibility; change digests are driven by collector results."""
 import time
 
+from jarvis.response import alert
+
+from . import notifications
+
 
 def daily_due(store, conf, now=None):
     now = int(time.time() if now is None else now)
-    from .. import alert
-    hour = min(23,max(0,alert._int(conf.get('report_hour'),9)))
+    hour = min(23,max(0,alert.parse_int(conf.get('report_hour'),9)))
     last = int(store.get_meta('report_daily_last_ok',0) or
-               store.get_meta(alert._M_REPORT_OK,0) or 0)
+               store.get_meta(alert.REPORT_OK_META,0) or 0)
     current = time.localtime(now)
     if current.tm_hour < hour:
         return False
@@ -15,8 +18,6 @@ def daily_due(store, conf, now=None):
 
 
 def run(store, jobs):
-    from .. import alert
-    from . import notifications
     conf = alert.load_conf()
     if not alert.enabled(conf):
         return alert.advisory_report(store,jobs)
@@ -32,7 +33,7 @@ def run(store, jobs):
                  'title':'daily advisory scheduled; change digests active',
                  'detail':'Unchanged findings do not send repeat alerts.','where':'scheduler'}]
     result = alert.advisory_report(store,jobs)
-    if int(store.get_meta(alert._M_REPORT_OK,0) or 0) >= now:
+    if int(store.get_meta(alert.REPORT_OK_META,0) or 0) >= now:
         store.set_meta('report_daily_last_ok',now)
         store.set_meta('report_retry_at',0)
     else:

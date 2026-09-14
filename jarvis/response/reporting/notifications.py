@@ -2,6 +2,8 @@
 import json
 import time
 
+from jarvis.response import alert, fixit
+
 from .commands import command_for
 
 QUEUE = 'alert_pending_changes'
@@ -22,11 +24,25 @@ def _load(store, key):
         return {}
 
 
+def deliver(store, job, findings, error=""):
+    """Called by the scheduler after every job. Sends at most one email.
+
+    Never raises: an alerting path that can crash the monitor is worse than one
+    that occasionally misses. The caller still wraps this in its own guard.
+    """
+    try:
+        conf = alert.load_conf()
+        if not alert.enabled(conf):
+            return
+        dispatch(store, conf, job, list(findings or []), error)
+    except Exception:
+        pass
+
+
 def dispatch(store, conf, job, findings, error=''):
-    from .. import alert
     now = int(time.time())
     rank = alert.SEV_RANK
-    state = _load(store, alert._M_STATE)
+    state = _load(store, alert.STATE_META)
     queue = _load(store, QUEUE)
     minimum = rank.get(conf.get('alert_min_severity', 'high'), 1)
     if error:
@@ -36,17 +52,17 @@ def dispatch(store, conf, job, findings, error=''):
             'where':'jarvis serve'}]
     present, advisory = {}, set()
     for f in findings:
-        key = alert._key(f)
-        if f.get('category') in alert._NOPAGE_CATEGORIES and not alert._is_outage(f):
+        key = alert.finding_key(f)
+        if f.get('category') in alert.NOPAGE_CATEGORIES and not alert.is_outage(f):
             advisory.add(key)
-        elif rank.get(f.get('severity'), 9) <= minimum or alert._is_outage(f):
+        elif rank.get(f.get('severity'), 9) <= minimum or alert.is_outage(f):
             # Duplicate findings may disagree: the worst evidence wins.
             if key not in present or rank.get(f.get('severity'),9) < rank.get(present[key].get('severity'),9):
                 present[key] = f
 
     for key, f in present.items():
         sev = f.get('severity','high')
-        outage = alert._is_outage(f)
+        outage = alert.is_outage(f)
         st = state.get(key)
         first_observation = st is None
         if st is None:
@@ -79,7 +95,7 @@ def dispatch(store, conf, job, findings, error=''):
 
     for key in list(state):
         st = state[key]
-        if error or key in present or not alert._same_domain(st.get('job',''),job):
+        if error or key in present or not alert.same_domain(st.get('job',''),job):
             continue
         pending = queue.pop(key, None)
         if st.get('last_sent'):
@@ -93,13 +109,12 @@ def dispatch(store, conf, job, findings, error=''):
                               'queued':now, 'urgent':bool(st.get('outage')),
                               'first':st.get('first',now), 'level':0}
         state.pop(key)
-    store.set_meta(alert._M_STATE, json.dumps(state))
+    store.set_meta(alert.STATE_META, json.dumps(state))
     store.set_meta(QUEUE, json.dumps(queue))
     return flush(store, conf)
 
 
 def flush(store, conf):
-    from .. import alert
     now = int(time.time())
     queue = _load(store, QUEUE)
     if conf.get('alert_on_clear', False) is not True:
@@ -107,7 +122,7 @@ def flush(store, conf):
         store.set_meta(QUEUE, json.dumps(queue))
     if not queue or now < int(store.get_meta(RETRY_AT,0) or 0):
         return False
-    period = max(60, alert._int(conf.get('alert_digest_interval'),3600))
+    period = max(60, alert.parse_int(conf.get('alert_digest_interval'),3600))
     last = int(store.get_meta(LAST_DIGEST,0) or 0)
     oldest = min(item['queued'] for item in queue.values())
     due = now - (last or oldest) >= period
@@ -115,8 +130,8 @@ def flush(store, conf):
     if not batch:
         return False
     urgent = any(v.get('urgent') for v in batch.values())
-    cap = alert.OUTAGE_HOURLY_CAP if urgent else max(0,alert._int(conf.get('alert_hourly_cap'),12))
-    if cap and len(alert._recent_sends(store)) >= cap:
+    cap = alert.OUTAGE_HOURLY_CAP if urgent else max(0,alert.parse_int(conf.get('alert_hourly_cap'),12))
+    if cap and len(alert.recent_sends(store)) >= cap:
         store.set_meta('alert_capped_at',now)
         return False  # Nothing is acknowledged or discarded.
     ordered = sorted(batch.items(), key=lambda kv: alert.SEV_RANK.get(kv[1]['finding'].get('severity'),9))
@@ -144,7 +159,7 @@ def flush(store, conf):
         store.set_meta('alert_last_error',f'{now}: {err}'[:300])
         store.set_meta(RETRY_AT,now + 300)
         return False
-    state = _load(store,alert._M_STATE)
+    state = _load(store,alert.STATE_META)
     for key, item in ordered:
         if item['tag'] != 'RESOLVED':
             st = state.get(key)
@@ -152,11 +167,11 @@ def flush(store, conf):
                 st.update(last_sent=now, count=int(st.get('count',0))+1,
                           sev=item['finding'].get('severity','high'), escalation=item['level'])
                 st.pop('pending',None)
-            store.ledger_sent(key,item['finding'],item['job'],alert.fixit.suggest(item['finding']) or '',now)
+            store.ledger_sent(key,item['finding'],item['job'],fixit.suggest(item['finding']) or '',now)
         queue.pop(key,None)
-    store.set_meta(alert._M_STATE,json.dumps(state))
+    store.set_meta(alert.STATE_META,json.dumps(state))
     store.set_meta(QUEUE,json.dumps(queue))
-    alert._record_send(store)
+    alert.record_send(store)
     if due: store.set_meta(LAST_DIGEST,now)
     store.set_meta(RETRY_AT,0)
     store.set_meta('alert_last_ok',now)

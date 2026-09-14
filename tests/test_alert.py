@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from jarvis.response import alert
+from jarvis.response.reporting import notifications
 from jarvis.core.store import Store
 
 
@@ -19,19 +20,19 @@ class AdvisoryReportTests(unittest.TestCase):
         import json
         finding = {"category": "coverage gap", "severity": "high",
                    "title": "T1003", "detail": "missing coverage", "where": ""}
-        self.store.set_meta(alert._M_STATE, json.dumps({alert._key(finding): {
+        self.store.set_meta(alert.STATE_META, json.dumps({alert.finding_key(finding): {
             "job": "gaps", "first": 1, "last_sent": 1, "count": 2}}))
         with patch.object(alert, "send_email") as send:
-            alert._dispatch(self.store, CONF, "gaps", [finding], "")
-            alert._dispatch(self.store, CONF, "gaps", [finding], "")
+            notifications.dispatch(self.store, CONF, "gaps", [finding], "")
+            notifications.dispatch(self.store, CONF, "gaps", [finding], "")
         send.assert_not_called()
-        self.assertEqual(json.loads(self.store.get_meta(alert._M_STATE)), {})
+        self.assertEqual(json.loads(self.store.get_meta(alert.STATE_META)), {})
 
     def test_collector_outages_still_page(self):
         finding = {"category": "collectors", "severity": "high",
                    "title": "collector 'scan' is stale", "detail": "no results", "where": ""}
         with patch.object(alert, "send_email", return_value="") as send:
-            alert._dispatch(self.store, CONF, "coverage", [finding], "")
+            notifications.dispatch(self.store, CONF, "coverage", [finding], "")
         send.assert_called_once()
 
     def setUp(self):
@@ -108,7 +109,7 @@ class AdvisoryReportTests(unittest.TestCase):
         self.assertNotIn("SECRET_ON_COMMAND_LINE", sent["html"])
         self.assertIn("Current findings by protection layer", sent["html"])
         self.assertIn("Optional deeper AI assessment", sent["html"])
-        self.assertTrue(self.store.get_meta(alert._M_REPORT_OK))
+        self.assertTrue(self.store.get_meta(alert.REPORT_OK_META))
 
     def test_report_surfaces_missing_delivery_configuration(self):
         with patch("jarvis.response.alert.load_conf", return_value={}):

@@ -65,7 +65,7 @@ OUTAGE_RESEND_CAP = 3600
 OUTAGE_HOURLY_CAP = 60
 
 
-def _int(v, default):
+def parse_int(v, default):
     """int() with a default for None / "" / junk — but 0 is kept as 0."""
     if v is None or v == "":
         return default
@@ -85,8 +85,8 @@ _OUTAGE_MARKERS = (
 )
 _OUTAGE_CATEGORIES = ("input", "collectors", "daemon")
 
-_M_STATE = "alert_state"       # json: {key: {first, last_sent, count, sev}}
-_M_SENTLOG = "alert_sent_log"  # json: [ts, ...] emails actually sent, last hour
+STATE_META = "alert_state"       # json: {key: {first, last_sent, count, sev}}
+SENT_LOG_META = "alert_sent_log"  # json: [ts, ...] emails actually sent, last hour
 
 
 # ── config ──────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ def status(store):
     """A dict for `jarvis alert` to print — never includes the key itself."""
     conf = load_conf()
     try:
-        state = json.loads(store.get_meta(_M_STATE, "{}") or "{}")
+        state = json.loads(store.get_meta(STATE_META, "{}") or "{}")
     except ValueError:
         state = {}
     return {
@@ -138,20 +138,20 @@ def status(store):
         "from": conf.get("alert_from", ""),
         "to": recipients(conf),
         "min_severity": conf.get("alert_min_severity", "high"),
-        "digest_interval": max(60, _int(conf.get("alert_digest_interval"), 3600)),
+        "digest_interval": max(60, parse_int(conf.get("alert_digest_interval"), 3600)),
         "resend_after": 0,
-        "outage_resend_after": max(60, _int(
+        "outage_resend_after": max(60, parse_int(
             conf.get("alert_outage_resend_after"), OUTAGE_RESEND)),
         "on_clear": conf.get("alert_on_clear", True) is not False,
-        "hourly_cap": max(0, _int(conf.get("alert_hourly_cap"), 12)),
+        "hourly_cap": max(0, parse_int(conf.get("alert_hourly_cap"), 12)),
         "outage_hourly_cap": OUTAGE_HOURLY_CAP,
-        "send_attempts": max(1, _int(conf.get("alert_send_attempts"),
+        "send_attempts": max(1, parse_int(conf.get("alert_send_attempts"),
                                      SEND_ATTEMPTS)),
         "active": sorted(state.keys()),
         "outages": sorted(k for k, v in state.items() if v.get("outage")),
-        "sent_last_hour": len(_recent_sends(store)),
+        "sent_last_hour": len(recent_sends(store)),
         "last_ok": int(store.get_meta("alert_last_ok", 0) or 0),
-        "report_last_ok": int(store.get_meta(_M_REPORT_OK, 0) or 0),
+        "report_last_ok": int(store.get_meta(REPORT_OK_META, 0) or 0),
         "report_last_error": store.get_meta(_M_REPORT_ERROR, "") or "",
         "advisory_model": conf.get("advisory_model", "") or "",
         "advisory_ai": bool((os.environ.get("JARVIS_OPENAI_KEY", "").strip() or
@@ -181,7 +181,7 @@ def send_email(conf, subject, text, html=None):
         message["html"] = html
     payload = json.dumps(message).encode()
     ctx = ssl.create_default_context()
-    attempts = max(1, _int(conf.get("alert_send_attempts"), SEND_ATTEMPTS))
+    attempts = max(1, parse_int(conf.get("alert_send_attempts"), SEND_ATTEMPTS))
     last = "no attempt was made"
 
     for i in range(attempts):
@@ -232,13 +232,13 @@ def test(store):
                      "This is a test from JARVIS (`jarvis alert --test`).\n"
                      "If you got this, outage alerts will reach you too.\n")
     if not err:
-        _record_send(store)
+        record_send(store)
     return err
 
 
 # ── periodic whole-system advisory ─────────────────────────────────────────
 
-_M_REPORT_OK = "advisory_report_last_ok"
+REPORT_OK_META = "advisory_report_last_ok"
 _M_REPORT_ERROR = "advisory_report_last_error"
 
 
@@ -602,9 +602,9 @@ def advisory_report(store, jobs):
             "title": "daily security report could not be sent",
             "detail": err, "where": "Resend"}]
 
-    _record_send(store)
+    record_send(store)
     report_diff.save(store, findings, generated)
-    store.set_meta(_M_REPORT_OK, generated)
+    store.set_meta(REPORT_OK_META, generated)
     store.set_meta(_M_REPORT_ERROR, "")
     return [{
         "category": "reporting", "severity": "ok", "host": "wsl",
@@ -625,7 +625,7 @@ def advisory_report(store, jobs):
 # recorded in the ledger as another unresolved alert, which would page. The
 # backlog belongs in the advisory report and on the dashboard, where it is read
 # deliberately rather than pushed.
-_NOPAGE_CATEGORIES = {"process", "peer", "coverage gap", "not observable",
+NOPAGE_CATEGORIES = {"process", "peer", "coverage gap", "not observable",
                       "ledger"}
 
 # Volatile tokens that must not be part of a dedupe key, or every occurrence is
@@ -636,7 +636,7 @@ _VOLATILE = re.compile(
     r"\b[0-9a-f]{16,}\b|\b\d{10,}\b")
 
 
-def _key(f):
+def finding_key(f):
     title = _VOLATILE.sub("", f.get("title", "")).strip(" -—|")
     return f"{f.get('category', '')}|{title}|{f.get('where', '')}"
 
@@ -651,11 +651,11 @@ def _key(f):
 _DOMAIN = {"input": "input", "input_hook": "input"}
 
 
-def _same_domain(a, b):
+def same_domain(a, b):
     return _DOMAIN.get(a, a) == _DOMAIN.get(b, b)
 
 
-def _is_outage(f):
+def is_outage(f):
     if f.get("category") not in _OUTAGE_CATEGORIES:
         return False
     if SEV_RANK.get(f.get("severity"), 9) > SEV_RANK["medium"]:
@@ -664,36 +664,16 @@ def _is_outage(f):
     return any(m in blob for m in _OUTAGE_MARKERS)
 
 
-def _recent_sends(store):
+def recent_sends(store):
     try:
-        log = [int(x) for x in json.loads(store.get_meta(_M_SENTLOG, "[]") or "[]")]
+        log = [int(x) for x in json.loads(store.get_meta(SENT_LOG_META, "[]") or "[]")]
     except (ValueError, TypeError):
         log = []
     cutoff = int(time.time()) - 3600
     return [t for t in log if t >= cutoff]
 
 
-def _record_send(store):
-    log = _recent_sends(store)
+def record_send(store):
+    log = recent_sends(store)
     log.append(int(time.time()))
-    store.set_meta(_M_SENTLOG, json.dumps(log[-100:]))
-
-
-def dispatch(store, job, findings, error=""):
-    """Called by the scheduler after every job. Sends at most one email.
-
-    Never raises: an alerting path that can crash the monitor is worse than one
-    that occasionally misses. The caller still wraps this in its own guard.
-    """
-    try:
-        conf = load_conf()
-        if not enabled(conf):
-            return
-        _dispatch(store, conf, job, list(findings or []), error)
-    except Exception:
-        pass
-
-
-def _dispatch(store, conf, job, findings, error=""):
-    from .reporting.notifications import dispatch as notify
-    return notify(store, conf, job, findings, error)
+    store.set_meta(SENT_LOG_META, json.dumps(log[-100:]))

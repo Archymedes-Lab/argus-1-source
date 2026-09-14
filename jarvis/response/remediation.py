@@ -9,6 +9,9 @@ import time
 
 from jarvis.core import collection
 from jarvis.core.paths import win_script
+from jarvis.platform.windows import ps_json
+
+from .alert import finding_key
 
 META = 'automatic_repairs_v1'
 COOLDOWN = 3600
@@ -33,7 +36,6 @@ def action_for(job, finding):
 
 def execute(action):
     if action == 'orphan_firewall':
-        from jarvis.platform.windows import ps_json
         script = win_script('repair_orphan_firewall.ps1').read_text()
         result = ps_json(script, timeout=30)
         return bool(isinstance(result, dict) and result.get('ok') is True)
@@ -50,7 +52,6 @@ def execute(action):
 
 def process(store, conf, job, findings, error, collect):
     """Return findings/error for persistence and alerts; retain failed evidence."""
-    from .alert import _key
     if conf.get('auto_remediate', True) is False or error:
         return findings, error
     candidates = [f for f in findings if action_for(job, f)]
@@ -58,7 +59,7 @@ def process(store, conf, job, findings, error, collect):
         return findings, error
     action = action_for(job, candidates[0])  # one bounded operation per pass
     targets = [f for f in candidates if action_for(job, f) == action]
-    keys = {_key(f) for f in targets}
+    keys = {finding_key(f) for f in targets}
     now = int(time.time())
     try:
         records = json.loads(store.get_meta(META, '{}'))
@@ -84,7 +85,7 @@ def process(store, conf, job, findings, error, collect):
             # Coverage loss must never be mistaken for a successful repair.
             unavailable = any(f.get('category') in ('collectors', 'visibility')
                               and f.get('severity') != 'ok' for f in fresh)
-            remaining = keys & {_key(f) for f in fresh}
+            remaining = keys & {finding_key(f) for f in fresh}
             positive = (action == 'orphan_firewall' or
                         any(f.get('severity') == 'ok' and (
                             (action == 'telemetry' and f.get('category') == 'telemetry') or
@@ -97,8 +98,8 @@ def process(store, conf, job, findings, error, collect):
             else:
                 reason = 'Repair attempted, but a complete fresh scan did not verify resolution.'
                 # Retain original evidence and any newly discovered threats.
-                merged = {_key(f): f for f in findings}
-                merged.update({_key(f): f for f in fresh})
+                merged = {finding_key(f): f for f in findings}
+                merged.update({finding_key(f): f for f in fresh})
                 findings = list(merged.values())
                 error = observation.error or ('repair verification incomplete' if unavailable else '')
         record.update(status=status, reason=reason, verified_at=now if status == 'verified' else 0)
@@ -110,6 +111,5 @@ def process(store, conf, job, findings, error, collect):
 
 
 def _annotate(findings, keys, status, reason):
-    from .alert import _key
     return [{**f, 'remediation': {'status': status, 'reason': reason}}
-            if _key(f) in keys else f for f in findings]
+            if finding_key(f) in keys else f for f in findings]

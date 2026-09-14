@@ -339,7 +339,7 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
                     f"({verdict['scope']} manager)\n")
             err = alert.send_email(conf, "[JARVIS] the monitor is back up", body)
             if not err:
-                alert._record_send(store)
+                alert.record_send(store)
                 store.set_meta(_M_LAST_STATE, state)
                 store.set_meta(_M_LAST_ALERT, 0)
                 store.set_meta('selfcheck_first_down',0)
@@ -379,7 +379,7 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
             conf, "[JARVIS] the monitor is DOWN — nothing is being watched",
             "\n".join(lines) + "\n")
         if not err:
-            alert._record_send(store)
+            alert.record_send(store)
             store.set_meta(_M_LAST_STATE, state)
             store.set_meta(_M_LAST_ALERT, now())
             store.set_meta('selfcheck_escalation',level)

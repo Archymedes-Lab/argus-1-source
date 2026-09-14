@@ -59,7 +59,7 @@ class NotificationsTests(unittest.TestCase):
 
     def test_failed_initial_send_retries_without_acknowledging(self):
         self.f['severity']='critical';self.send.return_value='offline';self.observe()
-        st=json.loads(self.store.get_meta(alert._M_STATE))[alert._key(self.f)]
+        st=json.loads(self.store.get_meta(alert.STATE_META))[alert.finding_key(self.f)]
         self.assertEqual(st['last_sent'],0)
         self.assertTrue(json.loads(self.store.get_meta(n.QUEUE)))
         self.send.return_value='';self.now.return_value+=301;self.observe()
@@ -68,7 +68,7 @@ class NotificationsTests(unittest.TestCase):
 
     def test_cap_keeps_pending_and_quick_disappearance_is_not_mailed(self):
         self.observe();self.observe()
-        self.store.set_meta(alert._M_SENTLOG,json.dumps([1000000]*12))
+        self.store.set_meta(alert.SENT_LOG_META,json.dumps([1000000]*12))
         self.now.return_value+=3600;n.flush(self.store,CONF)
         self.send.assert_not_called()
         self.assertTrue(json.loads(self.store.get_meta(n.QUEUE)))
@@ -79,14 +79,14 @@ class NotificationsTests(unittest.TestCase):
     def test_failure_cannot_resolve_previous_security_findings(self):
         self.f['severity']='critical';self.observe()
         self.observe(findings=[],error='collector failed')
-        state=json.loads(self.store.get_meta(alert._M_STATE))
-        self.assertIn(alert._key(self.f),state)
+        state=json.loads(self.store.get_meta(alert.STATE_META))
+        self.assertIn(alert.finding_key(self.f),state)
         self.assertEqual(self.store.ledger_rows()[0]['cleared_at'],0)
 
     def test_unrelated_job_does_not_clear_and_recovery_survives_mail_failure(self):
         self.f['severity']='critical';self.observe()
         self.observe(job='other',findings=[])
-        self.assertIn(alert._key(self.f),json.loads(self.store.get_meta(alert._M_STATE)))
+        self.assertIn(alert.finding_key(self.f),json.loads(self.store.get_meta(alert.STATE_META)))
         n.dispatch(self.store, {**CONF, 'alert_on_clear': True}, 'intrusion', [])
         self.now.return_value+=3601;self.send.return_value='offline'
         n.flush(self.store,{**CONF, 'alert_on_clear': True})
@@ -108,7 +108,7 @@ class NotificationsTests(unittest.TestCase):
         self.assertIn('Repair lacks permission.', self.send.call_args.args[2])
 
     def test_outage_bypasses_ordinary_cap(self):
-        self.store.set_meta(alert._M_SENTLOG,json.dumps([1000000]*12))
+        self.store.set_meta(alert.SENT_LOG_META,json.dumps([1000000]*12))
         self.observe(findings=[{'category':'daemon','severity':'high','title':'JARVIS is down'}])
         self.send.assert_called_once()
 
