@@ -57,5 +57,16 @@ class SchedulerFairnessTests(unittest.TestCase):
             self.assertIsNone(self.scheduler._due())
 
 
+class JobRegistryTests(unittest.TestCase):
+    def test_every_scheduled_job_has_a_runner_and_nothing_else_does(self):
+        from jarvis.service import jobs
+        self.assertEqual(set(jobs.RUNNERS), set(JOBS))
+
+    def test_unknown_job_is_rejected(self):
+        from jarvis.service import jobs
+        with self.assertRaises(ValueError):
+            jobs.run_job("no-such-job", ("wsl",), ":memory:")
+
+
 if __name__ == "__main__":
     unittest.main()
