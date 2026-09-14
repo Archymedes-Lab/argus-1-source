@@ -172,12 +172,12 @@ def cmd_selfcheck(args, store):
     for p in res["problems"]:
         print(color(f"    - {p}", "high", t))
     if res["restarted"]:
-        print(f"    restart: "
+        print("    restart: "
               + (color(res["restart_error"], "high", t) if res["restart_error"]
                  else color("issued", "ok", t)))
         after = res.get("after_restart")
         if after:
-            print(f"    after restart: "
+            print("    after restart: "
                   + (color("healthy", "ok", t) if after["healthy"]
                      else color("still unhealthy", "high", t)))
     if res["mail_error"]:

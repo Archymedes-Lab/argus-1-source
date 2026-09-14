@@ -227,7 +227,6 @@ def audit_windows():
     # Everything above walks ActiveProcessLinks, one kernel list. These three
     # reach process objects by other routes, so a pid they can see while the
     # enumerations cannot is the signature of a process unlinked from that list.
-    enumerated = set(wmi) | set(api) | set(tl)
     threads = {p for p in aslist(data.get("threadOwners")) if isinstance(p, int)}
     perf = {p for p in aslist(data.get("perfpids")) if isinstance(p, int)}
     svc = {p for p in aslist(data.get("svcpids")) if isinstance(p, int)}

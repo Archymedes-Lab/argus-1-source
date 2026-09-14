@@ -10,7 +10,6 @@ from .mcp import check_mcp
 from .agents import check_agent_hooks
 from .extensions import check_extensions
 from .packaging import check_git_hooks, check_package_config
-from .common import _finding, reset_cache
 
 
 def audit(store=None, hosts=("wsl", "win")):

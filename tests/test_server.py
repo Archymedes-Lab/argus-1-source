@@ -23,7 +23,7 @@ class SchedulerColdStartTests(unittest.TestCase):
         self.assertEqual(self.scheduler._due(), "coverage")
 
     def test_automatic_report_waits_for_first_collector_sweep(self):
-        self.scheduler.next_run["coverage"] = future = time.time() + 3600
+        self.scheduler.next_run["coverage"] = time.time() + 3600
         self.scheduler.next_run["report"] = 0
         self.assertIsNone(self.scheduler._due())
         self.scheduler.cold_start_pending.clear()

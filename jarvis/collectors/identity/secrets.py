@@ -470,7 +470,7 @@ def audit(roots=None, hosts=("wsl",), deep=False):
             cat = "tracked"
             sev = "critical"
             remote = next((r for _, r in tracked if r), "")
-            extra = (f"  git is tracking this file"
+            extra = ("  git is tracking this file"
                      + (f" and its remote is {remote}" if remote else "")
                      + " — the credential is one push from being published")
         elif reachable and others:

@@ -97,7 +97,7 @@ def dispatch(store, conf, job, findings, error=''):
         st = state[key]
         if error or key in present or not alert.same_domain(st.get('job',''),job):
             continue
-        pending = queue.pop(key, None)
+        queue.pop(key, None)
         if st.get('last_sent'):
             # Ledger resolution is a collector fact, independent of mail.
             store.ledger_cleared(key, now)

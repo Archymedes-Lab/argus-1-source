@@ -40,7 +40,7 @@ CAPTURE_TOOLS = {
 # Ports that carry a live screen off the machine.
 SCREEN_PORTS = {
     3389: "RDP", 5900: "VNC", 5901: "VNC", 5938: "TeamViewer",
-    6568: "ScreenConnect", 7070: "AnyDesk", 5938: "TeamViewer",
+    6568: "ScreenConnect", 7070: "AnyDesk",
 }
 
 PS_SCREEN = r"""

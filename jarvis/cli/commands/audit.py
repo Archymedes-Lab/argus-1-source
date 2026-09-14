@@ -367,7 +367,6 @@ def cmd_bruteforce(args, store):
 
 def cmd_hunt(args, store):
     """Check every stored indicator against this machine."""
-    t = is_tty()
     info = intel.summary(store)
     if not info["total"]:
         print("no indicators yet — run `jarvis intel` first")
