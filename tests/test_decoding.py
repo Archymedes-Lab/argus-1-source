@@ -19,11 +19,17 @@ import unittest
 
 PKG = pathlib.Path(__file__).resolve().parent.parent / "jarvis"
 
+# Reads that must stay strict. The evidence manifest is an integrity record:
+# replacing an undecodable byte would silently alter the hashes it vouches for,
+# so a corrupt manifest is rejected (UnicodeDecodeError is a ValueError, which
+# load() already treats as "no manifest") rather than repaired.
+STRICT_BY_DESIGN = {"evidence/manifest.py"}
+
 
 class SubprocessDecodingTests(unittest.TestCase):
     def test_no_collector_decodes_subprocess_output_strictly(self):
         offenders = []
-        for path in sorted(PKG.glob("*.py")):
+        for path in sorted(PKG.rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if not (isinstance(node, ast.Call)
@@ -33,7 +39,7 @@ class SubprocessDecodingTests(unittest.TestCase):
                 kwargs = {k.arg for k in node.keywords}
                 decodes = bool(kwargs & {"text", "universal_newlines", "encoding"})
                 if decodes and "errors" not in kwargs:
-                    offenders.append(f"{path.name}:{node.lineno}")
+                    offenders.append(f"{path.relative_to(PKG).as_posix()}:{node.lineno}")
         self.assertEqual(
             offenders, [],
             "these decode subprocess output strictly and will raise "
@@ -49,7 +55,7 @@ class SubprocessDecodingTests(unittest.TestCase):
 class FileDecodingTests(unittest.TestCase):
     def test_no_collector_opens_a_file_for_text_reading_strictly(self):
         offenders = []
-        for path in sorted(PKG.glob("*.py")):
+        for path in sorted(PKG.rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if not (isinstance(node, ast.Call)
@@ -69,8 +75,9 @@ class FileDecodingTests(unittest.TestCase):
                 # failure there is a bug worth seeing, not one to paper over.
                 if any(c in mode for c in "wax"):
                     continue
-                if "errors" not in kwargs:
-                    offenders.append(f"{path.name}:{node.lineno}")
+                if ("errors" not in kwargs and
+                        path.relative_to(PKG).as_posix() not in STRICT_BY_DESIGN):
+                    offenders.append(f"{path.relative_to(PKG).as_posix()}:{node.lineno}")
         self.assertEqual(
             offenders, [],
             "these read text files strictly; a single non-UTF-8 byte in a log, "

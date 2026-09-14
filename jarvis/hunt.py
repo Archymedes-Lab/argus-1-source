@@ -591,7 +591,11 @@ def _intercept_active():
         _INTERCEPT = (False, "")
         for name in ("auditd", "sysmon_linux"):
             try:
-                mod = __import__(f"jarvis.{name}", fromlist=[name])
+                # Lazy: only the gap report needs these, once per process.
+                if name == "auditd":
+                    from . import auditd as mod
+                else:
+                    from . import sysmon_linux as mod
                 if mod.active():
                     _INTERCEPT = (True, "auditd" if name == "auditd"
                                   else "Sysmon for Linux")
