@@ -14,30 +14,17 @@ Three categories:
                  first move is usually to disable them
 """
 
-import base64
 import glob
 import hashlib
-import json
 import os
 import re
 import subprocess
 
-from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import aslist, ps_json
-from jarvis.core import collection
 from jarvis.core.paths import REPO_ROOT
+from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.core.util import short
 
-# Commercial remote-control agents. Presence is not proof of compromise -- it is
-# proof that someone can drive this machine, which is what you asked to see.
-REMOTE_AGENTS = re.compile(
-    r"teamviewer|anydesk|rustdesk|ultravnc|tightvnc|realvnc|vncserver|x11vnc|"
-    r"screenconnect|connectwise|logmein|gotoassist|splashtop|supremo|ammyy|"
-    r"radmin|dwservice|dwagent|atera|ninjarmm|ninjaone|syncro|kaseya|"
-    r"chrome remote desktop|remotepc|zoho assist|action1|pulseway|"
-    r"quickassist|mstsc|psexec|paexec|meshagent|tacticalrmm",
-    re.I,
-)
 
 # PowerShell's -EncodedCommand, as a real flag rather than any string containing
 # "enc" (Proton's "ms-encodedlaunch:" URI matched a looser pattern).

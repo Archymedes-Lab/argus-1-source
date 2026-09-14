@@ -15,7 +15,7 @@ way down the wire:
 import re
 
 from jarvis.platform.linux import read_file, socket_table
-from jarvis.collectors.persistence.control import REMOTE_AGENTS
+from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.util import classify_ip
 

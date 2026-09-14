@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 from jarvis.platform import windows as collect_windows
 from jarvis.core import collection
-from jarvis.collectors.persistence import control
 from jarvis.collectors.telemetry import sysmon
 from jarvis.service.protection import health
 from jarvis.core.store import Store
@@ -23,7 +22,7 @@ class CollectionTests(unittest.TestCase):
             self.assertEqual(outer.status, 'complete')
 
     def test_bridge_failure_is_explicit_even_when_helper_returns_none(self):
-        with collection.observe() as observation, patch.object(control.collect_windows, 'available', return_value=False):
+        with collection.observe() as observation, patch.object(collect_windows, 'available', return_value=False):
             self.assertIsNone(collect_windows.ps_json('unused'))
         self.assertEqual(observation.status, 'unavailable')
 
