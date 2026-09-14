@@ -43,7 +43,7 @@ COVERAGE = {
     "T1556":     "implant / backdoor — PAM stack and auth configuration",
     "T1553":     "implant — root certificate trust store",
     "T1557":     "netwatch — gateway MAC and DNS changes",
-    "T1090":     "implant — proxy, PAC and portproxy",
+    "T1090":     "firewall / implant — proxy, tunnelling, PAC and portproxy",
     "T1548":     "backdoor — sudo, setuid and elevation grants",
     "T1098":     "backdoor / posture — account and group inventory",
     "T1136":     "backdoor — new and hidden accounts",
