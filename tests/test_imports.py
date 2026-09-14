@@ -103,6 +103,28 @@ class PackagedDataTests(unittest.TestCase):
             with self.subTest(label):
                 self.assertTrue(Path(path).exists(), "%s -> %s" % (label, path))
 
+    def test_every_bundled_powershell_payload_exists(self):
+        """Collectors load their PowerShell at import time by file name; a
+        typo or a missed file would stop the daemon from starting."""
+        names = set()
+        for path in ROOT.rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "load_win_script"
+                        and node.args and isinstance(node.args[0], ast.Constant)):
+                    names.add(node.args[0].value)
+        self.assertGreaterEqual(len(names), 21)
+        for name in sorted(names):
+            with self.subTest(name):
+                self.assertTrue((ROOT / "platform" / "win" / name).is_file(), name)
+
+    def test_templated_payloads_keep_their_placeholders(self):
+        from jarvis.collectors.host.posture import collect as posture_collect
+        from jarvis.collectors.network import netwatch
+
+        self.assertIn("__SINCE__", netwatch.PS_NET)
+        self.assertIn("[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))",
+                      posture_collect.PS_POSTURE)
+
     def test_the_helper_resolves_inside_the_installed_package(self):
         from jarvis.collectors.host.inputwatch import common as iw_common
 

@@ -26,6 +26,19 @@ def win_script(name):
     return WIN_SCRIPTS_DIR / name
 
 
+def load_win_script(name):
+    """Text of a bundled PowerShell payload, byte for byte.
+
+    newline="" disables newline translation, so the script reaches PowerShell
+    (and any str.replace templating) exactly as it is stored. Payloads load at
+    import time, so a damaged byte is replaced rather than raised: one broken
+    script then shows up as that collector's "unavailable" finding instead of
+    stopping the daemon and every other collector with it.
+    """
+    with open(win_script(name), encoding="utf-8", errors="replace", newline="") as fh:
+        return fh.read()
+
+
 def repo_file(name):
     """Path of an operator script shipped at the repository level."""
     return REPO_ROOT / name

@@ -14,6 +14,7 @@ import os
 import re
 
 from jarvis.core.finding import win_finding as finding
+from jarvis.core.paths import load_win_script
 from jarvis.platform.windows import aslist, ps_json
 
 # A beacon is a remote image that is too small to be content, or one whose URL
@@ -103,20 +104,7 @@ def rules_thunderbird(prefs_text, where=""):
         "load until you allow them per message", where, host="wsl")]
 
 
-PS_MAIL = r"""
-$ErrorActionPreference = 'SilentlyContinue'
-$o = [ordered]@{}
-$o.outlook = @(Get-ChildItem 'HKCU:\Software\Microsoft\Office' |
-    ForEach-Object {
-        $p = "$($_.PSPath)\Outlook\Options\Mail"
-        if (Test-Path $p) {
-            [ordered]@{ version = $_.PSChildName
-                        blockHttp = (Get-ItemProperty $p).BlockHTTPimages }
-        }
-    })
-$json = $o | ConvertTo-Json -Depth 5 -Compress
-[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
-"""
+PS_MAIL = load_win_script("pixel_mail.ps1")
 
 
 def rules_outlook(data):

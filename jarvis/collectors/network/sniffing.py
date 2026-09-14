@@ -24,6 +24,7 @@ import re
 import subprocess
 
 from jarvis.core.finding import finding as _finding
+from jarvis.core.paths import load_win_script
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import aslist, ps_json
 
@@ -134,24 +135,7 @@ def _linux():
 
 # ── Windows ─────────────────────────────────────────────────────────────────
 
-_WIN_PS = r"""
-$o = @{ drivers = @(); tools = @(); promisc = @() }
-foreach ($n in 'npcap','npf','pktmon') {
-  $s = Get-Service -Name $n -ErrorAction SilentlyContinue
-  if ($s) { $o.drivers += @{ name = $s.Name; status = "$($s.Status)" } }
-}
-$names = 'Wireshark','dumpcap','tshark','windump','WinDump','rawshark',
-         'NetworkMiner','Fiddler','mitmproxy','mitmdump','Netmon','tcpview'
-$o.tools = Get-Process -ErrorAction SilentlyContinue |
-  Where-Object { $names -contains $_.ProcessName } |
-  ForEach-Object { @{ name = $_.ProcessName; id = $_.Id } }
-try {
-  $o.promisc = Get-CimInstance -Namespace root/StandardCimv2 MSFT_NetAdapter `
-    -ErrorAction Stop | Where-Object { $_.PromiscuousMode } |
-    ForEach-Object { $_.Name }
-} catch { }
-[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $o -Depth 5)))
-"""
+_WIN_PS = load_win_script("sniffing.ps1")
 
 
 def _windows():

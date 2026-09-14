@@ -1,0 +1,3 @@
+# PowerShell payloads are loaded byte for byte (see core/paths.load_win_script);
+# keep their line endings fixed regardless of the checkout platform.
+jarvis/platform/win/*.ps1 text eol=lf
