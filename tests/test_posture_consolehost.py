@@ -2,11 +2,12 @@ import unittest
 from unittest.mock import patch
 
 from jarvis.collectors.host import posture
+from jarvis.collectors.host.posture import run as posture_run
 
 
 def titles(consolehost):
     data = {"consolehost": consolehost, "hotfix": [{"id": "KB1", "on": "2026-09-01"}]}
-    with patch.object(posture, "ps_json", return_value=data):
+    with patch.object(posture_run, "ps_json", return_value=data):
         return [f["title"] for f in posture.audit()]
 
 

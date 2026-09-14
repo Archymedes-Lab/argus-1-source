@@ -14,7 +14,7 @@ enough to be certain, not just to be broad.
 
 import re
 
-# GUID -> name, kept identical to posture.ASR_KEY so the fix command lists
+# GUID -> name, kept identical to posture.sections.ASR_KEY so the fix command lists
 # exactly the rules that collector checked, not a generic "all of ASR" blob.
 _ASR_KEY = {
     "d4f940ab-401b-4efc-aadc-ad5f3c50688a":
