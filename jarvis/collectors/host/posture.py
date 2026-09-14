@@ -270,26 +270,9 @@ def elevated_data(timeout=300):
                 pass
 
 
-def audit(hosts=("win",), elevate=False):
-    if "win" not in hosts:
-        return []
-    elev_err = ""
-    d = None
-    if elevate:
-        d, elev_err = elevated_data()
-    if d is None:
-        d = ps_json(PS_POSTURE, timeout=400)
-    if not d:
-        return [_finding("visibility", "medium", "posture audit unavailable",
-                         "powershell.exe returned no data")]
+def _malware_defense(d):
+    """Malware defense."""
     out = []
-    if elevate and elev_err:
-        out.append(_finding(
-            "visibility", "medium", "elevated audit did not run",
-            f"{elev_err} — falling back to the unelevated result, so the "
-            f"checks that need administrator remain unread"))
-
-    # ── malware defense ───────────────────────────────────────────────────
     dfn = d.get("defender") or {}
     pref = d.get("mppref") or {}
     mode = str(dfn.get("AMRunningMode") or "")
@@ -371,8 +354,12 @@ def audit(hosts=("win",), elevate=False):
             + ("; …" if len(missing) > 4 else ""),
             "Add-MpPreference -AttackSurfaceReductionRules_Ids <guid> "
             "-AttackSurfaceReductionRules_Actions Enabled"))
+    return out
 
-    # ── platform integrity ────────────────────────────────────────────────
+
+def _platform_integrity(d):
+    """Platform integrity."""
+    out = []
     sb = d.get("secureboot")
     if sb is False:
         out.append(_finding(
@@ -425,8 +412,12 @@ def audit(hosts=("win",), elevate=False):
             "LSA runs unprotected, so tools like mimikatz can open it",
             r"reg add HKLM\System\CurrentControlSet\Control\Lsa "
             r"/v RunAsPPL /t REG_DWORD /d 1"))
+    return out
 
-    # ── data at rest ──────────────────────────────────────────────────────
+
+def _data_at_rest(d):
+    """Data at rest."""
+    out = []
     vols = aslist(d.get("bitlocker"))
     if not vols:
         out.append(_finding(
@@ -447,8 +438,12 @@ def audit(hosts=("win",), elevate=False):
                 "machine — including the .env secrets and credential vault "
                 "in your project directories",
                 "manage-bde -on C: (or Settings > Device encryption)"))
+    return out
 
-    # ── account & access ──────────────────────────────────────────────────
+
+def _account_access(d):
+    """Account & access."""
+    out = []
     uac = d.get("uac") or {}
     if uac.get("enabled") is not None and not _truthy(uac.get("enabled")):
         out.append(_finding("account & access", "critical", "UAC is disabled",
@@ -485,8 +480,12 @@ def audit(hosts=("win",), elevate=False):
             "account & access", "low",
             f"{len(admins)} accounts are local administrators",
             ", ".join(a.split("\\")[-1] for a in admins[:6])))
+    return out
 
-    # ── attack surface ────────────────────────────────────────────────────
+
+def _attack_surface(d):
+    """Attack surface."""
+    out = []
     if d.get("smb1") is None:
         out.append(_finding(
             "visibility", "low", "SMBv1 feature state is not readable",
@@ -518,8 +517,12 @@ def audit(hosts=("win",), elevate=False):
             "downloaded executables are not reputation-checked",
             "Windows Security > App & browser control > "
             "Reputation-based protection"))
+    return out
 
-    # ── visibility ────────────────────────────────────────────────────────
+
+def _visibility(d):
+    """Visibility."""
+    out = []
     ps = d.get("pslog") or {}
     if not _truthy(ps.get("scriptblock")):
         out.append(_finding(
@@ -555,8 +558,12 @@ def audit(hosts=("win",), elevate=False):
         out.append(_finding("visibility", "medium",
                             "no installed updates could be listed",
                             "update history is unreadable"))
+    return out
 
-    # ── licensing ─────────────────────────────────────────────────────────
+
+def _licensing(d):
+    """Licensing."""
+    out = []
     for lic in aslist(d.get("license")):
         status = lic.get("status")
         name = (lic.get("name") or "Windows")[:60]
@@ -576,6 +583,35 @@ def audit(hosts=("win",), elevate=False):
                 "how activation is attempted — a script piped from the web "
                 "into an elevated shell is a full-trust event, and this "
                 "machine's PowerShell history shows exactly that"))
+    return out
+
+
+# In the order they are reported before sorting.
+SECTIONS = (_malware_defense, _platform_integrity, _data_at_rest,
+            _account_access, _attack_surface, _visibility, _licensing)
+
+
+def audit(hosts=("win",), elevate=False):
+    if "win" not in hosts:
+        return []
+    elev_err = ""
+    d = None
+    if elevate:
+        d, elev_err = elevated_data()
+    if d is None:
+        d = ps_json(PS_POSTURE, timeout=400)
+    if not d:
+        return [_finding("visibility", "medium", "posture audit unavailable",
+                         "powershell.exe returned no data")]
+    out = []
+    if elevate and elev_err:
+        out.append(_finding(
+            "visibility", "medium", "elevated audit did not run",
+            f"{elev_err} — falling back to the unelevated result, so the "
+            f"checks that need administrator remain unread"))
+
+    for section in SECTIONS:
+        out.extend(section(d))
     return sort_findings(out)
 
 
