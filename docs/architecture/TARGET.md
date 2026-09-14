@@ -79,7 +79,7 @@ Kept at the repository root on purpose:
 | Import cycles | 2 | 0 |
 | Private names imported between modules outside their own subpackage | 49 | 0 |
 | Function-local imports | 29 | 2 (CLI startup cost, commented) |
-| Collector importing another collector domain | 3 | 0 |
+| Layer or domain rule violations once the layout existed | 3 (firewall→control, flash→evidence, sysmon→vet) | 0 |
 | Finding factories | 18 identical copies + variants | `core/finding.py` + genuinely different variants |
 | PowerShell runner | private helper in a collector (`control._ps_json`) | `platform.windows.ps_json` |
 | `server.py` | 807 lines: job table, 270-line `if` dispatch, scheduler, HTTP | `service/schedule`, `service/jobs` (dispatch table), `service/scheduler`, `web/server` |
@@ -90,7 +90,8 @@ Kept at the repository root on purpose:
 Verification after each step: the full unittest suite; `scripts/dev/behavior_snapshot.py`,
 where CLI help for all 52 commands was identical throughout and every string
 literal change was reviewed; `compileall`; and, after structural steps, a
-restart of the live daemon with every job's snapshot checked for errors.
+restart of the live daemon. Every job's stored snapshot was checked for errors
+after the first restart on the new layout and again on the final commit.
 
 ## Performance (measured, no change made)
 
