@@ -3,7 +3,7 @@ import time
 
 from jarvis.response import alert
 
-from . import notifications
+from . import advisory, notifications
 
 
 def daily_due(store, conf, now=None):
@@ -20,7 +20,7 @@ def daily_due(store, conf, now=None):
 def run(store, jobs):
     conf = alert.load_conf()
     if not alert.enabled(conf):
-        return alert.advisory_report(store,jobs)
+        return advisory.advisory_report(store,jobs)
     notifications.flush(store,conf)
     if conf.get('report_daily_enabled', False) is not True:
         return [{'category':'reporting','severity':'ok','host':'wsl',
@@ -32,7 +32,7 @@ def run(store, jobs):
         return [{'category':'reporting','severity':'ok','host':'wsl',
                  'title':'daily advisory scheduled; change digests active',
                  'detail':'Unchanged findings do not send repeat alerts.','where':'scheduler'}]
-    result = alert.advisory_report(store,jobs)
+    result = advisory.advisory_report(store,jobs)
     if int(store.get_meta(alert.REPORT_OK_META,0) or 0) >= now:
         store.set_meta('report_daily_last_ok',now)
         store.set_meta('report_retry_at',0)

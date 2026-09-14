@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from jarvis.response import alert
-from jarvis.response.reporting import notifications
+from jarvis.response.reporting import advisory, notifications
 from jarvis.core.store import Store
 
 
@@ -88,7 +88,7 @@ class AdvisoryReportTests(unittest.TestCase):
         }
         with patch("jarvis.response.alert.load_conf", return_value=CONF), \
              patch("jarvis.response.alert.send_email", side_effect=capture):
-            result = alert.advisory_report(self.store, jobs)
+            result = advisory.advisory_report(self.store, jobs)
 
         self.assertEqual(result[0]["severity"], "ok")
         self.assertTrue(sent["subject"].startswith("[JARVIS]"))
@@ -113,7 +113,7 @@ class AdvisoryReportTests(unittest.TestCase):
 
     def test_report_surfaces_missing_delivery_configuration(self):
         with patch("jarvis.response.alert.load_conf", return_value={}):
-            result = alert.advisory_report(
+            result = advisory.advisory_report(
                 self.store, {"report": (18000, "report")})
         self.assertEqual(result[0]["severity"], "medium")
         self.assertIn("not configured", result[0]["title"])
