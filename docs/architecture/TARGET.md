@@ -10,18 +10,18 @@ plan.
 ```
 jarvis/
   core/          store, schema, retention, collection (observation accounting),
-                 finding (the common finding factory), vet (indicator validation),
+                 finding (the common finding factory), vet + vet_lists (indicator validation),
                  paths, util
   platform/      linux (/proc), windows (interop + the one PowerShell runner),
                  win/*.ps1 payloads, native/ (Windows sensor spool ingest)
   collectors/
     signatures.py  detection knowledge shared across domains (REMOTE_AGENTS)
     process/       monitor, detect, hidden/, memscan, evasion, resourcewatch
-    telemetry/     sysmon, sysmon_linux, auditd
-    persistence/   asep, startup, control, implant, backdoor
+    telemetry/     sysmon, sysmon_linux/, auditd
+    persistence/   asep, startup, control, trusted_tasks, implant, backdoor
     network/       firewall, netwatch, internetwatch, sniffing, webshell
     identity/      bruteforce, secrets, impersonation/
-    host/          posture, spyware, inputwatch/, intrusion, toolchain/,
+    host/          posture/, spyware/, inputwatch/, intrusion/, toolchain/,
                    controlwatch, pixel/
   intel/         research (was intel.py), corpus, feeds, hunt, gaps
   response/      alert (delivery policy + transport), remediation, fixit, ledger,
@@ -83,9 +83,9 @@ Kept at the repository root on purpose:
 | Finding factories | 18 identical copies + variants | `core/finding.py` + genuinely different variants |
 | PowerShell runner | private helper in a collector (`control._ps_json`) | `platform.windows.ps_json` |
 | `server.py` | 807 lines: job table, 270-line `if` dispatch, scheduler, HTTP | `service/schedule`, `service/jobs` (dispatch table), `service/scheduler`, `web/server` |
-| Largest modules | server 807, alert 699, intel 698, hunt 673 | sysmon_linux 684, spyware 664 (see FOLLOWUPS) |
+| Largest modules | server 807, alert 699, intel 698, sysmon_linux 688 | secrets 518, research 516, netwatch 493 (see FOLLOWUPS) |
 | Tests | 354 | 362 (layer rules, job registry) |
-| Lint (`uvx ruff check`, F + E9) | not configured | clean |
+| Lint (`uvx ruff check`, F + E9 + I) | not configured | clean |
 
 Verification after each step: the full unittest suite; `scripts/dev/behavior_snapshot.py`,
 where CLI help for all 52 commands was identical throughout and every string
