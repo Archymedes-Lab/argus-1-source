@@ -1,35 +1,13 @@
-"""Artifacts of how machines actually get compromised right now.
-
-The other modules look for things that are *running* or *installed*. This one
-looks for evidence of the initial access itself, because current intrusions are
-increasingly things that happen once and leave no persistent process behind:
-
-  ClickFix          A fake CAPTCHA page copies a command to the clipboard and
-                    tells you to press Win+R and paste it. It is reportedly the
-                    single largest initial-access technique in circulation, and
-                    it leaves a perfect fingerprint: Windows records everything
-                    typed into the Run dialog in the RunMRU registry key.
-
-  Infostealers      Modern stealers run once, harvest browser cookies, session
-                    tokens and saved passwords, and exit. Behavioural rules that
-                    watch for persistence miss them entirely, because there is
-                    no persistence. What they leave behind is access to the
-                    browser credential stores and, often, a malicious extension.
-
-  Session theft     Stolen cookies and OAuth tokens are replayed directly, so
-                    the password and the second factor never come into it. A
-                    browser extension with broad host permissions is one of the
-                    cheapest ways to keep harvesting them.
-
-It also reads Defender's own detection history, which is the cheapest possible
-question to ask and the one most often skipped: has the antivirus already found
-something and been ignored?
-"""
+"""The intrusion audit: one PowerShell sample, turned into findings."""
 
 import re
-from urllib.parse import urlsplit
 
 from jarvis.platform.windows import aslist, ps_json
+
+from .bits import _bits_is_vendor
+from .common import _finding
+from .history import _history_findings
+
 
 # Command shapes that show up in ClickFix lures and in pasted-payload attacks.
 PASTE_ATTACK = re.compile(
@@ -40,24 +18,22 @@ PASTE_ATTACK = re.compile(
     re.I,
 )
 
+
 # Browser credential and session stores. Anything but the browser reading these
 # is worth knowing about.
 CRED_STORES = re.compile(
     r"\\(Login Data|Cookies|Web Data|Local State|key4\.db|logins\.json|"
     r"cookies\.sqlite|places\.sqlite)$", re.I)
 
+
 BROWSER_PROC = re.compile(r"^(chrome|msedge|firefox|opera|brave|vivaldi|"
                           r"chromium|thorium)\.exe$", re.I)
+
 
 # Extension permissions that allow reading every page, including session tokens.
 BROAD_PERMS = re.compile(r"<all_urls>|\*://\*/\*|http://\*/\*|https://\*/\*|"
                          r"webRequest|cookies|debugger|nativeMessaging|proxy",
                          re.I)
-
-
-def _finding(category, severity, title, detail, where=""):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": "win"}
 
 
 PS_INTRUSION = r"""
@@ -231,144 +207,6 @@ try {
 $json = [pscustomobject]$o | ConvertTo-Json -Depth 6 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 """
-
-# BITS job names Windows Update and vendor updaters use.
-_BITS_BENIGN = re.compile(
-    r"windows ?update|wuauclt|delivery optimization|msedge|edgeupdate|"
-    r"google update|gupdate|dropbox|onedrive|office|teams|adobe|mozilla",
-    re.I)
-
-# Hosts those updaters actually fetch from. The name alone is not enough in
-# either direction, and matching it against the whole URL was worse than
-# useless: `https://evil.example/?ref=onedrive` contains "onedrive" and was
-# therefore exempt, while OneDrive's own real job — DisplayName
-# `PreSignInSettingsConfigJSON`, url `https://g.live.com/odclientsettings/ProdV2`
-# — contains none of these words anywhere and was reported HIGH. So the host is
-# what gets matched, parsed out of the URL rather than searched for inside it: a
-# dropper can name its job anything, but it still has to serve the payload from
-# somewhere, and that somewhere is never one of these.
-_BITS_VENDOR_HOST = re.compile(
-    r"(^|\.)("
-    r"(g|go|api)\.live\.com|"
-    r"(officecdn|officeclient|download|update|dl\.delivery\.mp|"
-    r"[a-z0-9-]*\.?windowsupdate|au\.download\.windowsupdate)\.microsoft\.com|"
-    r"[a-z0-9-]+\.windowsupdate\.com|"
-    r"[a-z0-9-]*\.?dl\.delivery\.mp\.microsoft\.com|"
-    r"onedrive\.live\.com|oneclient\.sfx\.ms|"
-    r"dl\.google\.com|update\.googleapis\.com|"
-    r"download\.mozilla\.org|[a-z0-9-]+\.cdn\.mozilla\.net|"
-    r"ardownload[0-9]*\.adobe\.com|"
-    r"client-update\.dropbox\.com|edgedl\.me\.gvt1\.com"
-    r")$", re.I)
-
-
-def _bits_hosts(url):
-    """Every host named in a BITS job's file list, lowercased."""
-    return [m.group(1).lower()
-            for m in re.finditer(r"https?://([^/\s;:]+)", url or "", re.I)]
-
-
-def _bits_is_vendor(name, url):
-    """True when this job is a known updater doing its normal work.
-
-    Requires the *hosts* to check out whenever there are any. A job with no URL
-    at all falls back to the name, because there is then nothing to fetch and
-    nothing to stage.
-    """
-    hosts = _bits_hosts(url)
-    if hosts:
-        return all(_BITS_VENDOR_HOST.search(h) for h in hosts)
-    return bool(_BITS_BENIGN.search(name or ""))
-
-SUSPICIOUS_HISTORY = re.compile(
-    r"\b(irm|invoke-restmethod|iwr|invoke-webrequest|curl|wget)\b[^|;\n]*\|\s*(iex|invoke-expression)\b|"
-    r"frombase64string|-enc(odedcommand)?\s+[A-Za-z0-9+/=]{30,}|"
-    r"downloadstring|downloadfile|"
-    r"set-mppreference\s+-disable|add-mppreference\s+-exclusionpath|"
-    r"disable-windowsoptionalfeature|"
-    r"new-object\s+system\.net\.webclient|"
-    r"bypass\s+-\w*\s*(file|command)|start-process\s+-verb\s+runas",
-    re.I,
-)
-
-# Exact hostname matching: the missing-d MAS lookalike has a documented
-# malware-download record (https://urlhaus.abuse.ch/url/3740911/).
-# A history entry records a command, not successful payload execution.
-HISTORY_MALWARE_HOSTS = frozenset({"get.activate.win"})
-
-
-def _history_malware_hosts(line):
-    hosts = set()
-    for url in re.findall(r"https?://[^\s\"'`<>|)]+", line, re.I):
-        try:
-            host = (urlsplit(url).hostname or "").lower().rstrip(".")
-        except ValueError:
-            continue
-        if host in HISTORY_MALWARE_HOSTS:
-            hosts.add(host)
-    return hosts
-
-# Download-and-execute is also how half of developer tooling installs itself, so
-# shape alone cannot separate `iex (irm chocolatey.org/install.ps1)` from a
-# ClickFix payload. What does separate them is where the code comes from: an
-# HTTPS URL on a known vendor's own domain. A lure has to host its payload
-# somewhere, and it is never here.
-VENDOR_INSTALL = re.compile(
-    r"https://([a-z0-9-]+\.)*("
-    r"chocolatey\.org|community\.chocolatey\.org|"
-    r"astral\.sh|ollama\.com|rustup\.rs|sh\.rustup\.rs|"
-    r"get\.scoop\.sh|scoop\.sh|nodejs\.org|python\.org|"
-    r"aka\.ms|microsoft\.com|windows\.net|"
-    r"githubusercontent\.com/(docker|nvm-sh|Homebrew|oven-sh|pyenv)/|"
-    r"deb\.nodesource\.com|get\.docker\.com|starship\.rs|deno\.land|bun\.sh"
-    r")/",
-    re.I,
-)
-
-# A vendor domain only excuses the URL. If the same line also turns off a
-# defence or hides itself, the origin is beside the point.
-NEVER_BENIGN = re.compile(
-    r"set-mppreference\s+-disable|add-mppreference\s+-exclusionpath|"
-    r"-enc(odedcommand)?\s+[A-Za-z0-9+/=]{30,}|frombase64string|"
-    r"-w(indowstyle)?\s+hidden|disable-windowsoptionalfeature",
-    re.I,
-)
-
-
-def _history_severity(line: str) -> str:
-    if _history_malware_hosts(line):
-        return "critical"
-    if NEVER_BENIGN.search(line):
-        return "high"
-    if VENDOR_INSTALL.search(line):
-        return "low"
-    return "high"
-
-
-def _history_findings(data):
-    hist = aslist(data.get("psHistory"))
-    out = []
-    for h in hist:
-        if not isinstance(h, str) or not SUSPICIOUS_HISTORY.search(h):
-            continue
-        hosts = _history_malware_hosts(h)
-        sev = _history_severity(h)
-        if hosts:
-            title = "PowerShell history references a known malware host: " + ", ".join(sorted(hosts))
-            detail = h[:300] + " — recorded command; successful download/execution is not established"
-        else:
-            title = ("download-and-execute from a known vendor domain"
-                     if sev == "low" else "suspicious PowerShell command in history")
-            detail = h[:150]
-        out.append(_finding("clickfix", sev, title, detail,
-                            data.get("psHistoryPath", "")))
-    # Inspect every collected line before presenting results; old high/critical
-    # commands must not disappear behind a list of benign installer entries.
-    if hist and not out:
-        out.append(_finding("clickfix", "ok", "PowerShell history clean",
-                            f"{len(hist)} recent commands, none matching known "
-                            "download-and-execute or defence-tampering shapes", ""))
-    return out
 
 
 # Extensions that ship with the browser or are installed by Windows itself.
@@ -545,12 +383,3 @@ def audit():
             "Get-BitsTransfer"))
 
     return out
-
-
-CAT_ORDER = {"av": 0, "clickfix": 1, "extension": 2, "staging": 3}
-SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
-
-
-def sort_findings(f):
-    return sorted(f, key=lambda x: (CAT_ORDER.get(x["category"], 9),
-                                    SEV_ORDER.get(x["severity"], 9), x["title"]))
