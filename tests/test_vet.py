@@ -1,6 +1,6 @@
 import unittest
 
-from jarvis import vet
+from jarvis.intel import vet
 
 
 class SharedInfrastructureTests(unittest.TestCase):

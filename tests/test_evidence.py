@@ -3,10 +3,10 @@ import tempfile
 import unittest
 from unittest import mock
 
-from jarvis.evidence import case as case_mod
-from jarvis.evidence import paths, sources
-from jarvis.evidence.manifest import Manifest, sha256_file
-from jarvis.evidence.scan import scan_text
+from jarvis.response.evidence import case as case_mod
+from jarvis.response.evidence import paths, sources
+from jarvis.response.evidence.manifest import Manifest, sha256_file
+from jarvis.response.evidence.scan import scan_text
 
 
 class _CaseTestBase(unittest.TestCase):

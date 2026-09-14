@@ -2,9 +2,9 @@ import os
 import tempfile
 import unittest
 
-from jarvis.inputwatch import analysis
-from jarvis.store import Store
-from jarvis.util import now
+from jarvis.collectors.host.inputwatch import analysis
+from jarvis.core.store import Store
+from jarvis.core.util import now
 
 
 class ControlActivationTests(unittest.TestCase):

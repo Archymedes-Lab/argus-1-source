@@ -1,7 +1,8 @@
 import unittest
 import os
 
-from jarvis import control
+from jarvis.collectors.persistence import control
+from jarvis.core import paths
 
 
 class TrustedScheduledTaskTests(unittest.TestCase):
@@ -79,7 +80,7 @@ class TrustedScheduledTaskTests(unittest.TestCase):
         self.assertFalse(ok)
 
     def test_wake_task_uses_the_actual_checkout_path(self):
-        root = os.path.dirname(os.path.dirname(control.__file__))
+        root = str(paths.REPO_ROOT)
         task = {
             "name": "jarvis wake watchdog",
             "path": "\\",

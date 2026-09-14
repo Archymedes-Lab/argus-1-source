@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from jarvis import resourcewatch
-from jarvis.store import Store
+from jarvis.collectors.process import resourcewatch
+from jarvis.core.store import Store
 
 
 class ResourceWatchTests(unittest.TestCase):
@@ -24,11 +24,11 @@ class ResourceWatchTests(unittest.TestCase):
         }))
         proc = {"host": "wsl", "pid": 42, "fp": "fp", "name": "worker",
                 "exe": "/opt/worker", "rss_bytes": 100, "cpu_seconds": 400.0}
-        with patch("jarvis.resourcewatch.time.time", return_value=1000.0), \
-             patch("jarvis.resourcewatch.monitor.collect_all", return_value=[proc]), \
-             patch("jarvis.resourcewatch.os.cpu_count", return_value=4), \
-             patch("jarvis.resourcewatch._memory_pressure", return_value=(100, 100)), \
-             patch("jarvis.resourcewatch.os.path.exists", return_value=False):
+        with patch("jarvis.collectors.process.resourcewatch.time.time", return_value=1000.0), \
+             patch("jarvis.collectors.process.resourcewatch.monitor.collect_all", return_value=[proc]), \
+             patch("jarvis.collectors.process.resourcewatch.os.cpu_count", return_value=4), \
+             patch("jarvis.collectors.process.resourcewatch._memory_pressure", return_value=(100, 100)), \
+             patch("jarvis.collectors.process.resourcewatch.os.path.exists", return_value=False):
             findings = resourcewatch.audit(self.store, hosts=("wsl",))
 
         self.assertEqual(findings[0]["severity"], "medium")
@@ -39,11 +39,11 @@ class ResourceWatchTests(unittest.TestCase):
         key = f"{proc['host']}:{proc['pid']}:fp"
         self.store.set_meta(resourcewatch._META, json.dumps({
             'ts': previous_ts, 'processes': {key: {'cpu': previous_cpu}}}))
-        with patch('jarvis.resourcewatch.time.time', return_value=1000.0), \
-             patch('jarvis.resourcewatch.monitor.collect_all', return_value=[proc]), \
-             patch('jarvis.resourcewatch.os.cpu_count', return_value=4), \
-             patch('jarvis.resourcewatch._memory_pressure', return_value=(100, 100)), \
-             patch('jarvis.resourcewatch.os.path.exists', return_value=False):
+        with patch('jarvis.collectors.process.resourcewatch.time.time', return_value=1000.0), \
+             patch('jarvis.collectors.process.resourcewatch.monitor.collect_all', return_value=[proc]), \
+             patch('jarvis.collectors.process.resourcewatch.os.cpu_count', return_value=4), \
+             patch('jarvis.collectors.process.resourcewatch._memory_pressure', return_value=(100, 100)), \
+             patch('jarvis.collectors.process.resourcewatch.os.path.exists', return_value=False):
             return resourcewatch.audit(self.store)
 
     def windows_process(self, **changes):

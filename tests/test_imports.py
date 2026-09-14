@@ -91,8 +91,9 @@ class PackagedDataTests(unittest.TestCase):
     """
 
     def test_every_shipped_data_file_referenced_by_a_module_exists(self):
-        from jarvis import memscan, paths
-        from jarvis.inputwatch import common as iw_common
+        from jarvis.collectors.process import memscan
+        from jarvis.core import paths
+        from jarvis.collectors.host.inputwatch import common as iw_common
 
         for label, path in (
             ("inputwatch HOOK_PS1", iw_common.HOOK_PS1),
@@ -103,9 +104,9 @@ class PackagedDataTests(unittest.TestCase):
                 self.assertTrue(Path(path).exists(), "%s -> %s" % (label, path))
 
     def test_the_helper_resolves_inside_the_installed_package(self):
-        from jarvis.inputwatch import common as iw_common
+        from jarvis.collectors.host.inputwatch import common as iw_common
 
-        self.assertEqual(Path(iw_common.HOOK_PS1).parent.parent, ROOT)
+        self.assertEqual(Path(iw_common.HOOK_PS1).parent, ROOT / "platform" / "win")
 
 
 if __name__ == "__main__":

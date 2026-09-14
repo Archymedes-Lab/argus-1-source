@@ -3,19 +3,20 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from jarvis.secrets import audit, scan_file, _private_blocks, fingerprint
+from jarvis.collectors.identity.secrets import (audit, scan_file, _private_blocks,
+                                                fingerprint)
 
 
 class SecretScannerSyntaxTests(unittest.TestCase):
     def test_audit_does_not_infer_volume_encryption_or_duplicate_paths(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch("jarvis.secrets.walk", return_value=["/test/key", "/test/key"]), \
-                 patch("jarvis.secrets.scan_file", return_value=[
+            with patch("jarvis.collectors.identity.secrets.walk", return_value=["/test/key", "/test/key"]), \
+                 patch("jarvis.collectors.identity.secrets.scan_file", return_value=[
                      ("private key block (encrypted)", "synthetic-key", 1, "low")]), \
-                 patch("jarvis.secrets._other_humans", return_value=[]), \
-                 patch("jarvis.secrets._world_readable", return_value=False), \
-                 patch("jarvis.secrets._git_tracked", return_value=(False, "")), \
-                 patch("jarvis.secrets.os.path.expanduser", return_value=directory):
+                 patch("jarvis.collectors.identity.secrets._other_humans", return_value=[]), \
+                 patch("jarvis.collectors.identity.secrets._world_readable", return_value=False), \
+                 patch("jarvis.collectors.identity.secrets._git_tracked", return_value=(False, "")), \
+                 patch("jarvis.collectors.identity.secrets.os.path.expanduser", return_value=directory):
                 findings = audit(roots=[directory], deep=True)
         key = next(f for f in findings if "private key block" in f["title"])
         self.assertNotIn("plaintext", key["title"])

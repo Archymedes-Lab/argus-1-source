@@ -3,9 +3,12 @@
 import json
 import time
 
-from ... import (alert, collect_windows, control, deadman, fixit, monitor,
-                 selfcheck)
-from ...util import iso
+from jarvis.response import alert, fixit
+from jarvis.platform import windows as collect_windows
+from jarvis.collectors.persistence import control
+from jarvis.service import deadman, selfcheck
+from jarvis.collectors.process import monitor
+from jarvis.core.util import iso
 from ..output import color, is_tty, selected_hosts, print_process_finding
 
 
@@ -79,7 +82,7 @@ def cmd_control(args, store):
 
 
 def cmd_serve(args, store):
-    from ... import server
+    from jarvis.web import server
     store.close()  # the daemon opens its own handles per thread
     server.serve(db_path=args.db, port=args.port, hosts=selected_hosts(args))
 

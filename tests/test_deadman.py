@@ -11,7 +11,7 @@ import os
 import tempfile
 import unittest
 
-from jarvis import deadman
+from jarvis.service import deadman
 
 
 class DeadmanAuditTests(unittest.TestCase):
@@ -106,7 +106,7 @@ class DeadmanAuditTests(unittest.TestCase):
 
 class WatchdogWiringTests(unittest.TestCase):
     def test_the_watchdogs_job_reports_both_halves_of_the_loop(self):
-        from jarvis import server
+        from jarvis.web import server
 
         self.assertIs(server.deadman, deadman)
 

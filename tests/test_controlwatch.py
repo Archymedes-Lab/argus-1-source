@@ -3,8 +3,8 @@ import os
 import tempfile
 import unittest
 
-from jarvis.controlwatch import audit, compare
-from jarvis.store import Store
+from jarvis.collectors.host.controlwatch import audit, compare
+from jarvis.core.store import Store
 
 
 class ControlWatchTests(unittest.TestCase):
@@ -74,7 +74,7 @@ class ControlWatchTests(unittest.TestCase):
                       'audioCapture': [{'id': 'mic-a', 'status': 'OK'}],
                       'errors': []}
             import unittest.mock as mock
-            with mock.patch('jarvis.controlwatch.ps_json', return_value=sample):
+            with mock.patch('jarvis.collectors.host.controlwatch.ps_json', return_value=sample):
                 audit(store, hosts=('win',))
             self.assertIn('mic-a',
                           json.loads(store.get_meta('controlwatch_seen_v1')))

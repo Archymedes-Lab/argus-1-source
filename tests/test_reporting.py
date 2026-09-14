@@ -31,7 +31,7 @@ class CommandMapTests(unittest.TestCase):
         self.assertEqual(missing, [])
 
     def test_every_scheduled_job_has_a_command(self):
-        from jarvis.server import JOBS
+        from jarvis.web.server import JOBS
         missing = sorted(set(JOBS) - set(commands.JOB_COMMANDS))
 
         self.assertEqual(missing, [], "jobs with no command: %s" % missing)

@@ -2,9 +2,9 @@ import os
 import tempfile
 import unittest
 
-from jarvis import retention
-from jarvis.store import Store
-from jarvis.util import now
+from jarvis.core import retention
+from jarvis.core.store import Store
+from jarvis.core.util import now
 
 DAY = 86400
 
@@ -138,7 +138,7 @@ class ServerWiringTests(unittest.TestCase):
     run time, inside a background thread, where it is easy to miss."""
 
     def test_server_module_binds_retention(self):
-        from jarvis import server
+        from jarvis.web import server
 
         self.assertIs(server.retention, retention)
 

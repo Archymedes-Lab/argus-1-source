@@ -2,8 +2,9 @@ import os
 import tempfile
 import unittest
 from unittest.mock import patch
-from jarvis import selfcheck, alert
-from jarvis.store import Store
+from jarvis.service import selfcheck
+from jarvis.response import alert
+from jarvis.core.store import Store
 
 
 class SelfcheckNotificationTests(unittest.TestCase):

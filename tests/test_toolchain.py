@@ -3,12 +3,12 @@ import os
 import tempfile
 import unittest
 
-from jarvis import toolchain as tc
+from jarvis.collectors.host import toolchain as tc
 # Patch where each name is looked up: tc re-exports these, but the callers
 # resolve them inside their own module, so rebinding on tc has no effect.
-from jarvis.toolchain import extensions as tc_extensions
-from jarvis.toolchain import run as tc_run
-from jarvis.store import Store
+from jarvis.collectors.host.toolchain import extensions as tc_extensions
+from jarvis.collectors.host.toolchain import run as tc_run
+from jarvis.core.store import Store
 
 
 def _write(path, text):

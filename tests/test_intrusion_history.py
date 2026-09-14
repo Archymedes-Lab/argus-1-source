@@ -1,6 +1,6 @@
 import unittest
 
-from jarvis import intrusion
+from jarvis.collectors.host import intrusion
 
 
 class IntrusionHistoryTests(unittest.TestCase):

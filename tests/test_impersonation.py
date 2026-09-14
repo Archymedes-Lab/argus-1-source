@@ -1,6 +1,6 @@
 import unittest
 
-from jarvis.impersonation import rules
+from jarvis.collectors.identity.impersonation import rules
 
 
 def sev(findings, part):

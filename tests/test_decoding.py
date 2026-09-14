@@ -23,7 +23,7 @@ PKG = pathlib.Path(__file__).resolve().parent.parent / "jarvis"
 # replacing an undecodable byte would silently alter the hashes it vouches for,
 # so a corrupt manifest is rejected (UnicodeDecodeError is a ValueError, which
 # load() already treats as "no manifest") rather than repaired.
-STRICT_BY_DESIGN = {"evidence/manifest.py"}
+STRICT_BY_DESIGN = {"response/evidence/manifest.py"}
 
 
 class SubprocessDecodingTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class SubprocessDecodingTests(unittest.TestCase):
             "UnicodeDecodeError on a non-UTF-8 byte; add errors='replace'")
 
     def test_the_sysmon_journal_reader_survives_an_invalid_byte(self):
-        from jarvis import sysmon_linux
+        from jarvis.collectors.telemetry import sysmon_linux
         out, _rc = sysmon_linux._run(["printf", "before \xff\xfe after\n"])
         self.assertIn("before", out)
         self.assertIn("after", out)

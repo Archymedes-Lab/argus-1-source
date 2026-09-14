@@ -2,7 +2,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from jarvis.server import JOBS, Scheduler
+from jarvis.web.server import JOBS, Scheduler
 
 
 class SchedulerColdStartTests(unittest.TestCase):
@@ -47,12 +47,12 @@ class SchedulerFairnessTests(unittest.TestCase):
         # missed a larger share of its promised cadence and must run first.
         self.scheduler.next_run["firewall"] = 900.0
         self.scheduler.next_run["scan"] = 950.0
-        with patch("jarvis.server.time.time", return_value=1_000.0):
+        with patch("jarvis.web.server.time.time", return_value=1_000.0):
             self.assertEqual(self.scheduler._due(), "scan")
 
     def test_not_yet_due_jobs_are_not_selected(self):
         self.scheduler.next_run = {name: 1_001.0 for name in JOBS}
-        with patch("jarvis.server.time.time", return_value=1_000.0):
+        with patch("jarvis.web.server.time.time", return_value=1_000.0):
             self.assertIsNone(self.scheduler._due())
 
 

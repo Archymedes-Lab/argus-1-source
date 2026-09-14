@@ -3,8 +3,8 @@ import os
 import tempfile
 from datetime import datetime, timezone
 
-from jarvis import sysmon_linux
-from jarvis.store import Store
+from jarvis.collectors.telemetry import sysmon_linux
+from jarvis.core.store import Store
 
 
 class SysmonHealthTests(unittest.TestCase):
@@ -230,7 +230,7 @@ class SysmonPersistenceTests(unittest.TestCase):
 
 class SysmonTableIsolationTests(unittest.TestCase):
     def test_windows_sysmon_does_not_re_emit_linux_rows(self):
-        from jarvis import sysmon
+        from jarvis.collectors.telemetry import sysmon
         with tempfile.TemporaryDirectory() as directory:
             store = Store(os.path.join(directory, "jarvis.db"))
             store.db.execute(

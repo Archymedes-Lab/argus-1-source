@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jarvis.native.store import BatchError, EventStore
+from jarvis.platform.native.store import BatchError, EventStore
 
 
 def batch(sequence=1, events=None):

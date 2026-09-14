@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from jarvis import auditd
+from jarvis.collectors.telemetry import auditd
 
 
 class AuditdWsl2Tests(unittest.TestCase):

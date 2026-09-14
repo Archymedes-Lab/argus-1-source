@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from jarvis import connectivity
+from jarvis.service import connectivity
 
 
 class ConnectivityAuditTest(unittest.TestCase):

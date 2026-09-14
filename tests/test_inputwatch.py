@@ -3,9 +3,9 @@ import sqlite3
 import tempfile
 import unittest
 
-from jarvis import inputwatch
-from jarvis.store import Store
-from jarvis.util import now
+from jarvis.collectors.host import inputwatch
+from jarvis.core.store import Store
+from jarvis.core.util import now
 
 
 class TypingWindowTests(unittest.TestCase):

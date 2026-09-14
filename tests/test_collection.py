@@ -5,9 +5,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from jarvis import collect_windows, collection, control, sysmon
-from jarvis.protection import health
-from jarvis.store import Store
+from jarvis.platform import windows as collect_windows
+from jarvis.core import collection
+from jarvis.collectors.persistence import control
+from jarvis.collectors.telemetry import sysmon
+from jarvis.service.protection import health
+from jarvis.core.store import Store
 
 
 class CollectionTests(unittest.TestCase):
@@ -48,7 +51,7 @@ class ProtectionHealthTests(unittest.TestCase):
         self.store.close(); self.temp.cleanup()
 
     def record(self, kind, findings=None, error=''):
-        with patch('jarvis.store.now', return_value=1000):
+        with patch('jarvis.core.store.now', return_value=1000):
             self.store.save_snapshot(kind, findings or [], error=error)
 
     def test_live_is_not_protected_when_windows_is_blind(self):

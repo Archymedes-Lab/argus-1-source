@@ -3,8 +3,8 @@ import os
 import tempfile
 import unittest
 
-from jarvis.pixel import mail, screen, web
-from jarvis.pixel.run import audit
+from jarvis.collectors.host.pixel import mail, screen, web
+from jarvis.collectors.host.pixel.run import audit
 
 
 def sev(findings, title_part):
@@ -211,7 +211,7 @@ class WiringTests(unittest.TestCase):
     a missing import there only fails at run time, in a background thread."""
 
     def test_daemon_registers_and_dispatches_the_pixel_job(self):
-        from jarvis import server
+        from jarvis.web import server
 
         self.assertIn("pixel", server.JOBS)
         self.assertIsInstance(server._run_job("pixel", ("wsl",)), list)

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from jarvis import posture
+from jarvis.collectors.host import posture
 
 
 def titles(consolehost):

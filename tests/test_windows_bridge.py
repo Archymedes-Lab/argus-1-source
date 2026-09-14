@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from jarvis import collect_windows
+from jarvis.platform import windows as collect_windows
 
 
 class BridgeTests(unittest.TestCase):

@@ -20,7 +20,7 @@ $p = Start-Process "$env:TEMP\JarvisSensorBuild\JarvisSensor.exe" -ArgumentList 
 Get-Content "$env:TEMP\JarvisSensorTest\health.json"
 ```
 
-Ingest the spool with `python3 -m jarvis.native PATH_TO_SPOOL --db PATH_TO_PRIVATE_DB`.
+Ingest the spool with `python3 -m jarvis.platform.native PATH_TO_SPOOL --db PATH_TO_PRIVATE_DB`.
 The importer does not delete or acknowledge source batches. It rejects gaps in
 batch sequences and conflicting duplicate identities transactionally.
 

@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from jarvis import alert
-from jarvis.store import Store
+from jarvis.response import alert
+from jarvis.core.store import Store
 
 
 CONF = {
@@ -85,8 +85,8 @@ class AdvisoryReportTests(unittest.TestCase):
             "posture": (7200, "posture"),
             "report": (18000, "report"),
         }
-        with patch("jarvis.alert.load_conf", return_value=CONF), \
-             patch("jarvis.alert.send_email", side_effect=capture):
+        with patch("jarvis.response.alert.load_conf", return_value=CONF), \
+             patch("jarvis.response.alert.send_email", side_effect=capture):
             result = alert.advisory_report(self.store, jobs)
 
         self.assertEqual(result[0]["severity"], "ok")
@@ -111,7 +111,7 @@ class AdvisoryReportTests(unittest.TestCase):
         self.assertTrue(self.store.get_meta(alert._M_REPORT_OK))
 
     def test_report_surfaces_missing_delivery_configuration(self):
-        with patch("jarvis.alert.load_conf", return_value={}):
+        with patch("jarvis.response.alert.load_conf", return_value={}):
             result = alert.advisory_report(
                 self.store, {"report": (18000, "report")})
         self.assertEqual(result[0]["severity"], "medium")

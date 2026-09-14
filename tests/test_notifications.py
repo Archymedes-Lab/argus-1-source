@@ -3,8 +3,8 @@ import os
 import tempfile
 import unittest
 from unittest.mock import patch
-from jarvis import alert
-from jarvis.store import Store
+from jarvis.response import alert
+from jarvis.core.store import Store
 from jarvis.reporting import notifications as n, cadence
 
 CONF = {'resend_api_key':'test','alert_to':'owner@example.test','alert_from':'jarvis@example.test',

@@ -2,12 +2,13 @@
 
 import argparse
 
-from .. import (feeds, intel, selfcheck)
-from .. import retention as retention_mod
-from ..evidence import cli as evidence_cli
-from ..impersonation import cli as impersonation_cli
-from ..pixel import cli as pixel_cli
-from ..store import DEFAULT_DB, Store
+from jarvis.intel import feeds, research as intel
+from jarvis.service import selfcheck
+from jarvis.core import retention as retention_mod
+from jarvis.response.evidence import cli as evidence_cli
+from jarvis.collectors.identity.impersonation import cli as impersonation_cli
+from jarvis.collectors.host.pixel import cli as pixel_cli
+from jarvis.core.store import DEFAULT_DB, Store
 from .commands import (
     cmd_alert,
     cmd_auditd,
@@ -60,7 +61,7 @@ def build_parser():
     p.add_argument("--db", default=DEFAULT_DB, help="database path")
     p.add_argument("--host", choices=["wsl", "win", "all"], default="all")
     sub = p.add_subparsers(dest="cmd", required=True)
-    from ..repair import add_parser as add_repair
+    from jarvis.response.repair import add_parser as add_repair
     add_repair(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")

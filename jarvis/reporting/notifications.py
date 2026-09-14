@@ -23,7 +23,7 @@ def _load(store, key):
 
 
 def dispatch(store, conf, job, findings, error=''):
-    from .. import alert
+    from jarvis.response import alert
     now = int(time.time())
     rank = alert.SEV_RANK
     state = _load(store, alert._M_STATE)
@@ -99,7 +99,7 @@ def dispatch(store, conf, job, findings, error=''):
 
 
 def flush(store, conf):
-    from .. import alert
+    from jarvis.response import alert
     now = int(time.time())
     queue = _load(store, QUEUE)
     if conf.get('alert_on_clear', False) is not True:

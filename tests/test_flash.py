@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from jarvis.flash import analyze, save
-from jarvis.evidence.manifest import Manifest
+from jarvis.collectors.persistence.flash import analyze, save
+from jarvis.response.evidence.manifest import Manifest
 
 
 def event(kind, time, record, **data):
@@ -72,7 +72,7 @@ class FlashTraceTests(unittest.TestCase):
         self.assertEqual(len(analyze({'windows': [window, window]})['consoleProcesses']), 1)
 
     def test_evidence_is_hashed_and_never_overwritten(self):
-        with tempfile.TemporaryDirectory() as directory, patch('jarvis.flash.case_dir', return_value=directory):
+        with tempfile.TemporaryDirectory() as directory, patch('jarvis.collectors.persistence.flash.case_dir', return_value=directory):
             save({'errors': ['unavailable']}, 'case')
             ok, changed, missing = Manifest(directory).verify()
             self.assertEqual(len(ok), 2)

@@ -5,8 +5,8 @@ import os
 import tempfile
 import unittest
 
-from jarvis import ledger
-from jarvis.store import Store
+from jarvis.response import ledger
+from jarvis.core.store import Store
 
 DAY = 86400
 
@@ -188,7 +188,7 @@ class AuditTests(unittest.TestCase):
         self.assertTrue(any("come back" in t for t in titles), titles)
 
     def test_every_ledger_finding_is_in_the_nopage_category(self):
-        from jarvis.alert import _NOPAGE_CATEGORIES
+        from jarvis.response.alert import _NOPAGE_CATEGORIES
         # Structural: a ledger finding that paged would be mailed, recorded in
         # the ledger, and become another unresolved alert.
         self.assertIn("ledger", _NOPAGE_CATEGORIES)

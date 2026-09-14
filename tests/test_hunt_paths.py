@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from jarvis import hunt
+from jarvis.intel import hunt
 
 
 def _row(norm):

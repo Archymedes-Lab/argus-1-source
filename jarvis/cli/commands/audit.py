@@ -2,8 +2,16 @@
 
 import json
 
-from ... import (asep, auditd, pixel, sniffing, webshell, backdoor, bruteforce, control, coverage, firewall, hidden, evasion, hunt, implant, intel, intrusion, inputwatch, memscan, monitor, netwatch, posture, secrets, spyware, startup, sysmon, sysmon_linux, toolchain)
-from ...util import iso, short
+from jarvis.collectors.persistence import asep, backdoor, control, implant, startup
+from jarvis.collectors.telemetry import auditd, sysmon, sysmon_linux
+from jarvis.collectors.host import (pixel, intrusion, inputwatch, posture, spyware,
+                                    toolchain)
+from jarvis.collectors.network import sniffing, webshell, firewall, netwatch
+from jarvis.collectors.identity import bruteforce, secrets
+from jarvis.service import coverage
+from jarvis.collectors.process import hidden, evasion, memscan, monitor
+from jarvis.intel import hunt, research as intel
+from jarvis.core.util import iso, short
 from ..output import (color, is_tty, selected_hosts, print_process_finding, render_findings,
                       simple_command)
 
@@ -119,7 +127,7 @@ def cmd_spy(args, store):
 
 def cmd_boot(args, store):
     if getattr(args, 'trace', False) or getattr(args, 'watch_seconds', None):
-        from ... import flash
+        from jarvis.collectors.persistence import flash
         argv = ['--watch-seconds', str(args.watch_seconds)] if args.watch_seconds else []
         return flash.main(argv)
     print("Reconstructing what ran at startup…\n")

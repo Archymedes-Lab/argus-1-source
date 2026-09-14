@@ -9,7 +9,7 @@ dropper can opt into by choosing a query string.
 
 import unittest
 
-from jarvis.intrusion import _bits_is_vendor, _bits_hosts
+from jarvis.collectors.host.intrusion import _bits_is_vendor, _bits_hosts
 
 
 class BitsVendorTests(unittest.TestCase):
