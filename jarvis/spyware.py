@@ -546,7 +546,7 @@ def _unix_socket_map():
     """inode -> unix socket path, from /proc/net/unix."""
     out = {}
     try:
-        with open("/proc/net/unix") as fh:
+        with open("/proc/net/unix", errors="replace") as fh:
             next(fh, None)
             for line in fh:
                 parts = line.split()
@@ -588,7 +588,7 @@ def audit_linux():
             continue
         pid = int(entry)
         try:
-            with open(f"/proc/{pid}/comm") as fh:
+            with open(f"/proc/{pid}/comm", errors="replace") as fh:
                 name = fh.read().strip()
         except OSError:
             continue

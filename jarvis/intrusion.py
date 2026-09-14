@@ -27,6 +27,7 @@ something and been ignored?
 """
 
 import re
+from urllib.parse import urlsplit
 
 from .control import _aslist, _ps_json
 
@@ -197,9 +198,18 @@ try {
 # --- 7. BITS transfer jobs (T1197) --------------------------------------
 # A queued BITS job survives reboots and logoffs and downloads with the
 # System service's network identity, which is why droppers and C2 use it.
+# -AllUsers needs elevation. Unelevated it throws Access Denied, and the
+# original code caught that and left the list empty -- so an unelevated daemon
+# reported no BITS jobs at all rather than reporting that it could not see them,
+# which is the exact "a clean report and no report look identical" failure this
+# codebase treats as worse than a finding. Fall back to this user's own jobs and
+# say which view was obtained.
 $o.bits = @()
-try {
-  $o.bits = @(Get-BitsTransfer -AllUsers -ErrorAction Stop | ForEach-Object {
+$o.bitsScope = 'none'
+function Get-BitsJobs($all) {
+  $jobs = if ($all) { Get-BitsTransfer -AllUsers -ErrorAction Stop }
+          else { Get-BitsTransfer -ErrorAction Stop }
+  @($jobs | ForEach-Object {
     [pscustomobject]@{
       name  = [string]$_.DisplayName
       state = [string]$_.JobState
@@ -207,21 +217,71 @@ try {
       url   = [string](@($_.FileList | ForEach-Object { $_.RemoteName }) -join ' ; ')
       local = [string](@($_.FileList | ForEach-Object { $_.LocalName }) -join ' ; ')
     } })
-} catch {}
+}
+try {
+  $o.bits = Get-BitsJobs $true
+  $o.bitsScope = 'all'
+} catch {
+  try {
+    $o.bits = Get-BitsJobs $false
+    $o.bitsScope = 'user'
+  } catch { $o.bitsScope = 'none' }
+}
 
 $json = [pscustomobject]$o | ConvertTo-Json -Depth 6 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 """
 
-# BITS job names Windows Update and vendor updaters use — seeing these is
-# expected, not a finding.
+# BITS job names Windows Update and vendor updaters use.
 _BITS_BENIGN = re.compile(
     r"windows ?update|wuauclt|delivery optimization|msedge|edgeupdate|"
     r"google update|gupdate|dropbox|onedrive|office|teams|adobe|mozilla",
     re.I)
 
+# Hosts those updaters actually fetch from. The name alone is not enough in
+# either direction, and matching it against the whole URL was worse than
+# useless: `https://evil.example/?ref=onedrive` contains "onedrive" and was
+# therefore exempt, while OneDrive's own real job — DisplayName
+# `PreSignInSettingsConfigJSON`, url `https://g.live.com/odclientsettings/ProdV2`
+# — contains none of these words anywhere and was reported HIGH. So the host is
+# what gets matched, parsed out of the URL rather than searched for inside it: a
+# dropper can name its job anything, but it still has to serve the payload from
+# somewhere, and that somewhere is never one of these.
+_BITS_VENDOR_HOST = re.compile(
+    r"(^|\.)("
+    r"(g|go|api)\.live\.com|"
+    r"(officecdn|officeclient|download|update|dl\.delivery\.mp|"
+    r"[a-z0-9-]*\.?windowsupdate|au\.download\.windowsupdate)\.microsoft\.com|"
+    r"[a-z0-9-]+\.windowsupdate\.com|"
+    r"[a-z0-9-]*\.?dl\.delivery\.mp\.microsoft\.com|"
+    r"onedrive\.live\.com|oneclient\.sfx\.ms|"
+    r"dl\.google\.com|update\.googleapis\.com|"
+    r"download\.mozilla\.org|[a-z0-9-]+\.cdn\.mozilla\.net|"
+    r"ardownload[0-9]*\.adobe\.com|"
+    r"client-update\.dropbox\.com|edgedl\.me\.gvt1\.com"
+    r")$", re.I)
+
+
+def _bits_hosts(url):
+    """Every host named in a BITS job's file list, lowercased."""
+    return [m.group(1).lower()
+            for m in re.finditer(r"https?://([^/\s;:]+)", url or "", re.I)]
+
+
+def _bits_is_vendor(name, url):
+    """True when this job is a known updater doing its normal work.
+
+    Requires the *hosts* to check out whenever there are any. A job with no URL
+    at all falls back to the name, because there is then nothing to fetch and
+    nothing to stage.
+    """
+    hosts = _bits_hosts(url)
+    if hosts:
+        return all(_BITS_VENDOR_HOST.search(h) for h in hosts)
+    return bool(_BITS_BENIGN.search(name or ""))
+
 SUSPICIOUS_HISTORY = re.compile(
-    r"(iwr|invoke-webrequest|curl|wget)[^|;\n]*\|\s*(iex|invoke-expression)|"
+    r"\b(irm|invoke-restmethod|iwr|invoke-webrequest|curl|wget)\b[^|;\n]*\|\s*(iex|invoke-expression)\b|"
     r"frombase64string|-enc(odedcommand)?\s+[A-Za-z0-9+/=]{30,}|"
     r"downloadstring|downloadfile|"
     r"set-mppreference\s+-disable|add-mppreference\s+-exclusionpath|"
@@ -230,6 +290,23 @@ SUSPICIOUS_HISTORY = re.compile(
     r"bypass\s+-\w*\s*(file|command)|start-process\s+-verb\s+runas",
     re.I,
 )
+
+# Exact hostname matching: the missing-d MAS lookalike has a documented
+# malware-download record (https://urlhaus.abuse.ch/url/3740911/).
+# A history entry records a command, not successful payload execution.
+HISTORY_MALWARE_HOSTS = frozenset({"get.activate.win"})
+
+
+def _history_malware_hosts(line):
+    hosts = set()
+    for url in re.findall(r"https?://[^\s\"'`<>|)]+", line, re.I):
+        try:
+            host = (urlsplit(url).hostname or "").lower().rstrip(".")
+        except ValueError:
+            continue
+        if host in HISTORY_MALWARE_HOSTS:
+            hosts.add(host)
+    return hosts
 
 # Download-and-execute is also how half of developer tooling installs itself, so
 # shape alone cannot separate `iex (irm chocolatey.org/install.ps1)` from a
@@ -259,11 +336,39 @@ NEVER_BENIGN = re.compile(
 
 
 def _history_severity(line: str) -> str:
+    if _history_malware_hosts(line):
+        return "critical"
     if NEVER_BENIGN.search(line):
         return "high"
     if VENDOR_INSTALL.search(line):
         return "low"
     return "high"
+
+
+def _history_findings(data):
+    hist = _aslist(data.get("psHistory"))
+    out = []
+    for h in hist:
+        if not isinstance(h, str) or not SUSPICIOUS_HISTORY.search(h):
+            continue
+        hosts = _history_malware_hosts(h)
+        sev = _history_severity(h)
+        if hosts:
+            title = "PowerShell history references a known malware host: " + ", ".join(sorted(hosts))
+            detail = h[:300] + " — recorded command; successful download/execution is not established"
+        else:
+            title = ("download-and-execute from a known vendor domain"
+                     if sev == "low" else "suspicious PowerShell command in history")
+            detail = h[:150]
+        out.append(_finding("clickfix", sev, title, detail,
+                            data.get("psHistoryPath", "")))
+    # Inspect every collected line before presenting results; old high/critical
+    # commands must not disappear behind a list of benign installer entries.
+    if hist and not out:
+        out.append(_finding("clickfix", "ok", "PowerShell history clean",
+                            f"{len(hist)} recent commands, none matching known "
+                            "download-and-execute or defence-tampering shapes", ""))
+    return out
 
 
 # Extensions that ship with the browser or are installed by Windows itself.
@@ -301,18 +406,7 @@ def audit():
                             "nothing has been typed into Win+R", "RunMRU"))
 
     # -- 2. PowerShell history --------------------------------------------
-    hist = _aslist(data.get("psHistory"))
-    hits = [h for h in hist if isinstance(h, str) and SUSPICIOUS_HISTORY.search(h)]
-    for h in hits[:15]:
-        sev = _history_severity(h)
-        title = ("download-and-execute from a known vendor domain"
-                 if sev == "low" else "suspicious PowerShell command in history")
-        out.append(_finding("clickfix", sev, title,
-                            h[:150], data.get("psHistoryPath", "")))
-    if hist and not hits:
-        out.append(_finding("clickfix", "ok", "PowerShell history clean",
-                            f"{len(hist)} recent commands, none matching known "
-                            f"download-and-execute or defence-tampering shapes", ""))
+    out.extend(_history_findings(data))
 
     # -- 3. Defender's own findings ---------------------------------------
     # Grade on what is still true, not on the fact that Defender once said the
@@ -411,7 +505,7 @@ def audit():
     for j in bits:
         name = j.get("name") or "(unnamed)"
         url = j.get("url") or ""
-        if _BITS_BENIGN.search(name) or _BITS_BENIGN.search(url):
+        if _bits_is_vendor(name, url):
             continue
         http = re.search(r"https?://", url, re.I)
         suspended = (j.get("state") or "").lower() in ("suspended", "queued",
@@ -427,10 +521,28 @@ def audit():
             "staging", sev, f"BITS transfer job: {name}",
             f"{why} — state {j.get('state')}, owner {j.get('owner') or '?'}, "
             f"url {url[:120] or '—'}", "Get-BitsTransfer"))
-    if bits and not any(f["title"].startswith("BITS") for f in out):
-        out.append(_finding("staging", "ok", "BITS jobs",
-                            f"{len(bits)} queued, all matching known updaters",
-                            "Get-BitsTransfer"))
+    scope = str(data.get("bitsScope") or "none")
+    if scope == "none":
+        out.append(_finding(
+            "staging", "medium", "BITS transfer jobs are not readable",
+            "neither the all-users nor the per-user query returned — queued "
+            "BITS jobs are a reboot-surviving download channel and none of "
+            "them are visible from here, which is not the same as there being "
+            "none", "Get-BitsTransfer"))
+    elif bits and not any(f["title"].startswith("BITS") for f in out):
+        out.append(_finding(
+            "staging", "ok", "BITS jobs",
+            f"{len(bits)} queued, all served by known updater hosts"
+            + ("" if scope == "all" else
+               " — this account's jobs only; -AllUsers needs elevation, so "
+               "jobs owned by other users or by SYSTEM are not in this view"),
+            "Get-BitsTransfer"))
+    elif not bits and scope == "user":
+        out.append(_finding(
+            "staging", "low", "no BITS jobs for this account",
+            "the all-users view needs elevation and was refused, so a job "
+            "owned by SYSTEM or another user would not appear here",
+            "Get-BitsTransfer"))
 
     return out
 

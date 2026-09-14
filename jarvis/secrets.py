@@ -251,13 +251,13 @@ def _repo_of(directory):
         return _repo_cache[directory]
     try:
         r = subprocess.run(["git", "-C", directory, "rev-parse", "--show-toplevel"],
-                           capture_output=True, text=True, timeout=8)
+                           capture_output=True, text=True, errors="replace", timeout=8)
         if r.returncode != 0:
             result = (None, "")
         else:
             root = r.stdout.strip()
             rem = subprocess.run(["git", "-C", root, "remote", "get-url", "origin"],
-                                 capture_output=True, text=True, timeout=8)
+                                 capture_output=True, text=True, errors="replace", timeout=8)
             result = (root, rem.stdout.strip() if rem.returncode == 0 else "")
     except (OSError, subprocess.SubprocessError):
         result = (None, "")
@@ -273,7 +273,7 @@ def _git_tracked(path):
         return False, ""
     try:
         r = subprocess.run(["git", "-C", root, "ls-files", "--error-unmatch",
-                            "--", path], capture_output=True, text=True, timeout=8)
+                            "--", path], capture_output=True, text=True, errors="replace", timeout=8)
         return (r.returncode == 0), remote
     except (OSError, subprocess.SubprocessError):
         return False, ""

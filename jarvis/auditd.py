@@ -40,7 +40,8 @@ def sort_findings(f):
 
 def _run(args, timeout=15):
     try:
-        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(args, capture_output=True, text=True,
+                           errors="replace", timeout=timeout)
         return (r.stdout + r.stderr), r.returncode
     except (OSError, subprocess.SubprocessError):
         return "", 1
@@ -52,7 +53,7 @@ def _rules_on_disk():
     n = 0
     for path in glob.glob("/etc/audit/rules.d/*.rules") + ["/etc/audit/audit.rules"]:
         try:
-            with open(path) as fh:
+            with open(path, errors="replace") as fh:
                 n += sum(1 for ln in fh
                          if ln.strip() and not ln.lstrip().startswith("#"))
         except OSError:
@@ -103,7 +104,7 @@ def active():
 
 def _is_wsl():
     try:
-        with open("/proc/sys/kernel/osrelease") as fh:
+        with open("/proc/sys/kernel/osrelease", errors="replace") as fh:
             return "microsoft" in fh.read().lower()
     except OSError:
         return False

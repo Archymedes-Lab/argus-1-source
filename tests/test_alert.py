@@ -91,9 +91,14 @@ class AdvisoryReportTests(unittest.TestCase):
 
         self.assertEqual(result[0]["severity"], "ok")
         self.assertTrue(sent["subject"].startswith("[JARVIS]"))
-        self.assertIn("5-hour security report", sent["subject"])
-        self.assertIn("JARVIS FIVE-HOUR SECURITY ADVISORY", sent["body"])
-        self.assertIn("JARVIS · FIVE-HOUR SECURITY ADVISORY", sent["html"])
+        # The subject carries what moved since the last report, so two
+        # consecutive reports do not read identically in the inbox.
+        self.assertIn("security report", sent["subject"])
+        self.assertIn("first report", sent["subject"])
+        self.assertIn("JARVIS SECURITY ADVISORY", sent["body"])
+        self.assertIn("WHAT CHANGED", sent["body"])
+        self.assertIn("SEE FOR YOURSELF", sent["body"])
+        self.assertIn("JARVIS · DAILY SECURITY ADVISORY", sent["html"])
         self.assertIn("SECURE NEXT", sent["body"])
         self.assertIn("ASR rules are not enforcing", sent["body"])
         self.assertIn("Add-MpPreference", sent["body"])

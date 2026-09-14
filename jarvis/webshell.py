@@ -76,7 +76,7 @@ def sort_findings(f):
 
 def _linux_servers():
     try:
-        r = subprocess.run(["ss", "-ltnpH"], capture_output=True, text=True,
+        r = subprocess.run(["ss", "-ltnpH"], capture_output=True, text=True, errors="replace",
                            timeout=15)
     except (OSError, subprocess.SubprocessError):
         return []
@@ -99,7 +99,7 @@ def _roots_from_config():
     roots = set()
     for cfg_cmd in (["nginx", "-T"], ["apache2ctl", "-S"], ["httpd", "-S"]):
         try:
-            r = subprocess.run(cfg_cmd, capture_output=True, text=True,
+            r = subprocess.run(cfg_cmd, capture_output=True, text=True, errors="replace",
                                timeout=15)
             for m in re.finditer(r"(?:^\s*root|DocumentRoot)\s+\"?([^\";\s]+)",
                                  r.stdout + r.stderr, re.M):

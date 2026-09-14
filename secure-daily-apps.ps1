@@ -29,7 +29,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $TaskName = 'jarvis daily app guard'
 $DataDir = Join-Path $env:LOCALAPPDATA 'Jarvis\AppGuard'
-$LegacyDataDir = Join-Path $env:LOCALAPPDATA 'Sentry\AppGuard'
 $InstalledScript = Join-Path $DataDir 'secure-daily-apps.ps1'
 $EventsFile = Join-Path $DataDir 'launches.jsonl'
 $ConfigFile = Join-Path $DataDir 'config.json'
@@ -38,14 +37,6 @@ $ReportFile = Join-Path $DataDir 'essential-apps.json'
 $ProtectionFile = Join-Path $DataDir 'browser-protection.json'
 
 function Ensure-DataDir {
-    if (-not (Test-Path -LiteralPath $DataDir) -and
-        (Test-Path -LiteralPath $LegacyDataDir)) {
-        $parent = Split-Path -Parent $DataDir
-        if (-not (Test-Path -LiteralPath $parent)) {
-            New-Item -ItemType Directory -Path $parent -Force | Out-Null
-        }
-        Move-Item -LiteralPath $LegacyDataDir -Destination $DataDir
-    }
     if (-not (Test-Path -LiteralPath $DataDir)) {
         New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
     }
@@ -312,10 +303,6 @@ function Install-Watcher {
         MinActiveDays = $MinActiveDays
         AutoHarden = [bool]$AutoHarden
     })
-    Stop-ScheduledTask -TaskName 'sentry daily app guard' `
-        -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName 'sentry daily app guard' -Confirm:$false `
-        -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false `
         -ErrorAction SilentlyContinue
     $arg = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass ' +

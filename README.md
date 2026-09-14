@@ -118,6 +118,8 @@ default-deny inbound, and non-bypassable Windows/Edge SmartScreen.
 | `bruteforce` | Is anything guessing passwords — failed-auth spikes, lockouts? |
 | `sniffing` | Is anything capturing traffic — promiscuous NICs, raw sockets, pcap drivers? |
 | `webshell` | Is there a command dispatcher sitting in a web server's document root? |
+| `toolchain` | What runs because I opened an editor, a repo or a shell? |
+| `outstanding` | What was I told about that I never resolved — and what came back? |
 | `auditd` | Is Linux syscall interception installed and actually recording? |
 | `sysmon-linux` | eBPF syscall events (execve, connect, ptrace, file writes) with rules. |
 | `serve` | Run everything continuously behind a local dashboard. |
@@ -430,6 +432,119 @@ Most of these need a human to confirm, because the tool cannot know which SSH
 key is yours. So each finding shows the actual evidence — the key comment, the
 sudoers line, the appended command — not just the filename.
 
+## The developer trust surface
+
+Every other collector here watches something the operating system knows about: a
+process, a service, a socket, a run key. `toolchain` watches the layer above all
+of it, which none of them can see — a JSON file that a trusted binary reads and
+obeys.
+
+The mechanisms are all documented features working exactly as designed:
+
+| mechanism | what it actually is |
+|---|---|
+| MCP server entry | a command line an editor spawns on launch, unattended |
+| agent hook | a shell command bound to a tool event |
+| editor extension | unsandboxed Node with your tokens, SSH agent and filesystem |
+| git hook | a script `git commit` runs for you |
+| executable `.pth` line | Python that runs on *every* interpreter start |
+
+What makes them a security surface is where the file lives. Cloning a repository
+is not supposed to be a privileged act and opening a folder is not supposed to be
+one either, but a `.mcp.json`, a `.claude/settings.json` hook or a `.git/hooks/`
+script inside that repository makes both of them exactly that. So repo-scoped
+configuration is scored above user-scoped configuration everywhere in this
+module: user scope is a decision you made once, repo scope is a decision someone
+else made for you.
+
+Two things follow from how these get abused in practice:
+
+**Inventory alone is worthless.** A backdoored extension is a *version change* on
+something you installed legitimately last week — the package is already trusted
+and only its contents are new. So the baseline of what was here on the previous
+run is the detection, not the list. Same for MCP servers: the 2026 Cursor finding
+was not a malicious config, it was a benign config approved once and swapped
+afterwards, because approval was recorded and the command was re-read at every
+launch. A changed definition is therefore `critical` here, not informational.
+
+**Content decides severity, not presence.** A `.mcp.json` is normal. A `.mcp.json`
+whose command is `bash -c 'curl … | sh'` is an incident, and the difference is one
+string. Inline `node -e` gets its own tier between the two, because it is how a
+great many honest hooks read their stdin and also what makes a dishonest one
+invisible in a diff.
+
+One check has no equivalent elsewhere in the codebase: agent instruction files —
+`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, skill files — are scanned for zero-width
+and bidirectional-override characters. Those render as nothing to you and as text
+to a model, which is the documented way to put an instruction in a file that a
+human reviewer cannot see.
+
+The bounds are stated rather than hidden: the `$HOME` walk stops at four levels
+deep and 200 repositories, and if it stops early it says so as a `visibility`
+finding, because a scan that quietly stopped looking is indistinguishable from
+one that looked and found nothing.
+
+```bash
+jarvis toolchain -v
+```
+
+## What was reported and never resolved
+
+Every collector answers "what is true right now?". None of them could answer
+"what did this system tell me about that I never actually dealt with?"
+
+The reason is structural. `alert.py` keeps a live state map so it can decide
+what to mail next, and it **deletes** an entry the moment the finding stops
+being reported. That is right for sending and useless for accountability: a HIGH
+could be mailed, ignored for three weeks, then quietly clear itself — because
+the collector that raised it started failing, say — and leave no trace that it
+had ever existed. Worse, a finding that was genuinely fixed and then came back
+looked exactly like one seen for the first time, which throws away the most
+diagnostic fact available: *it came back*.
+
+`alert_ledger` is append-and-update, never delete. Rows are marked cleared, not
+removed, so a reappearance is recognisable as one. Four states:
+
+| state | meaning |
+|---|---|
+| `recurring` | cleared before, reported again since — the fix did not hold |
+| `outstanding` | mailed, still reported, never cleared |
+| `stale` | mailed, and the job that raised it has not run since |
+| `resolved` | cleared, and stayed cleared |
+
+`stale` is the one that matters most and is easiest to miss. An open finding
+whose collector has not run since it was mailed has not survived a re-check — it
+has merely not been contradicted. Silence from a dead collector is not a clean
+result, and this is where that distinction gets made rather than assumed.
+
+Age is reported in days, not as a boolean, because "unresolved" does not mean
+the same thing after an hour and after a month. Each severity gets a deadline —
+critical 2 days, high 7, medium 21, low 45 — and only a finding past its own
+deadline is raised.
+
+Two deliberate constraints:
+
+**The ledger never pages.** Its category is in `_NOPAGE_CATEGORIES` for a
+structural reason rather than a stylistic one: an unresolved HIGH would generate
+a ledger HIGH, which would be mailed, which would be recorded in the ledger as
+another unresolved alert, which would page. The backlog belongs somewhere you
+read deliberately, not somewhere it is pushed at you.
+
+**The import is honest about what it could not recover.** The ledger was added
+after alerting had been running for weeks, so it imports `alert_state` once — 41
+open alerts on the machine it was written on. That map stores the key,
+timestamps, count, severity and job, but never the finding's `detail`, so
+imported rows say so instead of inventing one. It also stored no host, and
+guessing produced confident nonsense (Windows paths labelled `wsl`), so imported
+rows carry no host until the next genuine send fills it in. Entries still inside
+the persistence gate — queued but never actually mailed — are skipped, because
+the ledger records what was *sent*.
+
+```bash
+jarvis outstanding          # the backlog, worst and oldest first
+jarvis outstanding --all    # including what has been resolved
+```
+
 ## Posture: what should be switched on
 
 `posture` asks whether the defenses that would have stopped an intrusion are
@@ -581,8 +696,11 @@ over HTTPS, standard library only. Put this in `~/.jarvis/config.json` (kept
   "alert_from": "JARVIS <jarvis@yourdomain.com>",
   "alert_to": "you@example.com",
   "alert_min_severity": "high",
-  "alert_resend_after": 21600,
-  "alert_on_clear": true,
+  "alert_digest_interval": 3600,
+  "report_hour": 9,
+  "auto_remediate": true,
+  "report_daily_enabled": false,
+  "alert_on_clear": false,
   "alert_hourly_cap": 12,
   "advisory_model": "gpt-5.6-luna",
   "openai_api_key": "sk-...",
@@ -598,16 +716,19 @@ takes a string or a list. The key may also come from `$JARVIS_RESEND_KEY`, and
 it is only ever sent in the `Authorization` header of the one request to
 `api.resend.com` — never logged, never in the body.
 
-Every finding has a stable key, so an alert pages you once when it fires, again
-after `alert_resend_after` if it is *still* firing, and once when it clears —
-not on every 45-second watchdog tick. Findings that mean "JARVIS itself is not
-watching something" page regardless of `alert_min_severity`, because a
-monitoring gap is the one class of finding whose whole point is that nothing
-else will tell you. `alert_hourly_cap` is a hard ceiling; anything past it is
-suppressed and noted in the next mail.
+Every finding has a stable key. Ordinary high findings must be observed twice
+and are then queued in an hourly change digest. New critical findings and
+monitoring outages notify immediately. Unchanged findings escalate once at each
+age threshold: critical at 1h/6h/24h, high at 1d/3d/7d, medium at 3d/7d/14d,
+and collector outages at 15m/1h/6h. There are no periodic STILL emails.
+Resolution comes from the owning collector's successful result. Delivery failures
+retain queued changes for retry; hourly caps defer delivery without discarding it.
+Monitoring outages bypass the severity filter. Ordinary mail uses
+`alert_hourly_cap` (default 12); urgent changes have a separate ceiling of 60.
 
-Independently of event alerts, `jarvis serve` sends a detailed posture advisory
-every five hours through the same configured Resend recipient. It reports which
+Independently of change alerts, `jarvis serve` sends a daily posture advisory
+after `report_hour` in the host's local timezone, checking eligibility every five
+minutes. It uses the same configured Resend recipient and reports which
 collectors are current, stale, failing, or missing; ranks active findings by
 severity; attaches a concrete safe next action where one is known; names
 visibility gaps and design limits; and lists explicit clean/protected checks.
@@ -942,6 +1063,8 @@ A trait on an approved process still gets flagged.
 | `jarvis/evasion.py` | kernel integrity, ADS, LNK abuse, dead-drop C2, Unicode |
 | `jarvis/coverage.py` | self-audit: collector health, blind spots, continuity |
 | `jarvis/control.py` | persistence / remote-access / defense audit |
+| `jarvis/toolchain.py` | MCP servers, agent hooks, editor extensions, git hooks, `.pth` |
+| `jarvis/ledger.py` | durable record of every alert sent, and what became of it |
 | `jarvis/monitor.py` | scan orchestration |
 | `jarvis/server.py` | scheduler + localhost dashboard server |
 | `jarvis/static/dashboard.html` | the dashboard, self-contained |
@@ -949,3 +1072,19 @@ A trait on an approved process still gets flagged.
 | `jarvis/cli.py` | command-line interface |
 
 State lives in `~/.jarvis/jarvis.db`.
+
+### Privileged repairs and independent Windows monitoring
+
+`jarvis repair status` verifies the Linux monitor, Sysmon, journal, and Windows
+mount. `jarvis repair all` repairs unhealthy components; individual actions are
+`monitor`, `telemetry`, `journal`, and `mount`. Install the root-owned helper with
+`sudo bash install-repair-helper.sh`. Its sudo rules permit only these fixed
+actions; Windows administrator operations still require Windows elevation.
+
+`deadman-jarvis.ps1` runs from `%LOCALAPPDATA%\Jarvis\Deadman` as a native
+Windows scheduled task, independent of WSL. It checks scheduler progress every
+minute, confirms outages across two probes, and sends toast/email notifications
+with one-time 1h/6h/24h escalation and recovery notification. Its `mail.json`
+contains the existing sender/recipient and a Windows-user DPAPI-encrypted key.
+Installation requires staging that credential and running the script with
+`-Install`; `-ProbeOnly` checks health without sending notifications.

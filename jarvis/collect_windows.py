@@ -14,11 +14,13 @@ import stat
 import subprocess
 
 from .util import fingerprint
+from . import collection
 
 HOST = "win"
 
 PS_SCRIPT = r"""
 $ErrorActionPreference = 'SilentlyContinue'
+$logicalCpus = [int](Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
 
 $procs = Get-CimInstance Win32_Process | ForEach-Object {
     [pscustomobject]@{
@@ -47,7 +49,7 @@ if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
     }
 }
 
-$payload = [pscustomobject]@{ procs = @($procs); conns = @($conns) } | ConvertTo-Json -Depth 4 -Compress
+$payload = [pscustomobject]@{ procs = @($procs); conns = @($conns); logical_cpus = $logicalCpus } | ConvertTo-Json -Depth 4 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
 """
 
@@ -146,6 +148,7 @@ def _script_target(cmd: str, exe_base: str) -> str:
 def collect(timeout: int = 45):
     """Return a list of process records for the Windows side (empty if unreachable)."""
     if not available():
+        collection.failed('windows-processes', 'interop unavailable')
         return []
     try:
         res = subprocess.run(
@@ -155,15 +158,23 @@ def collect(timeout: int = 45):
             cwd="/",  # avoids the UNC-path warning when cwd is a Linux dir
         )
     except (subprocess.TimeoutExpired, OSError):
+        collection.failed('windows-processes', 'query failed or timed out')
         return []
 
     blob = res.stdout.decode("ascii", "ignore").strip().replace("\r", "").replace("\n", "")
     if not blob:
+        collection.failed('windows-processes', 'query returned no payload')
         return []
     try:
         data = json.loads(base64.b64decode(blob).decode("utf-8", "replace"))
     except Exception:
+        collection.failed('windows-processes', 'invalid payload')
         return []
+
+    if not isinstance(data, dict) or not data.get('procs'):
+        collection.failed('windows-processes', 'no process observations')
+        return []
+    collection.succeeded('windows-processes')
 
     by_pid = {}
     for c in data.get("conns") or []:
@@ -202,6 +213,7 @@ def collect(timeout: int = 45):
             "user": "",  # per-process owner lookup is too slow to do on every scan
             "rss_bytes": int(p.get("rss") or 0),
             "cpu_seconds": float(p.get("cpu") or 0),
+            "logical_cpus": int(data.get("logical_cpus") or 0),
             "conns": by_pid.get(pid, []),
             "fp": fingerprint(HOST, ident_exe or name, cmd, ""),
         })

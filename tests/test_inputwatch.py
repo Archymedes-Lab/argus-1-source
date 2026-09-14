@@ -29,6 +29,21 @@ class TypingWindowTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_digit_concentration_is_detected_without_key_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(os.path.join(directory, "jarvis.db"))
+            try:
+                store.db.execute(
+                    "INSERT INTO input_typing_windows "
+                    "(ts,real_keys,real_key_gaps,digit_keys) VALUES(?,?,?,?)",
+                    (now(), 40, 39, 22),
+                )
+                findings = inputwatch._typing_findings(store, None)
+                finding = next(f for f in findings if "digit" in f["title"])
+                self.assertEqual(finding["severity"], "low")
+            finally:
+                store.close()
+
     def test_existing_typing_table_gets_new_punctuation_counters(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "old.db")
@@ -49,7 +64,9 @@ class TypingWindowTests(unittest.TestCase):
             try:
                 columns = {row[1] for row in store.db.execute(
                     "PRAGMA table_info(input_typing_windows)")}
-                self.assertTrue({"equals_keys", "slash_keys", "period_keys"} <= columns)
+                self.assertTrue(
+                    {"equals_keys", "slash_keys", "period_keys", "digit_keys"}
+                    <= columns)
             finally:
                 store.close()
 

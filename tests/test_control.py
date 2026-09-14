@@ -56,6 +56,28 @@ class TrustedScheduledTaskTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("limited", detail)
 
+    def test_headless_conhost_wrapper_is_verified(self):
+        task = self._ide_task()
+        action = task["actions"][0]
+        action["execute"] = r"C:\Windows\System32\conhost.exe"
+        action["arguments"] = (r'--headless "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" '
+                               + action["arguments"])
+        ok, detail = control._verified_maintenance_task(task, self.data)
+        self.assertTrue(ok, detail)
+
+    def test_headless_conhost_cannot_wrap_other_programs(self):
+        task = self._ide_task()
+        action = task["actions"][0]
+        action["execute"] = r"C:\Windows\System32\conhost.exe"
+        action["arguments"] = r'--headless C:\Users\chris\evil.exe ' + action["arguments"]
+        ok, detail = control._verified_maintenance_task(task, self.data)
+        self.assertFalse(ok)
+        task["actions"][0]["execute"] = r"C:\Users\chris\conhost.exe"
+        action["arguments"] = (r'--headless "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" '
+                               + self._ide_task()["actions"][0]["arguments"])
+        ok, detail = control._verified_maintenance_task(task, self.data)
+        self.assertFalse(ok)
+
     def test_wake_task_uses_the_actual_checkout_path(self):
         root = os.path.dirname(os.path.dirname(control.__file__))
         task = {
@@ -71,7 +93,7 @@ class TrustedScheduledTaskTests(unittest.TestCase):
                     '-ExecutionPolicy Bypass -File '
                     '"C:\\Users\\chris\\AppData\\Local\\WSLKeepalive\\'
                     'wake-jarvis.ps1" -Distro "Ubuntu" '
-                    f'-RepoRoot "{root}" -RecoverInterop:True'),
+                    f'-RepoRoot "{root}" -RecoverInterop true'),
                 "targetHash": control._normalized_text_hash(
                     os.path.join(root, "wake-jarvis.ps1")),
             }],

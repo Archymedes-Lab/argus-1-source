@@ -128,7 +128,7 @@ def dpkg_owns(path: str) -> bool:
     for cand in dpkg_candidates(path):
         try:
             r = subprocess.run(["dpkg", "-S", cand], capture_output=True,
-                               text=True, timeout=8)
+                               text=True, errors="replace", timeout=8)
             if r.returncode == 0 and ":" in r.stdout:
                 return True
         except (OSError, subprocess.SubprocessError):

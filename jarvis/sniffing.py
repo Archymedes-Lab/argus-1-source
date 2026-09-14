@@ -52,7 +52,7 @@ def _capture_procs_linux():
     procs = []
     for p in glob.glob("/proc/[0-9]*"):
         try:
-            with open(f"{p}/comm") as fh:
+            with open(f"{p}/comm", errors="replace") as fh:
                 comm = fh.read().strip()
         except OSError:
             continue
@@ -65,7 +65,8 @@ def _packet_sockets():
     """Processes holding an AF_PACKET socket, via `ss`."""
     try:
         r = subprocess.run(["ss", "-0", "-p", "-a", "-H"],
-                           capture_output=True, text=True, timeout=15)
+                           capture_output=True, text=True,
+                           errors="replace", timeout=15)
     except (OSError, subprocess.SubprocessError):
         return []
     holders = []
@@ -81,7 +82,7 @@ def _promisc_ifaces():
     for path in glob.glob("/sys/class/net/*/flags"):
         iface = path.split("/")[-2]
         try:
-            flags = int(open(path).read().strip(), 16)
+            flags = int(open(path, errors="replace").read().strip(), 16)
         except (OSError, ValueError):
             continue
         if flags & IFF_PROMISC:

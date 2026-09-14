@@ -108,13 +108,17 @@ DOWNLOAD_RUN = re.compile(
 # place to hide a payload -- but one severity lower, so the genuinely odd case
 # of an unparented binary in /tmp stays visible above the noise.
 DEV_PKG_PATH = re.compile(
-    r"/(node_modules|site-packages|\.venv|venv|\.pnpm|\.cargo|vendor)/")
+    r"/(node_modules|site-packages|\.venv|venv|\.pnpm|\.cargo|vendor|"
+    r"go-build\d+/b\d+)/")
 DEV_PARENTS = ("node", "npm", "npx", "pnpm", "yarn", "bun", "deno", "tsx",
                "python", "python3", "pip", "pip3", "cargo", "go", "make")
 
 LOG_DELETE_TITLE = "a log or history file was deleted"
 LOG_DELETE_SUFFIX = " — indicator removal"
 PERSIST_WRITE_TITLE = "write to a persistence or trust location"
+RAW_ACCESS_TITLE = "raw device read"  # retain existing alert identity
+RAW_UNRESOLVED_TITLE = "Sysmon raw-access event has an unresolved device"
+RAW_LEGACY_SUFFIX = " for raw access — disk imaging or filesystem-bypass read"
 
 
 # Claude Code and similar agent harnesses run every command through a fixed
@@ -124,14 +128,61 @@ PERSIST_WRITE_TITLE = "write to a persistence or trust location"
 # ran, and matching the content rules against it produced a download-and-run
 # false positive whenever the real command was ordinary. Pull the real command
 # back out before those rules look at it.
+# The wrapper is not one fixed shape. A single-line command ends
+# `' < /dev/null && pwd -P >| /tmp/claude-<id>-cwd`; a multi-line one (a
+# heredoc, say) has no `< /dev/null` at all and ends at `' && pwd -P >|`.
+# Matching only the first shape left roughly a third of harness events falling
+# through to raw content matching — measured at 9 of 26 on this machine — and a
+# rule that then reads the scaffolding is a rule that reports the scaffolding.
+# So accept either terminator, and take the last one on the line rather than
+# the first, because the real command may legitimately contain either string.
+_HARNESS_MARK = "shell-snapshots/"
 _HARNESS_WRAP = re.compile(
-    r"shell-snapshots/\S+\.sh\b.*?&&\s*eval\s+'(?P<real>.*)'\s*<\s*/dev/null",
+    r"shell-snapshots/\S+\.sh\b.*?&&\s*eval\s+'(?P<real>.*)'"
+    r"(?:\s*<\s*/dev/null|\s*&&\s*pwd\s+-P\s*>\|)",
     re.S)
+
+# The pieces of scaffolding themselves, for the case where the payload cannot be
+# isolated — a truncated journal line, or a wrapper revision not seen yet.
+# Stripping them is strictly better than giving up in either direction: the real
+# command is still content-matched, and the scaffolding cannot be reported as if
+# it were the command.
+_HARNESS_PARTS = (
+    re.compile(r"^/bin/bash\s+-c\s+", re.S),
+    re.compile(r"source\s+\S*shell-snapshots/\S+\.sh\s*2>/dev/null\s*\|\|\s*true"),
+    re.compile(r"shopt\s+-u\s+extglob\s*2>/dev/null\s*\|\|\s*true"),
+    re.compile(r"\{[^{}]*\\builtin\s+un(alias|set)[^{}]*\}\s*>/dev/null\s*2>&1"
+               r"\s*\|\|\s*true", re.S),
+    re.compile(r"&&\s*pwd\s+-P\s*>\|\s*/tmp/claude-\S+-cwd\s*$"),
+    re.compile(r"<\s*/dev/null\s*$"),
+    re.compile(r"^\s*(&&\s*)+"),
+)
+
+
+# The bash escape for an apostrophe inside a single-quoted string.
+_SQ_ESCAPE = chr(39) + chr(34) + chr(39) + chr(34) + chr(39)
 
 
 def _payload(cmd):
-    m = _HARNESS_WRAP.search(cmd or "")
-    return m.group("real") if m else (cmd or "")
+    """The command the harness was asked to run, without the harness's own noise.
+
+    Returns the original string unchanged for anything that is not a harness
+    invocation, so non-agent command lines are unaffected.
+    """
+    cmd = cmd or ""
+    if _HARNESS_MARK not in cmd:
+        return cmd
+    m = _HARNESS_WRAP.search(cmd)
+    if m:
+        real = m.group("real")
+    else:
+        real = cmd
+        for part in _HARNESS_PARTS:
+            real = part.sub("", real).strip()
+        real = re.sub(r"^eval\s+'", "", real).strip()
+    # bash single-quote escaping: an apostrophe inside a '…' string is written
+    # as '"'"'. Left in place it splits words and hides what actually ran.
+    return real.replace(_SQ_ESCAPE, chr(39)).strip()
 
 
 def _finding(category, severity, title, detail, where="", host="wsl"):
@@ -147,7 +198,8 @@ def sort_findings(f):
 
 def _run(args, timeout=20):
     try:
-        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(args, capture_output=True, text=True,
+                           errors="replace", timeout=timeout)
         return r.stdout, r.returncode
     except (OSError, subprocess.SubprocessError):
         return "", 1
@@ -320,6 +372,11 @@ def _rules(events, store=None):
     out = []
     recon = {}
     dns_names, dests = set(), set()
+    # A PID can be reused. Only a matching Sysmon ProcessGuid can supply the
+    # command line for an event that doesn't contain one of its own.
+    processes = {e["ProcessGuid"]: e for e in events
+                 if e.get("id") == 1 and _clean(e.get("ProcessGuid"))
+                 and e["ProcessGuid"] != "{00000000-0000-0000-0000-000000000000}"}
 
     for e in events:
         eid = e.get("id")
@@ -417,10 +474,23 @@ def _rules(events, store=None):
                     f"{base or '?'} deleted {tgt}{LOG_DELETE_SUFFIX}", CHANNEL))
 
         elif eid == 9:
+            device = _clean(e.get("Device"))
+            proc = processes.get(e.get("ProcessGuid"), {})
+            context = _clean(proc.get("CommandLine")) if proc.get("Image") == img else ""
+            # Linux Event 9 originates in processFileOpen (Sysmon 1.5.2),
+            # which tests S_IFBLK but doesn't establish a read or disk imaging.
+            # Missing/relative device names are retained as an uncertainty,
+            # never silently trusted or promoted to a confirmed disk read.
+            resolved = device.startswith("/") and device != "/"
             out.append(_finding(
-                "sysmon-linux", "high", "raw device read",
-                f"{base or '?'} opened {e.get('Device') or 'a block device'} "
-                f"for raw access — disk imaging or filesystem-bypass read",
+                "sysmon-linux", "high" if resolved else "medium",
+                RAW_ACCESS_TITLE if resolved else RAW_UNRESOLVED_TITLE,
+                f"{img or '?'}: Sysmon Event 9 reports device {device or '<missing>'!r}; "
+                + ("block-device open requires investigation; read/write direction "
+                   "and disk imaging are not established"
+                   if resolved else "target is unresolved; raw disk access is not established")
+                + f"; PID {e.get('ProcessId') or '?'}; event time {e.get('UtcTime') or '?'}"
+                + (f"; command {context[:180]}" if context else ""),
                 CHANNEL))
 
     # Container and build tooling legitimately runs a lot of these.
@@ -481,6 +551,29 @@ def _remember(store, findings, hours):
                    detail=excluded.detail""",
             (ts, f["category"], f["severity"], f["title"][:300],
              f["detail"][:600], f["where"][:400]))
+
+    # Correct old rendered claims while retaining their original observation
+    # time. Never drop an unresolved device as benign or erase a real path.
+    for row in store.db.execute(
+            "SELECT * FROM sysmon_hits WHERE category='sysmon-linux' "
+            "AND title=?", (RAW_ACCESS_TITLE,)).fetchall():
+        detail = row["detail"] or ""
+        if not detail.endswith(RAW_LEGACY_SUFFIX) or " opened " not in detail:
+            continue
+        actor, device = detail[:-len(RAW_LEGACY_SUFFIX)].split(" opened ", 1)
+        if device.startswith("/") and device != "/":
+            continue
+        store.db.execute(
+            """INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_)
+               VALUES(?,?,?,?,?,?) ON CONFLICT(category,title,where_)
+               DO UPDATE SET ts=excluded.ts, detail=excluded.detail,
+                   severity=excluded.severity WHERE excluded.ts > sysmon_hits.ts""",
+            (row["ts"], "sysmon-linux", "medium", RAW_UNRESOLVED_TITLE,
+             f"{actor}: legacy Sysmon Event 9 reported device {device!r}; "
+             "target is unresolved; raw disk access is not established; "
+             "original event time and process GUID were not retained",
+             row["where_"]))
+        store.db.execute("DELETE FROM sysmon_hits WHERE id=?", (row["id"],))
 
     # A hit created before an exemption was widened would otherwise remain
     # visible for the whole reminder window.  Re-evaluate this detector's

@@ -63,9 +63,9 @@ try {
   foreach ($path in @($profiles.LogFileName | Sort-Object -Unique)) {
     try {
       $path = [Environment]::ExpandEnvironmentVariables($path)
-      $head = @(Get-Content -LiteralPath $path -TotalCount 30)
+      $head = @(Get-Content -LiteralPath $path -TotalCount 30 | ForEach-Object { $_.ToString() })
       $fields = @($head | Where-Object { $_ -like '#Fields:*' } | Select-Object -Last 1)
-      $tail = @(Get-Content -LiteralPath $path -Tail 1000)
+      $tail = @(Get-Content -LiteralPath $path -Tail 1000 | ForEach-Object { $_.ToString() })
       $o.logs += @{fields=($fields -join ''); lines=$tail; capped=($tail.Count -ge 1000)}
     } catch { $o.errors += 'Firewall traffic log unreadable' }
   }
@@ -95,9 +95,24 @@ def scope(address):
 
 def firewall_summary(log):
     """Summarize a bounded tail, not a cumulative or interval packet count."""
-    fields = log.get('fields', '').removeprefix('#Fields:').split()
+    def log_text(value):
+        # Windows PowerShell may serialize Get-Content's extended strings as
+        # objects with a value property and provider metadata.
+        if isinstance(value, dict):
+            value = value.get('value')
+        if not isinstance(value, str):
+            raise ValueError('Firewall traffic log contains non-text data')
+        return value
+
+    fields = log_text(log.get('fields', '')).removeprefix('#Fields:').split()
+    if not {'action', 'path'}.issubset(fields):
+        raise ValueError('Firewall traffic log field header is missing or invalid')
     totals = {'allow': 0, 'drop': 0, 'inbound': 0}
-    for line in log.get('lines', []):
+    lines = log.get('lines', [])
+    if not isinstance(lines, list):
+        raise ValueError('Firewall traffic log lines are not an array')
+    for line in lines:
+        line = log_text(line)
         if line.startswith('#'):
             continue
         row = dict(zip(fields, line.split()))
@@ -150,7 +165,14 @@ def analyze(host, data):
                 f"{p['name']}: enabled={p.get('enabled')}, log blocked={p.get('blocked')}, log allowed={p.get('allowed')}",
                 category='visibility'))
     for log in data.get('logs', []):
-        totals = firewall_summary(log)
+        try:
+            totals = firewall_summary(log)
+        except ValueError as exc:
+            error = str(exc)
+            data.setdefault('errors', []).append(error)
+            out.append(finding(host, 'medium', 'traffic monitoring visibility limited',
+                               error, category='visibility'))
+            continue
         out.append(finding(host, 'low', 'firewall traffic log tail',
             f"{totals['allow']} allowed, {totals['drop']} dropped, {totals['inbound']} marked inbound; "
             f"last up to 1000 lines, overlapping samples; tail limit reached={bool(log.get('capped'))}"))

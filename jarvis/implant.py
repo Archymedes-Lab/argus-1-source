@@ -51,7 +51,8 @@ def _finding(category, severity, title, detail, where="", host="win"):
 
 def _cmd(args, timeout=15):
     try:
-        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(args, capture_output=True, text=True,
+                           errors="replace", timeout=timeout)
         return r.stdout
     except (OSError, subprocess.SubprocessError):
         return ""

@@ -51,6 +51,26 @@ class InternetWatchTests(unittest.TestCase):
         self.assertEqual(store.get_meta('internetwatch_history_v1_win'), '[{"ts": 1}]')
         self.assertEqual(latest(store)['win']['status'], 'unavailable')
 
+    def test_powershell_extended_log_strings(self):
+        counts = firewall_summary({
+            'fields': '#Fields: date action path protocol',
+            'lines': [{'value': '2026-09-05 DROP RECEIVE TCP', 'PSPath': 'log'},
+                      {'value': '# comment'}, '2026-09-05 ALLOW SEND UDP']})
+        self.assertEqual(counts, {'allow': 1, 'drop': 1, 'inbound': 1})
+
+    def test_malformed_log_keeps_socket_sample_and_reports_partial(self):
+        for log in ({'fields': '#Fields: action path', 'lines': [{}]},
+                    {'fields': '', 'lines': []},
+                    {'fields': '#Fields: action path', 'lines': None}):
+            with self.subTest(log=log):
+                store = self.store()
+                with patch('jarvis.internetwatch._ps_json', return_value={
+                    'logs': [log], 'connections': [dict(pid=1, state='BOUND', proto='udp')]}):
+                    findings = audit(store, hosts=('win',))
+                self.assertEqual(latest(store)['win']['status'], 'partial')
+                self.assertEqual(len(latest(store)['win']['connections']), 1)
+                self.assertTrue(any(f['category'] == 'visibility' for f in findings))
+
     def test_failed_tcp_query_preserves_saved_sample(self):
         store = self.store()
         store.set_meta('internetwatch_history_v1_win', '[{"ts": 1, "connections": []}]')

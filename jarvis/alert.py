@@ -12,24 +12,16 @@ Config, all under ~/.jarvis/config.json (kept 0600), or the noted env var:
     alert_to            "you@example.com"   or ["a@x.com", "b@y.com"]
     alert_from          "JARVIS <jarvis@yourdomain.com>"  a verified sender
     alert_min_severity  "high"              critical | high | medium
-    alert_resend_after  21600               seconds a still-firing alert waits
-                                            before it pages again
-    alert_outage_resend_after  900          the same, for outages — much
-                                            shorter, and it widens per repeat
-                                            up to an hour
-    alert_on_clear      true                also send when an alert clears
-    alert_hourly_cap    12                  ceiling on ordinary emails per
-                                            hour; 0 or negative means no
-                                            ceiling. It never applies to
-                                            outages, which have their own far
-                                            higher ceiling.
+    alert_digest_interval 3600             group ordinary changes for an hour
+    alert_on_clear      true                include recoveries in the digest
+    alert_hourly_cap    12                  transport ceiling; unsent work stays queued
+    report_hour         9                   daily advisory, host local time
     alert_send_attempts 5                   transport retries per email
 
-Dedupe: every finding has a stable key — category | title | where. An alert for
-a key is sent once, then not again until alert_resend_after has passed while it
-kept firing, or until it clears and returns. So a flapping input monitor pages
-you when it goes down, again if it is still down alert_resend_after later, and
-once when it recovers — not on every 45-second watchdog tick.
+Critical findings and monitoring outages send immediately. Other findings
+must survive a second observation and are grouped into an hourly change digest.
+Unchanged findings escalate once per age threshold, never via periodic STILL
+mail. Notification state and pending delivery survive process restarts.
 """
 
 import json
@@ -43,6 +35,8 @@ import urllib.error
 import urllib.request
 
 from . import fixit
+from .reporting import commands as report_commands
+from .reporting import diff as report_diff
 
 CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
 API_URL = "https://api.resend.com/emails"
@@ -100,7 +94,7 @@ _M_SENTLOG = "alert_sent_log"  # json: [ts, ...] emails actually sent, last hour
 def load_conf():
     conf = {}
     try:
-        with open(CONFIG_PATH) as fh:
+        with open(CONFIG_PATH, errors="replace") as fh:
             conf = json.load(fh) or {}
     except (OSError, ValueError):
         conf = {}
@@ -144,7 +138,8 @@ def status(store):
         "from": conf.get("alert_from", ""),
         "to": recipients(conf),
         "min_severity": conf.get("alert_min_severity", "high"),
-        "resend_after": _int(conf.get("alert_resend_after"), 21600),
+        "digest_interval": max(60, _int(conf.get("alert_digest_interval"), 3600)),
+        "resend_after": 0,
         "outage_resend_after": max(60, _int(
             conf.get("alert_outage_resend_after"), OUTAGE_RESEND)),
         "on_clear": conf.get("alert_on_clear", True) is not False,
@@ -339,6 +334,14 @@ def _theme(f):
     category = (f.get("category") or "").lower()
     title = (f.get("title") or "").lower()
     blob = f"{category} {title}"
+    # Checked before the keyword themes below: a finding about an editor
+    # extension or an MCP server belongs with the rest of the developer trust
+    # surface, not under "Browsers and downloaded software" because its title
+    # happens to contain the word "extension".
+    if category == "ledger":
+        return "Unresolved and recurring"
+    if category in ("agent", "editor", "vcs", "packages"):
+        return "Developer toolchain"
     if any(x in blob for x in ("secret", "credential", "bitlocker", "ransom",
                                "data", "token", "exfil")):
         return "Data protection"
@@ -392,7 +395,7 @@ def _report_html(health, findings, actionable, blind_spots, checks,
     return f"""<!doctype html><html><head><meta charset='utf-8'></head>
 <body style='margin:0;background:#f2f4f7;color:#101828;font-family:Segoe UI,Arial,sans-serif'>
 <style>.wrap{{max-width:760px;margin:auto;background:#fff}}.hero{{padding:30px;background:#101828;color:#fff}}.hero p{{color:#d0d5dd}}.section{{padding:24px 30px;border-bottom:1px solid #eaecf0}}.cards{{display:flex;gap:10px;flex-wrap:wrap}}.card{{padding:12px 16px;background:#f9fafb;border:1px solid #eaecf0;border-radius:10px;min-width:110px}}.card b{{display:block;font-size:22px}}h2{{margin:0 0 14px}}h3{{margin:22px 0 8px}}.action{{display:flex;gap:12px;padding:14px 0;border-top:1px solid #eaecf0}}.num{{width:28px;height:28px;border-radius:50%;background:#101828;color:white;text-align:center;line-height:28px;flex:none}}.next{{color:#067647;margin-top:5px}}.why,.finding p{{color:#475467;margin:5px 0}}.finding{{padding:12px;border:1px solid #eaecf0;border-radius:8px;margin:8px 0}}.sev{{color:white;font-size:10px;font-weight:700;padding:3px 7px;border-radius:12px;margin-right:8px}}small{{color:#667085}}.notice{{padding:15px;background:#fffaeb;border:1px solid #fedf89;border-radius:8px}}.ai{{padding:18px;background:#f4f3ff;border-radius:8px}}.pre{{white-space:pre-wrap;line-height:1.5}}ul{{padding-left:20px}}li{{margin:7px 0}}</style>
-<div class='wrap'><div class='hero'><div style='font-size:12px;letter-spacing:1.5px'>JARVIS · FIVE-HOUR SECURITY ADVISORY</div><h1 style='margin:8px 0'>Your system security, prioritized</h1><p>Generated {esc(time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(generated)))} · Worst recorded severity: {esc(worst.upper())}. No endpoint monitor can guarantee complete security; this report shows the strongest evidence and the next defensible steps.</p></div>
+<div class='wrap'><div class='hero'><div style='font-size:12px;letter-spacing:1.5px'>JARVIS · DAILY SECURITY ADVISORY</div><h1 style='margin:8px 0'>Your system security, prioritized</h1><p>Generated {esc(time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(generated)))} · Worst recorded severity: {esc(worst.upper())}. No endpoint monitor can guarantee complete security; this report shows the strongest evidence and the next defensible steps.</p></div>
 <div class='section'><h2>Coverage at a glance</h2><div class='cards'><div class='card'><b>{len(health['current'])}</b>current</div><div class='card'><b>{len(health['stale'])}</b>stale</div><div class='card'><b>{len(health['failing'])}</b>failing</div><div class='card'><b>{len(health['missing'])}</b>missing</div><div class='card'><b>{len(actionable)}</b>actions</div></div><p><small>Stale: {esc(', '.join(health['stale']) or 'none')} · Failing: {esc(', '.join(health['failing']) or 'none')} · Missing: {esc(', '.join(health['missing']) or 'none')}</small></p></div>
 <div class='section'><h2>Secure next</h2>{action_html}</div>
 <div class='section'>{ai_html}</div>
@@ -414,7 +417,7 @@ def advisory_report(store, jobs):
     if not enabled(conf):
         return [{
             "category": "reporting", "severity": "medium", "host": "wsl",
-            "title": "five-hour security report is not configured",
+            "title": "daily security report is not configured",
             "detail": "set resend_api_key, alert_from and alert_to in "
                       f"{CONFIG_PATH}; the scheduled posture report cannot be sent",
             "where": CONFIG_PATH}]
@@ -483,9 +486,27 @@ def advisory_report(store, jobs):
     ai_text, ai_note = _openai_synthesis(
         conf, findings, health, intel_state)
 
+    # What moved since the last report. This goes first: a reader who only
+    # reads one section should read the one that is different this time.
+    previous_state, previous_ts = report_diff.load_previous(store)
+    movement = report_diff.compare(previous_state,
+                                   report_diff.snapshot(findings))
+    trend = report_diff.trend_line(
+        {sev: sum(1 for s in previous_state.values() if s == sev)
+         for sev in ("critical", "high", "medium", "low")} if previous_state
+        else {},
+        report_diff.counts(findings))
+    changed_text = report_diff.describe(movement, trend)
+
     lines = [
-        "JARVIS FIVE-HOUR SECURITY ADVISORY",
+        "JARVIS SECURITY ADVISORY",
         time.strftime("Generated %Y-%m-%d %H:%M:%S %Z", time.localtime(generated)),
+        (("Comparing against the report from "
+          + time.strftime("%Y-%m-%d %H:%M", time.localtime(previous_ts)))
+         if previous_ts else "First report — nothing to compare against yet."),
+        "",
+        "WHAT CHANGED",
+        changed_text or "  Nothing moved since the last report.",
         "",
         "COLLECTOR FRESHNESS",
         f"  Current: {len(health['current'])}",
@@ -543,9 +564,34 @@ def advisory_report(store, jobs):
         f"${float(intel_state.get('spend_today', 0)):.3f} of "
         f"${float(intel_state.get('budget', 0)):.2f}.")
 
+    # Every section above names a problem; this one names the command that
+    # shows it. A report you cannot act on from the inbox sends the reader
+    # hunting for the right subcommand.
+    lines.extend(["", "SEE FOR YOURSELF — WHOLE SYSTEM"])
+    for cmd, why in report_commands.OVERVIEW:
+        lines.append(f"  {cmd:<26} {why}")
+
+    per_job = report_commands.commands_for_findings(findings)
+    if per_job:
+        lines.extend(["", "SEE FOR YOURSELF — WHAT REPORTED THIS TIME",
+                      "  (worst severity that collector produced, first)"])
+        for cmd, sev in per_job[:20]:
+            lines.append(f"  {cmd:<26} worst: {sev.upper()}")
+
     worst = findings[0].get("severity", "ok") if findings else "ok"
-    subject = (f"[JARVIS] 5-hour security report — {len(actionable)} action(s), "
-               f"worst {worst.upper()}")
+    moved = (len(movement["appeared"]) + len(movement["worsened"])
+             + len(movement["resolved"]))
+    # The subject carries the movement, so two consecutive reports do not look
+    # identical in the inbox.
+    if not previous_ts:
+        headline = f"first report, worst {worst.upper()}"
+    elif moved:
+        headline = (f"{len(movement['appeared'])} new, "
+                    f"{len(movement['worsened'])} worse, "
+                    f"{len(movement['resolved'])} resolved")
+    else:
+        headline = f"no change, worst {worst.upper()}"
+    subject = f"[JARVIS] security report — {headline}"
     html = _report_html(health, findings, actionable, blind_spots, checks,
                         intel_state, ai_text, ai_note, generated)
     err = send_email(conf, subject, "\n".join(lines) + "\n", html=html)
@@ -553,15 +599,16 @@ def advisory_report(store, jobs):
         store.set_meta(_M_REPORT_ERROR, f"{generated}: {err}"[:300])
         return [{
             "category": "reporting", "severity": "high", "host": "wsl",
-            "title": "five-hour security report could not be sent",
+            "title": "daily security report could not be sent",
             "detail": err, "where": "Resend"}]
 
     _record_send(store)
+    report_diff.save(store, findings, generated)
     store.set_meta(_M_REPORT_OK, generated)
     store.set_meta(_M_REPORT_ERROR, "")
     return [{
         "category": "reporting", "severity": "ok", "host": "wsl",
-        "title": "five-hour security report sent",
+        "title": "daily security report sent",
         "detail": f"{len(findings)} findings, {len(actionable)} prioritized actions, "
                   f"{len(blind_spots)} visibility gaps or limits",
         "where": "Resend"}]
@@ -572,7 +619,14 @@ def advisory_report(store, jobs):
 # Categories whose findings are inherently per-PID / per-connection churn. They
 # belong on the dashboard, not in an inbox — a genuinely dangerous process
 # still pages through sysmon / hunt / intrusion with a stable title.
-_NOPAGE_CATEGORIES = {"process", "peer", "coverage gap", "not observable"}
+# "ledger" is here for a structural reason, not a preference one. Its findings
+# are *about* alerts that were already emailed. If they paged, an unresolved
+# HIGH would generate a ledger HIGH, which would be mailed, which would be
+# recorded in the ledger as another unresolved alert, which would page. The
+# backlog belongs in the advisory report and on the dashboard, where it is read
+# deliberately rather than pushed.
+_NOPAGE_CATEGORIES = {"process", "peer", "coverage gap", "not observable",
+                      "ledger"}
 
 # Volatile tokens that must not be part of a dedupe key, or every occurrence is
 # a "new" alert: pids, the NEW marker, repeat counts, long hex/base64 blobs,
@@ -640,166 +694,6 @@ def dispatch(store, job, findings, error=""):
         pass
 
 
-def _resend_interval(st, outage_resend, resend_after):
-    """How long this alert waits before paging again.
-
-    Ordinary findings use alert_resend_after. Outages start at outage_resend
-    and widen with each repeat up to OUTAGE_RESEND_CAP — so a monitor that has
-    been down for a minute pages quickly, one that has been down all afternoon
-    still pages hourly, and neither turns into a per-scan flood.
-    """
-    if not st.get("outage"):
-        return resend_after
-    count = max(1, int(st.get("count", 1)))
-    return int(min(OUTAGE_RESEND_CAP, outage_resend * count))
-
-
-def _dispatch(store, conf, job, findings, error):
-    now = int(time.time())
-    min_rank = SEV_RANK.get(conf.get("alert_min_severity", "high"), 1)
-    resend_after = _int(conf.get("alert_resend_after"), 21600)
-    outage_resend = max(60, _int(conf.get("alert_outage_resend_after"),
-                                 OUTAGE_RESEND))
-    on_clear = conf.get("alert_on_clear", True) is not False
-    # 0 or negative means "no ceiling". It used to mean "cap at zero", which
-    # silently suppressed every alert for as long as it was set — a monitoring
-    # tool must fail toward telling you, never toward silence.
-    cap = _int(conf.get("alert_hourly_cap"), 12)
-    if cap <= 0:
-        cap = 0        # falsy => unlimited, checked explicitly below
-
-    if error:
-        findings = findings + [{
-            "category": "collectors", "severity": "high",
-            "title": f"collector '{job}' crashed",
-            "detail": error.strip().splitlines()[-1][:200] if error.strip()
-                      else "unknown error",
-            "where": "jarvis serve", "host": "wsl"}]
-
-    # Which findings from THIS job would page.
-    pageable, outage_keys, advisory_keys = {}, set(), set()
-    for f in findings:
-        if f.get("category") in _NOPAGE_CATEGORIES and not _is_outage(f):
-            advisory_keys.add(_key(f))
-            continue
-        rank = SEV_RANK.get(f.get("severity"), 9)
-        if rank <= min_rank or _is_outage(f):
-            k = _key(f)
-            pageable[k] = f
-            if _is_outage(f):
-                outage_keys.add(k)
-
-    try:
-        state = json.loads(store.get_meta(_M_STATE, "{}") or "{}")
-    except ValueError:
-        state = {}
-
-    to_send, cleared = [], []
-
-    for k, f in pageable.items():
-        st = state.get(k)
-        outage = k in outage_keys
-        if st is None:
-            # Persistence gate: a finding must survive one interval before it
-            # pages, so a one-scan blip (a short-lived process, a transient
-            # error) never reaches the inbox. Outages skip the gate — "the
-            # monitor is down" is time-sensitive.
-            if outage:
-                state[k] = {"first": now, "last_sent": now, "count": 1,
-                            "sev": f.get("severity", "high"), "job": job,
-                            "outage": True}
-                to_send.append(("NEW", f))
-            else:
-                state[k] = {"first": now, "pending": now, "count": 0,
-                            "sev": f.get("severity", "high"), "job": job}
-            continue
-        if outage:
-            st["outage"] = True
-        if st.get("pending"):
-            st.pop("pending", None)
-            st["last_sent"] = now
-            st["count"] = 1
-            state[k] = st
-            to_send.append(("NEW", f))
-        elif now - int(st.get("last_sent", 0)) >= _resend_interval(
-                st, outage_resend, resend_after):
-            st["last_sent"] = now
-            st["count"] = int(st.get("count", 1)) + 1
-            st["sev"] = f.get("severity", st.get("sev", "high"))
-            st["job"] = job
-            to_send.append(("STILL", f))
-
-    # An alert clears only when the job that raised it (or one covering the
-    # same ground) runs and no longer reports it — so an unrelated job cannot
-    # "resolve" it just by staying silent about it.
-    for k in list(state.keys()):
-        if k in pageable:
-            continue
-        if _same_domain(state[k].get("job", ""), job):
-            # Moving an existing gap to the advisory is not remediation.
-            if on_clear and k not in advisory_keys:
-                cleared.append(k)
-            state.pop(k, None)
-
-    if not to_send and not cleared:
-        store.set_meta(_M_STATE, json.dumps(state))
-        return
-
-    # The hourly cap exists to stop a flapping collector from filling an inbox.
-    # It must never be able to silence an outage: "nothing is being monitored"
-    # is the one message whose whole purpose is to arrive. Outages get their own
-    # much higher ceiling, and only a true runaway trips it.
-    has_outage = any(_key(f) in outage_keys for _, f in to_send)
-    limit = OUTAGE_HOURLY_CAP if has_outage else cap
-    if limit and len(_recent_sends(store)) >= limit:
-        # Keep the state we just advanced (so resend timing stays honest) but
-        # do not add to the flood. The next email will note the gap.
-        store.set_meta(_M_STATE, json.dumps(state))
-        store.set_meta("alert_capped_at", now)
-        return
-
-    lines = []
-    worst = "low"
-    for tag, f in sorted(to_send, key=lambda x: SEV_RANK.get(
-            x[1].get("severity"), 9)):
-        sev = f.get("severity", "?")
-        if SEV_RANK.get(sev, 9) < SEV_RANK.get(worst, 9):
-            worst = sev
-        line = (f"[{sev.upper()}] {tag}: {f.get('title', '')}\n"
-               f"    {f.get('detail', '')}\n"
-               f"    where: {f.get('where', '') or '—'}  (job: {job})")
-        fix = fixit.suggest(f)
-        if fix:
-            line += f"\n    fix: {fix}"
-        lines.append(line)
-    for k in cleared:
-        lines.append(f"[CLEARED] {k.split('|', 1)[1].replace('|', ' — ')}")
-
-    if to_send:
-        subject = f"[JARVIS] {len(to_send)} alert(s), worst {worst.upper()}: " \
-                  f"{to_send[0][1].get('title', '')}"
-    else:
-        subject = f"[JARVIS] {len(cleared)} alert(s) cleared"
-
-    body = "\n\n".join(lines)
-    if store.get_meta("alert_capped_at"):
-        body += "\n\n(some earlier alerts were suppressed by the hourly cap)"
-        store.set_meta("alert_capped_at", "")
-
-    err = send_email(conf, subject, body + "\n")
-    if err:
-        # Could not send. Roll back last_sent on the STILL items so we retry
-        # promptly rather than waiting a full resend_after.
-        for tag, f in to_send:
-            if tag == "STILL":
-                k = _key(f)
-                if k in state:
-                    state[k]["last_sent"] = 0
-        store.set_meta(_M_STATE, json.dumps(state))
-        store.set_meta("alert_last_error", f"{now}: {err}"[:300])
-        return
-
-    _record_send(store)
-    store.set_meta(_M_STATE, json.dumps(state))
-    store.set_meta("alert_last_ok", now)
-    store.set_meta("alert_last_error", "")
+def _dispatch(store, conf, job, findings, error=""):
+    from .reporting.notifications import dispatch as notify
+    return notify(store, conf, job, findings, error)

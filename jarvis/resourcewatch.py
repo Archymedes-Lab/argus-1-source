@@ -1,6 +1,7 @@
 """Sustained process consumption and whole-system capacity pressure."""
 
 import json
+import math
 import os
 import shutil
 import time
@@ -18,7 +19,7 @@ def _finding(severity, title, detail, where="", host="wsl"):
 def _memory_pressure():
     try:
         values = {}
-        with open("/proc/meminfo") as fh:
+        with open("/proc/meminfo", errors="replace") as fh:
             for line in fh:
                 name, value = line.split(":", 1)
                 values[name] = int(value.split()[0]) * 1024
@@ -35,31 +36,60 @@ def audit(store, hosts=("wsl", "win")):
         previous = json.loads(store.get_meta(_META, "{}") or "{}")
     except (TypeError, ValueError):
         previous = {}
-    elapsed = max(1.0, sampled_at - float(previous.get("ts", sampled_at)))
+    if not isinstance(previous, dict):
+        previous = {}
+    elapsed = sampled_at - float(previous.get("ts", sampled_at))
     cpu_count = max(1, os.cpu_count() or 1)
     old = previous.get("processes", {}) if isinstance(previous, dict) else {}
     current = {}
     findings = []
+    cpu_gaps = set()
 
     for proc in processes:
+        # Windows PID 0 is the idle-time counter. Its socket attribution label
+        # must not turn unused CPU capacity into a resource-pressure alert.
+        if proc.get("pid") in (None, 0, "0"):
+            continue
+        host = proc.get("host") or "wsl"
         key = f"{proc.get('host')}:{proc.get('pid')}:{proc.get('fp')}"
         cpu_seconds = max(0.0, float(proc.get("cpu_seconds") or 0))
         rss = max(0, int(proc.get("rss_bytes") or 0))
         current[key] = {"cpu": cpu_seconds}
         prior = old.get(key) if isinstance(old, dict) else None
-        cpu_pct = 0.0
-        if prior is not None:
-            cpu_pct = max(0.0, (cpu_seconds - float(prior.get("cpu", 0))) /
-                              elapsed / cpu_count * 100)
-        severe = rss >= 4 * 1024**3 or cpu_pct >= 50
-        notable = rss >= 1536 * 1024**2 or cpu_pct >= 20
+        # WSL can have fewer virtual CPUs than the Windows host. Never divide
+        # Windows CPU counters by the Linux VM's processor count.
+        capacity = proc.get("logical_cpus", 0) if host == "win" else cpu_count
+        cpu_pct = None
+        if not capacity:
+            cpu_gaps.add(host)
+        elif prior is not None and elapsed > 0:
+            delta = cpu_seconds - float(prior.get("cpu", 0))
+            measured = delta / elapsed / capacity * 100
+            if math.isfinite(measured) and 0 <= measured <= 100:
+                cpu_pct = measured
+            else:
+                # Counter resets, PID reuse, or clock discontinuities cannot
+                # establish sustained consumption. Rebaseline, don't clamp an
+                # impossible measurement into a HIGH process alert.
+                cpu_gaps.add(host)
+        elif prior is not None:
+            cpu_gaps.add(host)
+        severe = rss >= 4 * 1024**3 or (cpu_pct is not None and cpu_pct >= 50)
+        notable = rss >= 1536 * 1024**2 or (cpu_pct is not None and cpu_pct >= 20)
         if severe or notable:
+            cpu_detail = (f"{cpu_pct:.1f}% of total CPU over the last {_duration(elapsed)}"
+                          if cpu_pct is not None else "CPU usage unavailable for this sample")
             findings.append(_finding(
                 "high" if severe else "medium", "resource-intensive process",
                 f"{proc.get('name') or '?'} [pid {proc.get('pid')}] uses "
-                f"{rss / 1024**3:.1f} GiB resident memory and {cpu_pct:.1f}% "
-                f"of total CPU over the last {_duration(elapsed)}",
+                f"{rss / 1024**3:.1f} GiB resident memory and {cpu_detail}",
                 proc.get("exe") or "", proc.get("host") or "wsl"))
+
+    for host in sorted(cpu_gaps):
+        findings.append(_finding(
+            "medium", "process CPU measurement unavailable",
+            "Missing host CPU capacity or inconsistent counters/timestamps; "
+            "affected samples were rebaselined, memory checks remain active", host=host))
 
     total, available = _memory_pressure()
     if total:

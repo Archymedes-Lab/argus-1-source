@@ -5,7 +5,7 @@ covers a collector going quiet, the Windows bridge dropping, the input hook
 dying — but not the one failure that silences all of them at once: the daemon
 itself being gone. A dead process cannot mail you about being dead.
 
-So this module is deliberately small, has no state of its own beyond two meta
+So this module is deliberately small, has no state of its own beyond a few meta
 keys, and is meant to be run from a systemd timer that is independent of
 jarvis.service:
 
@@ -24,8 +24,8 @@ wedged-scheduler case. A snapshot timestamp only advances when a job actually
 completed and wrote a result.
 
 Mail goes out through the same Resend transport as everything else, with its
-own re-send interval so a timer running every few minutes cannot flood an
-inbox while the machine is genuinely broken.
+finite age escalation so a timer running every few minutes cannot flood an
+inbox during a persistent outage.
 """
 
 import json
@@ -42,10 +42,6 @@ UNIT = "jarvis.service"
 # The scheduler runs jobs one at a time and the longest measured job is ~106s,
 # so a gap of a couple of minutes is normal. Five is not.
 STALE_AFTER = 300
-
-# Do not re-mail the same unhealthy verdict more often than this. Short on
-# purpose: an unmonitored machine should keep nagging.
-RENOTIFY_AFTER = 900
 
 # Never declare the daemon dead on one reading. A check can lose a race with a
 # restart, a systemctl call can time out under load, sqlite can be locked mid
@@ -83,7 +79,8 @@ def _user_env():
 
 def _run(cmd, env=None):
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           errors="replace", timeout=30,
                            env=env)
         return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
     except (OSError, subprocess.SubprocessError) as exc:
@@ -137,7 +134,7 @@ def uptime_s():
         started_us = int(out)
         if started_us <= 0:
             return None
-        with open("/proc/uptime") as fh:
+        with open("/proc/uptime", errors="replace") as fh:
             boot_s = float(fh.read().split()[0])
         return max(0.0, boot_s - started_us / 1_000_000)
     except (ValueError, OSError, IndexError):
@@ -310,7 +307,7 @@ def restart(attempts=RESTART_ATTEMPTS, db_path=DEFAULT_DB):
 
 
 def _notify(db_path, verdict, restart_err=None, restarted=False):
-    """Mail the verdict, at most once per RENOTIFY_AFTER while it persists.
+    """Mail once initially and at the 1h, 6h, and 24h outage thresholds.
 
     A recovery is always mailed once, so "jarvis is back" is never inferred
     from silence — the same rule the in-daemon alerts follow.
@@ -322,12 +319,18 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
     store = Store(db_path)
     try:
         last_state = store.get_meta(_M_LAST_STATE, "") or ""
-        last_alert = int(store.get_meta(_M_LAST_ALERT, 0) or 0)
         state = "healthy" if verdict["healthy"] else "down"
 
         if verdict["healthy"]:
+            # A new outage must start a fresh clock even if no outage mail
+            # was delivered, or recovery delivery is still pending.
+            store.set_meta('selfcheck_first_down', 0)
+            store.set_meta('selfcheck_escalation', -1)
             if last_state != "down":
                 store.set_meta(_M_LAST_STATE, state)
+                store.set_meta("selfcheck_retry_at", 0)
+                return ""
+            if now() < int(store.get_meta('selfcheck_retry_at', 0) or 0):
                 return ""
             body = (f"JARVIS is running again.\n\n"
                     f"newest snapshot: {verdict['newest_kind']} "
@@ -339,10 +342,24 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
                 alert._record_send(store)
                 store.set_meta(_M_LAST_STATE, state)
                 store.set_meta(_M_LAST_ALERT, 0)
+                store.set_meta('selfcheck_first_down',0)
+                store.set_meta('selfcheck_escalation',-1)
+                store.set_meta('selfcheck_retry_at',0)
+            else:
+                store.set_meta('selfcheck_retry_at',now()+300)
             return err
 
-        if last_state == "down" and now() - last_alert < RENOTIFY_AFTER:
-            return ""      # already paged recently; do not flood
+        first_down = int(store.get_meta('selfcheck_first_down',0) or 0)
+        if not first_down:
+            first_down = now()
+            store.set_meta('selfcheck_first_down',first_down)
+        level = sum(now()-first_down >= t for t in (3600,21600,86400))
+        delivered = int(store.get_meta('selfcheck_escalation',-1))
+        if last_state == 'down' and level <= delivered:
+            return ''
+        retry = int(store.get_meta('selfcheck_retry_at',0) or 0)
+        if now() < retry:
+            return ''
 
         lines = ["JARVIS is NOT monitoring this machine.", ""]
         lines += [f"  - {p}" for p in verdict["problems"]]
@@ -365,6 +382,10 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
             alert._record_send(store)
             store.set_meta(_M_LAST_STATE, state)
             store.set_meta(_M_LAST_ALERT, now())
+            store.set_meta('selfcheck_escalation',level)
+            store.set_meta('selfcheck_retry_at',0)
+        else:
+            store.set_meta('selfcheck_retry_at',now()+300)
         return err
     except Exception as exc:
         return str(exc)

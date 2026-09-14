@@ -89,7 +89,7 @@ def _finding(category, severity, title, detail, where="", host="win"):
 
 def _run(timeout=420):
     try:
-        with open(SCAN_PS1, encoding="utf-8") as fh:
+        with open(SCAN_PS1, encoding="utf-8", errors="replace") as fh:
             script = fh.read()
     except OSError as exc:
         return None, f"could not read the scan helper: {exc}"

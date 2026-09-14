@@ -26,17 +26,23 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import (alert, auditd, backdoor, bruteforce, control, controlwatch, feeds, firewall,
+from . import (alert, auditd, backdoor, bruteforce, control, controlwatch,
+               deadman, feeds, firewall,
                hidden, hunt, implant, intel, internetwatch,
                inputwatch, memscan, monitor, netwatch, posture, resourcewatch,
-               secrets, sdnotify, selfcheck, sniffing, spyware, startup, sysmon,
-               sysmon_linux, webshell)
+               impersonation, pixel, retention, secrets, sdnotify, selfcheck,
+               sniffing,
+               spyware,
+               startup, sysmon,
+               sysmon_linux, toolchain, webshell)
+from . import ledger as ledger_mod
 from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
 from . import intrusion as intrusion_mod
 from .store import DEFAULT_DB, Store
 from .util import now
+from . import collection
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "static", "dashboard.html")
@@ -58,6 +64,7 @@ PAGE = os.path.join(HERE, "static", "dashboard.html")
 #   hidden 14s   netwatch 10s   implant 15s   posture 14s   intrusion 106s
 #   firewall 18s   control 16s   spy 22s   memscan 90s   feeds 90s
 #   sysmon 1.5s (incremental; 23s before)   scan 2.2s   secrets 60s
+#   toolchain 17s (bounded $HOME walk + one stat pass per extension)
 #   coverage/hunt/gaps under 0.5s — they only touch SQLite
 #
 # Sysmon earned its short interval by reading only what happened since the
@@ -89,6 +96,8 @@ JOBS = {
     "control":  (1800,  "Control surfaces"),
     "asep":     (3600,  "Autostart points"),
     "spy":      (5400,  "Spyware & capabilities"),
+    "pixel":    (3600,  "Screen capture & tracking pixels"),
+    "identity": (900,   "Who is acting on this machine"),
     "intrusion":(5400,  "Intrusion artifacts"),
     "evasion":  (1200,  "Evasion & kernel integrity"),
     "coverage": (600,   "Self-audit & blind spots"),
@@ -101,7 +110,7 @@ JOBS = {
     "intel":    (18000, "Threat-intelligence refresh"),
     # Runs after the equally frequent intel refresh in declaration-order ties,
     # so a report can describe the newest research rather than the prior wave.
-    "report":   (18000, "Five-hour security advisory"),
+    "report":   (300, "Daily advisory & change digests"),
     # Free, unauthenticated and high volume. Each feed has its own publisher
     # cadence; this job just asks which are due.
     "feeds":    (3600,  "Bulk indicator feeds"),
@@ -111,6 +120,14 @@ JOBS = {
     "netwatch": (300,   "Network & wireless state"),
     "posture":  (7200,  "Windows security posture"),
     "backdoor": (3600,  "Backdoors & access grants"),
+    # The developer trust surface: MCP servers, agent hooks, editor extensions,
+    # git hooks and .pth files. Local filesystem only — no interop — but it
+    # walks $HOME for repositories and stats every installed extension, so it
+    # sits with the hourly collectors rather than the fast ones.
+    "toolchain":(3600,  "Developer toolchain trust"),
+    # Reads only the alert ledger and the snapshot timestamps, so it costs
+    # nothing. Frequent enough that a recurrence is noticed the same day.
+    "ledger":   (1800,  "Unresolved & recurring alerts"),
     # Cheap: the helper does the watching, this only drains its output file
     # and runs the injected-event audit. The short-interval "input_hook"
     # watchdog (declared above) is what keeps the helper itself alive.
@@ -204,14 +221,27 @@ def _run_job(name, hosts):
         return spyware.sort_findings(spyware.audit())
     if name == "intrusion":
         return intrusion_mod.sort_findings(intrusion_mod.audit())
+    if name == "pixel":
+        return pixel.audit(hosts=hosts)
+    if name == "identity":
+        store = Store(_run_job.db_path)
+        try:
+            return impersonation.audit(store, hosts=hosts)
+        finally:
+            store.close()
     if name == "evasion":
         return evasion_mod.sort_findings(evasion_mod.audit())
     if name == "bridge":
         return coverage_mod.bridge_status()
     if name == "watchdogs":
+        # Both halves of the supervision loop: the systemd timer that restarts
+        # this daemon, and the Windows task that reports it missing when WSL
+        # itself is down.
+        from . import connectivity
+        out = deadman.audit() + connectivity.audit()
         active, enabled_state = selfcheck.timer_state()
         if not active:
-            return [{
+            return out + [{
                 "category": "daemon", "severity": "high", "host": "wsl",
                 "title": "the out-of-daemon watchdog is not installed",
                 "detail": "jarvis-selfcheck.timer is absent, so nothing outside "
@@ -221,7 +251,7 @@ def _run_job(name, hosts):
                 "where": "jarvis-selfcheck.timer"}]
         err = selfcheck.ensure_timer()
         if err:
-            return [{
+            return out + [{
                 "category": "daemon", "severity": "high", "host": "wsl",
                 "title": "the out-of-daemon watchdog has stopped",
                 "detail": f"jarvis-selfcheck.timer is {active}/{enabled_state} "
@@ -230,14 +260,14 @@ def _run_job(name, hosts):
         if active != "active" or enabled_state != "enabled":
             # ensure_timer() fixed it. Say so — a watchdog that keeps needing
             # to be restarted is a finding, not a routine success.
-            return [{
+            return out + [{
                 "category": "daemon", "severity": "medium", "host": "wsl",
                 "title": "the out-of-daemon watchdog had stopped and was re-armed",
                 "detail": f"jarvis-selfcheck.timer was {active}/{enabled_state}; "
                           f"it is running again. Repeated occurrences mean "
                           f"something is stopping it.",
                 "where": "jarvis-selfcheck.timer"}]
-        return [{
+        return out + [{
             "category": "daemon", "severity": "ok", "host": "wsl",
             "title": "watchdogs supervise each other",
             "detail": f"jarvis-selfcheck.timer {active}/{enabled_state} — it "
@@ -249,7 +279,8 @@ def _run_job(name, hosts):
     if name == "report":
         store = Store(_run_job.db_path)
         try:
-            return alert.advisory_report(store, JOBS)
+            from .reporting.cadence import run as report_due
+            return report_due(store, JOBS)
         finally:
             store.close()
     if name == "boot":
@@ -260,6 +291,23 @@ def _run_job(name, hosts):
         return posture.audit(hosts=hosts)
     if name == "backdoor":
         return backdoor.audit(hosts=hosts)
+    if name == "ledger":
+        store = Store(_run_job.db_path)
+        try:
+            # A row is only "stale" relative to whether its own collector has
+            # run since; the snapshot table is where that is recorded.
+            snaps = store.get_snapshots()
+            job_ts = {k: int(v.get("ts") or 0) for k, v in snaps.items()
+                      if not v.get("error")}
+            return ledger_mod.audit(store, job_ts=job_ts)
+        finally:
+            store.close()
+    if name == "toolchain":
+        store = Store(_run_job.db_path)
+        try:
+            return toolchain.audit(store, hosts=hosts)
+        finally:
+            store.close()
     if name == "memscan":
         return memscan.audit(hosts=hosts)
     if name == "secrets":
@@ -328,6 +376,17 @@ def _run_job(name, hosts):
                                 r["name"] for r in results
                                 if r.get("kept")), "where": ""})
             feeds.prune(store)
+            # Retire-then-remove: prune() marks feed entries retired, and
+            # retention deletes the ones that have stayed retired. Without
+            # this second step the indicators table only ever grows.
+            removed = sum(r["rows"] for r in retention.apply(store))
+            if removed:
+                out.append({"category": "feed", "severity": "low",
+                            "host": "wsl",
+                            "title": f"{removed} aged rows removed",
+                            "detail": "database retention policy; run "
+                                      "`jarvis retention` to see what it keeps",
+                            "where": ""})
             return out
         finally:
             store.close()
@@ -442,8 +501,14 @@ class Scheduler(threading.Thread):
                 started = time.time()
                 findings, err = [], ""
                 try:
-                    findings = _run_job(name, self.hosts)
-                    store.save_snapshot(name, findings, max(0.0, time.time() - started))
+                    with collection.observe() as observation:
+                        findings = _run_job(name, self.hosts)
+                    err = observation.error
+                    from . import remediation
+                    findings, err = remediation.process(
+                        store, alert.load_conf(), name, findings, err,
+                        lambda: _run_job(name, self.hosts))
+                    store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
                 except Exception:
                     # One broken collector must never stop the other six.
                     err = traceback.format_exc()[-800:]
@@ -690,7 +755,7 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path in ("/", "/index.html"):
             try:
-                with open(PAGE, "r", encoding="utf-8") as fh:
+                with open(PAGE, "r", encoding="utf-8", errors="replace") as fh:
                     return self._send(200, fh.read(), "text/html; charset=utf-8")
             except OSError:
                 return self._send(500, "dashboard.html missing", "text/plain")
@@ -698,6 +763,12 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/state":
             return self._send(200, json.dumps(
                 build_state(self.db_path, self.scheduler), default=str))
+
+        if url.path in ("/api/health", "/api/live"):
+            from .protection import health
+            state = health(self.db_path, self.scheduler)
+            ok = state['live'] if url.path == '/api/live' else state['healthy']
+            return self._send(200 if ok else 503, json.dumps(state))
 
         # /api/run is a state-changing action, so it is POST-only: a cross-site
         # page cannot force one without a preflight it will not survive.

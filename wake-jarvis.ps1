@@ -35,8 +35,21 @@ param(
     # repo version over itself if they differ. install.sh bakes it in.
     [string]$RepoRoot = '',
     # Rebuild the interop bridge with `wsl --shutdown` when /mnt/c is unreadable.
-    [bool]$RecoverInterop = $true
+    #
+    # Typed as [string], not [bool], on purpose. Under -File every argument
+    # reaches the script as a string, and the [bool] binder rejects most of
+    # the forms a scheduled-task action can carry -- including the colon form
+    # this script used to register. The task then exits 1 on every run, before
+    # its first line of work, so nothing is logged and the watchdog is dead
+    # while Task Scheduler still reports it Ready. Parse the value here
+    # instead, where the failure cannot be silent.
+    [string]$RecoverInterop = 'true'
 )
+
+# Anything but an explicit off value means on, so a malformed argument fails
+# towards doing the recovery rather than silently skipping it.
+$RecoverInteropOff = @('0', 'false', 'no', 'off', '$false')
+$RecoverInteropOn  = -not ($RecoverInteropOff -contains $RecoverInterop.Trim().ToLower())
 
 $ErrorActionPreference = 'Continue'
 $logDir = Join-Path $env:LOCALAPPDATA 'WSLKeepalive'
@@ -73,12 +86,6 @@ function Invoke-WithTimeout([scriptblock]$Body, [int]$Seconds) {
 
 # --- install / remove ------------------------------------------------------
 if ($Install -or $Remove) {
-    # Retire the former product-name task so it cannot revive the old unit
-    # after JARVIS has taken ownership of the monitor port.
-    if ($TaskName -eq 'jarvis wake watchdog') {
-        Unregister-ScheduledTask -TaskName 'sentry wake watchdog' `
-            -Confirm:$false -ErrorAction SilentlyContinue
-    }
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     if ($Remove) { Say "removed task '$TaskName'"; return }
 
@@ -88,10 +95,15 @@ if ($Install -or $Remove) {
     $argline = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass ' +
                '-File "' + $self + '" -Distro "' + $Distro + '"'
     if ($RepoRoot) { $argline += ' -RepoRoot "' + $RepoRoot + '"' }
-    # Emit the literal True/False, not $True: -File mode passes args as strings
-    # and the [bool] binder parses "True"/"False" but not "$True".
-    $argline += " -RecoverInterop:$RecoverInterop"
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argline
+    # Pass the value as its own token, not with a colon. Under -File every
+    # argument arrives as a string, and the [bool] binder rejects the colon
+    # form outright -- `-RecoverInterop:True` fails with "Cannot process
+    # argument transformation", so the task exits 1 before its first line of
+    # work and the failure is invisible in the log it never reaches.
+    $argline += " -RecoverInterop $RecoverInterop"
+    # conhost --headless: -WindowStyle Hidden alone still flashes a console window each run.
+    $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" `
+        -Argument ('--headless "' + "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" + '" ' + $argline)
 
     # Two triggers: at logon, and every five minutes forever afterwards.
     $atLogon = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
@@ -187,7 +199,7 @@ if ($RepoRoot) {
             Say "re-staged from repo ($($repoTxt.Length) chars) -- re-registering task"
             & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
                 -File $self -Install -Distro $Distro -RepoRoot $RepoRoot `
-                -RecoverInterop:$RecoverInterop 2>&1 | Out-Null
+                -RecoverInterop $RecoverInterop 2>&1 | Out-Null
             exit 0
         }
     } catch {
@@ -205,24 +217,50 @@ if ($RepoRoot) {
 # during a legitimate restart as healthy so we do not race our own backstop.
 function Get-UnitState {
     $raw = (& wsl.exe -d $Distro --exec systemctl is-active jarvis.service 2>$null)
-    $lines = @($raw) | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' }
+    # Wrap the whole pipeline in @(), not just $raw. A pipeline that emits one
+    # item returns that item, not a one-element array, so $lines[-1] indexed
+    # the last *character* of "active" and [char] has no ToLower() in Windows
+    # PowerShell. The method-not-found exception left the function returning
+    # nothing, the caller read that as "the unit is not running", and the
+    # watchdog restarted a healthy daemon every five minutes.
+    $lines = @(@($raw) | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
     if ($lines.Count -eq 0) { return '' }
-    return $lines[-1].ToLower()
+    return ([string]$lines[-1]).ToLower()
+}
+
+# Read it until it answers. An empty result means the query itself failed --
+# wsl.exe was busy, or the interop call was re-entered -- and that is not the
+# same claim as "the unit is stopped". Restarting on an unreadable state is
+# how a watchdog becomes the outage: it fires every five minutes and kills
+# every in-flight collector on a unit that never stopped.
+function Get-UnitStateConfirmed($tries = 3, $gapSeconds = 5) {
+    for ($i = 1; $i -le $tries; $i++) {
+        $s = Get-UnitState
+        if ($s -ne '') { return $s }
+        if ($i -lt $tries) { Start-Sleep -Seconds $gapSeconds }
+    }
+    return ''
 }
 
 $healthy = @('active', 'activating', 'reloading')
-$state = Get-UnitState
-if ($healthy -notcontains $state) {
+$state = Get-UnitStateConfirmed
+if ($state -eq '') {
+    # Could not read the state at all. Say so and leave the unit alone; the
+    # next tick is five minutes away and systemd's own Restart=always still
+    # covers an actual crash in the meantime.
+    Say "could not read jarvis.service state after 3 attempts -- not restarting on an unknown state"
+}
+elseif ($healthy -notcontains $state) {
     # One bad read is not enough. Confirm it 5s later before acting, so a
     # restart we (or jarvis-selfcheck.timer) triggered a moment ago is not
     # counted twice.
     Start-Sleep -Seconds 5
-    $state = Get-UnitState
-    if ($healthy -notcontains $state) {
+    $state = Get-UnitStateConfirmed
+    if ($state -ne '' -and $healthy -notcontains $state) {
         Say "jarvis.service is '$state' -- restarting"
         & wsl.exe -d $Distro --exec bash -lc 'systemctl restart jarvis.service 2>/dev/null || sudo -n systemctl restart jarvis.service' 2>&1 | Out-Null
         Start-Sleep -Seconds 5
-        $state2 = Get-UnitState
+        $state2 = Get-UnitStateConfirmed
         if ($healthy -contains $state2) { Say "jarvis.service is '$state2' again" }
         else { Say "jarvis.service still '$state2' after restart -- needs a human"; exit 1 }
     }
@@ -234,7 +272,7 @@ if ($healthy -notcontains $state) {
 # that automatically is safe only if it cannot loop: require the bridge to read
 # as broken on two consecutive runs (~>= 8 min), and never shut down twice
 # inside 20 minutes.
-if ($RecoverInterop) {
+if ($RecoverInteropOn) {
     $stampBad  = Join-Path $logDir 'interop-bad-since'
     $stampDown = Join-Path $logDir 'last-shutdown'
 

@@ -19,24 +19,9 @@ BIN="$HOME/.local/bin"
 PORT="${JARVIS_PORT:-8787}"
 mkdir -p "$BIN"
 
-# One-time namespace migration. The database is copied through SQLite's online
-# backup command so a still-running legacy daemon cannot leave a torn WAL
-# snapshot. Keep the original directory as a rollback copy; JARVIS writes only
-# to the new namespace after this point.
 STATE_DIR="$HOME/.jarvis"
-LEGACY_STATE_DIR="$HOME/.sentry"
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR"
-if [ ! -e "$STATE_DIR/config.json" ] && [ -f "$LEGACY_STATE_DIR/config.json" ]; then
-  install -m 0600 "$LEGACY_STATE_DIR/config.json" "$STATE_DIR/config.json"
-  echo "migrated:  configuration -> $STATE_DIR/config.json"
-fi
-if [ ! -e "$STATE_DIR/jarvis.db" ] && [ -f "$LEGACY_STATE_DIR/sentry.db" ]; then
-  python3 -c 'import sqlite3, sys; src = sqlite3.connect(sys.argv[1]); dst = sqlite3.connect(sys.argv[2]); src.backup(dst); dst.close(); src.close()' \
-      "$LEGACY_STATE_DIR/sentry.db" "$STATE_DIR/jarvis.db"
-  chmod 600 "$STATE_DIR/jarvis.db"
-  echo "migrated:  monitoring state -> $STATE_DIR/jarvis.db"
-fi
 
 cat > "$BIN/jarvis" <<EOF
 #!/usr/bin/env bash
@@ -59,22 +44,6 @@ for arg in "$@"; do
     --windows) want_windows=true ;;
   esac
 done
-
-stop_legacy_windows_hook() {
-  command -v powershell.exe >/dev/null 2>&1 || return 0
-  powershell.exe -NoProfile -NonInteractive -Command '
-    $pidFile = Join-Path $env:LOCALAPPDATA "Sentry\input.pid"
-    if (Test-Path -LiteralPath $pidFile) {
-      try {
-        $oldPid = [int](Get-Content -LiteralPath $pidFile -Raw)
-        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$oldPid"
-        if ($proc.Name -eq "powershell.exe" -and
-            $proc.CommandLine -like "*\Sentry\inputhook.ps1*") {
-          Stop-Process -Id $oldPid -Force
-        }
-      } catch { }
-    }' >/dev/null 2>&1 || true
-}
 
 if $want_service; then
   UNIT="$HOME/.config/systemd/user"
@@ -109,10 +78,6 @@ TasksMax=4096
 WantedBy=default.target
 EOF
   systemctl --user daemon-reload
-  # Stop the previous namespace before binding the same dashboard port.
-  systemctl --user disable --now sentry.service 2>/dev/null || true
-  systemctl --user disable --now sentry-selfcheck.timer 2>/dev/null || true
-  stop_legacy_windows_hook
   systemctl --user enable --now jarvis.service
   echo "service:   systemctl --user status jarvis"
   echo "logs:      journalctl --user -u jarvis -f"
@@ -166,9 +131,6 @@ WantedBy=multi-user.target
 EOF
   systemctl --user disable --now jarvis.service 2>/dev/null || true
   sudo systemctl daemon-reload
-  # The old and new units share one port and must never run together.
-  sudo systemctl disable --now sentry.service 2>/dev/null || true
-  stop_legacy_windows_hook
   sudo systemctl enable --now jarvis.service
   echo "now managed by:  sudo systemctl status jarvis"
   echo "verify:          systemctl show jarvis -p Nice -p OOMScoreAdjust -p CPUWeight"
@@ -254,8 +216,6 @@ at logon, with no visible window.
 
 Run this ONCE in Windows PowerShell (no elevation needed):
 
-  Unregister-ScheduledTask -TaskName "WSL sentry 24x7" `
-       -Confirm:$false -ErrorAction SilentlyContinue
   $a = New-ScheduledTaskAction -Execute "wsl.exe" `
        -Argument "-d Ubuntu --exec /bin/true"
   $t = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME

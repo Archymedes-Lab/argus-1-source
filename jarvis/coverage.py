@@ -36,7 +36,8 @@ def _finding(category, severity, title, detail, where="", host="wsl"):
 
 def _cmd(args, timeout=10):
     try:
-        r = subprocess.run(args, capture_output=True, timeout=timeout, text=True)
+        r = subprocess.run(args, capture_output=True, timeout=timeout,
+                           text=True, errors="replace")
         return r.stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return ""
@@ -137,12 +138,12 @@ def daemon_health():
                     "-p", "MainPID", "--value"])
     if mainpid.isdigit() and mainpid != "0":
         try:
-            with open(f"/proc/{mainpid}/stat") as fh:
+            with open(f"/proc/{mainpid}/stat", errors="replace") as fh:
                 nice = int(fh.read().split(") ", 1)[1].split()[16])
         except (OSError, IndexError, ValueError):
             nice = 0
         try:
-            with open(f"/proc/{mainpid}/oom_score_adj") as fh:
+            with open(f"/proc/{mainpid}/oom_score_adj", errors="replace") as fh:
                 oom = int(fh.read().strip())
         except (OSError, ValueError):
             oom = 0
@@ -235,7 +236,7 @@ def visibility():
 
     # -- io_uring ----------------------------------------------------------
     try:
-        with open("/proc/sys/kernel/io_uring_disabled") as fh:
+        with open("/proc/sys/kernel/io_uring_disabled", errors="replace") as fh:
             val = fh.read().strip()
     except OSError:
         val = ""

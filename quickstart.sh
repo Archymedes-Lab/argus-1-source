@@ -2,8 +2,7 @@
 # One command to bring JARVIS fully online and keep it there.
 #
 #   ./quickstart.sh                 install + seal (systemd service, watchdog,
-#                                   self-check, Windows wake task), clear the
-#                                   pre-rename sentry-* units, enable linger,
+#                                   self-check, Windows wake task), enable linger,
 #                                   apply the reversible browser defaults, and
 #                                   pop one Windows UAC prompt for firewall
 #                                   logging + ASR rules
@@ -31,34 +30,6 @@ done
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 have_bridge() { command -v powershell.exe >/dev/null 2>&1; }
-
-remove_legacy_units() {
-  # The rename left sentry-selfcheck.{service,timer} enabled; the service
-  # fails every run with "No module named sentry" and the backdoor collector
-  # keeps flagging it. Nothing depends on it.
-  local changed=0
-  for unit in sentry-selfcheck.timer sentry-selfcheck.service sentry.service; do
-    if systemctl --user list-unit-files "$unit" >/dev/null 2>&1; then
-      systemctl --user disable --now "$unit" >/dev/null 2>&1 || true
-      changed=1
-    fi
-  done
-  for f in "$HOME/.config/systemd/user/sentry-selfcheck.service" \
-           "$HOME/.config/systemd/user/sentry-selfcheck.timer" \
-           "$HOME/.config/systemd/user/sentry.service"; do
-    [ -e "$f" ] && { rm -f "$f"; changed=1; }
-  done
-  if [ -e /etc/systemd/system/sentry.service ]; then
-    sudo systemctl disable --now sentry.service >/dev/null 2>&1 || true
-    sudo rm -rf /etc/systemd/system/sentry.service /etc/systemd/system/sentry.service.d
-    changed=1
-  fi
-  if [ "$changed" = 1 ]; then
-    systemctl --user daemon-reload || true
-    sudo systemctl daemon-reload 2>/dev/null || true
-    echo "removed pre-rename sentry-* units"
-  fi
-}
 
 HEALTH_PY='
 import json, sys, time
@@ -123,29 +94,26 @@ if [ "$mode" = check ]; then
   exit 0
 fi
 
-total=$([ "$do_windows" = 1 ] && echo 5 || echo 4)
+total=$([ "$do_windows" = 1 ] && echo 4 || echo 3)
 
 say "1/$total  Installing"
 if [ "$mode" = seal ]; then ./install.sh --seal; else ./install.sh --service; fi
 
-say "2/$total  Clearing pre-rename units"
-remove_legacy_units
-
-say "3/$total  Enabling linger (survives logout)"
+say "2/$total  Enabling linger (survives logout)"
 if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != "yes" ]; then
   sudo loginctl enable-linger "$USER" && echo "linger enabled for $USER"
 else
   echo "linger already on"
 fi
 
-say "4/$total  Waiting for the dashboard"
+say "3/$total  Waiting for the dashboard"
 for i in $(seq 1 30); do
   curl -fsS "http://127.0.0.1:$PORT/api/state" >/dev/null 2>&1 && { echo "up after ${i}s"; break; }
   sleep 1
 done
 
 if [ "$do_windows" = 1 ]; then
-  say "5/$total  Windows hardening"
+  say "4/$total  Windows hardening"
   windows_phase
 fi
 

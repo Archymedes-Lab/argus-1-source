@@ -23,6 +23,7 @@ import re
 import subprocess
 
 from . import collect_windows
+from . import collection
 from .util import short
 
 # Commercial remote-control agents. Presence is not proof of compromise -- it is
@@ -322,6 +323,7 @@ def _ps_json(script, timeout=120):
     ends, and the only symptom is empty output.
     """
     if not collect_windows.available():
+        collection.failed('windows', 'interop unavailable')
         return None
 
     for attempt in (1, 2):
@@ -332,14 +334,21 @@ def _ps_json(script, timeout=120):
                 capture_output=True, timeout=timeout, cwd="/",
             )
         except (OSError, subprocess.TimeoutExpired):
+            collection.failed('windows', 'PowerShell failed or timed out')
             return None
 
         blob = (r.stdout.decode("ascii", "ignore")
                 .strip().replace("\r", "").replace("\n", ""))
         if blob:
             try:
-                return json.loads(base64.b64decode(blob).decode("utf-8", "replace"))
+                value = json.loads(base64.b64decode(blob).decode("utf-8", "replace"))
+                if value is None:
+                    collection.failed('windows', 'PowerShell returned null')
+                else:
+                    collection.succeeded('windows')
+                return value
             except Exception:
+                collection.failed('windows', 'invalid PowerShell payload')
                 return None
 
         if attempt == 1:
@@ -347,7 +356,9 @@ def _ps_json(script, timeout=120):
             # cached value so ensure_interop() picks a fresh one, and retry.
             os.environ.pop("WSL_INTEROP", None)
             if not collect_windows.ensure_interop():
+                collection.failed('windows', 'interop retry unavailable')
                 return None
+    collection.failed('windows', 'PowerShell returned no payload')
     return None
 
 
@@ -398,7 +409,7 @@ def _verified_maintenance_task(task, data):
     remains a critical persistence finding.
     """
     name = (task.get("name") or "").casefold()
-    if name not in _TRUSTED_IDE_TASKS and name != "jarvis wake watchdog":
+    if name not in _TRUSTED_IDE_TASKS and name not in ("jarvis wake watchdog", "jarvis independent health monitor", "jarvis connectivity guard"):
         return False, "not a known maintenance task"
 
     actions = _aslist(task.get("actions"))
@@ -406,7 +417,17 @@ def _verified_maintenance_task(task, data):
         return False, "expected exactly one action"
     action = actions[0]
     execute = (action.get("execute") or "").replace("/", "\\").casefold()
-    if execute.rsplit("\\", 1)[-1] not in ("powershell.exe", "powershell"):
+    arguments = action.get("arguments") or ""
+    if re.fullmatch(r"(?:%systemroot%|c:\\windows)\\system32\\conhost\.exe", execute):
+        # conhost --headless is the only launch path that never shows a window;
+        # accept it solely as a wrapper around System32 Windows PowerShell.
+        wrapped = re.match(
+            r"--headless\s+\"?(?:%SystemRoot%|C:\\Windows)\\System32\\WindowsPowerShell"
+            r"\\v1\.0\\powershell\.exe\"?\s+(.*)$", arguments, re.I | re.S)
+        if not wrapped:
+            return False, "headless console host does not wrap Windows PowerShell"
+        arguments = wrapped.group(1)
+    elif execute.rsplit("\\", 1)[-1] not in ("powershell.exe", "powershell"):
         return False, "action is not Windows PowerShell"
     if (task.get("runLevel") or "").casefold() != "limited":
         return False, "principal is not limited"
@@ -417,7 +438,22 @@ def _verified_maintenance_task(task, data):
         return False, "principal is not the current Windows user"
 
     local = (data.get("localAppData") or "").rstrip("\\/")
-    if name == "jarvis wake watchdog":
+    if name == "jarvis connectivity guard":
+        repo_root = os.path.dirname(os.path.dirname(__file__))
+        spec = {"script":"connectivity-jarvis.ps1", "logon":"interactive",
+                "hash":_normalized_text_hash(os.path.join(repo_root,"connectivity-jarvis.ps1"))}
+        expected_args = (
+            rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
+            rf'-File "{re.escape(local)}\\Jarvis\\Connectivity\\connectivity-jarvis\.ps1" '
+            rf'-StateRoot "{re.escape(local)}\\Jarvis\\Connectivity"$')
+    elif name == "jarvis independent health monitor":
+        repo_root = os.path.dirname(os.path.dirname(__file__))
+        spec = {"script":"deadman-jarvis.ps1", "logon":"interactive",
+                "hash":_normalized_text_hash(os.path.join(repo_root,"deadman-jarvis.ps1"))}
+        expected_args = (
+            rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
+            rf'-File "{re.escape(local)}\\Jarvis\\Deadman\\deadman-jarvis\.ps1"$')
+    elif name == "jarvis wake watchdog":
         repo_root = os.path.dirname(os.path.dirname(__file__))
         spec = {
             "script": "wake-jarvis.ps1",
@@ -429,7 +465,7 @@ def _verified_maintenance_task(task, data):
             rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
             rf'-File "{re.escape(local)}\\WSLKeepalive\\wake-jarvis\.ps1" '
             rf'-Distro "Ubuntu" -RepoRoot "{re.escape(repo_root)}" '
-            rf'-RecoverInterop:True$'
+            rf'-RecoverInterop true$'
         )
     else:
         spec = _TRUSTED_IDE_TASKS[name]
@@ -440,7 +476,7 @@ def _verified_maintenance_task(task, data):
 
     if (task.get("logonType") or "").casefold() != spec["logon"]:
         return False, f'logon type is not {spec["logon"]}'
-    if not re.fullmatch(expected_args, action.get("arguments") or "", re.I):
+    if not re.fullmatch(expected_args, arguments, re.I):
         return False, "arguments differ from the reviewed definition"
     if not spec["hash"] or (action.get("targetHash") or "").casefold() != spec["hash"]:
         return False, "script fingerprint differs from the reviewed version"
@@ -467,7 +503,7 @@ def audit_windows():
         if OBFUSCATED.search(action):
             sev = "critical"
         if (t.get("name") or "").casefold() in (
-                "jarvis wake watchdog", "wsl ide keepalive",
+                "jarvis wake watchdog", "jarvis independent health monitor", "wsl ide keepalive",
                 "wsl ide keepalive watchdog"):
             sev = "critical"
             action = f"{action} [verification failed: {trust_detail}]"

@@ -104,6 +104,15 @@ CORPUS = {
         "malicious VSCode extension or IDE plugin analysis with indicators",
         "container escape and Docker socket abuse technical analysis",
     ],
+    # The agent surface is new enough that the research describing it is not
+    # yet indexed under the malware or supply-chain phrasing above: the primary
+    # sources call it tool poisoning, auto-execution or skill distribution.
+    "agent-toolchain": [
+        "MCP server tool poisoning and IDE auto-execution vulnerability analysis",
+        "malicious AI coding agent skill or plugin marketplace campaign with indicators",
+        "prompt injection through repository files targeting AI coding agents",
+        "backdoored IDE extension supply chain incident with detection guidance",
+    ],
     "exploited": [
         "actively exploited vulnerability with observed in the wild exploitation artifacts",
         "CISA known exploited vulnerability technical analysis and detection",
@@ -353,7 +362,7 @@ def _today():
 
 def daily_budget():
     try:
-        with open(CONFIG_PATH) as fh:
+        with open(CONFIG_PATH, errors="replace") as fh:
             return float(json.load(fh).get("daily_budget", DEFAULT_DAILY_BUDGET))
     except (OSError, ValueError, TypeError):
         return DEFAULT_DAILY_BUDGET
@@ -380,7 +389,7 @@ def load_key():
     if env:
         return env
     try:
-        with open(CONFIG_PATH) as fh:
+        with open(CONFIG_PATH, errors="replace") as fh:
             return (json.load(fh).get("exa_api_key") or "").strip()
     except (OSError, ValueError):
         return ""
@@ -391,7 +400,7 @@ def save_key(key):
     cfg = {}
     if os.path.exists(CONFIG_PATH):
         try:
-            with open(CONFIG_PATH) as fh:
+            with open(CONFIG_PATH, errors="replace") as fh:
                 cfg = json.load(fh)
         except ValueError:
             cfg = {}
@@ -593,7 +602,7 @@ def daemon_options(store):
     unbounded scheduled search.
     """
     try:
-        with open(CONFIG_PATH) as fh:
+        with open(CONFIG_PATH, errors="replace") as fh:
             conf = json.load(fh) or {}
     except (OSError, ValueError):
         conf = {}

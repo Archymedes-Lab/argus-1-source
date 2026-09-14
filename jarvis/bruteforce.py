@@ -57,7 +57,8 @@ def _linux_lines():
         r = subprocess.run(
             ["journalctl", "--since", since, "--no-pager", "-q",
              "SYSLOG_FACILITY=10", "-o", "cat"],
-            capture_output=True, text=True, timeout=30)
+            capture_output=True, text=True,
+            errors="replace", timeout=30)
         if r.returncode == 0 and r.stdout.strip():
             return r.stdout.splitlines()
     except (OSError, subprocess.SubprocessError):

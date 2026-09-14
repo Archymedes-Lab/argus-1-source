@@ -89,6 +89,18 @@ COVERAGE = {
     "T1505.003": "webshell — dispatcher-shaped scripts in web document roots",
     "T1112":     "asep / control / posture — autostart and security-relevant "
                  "registry surface",
+    # Added with the toolchain collector: the developer trust surface, where
+    # execution comes from a config file rather than from a service or a key.
+    "T1176":     "toolchain / intrusion — software extensions",
+    "T1176.001": "intrusion — browser extension artefacts",
+    "T1176.002": "toolchain — IDE/editor extension inventory, version drift and "
+                 "post-install modification",
+    "T1195.001": "toolchain — package registry and index redirection "
+                 "(~/.npmrc, pip.conf)",
+    "T1546.016": "toolchain — executable .pth lines that run on every Python "
+                 "interpreter start",
+    "T1059.006": "toolchain / sysmon_linux — Python execution, including "
+                 "site-triggered startup code",
 }
 
 # Techniques worth naming explicitly as uncovered when intel raises them, with
@@ -96,7 +108,12 @@ COVERAGE = {
 KNOWN_BLIND = {
     "T1555": "credential stores beyond browsers — Windows Credential Manager "
              "and OS keyrings are not read",
-    "T1195": "supply chain compromise — installed packages are not verified",
+    # Narrowed by the toolchain collector, not closed: registry redirection,
+    # editor-extension drift and repo-supplied agent/MCP/git hooks are checked,
+    # but the contents of an installed package are still taken on trust.
+    "T1195": "supply chain compromise — package *sources* and developer-tool "
+             "configuration are audited by `toolchain`, but installed package "
+             "contents are not verified against their publisher",
     "T1554": "compromised host binary — no integrity baseline for system files",
     "T1505": "server software component — no web/server module auditing",
     "T1567": "exfiltration to web service — egress is seen but not classified",
@@ -281,9 +298,64 @@ def check_peers(store):
     return out
 
 
+# Directories under C:\Windows that any user or service can write to. A
+# Microsoft-signed binary sitting in one of these is still a drop — attackers
+# bring signed hosts along to sideload from — so a signature does not clear it.
+_WIN_WRITABLE = ("c:/windows/temp/", "c:/windows/tasks/", "c:/windows/tracing/",
+                 "c:/windows/debug/", "c:/windows/registration/crmlog/",
+                 "c:/windows/system32/spool/", "c:/windows/system32/tasks/")
+
+
+# Files every Debian/Ubuntu system has but dpkg does not register (created by
+# maintainer scripts or the installer). Detection writeups name them as the
+# thing an attacker modifies, which says nothing about whether they exist.
+_STOCK_UNREGISTERED = frozenset((
+    "/etc/profile", "/etc/passwd", "/etc/shadow", "/etc/group", "/etc/gshadow",
+    "/etc/hosts", "/etc/hostname", "/etc/resolv.conf", "/etc/fstab",
+    "/etc/sudoers", "/etc/crontab", "/etc/environment", "/etc/ld.so.cache",
+    "/etc/machine-id", "/etc/shells", "/etc/os-release"))
+
+
+def _win_norm(path):
+    p = path.replace("\\", "/")
+    while "//" in p:
+        p = p.replace("//", "/")
+    return p.lower()
+
+
+def _microsoft_signed(paths):
+    """Subset of Windows paths carrying a valid Microsoft Authenticode signature.
+
+    Writeups name stock binaries (rundll32, dllhost, explorer) that malware
+    abuses, and the feed records them as attacker paths. The file existing is
+    then meaningless. Paths come from feeds, so they travel as base64 JSON and
+    are never interpolated into the script.
+    """
+    if not paths:
+        return set()
+    import base64
+    import json
+    from .control import _ps_json
+    blob = base64.b64encode(json.dumps(sorted(paths)).encode()).decode()
+    script = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        f"$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'))"
+        "|ConvertFrom-Json;"
+        "$ok=@(foreach($x in $p){$s=Get-AuthenticodeSignature -LiteralPath $x;"
+        "if($s.Status -eq 'Valid' -and $s.SignerCertificate.Subject -match "
+        "'O=Microsoft Corporation'){$x}});"
+        "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
+        "(ConvertTo-Json -InputObject $ok -Compress)))")
+    result = _ps_json(script, timeout=60)
+    if isinstance(result, str):
+        result = [result]
+    return set(result) if isinstance(result, list) else set()
+
+
 def check_paths(store):
     """Does any attacker-dropped path actually exist here?"""
     out = []
+    stock = {}      # windows path -> finding args, pending a signature check
     for r in _active(store, "path"):
         raw = r["norm"]
         candidates = []
@@ -301,14 +373,26 @@ def check_paths(store):
                     continue        # sockets, fifos and devices are not payloads
             except (OSError, ValueError):
                 continue
+            if host == "wsl" and path in _STOCK_UNREGISTERED:
+                continue        # exists on every system; tampering is audited elsewhere
             if host == "wsl" and _dpkg_owns(path):
                 continue        # a package owns it: present by design
-            out.append(_finding(
+            finding = _finding(
                 "dropped file", "high",
                 f"a file named in threat intelligence exists here: {raw}",
                 (r["context"] or "listed as an attacker-created path")
                 + " — verify before deleting; the name may simply collide",
-                r["source_url"], host))
+                r["source_url"], host)
+            norm = _win_norm(raw)
+            if (host == "win" and norm.startswith("c:/windows/")
+                    and not norm.startswith(_WIN_WRITABLE)):
+                stock.setdefault(raw.replace("\\\\", "\\"), []).append(finding)
+            else:
+                out.append(finding)
+    signed = _microsoft_signed(set(stock))
+    for path, findings in stock.items():
+        if path not in signed:
+            out.extend(findings)    # unsigned or unverifiable: still report
     return out
 
 

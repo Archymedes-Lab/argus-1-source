@@ -119,14 +119,25 @@ $since = __SINCE__
 # desktop it is most of the log by volume, and dropping it is most of the cost.
 # The remaining types split by frequency: 8/10/25 are rare and each one
 # matters, while 1/7/22 are continuous and only need a representative sample.
-$rare  = Get-WinEvent -FilterHashtable @{
+function Read-Events($filter, $limit) {
+  try { @(Get-WinEvent -FilterHashtable $filter -MaxEvents $limit -ErrorAction Stop) }
+  catch {
+    if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { $script:readFailed=$true }
+    @()
+  }
+}
+$readFailed=$false
+$rare  = @(Read-Events @{
         LogName='Microsoft-Windows-Sysmon/Operational'
         Id=8,10,25
-        StartTime=$since } -MaxEvents 800 -EA SilentlyContinue
-$bulk  = Get-WinEvent -FilterHashtable @{
+        StartTime=$since } 801)
+$bulk  = @(Read-Events @{
         LogName='Microsoft-Windows-Sysmon/Operational'
         Id=1,7,22
-        StartTime=$since } -MaxEvents __MAX__ -EA SilentlyContinue
+        StartTime=$since } (__MAX__ + 1))
+$o.complete = (-not $readFailed -and $rare.Count -le 800 -and $bulk.Count -le __MAX__)
+$o.readFailed = $readFailed
+$o.capped = ($rare.Count -gt 800 -or $bulk.Count -gt __MAX__)
 $ev = @($rare) + @($bulk)
 
 $rows = foreach ($e in $ev) {
@@ -134,6 +145,11 @@ $rows = foreach ($e in $ev) {
   foreach ($n in ([xml]$e.ToXml()).Event.EventData.Data) { $d[$n.Name] = $n.'#text' }
   [pscustomobject]@{
     id      = $e.Id
+    record_id = $e.RecordId
+    process_guid = [string]$d['ProcessGuid']
+    parent_guid = [string]$d['ParentProcessGuid']
+    process_id = [string]$d['ProcessId']
+    parent_cmdline = [string]$d['ParentCommandLine']
     time    = $e.TimeCreated.ToString('o')
     # ProcessAccess (10) and CreateRemoteThread (8) name the actor
     # SourceImage, not Image — reading the wrong field left every injection
@@ -185,14 +201,17 @@ def _base(path):
 
 
 def audit(store=None, hours=24, hosts=("win",), incremental=False):
+    from . import collection
     if "win" not in hosts:
         return []
 
     st = status()
     if not st:
+        collection.failed('sysmon', 'status unavailable')
         return [_finding("visibility", "medium", "Sysmon status unavailable",
                          "powershell.exe returned no data")]
     if not st.get("installed"):
+        collection.failed('sysmon', 'not installed')
         return [_finding(
             "visibility", "medium", "Sysmon is not installed",
             "without an interception layer, anything that starts and exits "
@@ -200,6 +219,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             "credential dumping cannot be detected by polling",
             "Sysmon64.exe -i")]
     if not st.get("readable"):
+        collection.failed('sysmon', 'log unreadable')
         return [_finding(
             "visibility", "high",
             "Sysmon is running but its log cannot be read by this account",
@@ -217,11 +237,20 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             # A minute of overlap, so an event landing between the query and
             # the timestamp write is seen twice rather than never.
             minutes = max(2, min(int((now() - last) / 60) + 1, hours * 60))
-        store.set_meta("sysmon_last_run", now())
 
+    query_started = now()
     data = _fetch(hours=hours, minutes=minutes)
+    if 'events' not in data or data.get('readFailed'):
+        collection.failed('sysmon', 'event query incomplete; cursor retained')
+        return [_finding('visibility', 'high', 'Sysmon event query failed',
+                         'Previous cursor retained; missing events are not a clean result.', CHANNEL)]
     events = _aslist(data.get("events"))
     out = []
+    if not data.get('complete', False):
+        collection.failed('sysmon', 'event query capped or completeness unverified; cursor retained')
+        out.append(_finding('visibility', 'high', 'Sysmon event coverage is partial',
+                            'The query cap was reached or completeness was not established. '
+                            'The cursor is retained; use native paged ingestion to drain the backlog.', CHANNEL))
     window = (f"{minutes} minutes" if minutes else f"{hours}h")
 
     lsass_hits, remote_threads, tampering = [], [], []
@@ -316,9 +345,14 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
     # new events, so anything worth reporting has to outlive its own snapshot.
     if store is not None:
         out = _remember(store, out, hours)
+        if incremental and data.get('complete'):
+            # Findings are durable first. A crash here replays evidence instead
+            # of skipping unseen records. The native store makes this atomic.
+            store.set_meta('sysmon_last_run', query_started)
+            store.commit()
 
     out.append(_finding(
-        "telemetry", "ok",
+        "telemetry", "ok" if data.get('complete') else "medium",
         f"Sysmon delivered {len(events)} events in the last {window}",
         f"{len(dns_names)} distinct DNS names and {len(proc_hashes)} process "
         f"hashes were checked against the indicator corpus; "

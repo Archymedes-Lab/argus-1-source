@@ -30,7 +30,8 @@ from .control import _aslist, _ps_json
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"malware defense": 0, "platform integrity": 1, "data at rest": 2,
              "account & access": 3, "attack surface": 4, "visibility": 5,
-             "licensing": 6}
+             "licensing": 6, "operations": 7}
+CONHOST = "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}"
 
 
 def _finding(category, severity, title, detail, fix="", host="win"):
@@ -105,6 +106,11 @@ $o.pslog = [pscustomobject]@{
   scriptblock=RVal 'HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' 'EnableScriptBlockLogging'
   module=RVal 'HKLM:\Software\Policies\Microsoft\Windows\PowerShell\ModuleLogging' 'EnableModuleLogging'
   transcript=RVal 'HKLM:\Software\Policies\Microsoft\Windows\PowerShell\Transcription' 'EnableTranscripting'
+}
+
+$o.consolehost = [pscustomobject]@{
+  console=[string](RVal 'HKCU:\Console\%%Startup' 'DelegationConsole')
+  terminal=[string](RVal 'HKCU:\Console\%%Startup' 'DelegationTerminal')
 }
 
 $o.autologon = [pscustomobject]@{
@@ -243,7 +249,7 @@ def elevated_data(timeout=300):
         return None, f"could not launch an elevated shell: {exc}"
 
     try:
-        with open(out_wsl) as fh:
+        with open(out_wsl, errors="replace") as fh:
             blob = fh.read().strip().replace("\r", "").replace("\n", "")
     except OSError:
         return None, ("no elevated result was produced — the UAC prompt was "
@@ -528,6 +534,15 @@ def audit(hosts=("win",), elevate=False):
             "visibility", "low", "PowerShell transcription is off",
             "transcripts record command output, not just the commands",
             "enable Transcription policy with an output directory"))
+
+    ch = d.get("consolehost")
+    if isinstance(ch, dict) and str(ch.get("console") or "").upper() != CONHOST:
+        out.append(_finding(
+            "operations", "low", "Background monitors can flash terminal windows",
+            "the default terminal is Windows Terminal (or 'Let Windows decide'), "
+            "which ignores -WindowStyle Hidden, so JARVIS's scheduled PowerShell "
+            "monitors open visible windows every minute",
+            r"powershell -ExecutionPolicy Bypass -File fix-console-host.ps1"))
 
     upd = d.get("updates") or {}
     hot = _aslist(d.get("hotfix"))

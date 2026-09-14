@@ -4,11 +4,12 @@
 # hardware. A low-level hook is the only place that tag is visible, so this
 # installs one and watches for it.
 #
-# It deliberately does NOT record what was typed. A hook that logs key values
-# is a keylogger, and writing one to an unencrypted disk would be a worse
-# problem than the one it detects. Only injected events are recorded, and only
-# as metadata: when, which flags, a coarse key class, and which window had
-# focus. Real keystrokes are counted and nothing more.
+# It deliberately does NOT record what was typed. A hook that logs arbitrary
+# key values is a keylogger, and writing one to an unencrypted disk would be a
+# worse problem than the one it detects. Only injected events are recorded in
+# full (coarse class only), plus a short allowlist of real key families the
+# operator asked to timestamp: =/+, /?, ./ >, and digits 0-9. Everything else
+# is counted without identity.
 param(
     [Parameter(Mandatory = $true)][string]$OutFile,
     [int]$HeartbeatSeconds = 60
@@ -73,6 +74,7 @@ public static class JarvisInputHook
     public static long WindowRealKeyGaps, WindowRealKeySub20, WindowRealKeySub8;
     public static long WindowCadRunMax;
     public static long WindowEqualsKeys, WindowSlashKeys, WindowPeriodKeys;
+    public static long WindowDigitKeys;
 
     // Injected key-up events, and the count of distinct injected cursor-move
     // bursts (a run of injected moves with no >400 ms gap). Key-down alone
@@ -115,11 +117,59 @@ public static class JarvisInputHook
     // A coarse bucket, recorded only for injected events. Enough to tell an
     // injected Enter from an injected character without ever reconstructing
     // what was typed.
+    // Volume, media and launch keys. These carry no text -- knowing that the
+    // volume-down key was pressed reveals nothing about what was typed -- so
+    // unlike ordinary keystrokes they are recorded in full, injected or not.
+    // That is the point: a control activation the user did not perform is only
+    // visible if the real ones are logged too.
+    public static string ControlClass(uint vk)
+    {
+        switch (vk) {
+            case 0xAD: return "volume-mute";
+            case 0xAE: return "volume-down";
+            case 0xAF: return "volume-up";
+            case 0xB0: return "media-next";
+            case 0xB1: return "media-prev";
+            case 0xB2: return "media-stop";
+            case 0xB3: return "media-play-pause";
+            case 0xB4: return "launch-mail";
+            case 0xB5: return "launch-media-select";
+            case 0xB6: return "launch-app1";
+            case 0xB7: return "launch-app2";
+            case 0xA6: return "browser-back";
+            case 0xA7: return "browser-forward";
+            case 0xA8: return "browser-refresh";
+            case 0xA9: return "browser-stop";
+            case 0xAA: return "browser-search";
+            case 0xAB: return "browser-favorites";
+            case 0xAC: return "browser-home";
+            default:   return "";
+        }
+    }
+
+    // Counted separately so a control activation is never lost inside the
+    // aggregate keystroke totals.
+    public static long ControlKeys, ControlKeysInjected;
+    static uint _lastCtrlTick;
+
+    // Milliseconds since the last control key of any kind, capped. The volume
+    // sampler uses this to decide whether a level change had a key behind it.
+    public static long MsSinceControlKey()
+    {
+        if (_lastCtrlTick == 0) return 999999;
+        long d = (long)unchecked((uint)Environment.TickCount - _lastCtrlTick);
+        return d < 0 ? 999999 : d;
+    }
+
     static string KeyClass(uint vk)
     {
         if (vk == 0xBB) return "equals-plus";       // = / + physical key
         if (vk == 0xBF || vk == 0x6F) return "slash-question";
         if (vk == 0xBE || vk == 0x6E) return "period-greater";
+        // Top-row and numpad digits. Named individually so a phantom "3"
+        // can be located; not a general character log.
+        if (vk >= 0x30 && vk <= 0x39) return "digit-" + (vk - 0x30);
+        if (vk >= 0x60 && vk <= 0x69) return "digit-" + (vk - 0x60);
         if (vk >= 0x70 && vk <= 0x87) return "function";
         if (vk == 0x0D) return "enter";
         if (vk == 0x09) return "tab";
@@ -132,7 +182,13 @@ public static class JarvisInputHook
         return "character";
     }
 
-    static string Foreground()
+    static bool IsDigitClass(string cls)
+    {
+        return cls.Length == 7 && cls.StartsWith("digit-")
+            && cls[6] >= '0' && cls[6] <= '9';
+    }
+
+    public static string Foreground()
     {
         try {
             uint pid;
@@ -149,6 +205,8 @@ public static class JarvisInputHook
         if (vk == 0xBB) WindowEqualsKeys++;
         if (vk == 0xBF || vk == 0x6F) WindowSlashKeys++;
         if (vk == 0xBE || vk == 0x6E) WindowPeriodKeys++;
+        if ((vk >= 0x30 && vk <= 0x39) || (vk >= 0x60 && vk <= 0x69))
+            WindowDigitKeys++;
         if (_lastRealKeyTick != 0) {
             long gap = (long)(eventTime - _lastRealKeyTick);
             // Key auto-repeat (a held key) is regular and fast but benign, so
@@ -181,15 +239,30 @@ public static class JarvisInputHook
 
     static void Write(string kind, uint flags, string cls)
     {
+        Write(kind, flags, cls, true);
+    }
+
+    static void Write(string kind, uint flags, string cls, bool injected)
+    {
         var line = new StringBuilder();
         line.Append("{\"ts\":").Append(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         line.Append(",\"kind\":\"").Append(kind).Append("\"");
-        line.Append(",\"injected\":1");
+        line.Append(",\"injected\":").Append(injected ? 1 : 0);
         line.Append(",\"lower_il\":").Append((flags & LLKHF_LOWER_IL_INJECTED) != 0 ? 1 : 0);
         line.Append(",\"class\":\"").Append(cls).Append("\"");
         line.Append(",\"fg\":\"").Append(Foreground().Replace("\"", "")).Append("\"}");
         lock (_lock) {
             try { File.AppendAllText(_out, line.ToString() + Environment.NewLine); }
+            catch { }
+        }
+    }
+
+    // Used by the volume sampler below. Goes through the same lock so a state
+    // line can never interleave with a key line mid-write.
+    public static void WriteState(string json)
+    {
+        lock (_lock) {
+            try { File.AppendAllText(_out, json + Environment.NewLine); }
             catch { }
         }
     }
@@ -204,6 +277,13 @@ public static class JarvisInputHook
             bool injected = (d.flags & LLKHF_INJECTED) != 0;
             if (down || up) Latency(d.time);
             if (down) {
+                string ctl = ControlClass(d.vkCode);
+                if (ctl.Length > 0) {
+                    ControlKeys++;
+                    if (injected) ControlKeysInjected++;
+                    _lastCtrlTick = (uint)Environment.TickCount;
+                    Write("control-key", d.flags, ctl, injected);
+                }
                 if (injected) {
                     InjectedKeys++;
                     WindowInjectedKeys++;
@@ -212,6 +292,18 @@ public static class JarvisInputHook
                     RealKeys++;
                     WindowRealKeys++;
                     Cadence(d.time, d.vkCode);
+                    // Watched real-key families are already counted in
+                    // aggregate. Timestamping them adds resolution, not a
+                    // general content log: a phantom "." or "3" gets a time,
+                    // a foreground window and a real/injected verdict, and
+                    // letters / other symbols stay anonymous counts only.
+                    string pc = KeyClass(d.vkCode);
+                    if (pc == "period-greater" || pc == "slash-question" ||
+                        pc == "equals-plus") {
+                        Write("punct-key", d.flags, pc, false);
+                    } else if (IsDigitClass(pc)) {
+                        Write("digit-key", d.flags, pc, false);
+                    }
                 }
             } else if (up && injected) {
                 InjectedKeyUps++;
@@ -301,11 +393,13 @@ public static class JarvisInputHook
                 ",\"cad_run_max\":" + WindowCadRunMax +
                 ",\"equals_keys\":" + WindowEqualsKeys +
                 ",\"slash_keys\":" + WindowSlashKeys +
-                ",\"period_keys\":" + WindowPeriodKeys + "}";
+                ",\"period_keys\":" + WindowPeriodKeys +
+                ",\"digit_keys\":" + WindowDigitKeys + "}";
             WindowRealKeys = WindowInjectedKeys = 0;
             WindowRealKeyGaps = WindowRealKeySub20 = WindowRealKeySub8 = 0;
             WindowCadRunMax = 0;
             WindowEqualsKeys = WindowSlashKeys = WindowPeriodKeys = 0;
+            WindowDigitKeys = 0;
             return value;
         }
     }
@@ -349,5 +443,90 @@ $pulse = New-Object System.Windows.Forms.Timer
 $pulse.Interval = 10000
 $pulse.Add_Tick($writePulse)
 $pulse.Start()
+
+# --- audio state sampler ------------------------------------------------------
+# The keyboard hook sees volume keys. It does not see everything that can change
+# the volume: a consumer-control HID often delivers WM_APPCOMMAND straight to the
+# foreground window without traversing WH_KEYBOARD_LL, and any process can move
+# the master level through CoreAudio with no input event at all.
+#
+# So the level itself is sampled, and each change is logged with how long ago a
+# control key was seen. A change with no key behind it is the signal worth
+# having: something moved the volume that was not the keyboard in front of you.
+$audioSrc = @'
+using System;
+using System.Runtime.InteropServices;
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioEndpointVolume {
+  int RegisterControlChangeNotify(IntPtr n);
+  int UnregisterControlChangeNotify(IntPtr n);
+  int GetChannelCount(out uint c);
+  int SetMasterVolumeLevel(float f, ref Guid g);
+  int SetMasterVolumeLevelScalar(float f, ref Guid g);
+  int GetMasterVolumeLevel(out float f);
+  int GetMasterVolumeLevelScalar(out float f);
+  int SetChannelVolumeLevel(uint i, float f, ref Guid g);
+  int SetChannelVolumeLevelScalar(uint i, float f, ref Guid g);
+  int GetChannelVolumeLevel(uint i, out float f);
+  int GetChannelVolumeLevelScalar(uint i, out float f);
+  int SetMute(bool m, ref Guid g);
+  int GetMute(out bool m);
+}
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDevice {
+  int Activate(ref Guid iid, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o);
+}
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDeviceEnumerator {
+  int EnumAudioEndpoints(int f, int m, out IntPtr c);
+  int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d);
+}
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorComObject { }
+public class JarvisAudio {
+  static IAudioEndpointVolume Endpoint() {
+    IMMDevice dev;
+    ((IMMDeviceEnumerator)new MMDeviceEnumeratorComObject()).GetDefaultAudioEndpoint(0, 1, out dev);
+    Guid iid = typeof(IAudioEndpointVolume).GUID;
+    object o; dev.Activate(ref iid, 23, IntPtr.Zero, out o);
+    return (IAudioEndpointVolume)o;
+  }
+  public static int Level() { float f; Endpoint().GetMasterVolumeLevelScalar(out f); return (int)Math.Round(f * 100); }
+  public static bool Muted() { bool m; Endpoint().GetMute(out m); return m; }
+}
+'@
+$audioOk = $true
+try { Add-Type -TypeDefinition $audioSrc -ErrorAction Stop } catch { $audioOk = $false }
+
+if ($audioOk) {
+    $script:lastVol = -1
+    $script:lastMute = $null
+    $sampleAudio = {
+        try {
+            $v = [JarvisAudio]::Level(); $m = [JarvisAudio]::Muted()
+        } catch { return }
+        if ($script:lastVol -lt 0) { $script:lastVol = $v; $script:lastMute = $m; return }
+        if ($v -eq $script:lastVol -and $m -eq $script:lastMute) { return }
+        $gap = [JarvisInputHook]::MsSinceControlKey()
+        # 1500 ms is generous for the gap between a key-down and the level
+        # actually moving; beyond it, no key explains the change.
+        $keyed = if ($gap -le 1500) { 1 } else { 0 }
+        $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $json = '{"ts":' + $ts + ',"kind":"control-state","control":"volume"' +
+                ',"from":' + $script:lastVol + ',"to":' + $v +
+                ',"muted":' + $(if ($m) { 1 } else { 0 }) +
+                ',"was_muted":' + $(if ($script:lastMute) { 1 } else { 0 }) +
+                ',"keyed":' + $keyed + ',"key_gap_ms":' + $gap +
+                ',"fg":"' + ([JarvisInputHook]::Foreground() -replace '"','') + '"}'
+        [JarvisInputHook]::WriteState($json)
+        $script:lastVol = $v; $script:lastMute = $m
+    }
+    & $sampleAudio
+    $audioTimer = New-Object System.Windows.Forms.Timer
+    # Fast enough that a press-and-hold ramp is not collapsed into one jump,
+    # cheap enough to be invisible: two COM reads per tick.
+    $audioTimer.Interval = 1000
+    $audioTimer.Add_Tick($sampleAudio)
+    $audioTimer.Start()
+}
 
 [System.Windows.Forms.Application]::Run()

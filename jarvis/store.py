@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+import time
 
 from .util import now
 
@@ -57,6 +58,42 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_peers_fp ON peers(fp);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+
+-- Every alert ever emailed, and what became of it.
+--
+-- alert.py keeps a live state map in meta, but it *deletes* an entry the moment
+-- the finding stops being reported, because that map exists to decide what to
+-- send next -- not to remember. So the question "what did JARVIS tell me about
+-- that I never actually dealt with?" had no answer anywhere: a finding that was
+-- mailed, ignored for three weeks, and then silently cleared left no trace at
+-- all, and one that was fixed and came back looked identical to one seen for
+-- the first time.
+--
+-- This table is append-and-update only. Rows are never deleted on clear; they
+-- are marked cleared, so a reappearance can be recognised as a reappearance.
+-- That distinction is the point: an alert that comes back after being resolved
+-- means the remediation did not hold, or the persistence re-established itself,
+-- and that is a different and worse fact than a new finding.
+CREATE TABLE IF NOT EXISTS alert_ledger (
+    key         TEXT PRIMARY KEY,   -- alert.py's dedupe key
+    category    TEXT DEFAULT '',
+    title       TEXT NOT NULL,
+    detail      TEXT DEFAULT '',
+    locus       TEXT DEFAULT '',    -- the finding's "where" ("where" is SQL)
+    host        TEXT DEFAULT '',
+    job         TEXT DEFAULT '',
+    severity    TEXT DEFAULT '',    -- severity at the most recent send
+    worst_sev   TEXT DEFAULT '',    -- worst it has ever been
+    fix         TEXT DEFAULT '',    -- remediation, captured when mailed
+    first_sent  INTEGER NOT NULL,
+    last_sent   INTEGER NOT NULL,
+    sent_count  INTEGER NOT NULL DEFAULT 1,
+    cleared_at  INTEGER NOT NULL DEFAULT 0,
+    clear_count INTEGER NOT NULL DEFAULT 0,
+    reopened    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_open
+    ON alert_ledger(cleared_at, last_sent);
 
 -- Latest result per audit, so the dashboard always has something to draw even
 -- while a slow collector is mid-run.
@@ -190,6 +227,25 @@ CREATE TABLE IF NOT EXISTS input_events (
 CREATE INDEX IF NOT EXISTS idx_input_ts ON input_events(ts DESC);
 
 -- Heartbeats, so a dead hook and a quiet keyboard are distinguishable.
+-- Control activations: volume, media and launch keys, and the state changes
+-- they should explain. A row with keyed=0 is a control that moved with no key
+-- behind it, which is the shape of software driving the machine as if it were
+-- the person at the keyboard.
+CREATE TABLE IF NOT EXISTS control_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         INTEGER NOT NULL,
+    kind       TEXT NOT NULL,       -- 'control-key' | 'control-state'
+    control    TEXT NOT NULL DEFAULT '',
+    detail     TEXT NOT NULL DEFAULT '',
+    injected   INTEGER NOT NULL DEFAULT 0,
+    lower_il   INTEGER NOT NULL DEFAULT 0,
+    keyed      INTEGER NOT NULL DEFAULT -1,   -- -1 = not applicable
+    key_gap_ms INTEGER NOT NULL DEFAULT -1,
+    fg         TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_control_events_ts ON control_events(ts DESC);
+
 CREATE TABLE IF NOT EXISTS input_beats (
     ts             INTEGER PRIMARY KEY,
     real_keys      INTEGER NOT NULL DEFAULT 0,
@@ -211,9 +267,11 @@ CREATE TABLE IF NOT EXISTS input_beats (
 );
 
 -- Privacy-safe typing history. One row describes a one-minute window; there
--- are no key codes, characters, window titles, clipboard values or command
--- lines. This is enough for cadence and volume anomaly detection without
--- turning the monitor into a keylogger. Raw windows are retained for 90 days.
+-- are no free-form characters, window titles, clipboard values or command
+-- lines. Watched families (=/+, /?, ./ >, digits) are counted in aggregate
+-- here; individual digit/punct presses are timestamped separately in
+-- input_events. Enough for cadence and volume anomaly detection without a
+-- full keylog. Raw windows are retained for 90 days.
 CREATE TABLE IF NOT EXISTS input_typing_windows (
     ts             INTEGER PRIMARY KEY,
     real_keys      INTEGER NOT NULL DEFAULT 0,
@@ -224,7 +282,8 @@ CREATE TABLE IF NOT EXISTS input_typing_windows (
     cad_run_max    INTEGER NOT NULL DEFAULT 0,
     equals_keys    INTEGER NOT NULL DEFAULT 0,
     slash_keys     INTEGER NOT NULL DEFAULT 0,
-    period_keys    INTEGER NOT NULL DEFAULT 0
+    period_keys    INTEGER NOT NULL DEFAULT 0,
+    digit_keys     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_input_typing_ts
@@ -316,7 +375,7 @@ class Store:
                     f"ALTER TABLE input_beats ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
         typing = {r[1] for r in self.db.execute(
             "PRAGMA table_info(input_typing_windows)")}
-        for col in ("equals_keys", "slash_keys", "period_keys"):
+        for col in ("equals_keys", "slash_keys", "period_keys", "digit_keys"):
             if col not in typing:
                 self.db.execute(
                     f"ALTER TABLE input_typing_windows ADD COLUMN {col} "
@@ -335,6 +394,57 @@ class Store:
                         "ON peers(remote_ip)")
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_peers_rdns "
                         "ON peers(rdns)")
+
+    # -- alert ledger -------------------------------------------------------
+
+    _SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
+
+    def ledger_sent(self, key, finding, job, fix="", ts=None):
+        """Record that an alert was mailed. Idempotent per (key, send)."""
+        ts = int(ts if ts is not None else time.time())
+        sev = str(finding.get("severity") or "")
+        row = self.db.execute(
+            "SELECT worst_sev, cleared_at, sent_count, reopened "
+            "FROM alert_ledger WHERE key=?", (key,)).fetchone()
+        if row is None:
+            self.db.execute(
+                "INSERT INTO alert_ledger (key, category, title, detail, locus,"
+                " host, job, severity, worst_sev, fix, first_sent, last_sent,"
+                " sent_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                (key, finding.get("category", ""), finding.get("title", ""),
+                 finding.get("detail", "")[:2000], finding.get("where", ""),
+                 finding.get("host", ""), job, sev, sev, fix[:500], ts, ts))
+            return
+        worst = row["worst_sev"] or sev
+        if self._SEV_RANK.get(sev, 9) < self._SEV_RANK.get(worst, 9):
+            worst = sev
+        # A row that had been cleared and is being sent again has reopened —
+        # the single most important state this table exists to distinguish.
+        reopened = row["reopened"] + (1 if row["cleared_at"] else 0)
+        # host/category/locus are refreshed too, not just the volatile fields:
+        # rows imported from the old alert state carry placeholders for them,
+        # and the first genuine send of that finding is what corrects them.
+        self.db.execute(
+            "UPDATE alert_ledger SET detail=?, severity=?, worst_sev=?, fix=?,"
+            " job=?, last_sent=?, sent_count=sent_count+1, cleared_at=0,"
+            " reopened=?, category=?, locus=?,"
+            " host=CASE WHEN ?<>'' THEN ? ELSE host END WHERE key=?",
+            (finding.get("detail", "")[:2000], sev, worst, fix[:500], job, ts,
+             reopened, finding.get("category", ""), finding.get("where", ""),
+             finding.get("host", ""), finding.get("host", ""), key))
+
+    def ledger_cleared(self, key, ts=None):
+        ts = int(ts if ts is not None else time.time())
+        self.db.execute(
+            "UPDATE alert_ledger SET cleared_at=?, clear_count=clear_count+1 "
+            "WHERE key=? AND cleared_at=0", (ts, key))
+
+    def ledger_rows(self, open_only=False, limit=500):
+        sql = "SELECT * FROM alert_ledger"
+        if open_only:
+            sql += " WHERE cleared_at=0"
+        sql += " ORDER BY last_sent DESC LIMIT ?"
+        return [dict(r) for r in self.db.execute(sql, (limit,))]
 
     def close(self):
         self.db.close()
