@@ -211,10 +211,10 @@ class WiringTests(unittest.TestCase):
     a missing import there only fails at run time, in a background thread."""
 
     def test_daemon_registers_and_dispatches_the_pixel_job(self):
-        from jarvis.web import server
+        from jarvis.service import jobs, schedule
 
-        self.assertIn("pixel", server.JOBS)
-        self.assertIsInstance(server._run_job("pixel", ("wsl",)), list)
+        self.assertIn("pixel", schedule.JOBS)
+        self.assertIsInstance(jobs.run_job("pixel", ("wsl",), ":memory:"), list)
 
     def test_investigate_sweep_includes_the_pixel_surface(self):
         from jarvis.cli.commands import audit as audit_cmd

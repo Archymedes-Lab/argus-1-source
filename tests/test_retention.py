@@ -138,9 +138,9 @@ class ServerWiringTests(unittest.TestCase):
     run time, inside a background thread, where it is easy to miss."""
 
     def test_server_module_binds_retention(self):
-        from jarvis.web import server
+        from jarvis.service import jobs
 
-        self.assertIs(server.retention, retention)
+        self.assertIs(jobs.retention, retention)
 
 
 if __name__ == "__main__":

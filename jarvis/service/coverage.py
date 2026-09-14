@@ -46,7 +46,7 @@ def _cmd(args, timeout=10):
 
 def job_health(db_path=DEFAULT_DB):
     """Is every collector actually producing fresh results?"""
-    from jarvis.web.server import JOBS
+    from jarvis.service.schedule import JOBS
 
     out = []
     try:

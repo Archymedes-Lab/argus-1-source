@@ -106,9 +106,9 @@ class DeadmanAuditTests(unittest.TestCase):
 
 class WatchdogWiringTests(unittest.TestCase):
     def test_the_watchdogs_job_reports_both_halves_of_the_loop(self):
-        from jarvis.web import server
+        from jarvis.service import jobs
 
-        self.assertIs(server.deadman, deadman)
+        self.assertIs(jobs.deadman, deadman)
 
 
 class InspectCommandTests(unittest.TestCase):
