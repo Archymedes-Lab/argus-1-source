@@ -31,13 +31,13 @@ absence: a region can be allocated, executed and freed between two passes.
 import os
 
 from .control import _ps_json
+from .paths import win_script
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"injected code": 0, "hooked syscalls": 1, "mitigations": 2,
              "visibility": 3}
 
-SCAN_PS1 = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "win", "memscan.ps1")
+SCAN_PS1 = str(win_script("memscan.ps1"))
 
 # Runtimes that compile code at run time. Private executable memory is their
 # normal operating state, not evidence of anything.

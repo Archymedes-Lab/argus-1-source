@@ -24,6 +24,7 @@ import subprocess
 
 from . import collect_windows
 from . import collection
+from .paths import REPO_ROOT
 from .util import short
 
 # Commercial remote-control agents. Presence is not proof of compromise -- it is
@@ -438,23 +439,21 @@ def _verified_maintenance_task(task, data):
         return False, "principal is not the current Windows user"
 
     local = (data.get("localAppData") or "").rstrip("\\/")
+    repo_root = str(REPO_ROOT)
     if name == "jarvis connectivity guard":
-        repo_root = os.path.dirname(os.path.dirname(__file__))
         spec = {"script":"connectivity-jarvis.ps1", "logon":"interactive",
-                "hash":_normalized_text_hash(os.path.join(repo_root,"connectivity-jarvis.ps1"))}
+                "hash":_normalized_text_hash(os.path.join(repo_root, "connectivity-jarvis.ps1"))}
         expected_args = (
             rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
             rf'-File "{re.escape(local)}\\Jarvis\\Connectivity\\connectivity-jarvis\.ps1" '
             rf'-StateRoot "{re.escape(local)}\\Jarvis\\Connectivity"$')
     elif name == "jarvis independent health monitor":
-        repo_root = os.path.dirname(os.path.dirname(__file__))
         spec = {"script":"deadman-jarvis.ps1", "logon":"interactive",
                 "hash":_normalized_text_hash(os.path.join(repo_root,"deadman-jarvis.ps1"))}
         expected_args = (
             rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
             rf'-File "{re.escape(local)}\\Jarvis\\Deadman\\deadman-jarvis\.ps1"$')
     elif name == "jarvis wake watchdog":
-        repo_root = os.path.dirname(os.path.dirname(__file__))
         spec = {
             "script": "wake-jarvis.ps1",
             "hash": _normalized_text_hash(os.path.join(

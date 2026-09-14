@@ -3,14 +3,11 @@
 import hashlib
 import os
 
+from ..paths import win_script
 
 HEARTBEAT_S = 60
 
-# The helper ships in jarvis/win/. This module sits one level deeper, in
-# jarvis/inputwatch/, so the package root is the *parent* of this directory.
-_PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-HOOK_PS1 = os.path.join(_PKG_ROOT, "win", "inputhook.ps1")
+HOOK_PS1 = str(win_script("inputhook.ps1"))
 
 READ_CAP = 8 * 1024 * 1024   # bytes of helper output read per pass; a runaway
 

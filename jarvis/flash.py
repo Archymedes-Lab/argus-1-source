@@ -4,11 +4,11 @@ import json
 import os
 import re
 from datetime import datetime
-from pathlib import Path
 
 from .control import _aslist, _ps_json
 from .evidence.manifest import Manifest, sha256_file
 from .evidence.paths import case_dir
+from .paths import win_script
 
 CONSOLES = {'cmd.exe', 'powershell.exe', 'pwsh.exe', 'wsl.exe', 'conhost.exe',
             'openconsole.exe', 'cscript.exe', 'wscript.exe', 'mshta.exe'}
@@ -138,7 +138,7 @@ def analyze(data):
 
 
 def collect():
-    script = Path(__file__).with_name('win').joinpath('startup_trace.ps1').read_text()
+    script = win_script('startup_trace.ps1').read_text()
     data = _ps_json(script, timeout=180)
     if not isinstance(data, dict):
         return {'errors': ['Windows bridge returned no usable trace; attribution unavailable.']}
@@ -149,7 +149,7 @@ def capture_windows(seconds=360):
     """Observe this Windows session for at most ten minutes, then unhook."""
     if not 1 <= seconds <= 600:
         raise ValueError('seconds must be between 1 and 600')
-    script = Path(__file__).with_name('win').joinpath('window_trace.ps1').read_text()
+    script = win_script('window_trace.ps1').read_text()
     return _ps_json(script.replace('__SECONDS__', str(int(seconds))), timeout=seconds + 45)
 
 

@@ -40,12 +40,12 @@ from . import asep as asep_mod
 from . import coverage as coverage_mod
 from . import evasion as evasion_mod
 from . import intrusion as intrusion_mod
+from .paths import STATIC_DIR
 from .store import DEFAULT_DB, Store
 from .util import now
 from . import collection
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PAGE = os.path.join(HERE, "static", "dashboard.html")
+PAGE = str(STATIC_DIR / "dashboard.html")
 
 # name -> (interval seconds, label, callable(hosts) -> list[finding])
 # Intervals have to fit through one worker. The scheduler runs jobs strictly

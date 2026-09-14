@@ -8,6 +8,7 @@ import subprocess
 import time
 
 from . import collection
+from .paths import win_script
 
 META = 'automatic_repairs_v1'
 COOLDOWN = 3600
@@ -33,8 +34,7 @@ def action_for(job, finding):
 def execute(action):
     if action == 'orphan_firewall':
         from .control import _ps_json
-        from pathlib import Path
-        script = Path(__file__).with_name('win').joinpath('repair_orphan_firewall.ps1').read_text()
+        script = win_script('repair_orphan_firewall.ps1').read_text()
         result = _ps_json(script, timeout=30)
         return bool(isinstance(result, dict) and result.get('ok') is True)
     if action not in ('telemetry', 'mount'):
