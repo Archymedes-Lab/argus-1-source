@@ -1,56 +1,13 @@
-"""Look for commodity spyware, stalkerware and unwanted monitoring.
-
-The sophisticated end of this problem needs a kernel driver. The unsophisticated
-end — which is most of it — leaves obvious traces, and those are what this
-module reads:
-
-  * Windows records which application used the microphone, camera or location
-    and exactly when, in the CapabilityAccessManager consent store. Nothing that
-    records you through the normal APIs escapes this ledger.
-  * Monitoring tools have to survive reboot, so they appear in autostart. Almost
-    none of them are signed by a recognizable vendor. Checking the Authenticode
-    signature of every autostart binary is a very high-signal, cheap test.
-  * Anything that can change your volume or type for you is either an HID device
-    sending consumer-control codes, or software with an input hook. Both are
-    enumerable.
-"""
+"""Windows: capability use (microphone, camera, location), unsigned or oddly signed
+autostarts, known monitoring software, and input and audio control devices."""
 
 import datetime
-import os
 import re
 
 from jarvis.platform.windows import aslist, ps_json
 
-# Names used by consumer monitoring, parental-control and stalkerware products.
-# Matching one is a prompt to look, not a verdict.
-STALKERWARE = re.compile(
-    r"actualspy|ardamax|blurspy|cocospy|couplevow|cerberus|clevguard|"
-    r"eyezy|flexispy|flexible?spy|hoverwatch|ikeymonitor|iwantspy|"
-    r"kidsguard|kidlogger|mobistealth|mspy|minspy|neatspy|netbull|"
-    r"pcpandora|perfectkeylogger|refog|realtime-?spy|revealer|spyagent|"
-    r"spyera|spyhuman|spyic|spyier|spytech|spyzie|snoopza|"
-    r"teensafe|thetruthspy|umobix|webwatcher|wolfeye|xnspy|"
-    r"keylog|keystroke|screenshot.?monitor|employee.?monitor|"
-    r"activtrak|hubstaff|teramind|veriato|interguard|workpuls|"
-    r"desktime|timedoctor|controlio",
-    re.I,
-)
-
-# Vendor software that legitimately drives volume and media keys. Present so the
-# audit can say "this is probably your keyboard" instead of leaving you guessing.
-INPUT_VENDORS = re.compile(
-    r"logi|logitech|lghub|icue|corsair|razer|synapse|steelseries|"
-    r"nahimic|sonic ?studio|realtek|dolby|armoury|asus|msi|alienware|"
-    r"gamebar|xbox|elgato|streamdeck|touchportal|autohotkey|powertoys",
-    re.I,
-)
-
-CAPABILITIES = ("microphone", "webcam", "location")
-
-
-def _finding(category, severity, title, detail, where=""):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": "win"}
+from .common import INPUT_VENDORS, STALKERWARE, _finding
+from .keyboard import _keyboard_findings
 
 
 PS_SPY = r"""
@@ -206,7 +163,10 @@ $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 """
 
+
 BAD_SIG = {"NotSigned", "HashMismatch", "NotTrusted", "UnknownError"}
+
+
 TRUSTED_SIGNERS = re.compile(
     r"Microsoft (Corporation|Windows)|CN=Microsoft|Google LLC|Mozilla Corporation|"
     r"Intel Corporation|NVIDIA|Advanced Micro Devices|Realtek|Logitech|"
@@ -225,14 +185,19 @@ SURVEILLANCE_CAPS = {
     "appDiagnostics", "humanInterfaceDevice", "gazeInput",
     "broadFileSystemAccess",
 }
+
+
 ROUTINE_CAPS = {
     "cellularData", "wifiData", "wiFiDirect", "radios", "bluetooth",
     "bluetoothSync", "musicLibrary", "picturesLibrary", "videosLibrary",
     "documentsLibrary", "usb", "serialCommunication", "sensors.custom",
     "activity", "userDataTasks", "systemAIModels",
 }
+
+
 CAP_TIER = ({c: "surveillance" for c in SURVEILLANCE_CAPS}
             | {c: "routine" for c in ROUTINE_CAPS})
+
 
 # Windows' internal names do not say what the capability lets an app do.
 CAP_LABEL = {
@@ -264,20 +229,6 @@ def _recent(iso_ts, hours=24):
     delta = datetime.datetime.now(datetime.timezone.utc) - t.astimezone(
         datetime.timezone.utc)
     return datetime.timedelta(0) <= delta <= datetime.timedelta(hours=hours)
-
-
-def audit(now_iso=None, hosts=("wsl", "win")):
-    """Run the spyware audit for the requested hosts.
-
-    Split per host deliberately: the WSL display/audio checks need no PowerShell,
-    so a broken interop bridge must not take them down with it.
-    """
-    out = []
-    if "win" in hosts:
-        out.extend(audit_windows(now_iso))
-    if "wsl" in hosts:
-        out.extend(audit_linux())
-    return out
 
 
 def audit_windows(now_iso=None):
@@ -415,250 +366,3 @@ def audit_windows(now_iso=None):
 
     out.extend(_keyboard_findings(data))
     return out
-
-
-# The driver stack for these two classes, on a machine nobody has inserted
-# anything into. Anything else in the list is a filter driver seeing input
-# before the applications do.
-STOCK_KBD_FILTERS = {"kbdclass"}
-STOCK_MOU_FILTERS = {"mouclass"}
-
-# Filter drivers that legitimately ship with laptop vendor and peripheral
-# software. They still see every keystroke, so they are reported — just not as
-# though they were a discovery.
-KNOWN_FILTERS = re.compile(
-    r"^(synTP|ETDFilter|ApplePS2|LenovoRd|HpqKbFiltr|SynRMIHID|"
-    r"CtrlPad|Elan|AlpsAlpine|VirtualBox|vmusbmouse|vmmouse|kbfiltr)",
-    re.I,
-)
-
-# Input devices that are part of a laptop rather than something attached to it.
-INTERNAL_BUS = re.compile(r"^(ACPI\\|HID\\CONVERTEDDEVICE|HID\\INTC|"
-                          r"HID\\ELAN|ROOT\\|BUTTONCONVERTER\\)", re.I)
-
-
-def _keyboard_findings(data):
-    """Answer 'is anything sitting between the keys and the applications?'"""
-    out = []
-
-    # -- 1. filter drivers -------------------------------------------------
-    for label, key, stock in (("keyboard", "kbdUpperFilters", STOCK_KBD_FILTERS),
-                              ("mouse", "mouUpperFilters", STOCK_MOU_FILTERS)):
-        filters = [f for f in aslist(data.get(key)) if isinstance(f, str) and f]
-        extra = [f for f in filters if f.lower() not in stock]
-        for f in extra:
-            known = KNOWN_FILTERS.match(f)
-            out.append(_finding(
-                "input", "low" if known else "critical",
-                f"extra {label} filter driver in the input stack",
-                f"{f} — a class filter driver sees every "
-                f"{'keystroke' if label == 'keyboard' else 'movement and click'} "
-                f"before any application does"
-                + (", and this one belongs to known vendor input software"
-                   if known else
-                   ". Nothing but the stock driver should be here."),
-                f"{label} class UpperFilters"))
-        if not extra:
-            out.append(_finding(
-                "input", "ok", f"{label} driver stack is stock",
-                f"UpperFilters = {', '.join(filters) or '(empty)'} — nothing is "
-                f"layered above the class driver", f"{label} class UpperFilters"))
-
-    lower = [f for f in aslist(data.get("kbdLowerFilters")) if isinstance(f, str) and f]
-    if lower:
-        out.append(_finding(
-            "input", "critical", "keyboard lower filter driver present",
-            f"{', '.join(lower)} — sits below the class driver, closer to the "
-            f"hardware than anything else in the stack. This position is almost "
-            f"never legitimately occupied.", "keyboard class LowerFilters"))
-
-    # -- 2. scancode remapping ---------------------------------------------
-    sc = data.get("scancodeMap") or ""
-    if sc:
-        out.append(_finding(
-            "input", "medium", "a kernel-level key remap is installed",
-            f"Scancode Map is set ({len(sc.split('-'))} bytes). Legitimate if you "
-            f"remapped a key yourself; otherwise a key does something other than "
-            f"what is printed on it.",
-            r"HKLM\SYSTEM\CurrentControlSet\Control\Keyboard Layout"))
-    else:
-        out.append(_finding("input", "ok", "no kernel key remapping",
-                            "Scancode Map is not set", "Keyboard Layout"))
-
-    # -- 3. what is physically plugged in ----------------------------------
-    kbs = aslist(data.get("keyboards"))
-    external = [k for k in kbs if not INTERNAL_BUS.match(k.get("id") or "")]
-    for k in external:
-        out.append(_finding(
-            "input", "medium", "external keyboard device present",
-            f"{k.get('name')} — an inline hardware keylogger must enumerate as a "
-            f"keyboard to pass keystrokes through, so confirm you recognise this",
-            k.get("id", "")))
-    if kbs and not external:
-        out.append(_finding(
-            "input", "ok", "all keyboard devices are internal",
-            f"{len(kbs)} keyboard device(s), all on internal buses (ACPI / "
-            f"embedded HID) — nothing attached from outside", ""))
-
-    # A hardware keylogger has to enumerate to work. Anything that ever did is
-    # still recorded, so this covers devices attached once and taken away.
-    usb_kb = [u for u in aslist(data.get("usbHistory"))
-              if re.search(r"keyboard|keypad", u.get("desc") or "", re.I)]
-    for u in usb_kb:
-        out.append(_finding(
-            "input", "high", "a USB keyboard was attached at some point",
-            f"{u.get('desc')} ({u.get('id')}) — present in the USB enumeration "
-            f"history even if it is not connected now", "USB enum history"))
-    if not usb_kb:
-        out.append(_finding(
-            "input", "ok", "no USB keyboard has ever been attached",
-            f"{len(aslist(data.get('usbHistory')))} USB devices in this "
-            f"machine's history, none of them a keyboard or keypad",
-            "USB enum history"))
-
-    # -- 4. accessibility backdoor -----------------------------------------
-    for h in aslist(data.get("ifeoAccessibility")):
-        out.append(_finding(
-            "input", "critical", "accessibility binary is hijacked",
-            f"{h.get('file')} → {h.get('debugger')} — these run as SYSTEM from "
-            f"the logon screen, so this is a backdoor reachable from the keyboard "
-            f"before anyone signs in",
-            "Image File Execution Options"))
-
-    return out
-
-
-# ---------------------------------------------------------------------------
-# WSL side: WSLg wires a Linux process straight into a display and audio server
-# ---------------------------------------------------------------------------
-#
-# This is the part of the machine that has no consent ledger at all. WSLg gives
-# every process in the distro an X11 display, a Wayland socket and a PulseAudio
-# server, and X11 in particular has no isolation between clients: any process
-# that can open the display can screenshot the entire desktop and read the
-# keyboard, with no prompt and nothing recorded anywhere. Windows asks before an
-# app uses the microphone; nothing asks here.
-
-_SOCKET_FD = re.compile(r"^socket:\[(\d+)\]$")
-
-
-def _unix_socket_map():
-    """inode -> unix socket path, from /proc/net/unix."""
-    out = {}
-    try:
-        with open("/proc/net/unix", errors="replace") as fh:
-            next(fh, None)
-            for line in fh:
-                parts = line.split()
-                if len(parts) >= 8 and parts[6].isdigit():
-                    out[int(parts[6])] = parts[7]
-    except (OSError, ValueError, StopIteration):
-        pass
-    return out
-
-
-# Which server a socket path belongs to, and what connecting to it grants.
-DISPLAY_SOCKETS = (
-    (re.compile(r"/tmp/\.X11-unix/X\d+"), "X11 display",
-     "X11 has no isolation between clients: any connected process can capture "
-     "the whole screen and read every keystroke sent to any window"),
-    (re.compile(r"wayland-\d+"), "Wayland display",
-     "Wayland isolates clients from each other, so this is normal for a GUI app"),
-    (re.compile(r"PulseServer|/pulse/native"), "PulseAudio server",
-     "a connected client can record from the microphone"),
-)
-
-
-def audit_linux():
-    """Who inside WSL is wired into the display and audio servers."""
-    out = []
-
-    def _f(sev, title, detail, where=""):
-        return {"category": "access", "severity": sev, "title": title,
-                "detail": detail, "where": where, "host": "wsl"}
-
-    if not os.path.isdir("/mnt/wslg"):
-        return [_f("ok", "no WSLg display stack",
-                   "this distro has no GUI, audio or screen-capture surface", "")]
-
-    inodes = _unix_socket_map()
-    clients = {}          # (kind, note) -> [ "name [pid]" ]
-    for entry in os.listdir("/proc"):
-        if not entry.isdigit():
-            continue
-        pid = int(entry)
-        try:
-            with open(f"/proc/{pid}/comm", errors="replace") as fh:
-                name = fh.read().strip()
-        except OSError:
-            continue
-        try:
-            fds = os.listdir(f"/proc/{pid}/fd")
-        except OSError:
-            continue
-        seen = set()
-        for fd in fds:
-            try:
-                target = os.readlink(f"/proc/{pid}/fd/{fd}")
-            except OSError:
-                continue
-            m = _SOCKET_FD.match(target)
-            if not m:
-                continue
-            path = inodes.get(int(m.group(1)), "")
-            if not path:
-                continue
-            for pattern, kind, note in DISPLAY_SOCKETS:
-                if pattern.search(path) and kind not in seen:
-                    seen.add(kind)
-                    clients.setdefault((kind, note), []).append(f"{name} [{pid}]")
-
-    for (kind, note), procs in sorted(clients.items()):
-        sev = "medium" if kind.startswith("X11") else "low"
-        out.append(_f(sev, f"connected to the {kind}",
-                      f"{len(procs)} process(es): {', '.join(sorted(set(procs))[:8])}"
-                      + (" …" if len(set(procs)) > 8 else "")
-                      + f" — {note}",
-                      kind))
-    if not clients:
-        out.append(_f("ok", "nothing inside WSL is connected to a display or audio server",
-                      "WSLg is present but no process holds an X11, Wayland or "
-                      "PulseAudio connection", "/mnt/wslg"))
-
-    # X11 exposure is a property of the display being reachable at all, not of
-    # anyone currently using it.
-    if os.path.exists("/tmp/.X11-unix/X0"):
-        out.append(_f(
-            "low", "an X11 display is reachable from every process in this distro",
-            "Any process here can connect to :0 and, because X11 grants every "
-            "client access to every other client's input and to the framebuffer, "
-            "screenshot the desktop and log keystrokes without a prompt and "
-            "without leaving a record. Windows' capability ledger does not cover "
-            "this. Prefer Wayland-native apps; unset DISPLAY for anything that "
-            "does not need a GUI.",
-            "/tmp/.X11-unix/X0"))
-
-    snd = [d for d in (os.listdir("/dev/snd") if os.path.isdir("/dev/snd") else [])
-           if d.startswith(("pcm", "control"))]
-    if snd:
-        out.append(_f("low", "ALSA capture devices present in WSL",
-                      f"{', '.join(sorted(snd)[:6])}", "/dev/snd"))
-
-    cams = [d for d in os.listdir("/dev") if d.startswith("video")] \
-        if os.path.isdir("/dev") else []
-    if cams:
-        out.append(_f("medium", "camera device present in WSL",
-                      f"{', '.join(sorted(cams))} — a process here can read the "
-                      f"camera directly, outside Windows' capability ledger", "/dev"))
-
-    return out
-
-
-CAT_ORDER = {"spyware": 0, "access": 1, "input": 2, "signing": 3}
-SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
-
-
-def sort_findings(findings):
-    return sorted(findings, key=lambda f: (CAT_ORDER.get(f["category"], 9),
-                                           SEV_ORDER.get(f["severity"], 9),
-                                           f["title"]))
