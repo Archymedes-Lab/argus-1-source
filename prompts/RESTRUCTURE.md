@@ -15,12 +15,44 @@ Jarvis detects, reports, or repairs.**
 This is a security tool. A refactor that silently drops a detection is worse
 than no refactor. Every rule below exists to prevent that.
 
+## Lessons from the first run (2026-09-14): read before starting
+
+The layered layout already exists (`docs/architecture/TARGET.md`), and
+`tests/test_layers.py` enforces it with no exceptions. Later runs work *within*
+that layout. Don't re-derive it.
+
+- **The live daemon runs from this checkout.** `jarvis.service` executes
+  `python3 -m jarvis serve` in this directory, and some imports and paths
+  resolve lazily at runtime. After any commit that moves files, run
+  `sudo -n /usr/bin/systemctl restart jarvis.service`, then check
+  `SELECT kind, error FROM snapshots` for errors once jobs have run. Skipping
+  this once produced a real "input-hook helper script is missing" alert.
+- **Three scripts must stay at the repo root:** `wake-jarvis.ps1`,
+  `deadman-jarvis.ps1`, `connectivity-jarvis.ps1`. Installed Windows task copies
+  self-sync from `<RepoRoot>\<name>`, and a moved file makes them silently
+  stop updating.
+- **The freeze check is a tool:** `python3 scripts/dev/behavior_snapshot.py
+  <dir> [--compare <before>]` diffs CLI help and every string literal. Run it
+  before and after each step, and account for every difference.
+- **Lint:** `uvx ruff check` (pyflakes + syntax) must stay clean.
+- **Moves:** regenerate import statements from the AST while preserving every
+  bound name (`from jarvis.platform import windows as collect_windows`), and
+  rewrite dotted `mock.patch("jarvis....")` targets. A lazy import that a test
+  patches at its source module stops seeing the patch once hoisted, so grep
+  the tests before hoisting.
+- **Verify behavior on real data** where you can. Run the old code from a
+  `git worktree` of the previous commit and the new code against the same
+  copy of `~/.jarvis/jarvis.db` (`sqlite3 … ".backup <scratch>"`), then compare
+  outputs.
+- **Open follow-ups** are in `docs/architecture/FOLLOWUPS.md`, and they're the
+  natural next work.
+
 ## Non-negotiables
 
 1. **Behavior is frozen.** Finding `category`, `severity`, `title`, `detail`
-   shape and `host` values stay identical: `alert._key` derives alert identity
-   from them, so a renamed title re-alerts, resets escalation, and orphans
-   repair history. The same applies to DB schema, `~/.jarvis/config.json` keys,
+   shape and `host` values stay identical. `response.alert.finding_key` derives
+   alert identity from `category|title|where`, so a renamed title or `where`
+   re-alerts, resets escalation, and orphans repair history. The same applies to DB schema, `~/.jarvis/config.json` keys,
    meta keys (e.g. `automatic_repairs_v1`), and CLI subcommands/flags used by
    systemd units, `*.sh`, `*.ps1`, and `jarvis/static`.
 2. **Never weaken a guard.** Don't loosen thresholds, allowlists, or severity
