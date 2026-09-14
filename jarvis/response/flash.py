@@ -6,8 +6,8 @@ import re
 from datetime import datetime
 
 from jarvis.platform.windows import aslist, ps_json
-from jarvis.response.evidence.manifest import Manifest, sha256_file
-from jarvis.response.evidence.paths import case_dir
+from .evidence.manifest import Manifest, sha256_file
+from .evidence.paths import case_dir
 from jarvis.core.paths import win_script
 
 CONSOLES = {'cmd.exe', 'powershell.exe', 'pwsh.exe', 'wsl.exe', 'conhost.exe',

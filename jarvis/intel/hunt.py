@@ -27,7 +27,7 @@ import ipaddress
 import os
 import subprocess
 
-from . import vet
+from jarvis.core import vet
 from jarvis.collectors.process.detect import TRUSTED_PATHS
 from jarvis.core.store import Store
 from jarvis.core.util import dpkg_owns, now

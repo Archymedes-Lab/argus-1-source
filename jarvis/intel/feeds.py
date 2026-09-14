@@ -33,7 +33,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import vet
+from jarvis.core import vet
 from jarvis.core.util import now
 
 UA = "jarvis-feeds/1.0 (+local host monitoring)"

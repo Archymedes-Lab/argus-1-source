@@ -33,7 +33,7 @@ wrong.
 
 import json
 
-from jarvis.intel import vet
+from jarvis.core import vet
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.util import iso, now
 
