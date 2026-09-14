@@ -1,10 +1,11 @@
 """`jarvis pixel` — screen-capture exposure and tracking-pixel posture."""
 
-from . import run
+from jarvis.collectors.host.pixel import run
+
+from ..output import render_findings, selected_hosts
 
 
 def cmd_pixel(args, store):
-    from jarvis.cli.output import selected_hosts, render_findings
     findings = run.audit(hosts=selected_hosts(args))
     render_findings(findings, verbose=args.verbose,
             severity=args.severity or "medium")

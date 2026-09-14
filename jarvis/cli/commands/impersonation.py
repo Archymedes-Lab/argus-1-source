@@ -1,10 +1,11 @@
 """`jarvis impersonation` — is someone else acting, or something acting as you?"""
 
-from . import run
+from jarvis.collectors.identity.impersonation import run
+
+from ..output import render_findings, selected_hosts
 
 
 def cmd_impersonation(args, store):
-    from jarvis.cli.output import selected_hosts, render_findings
     render_findings(run.audit(store, hosts=selected_hosts(args)), verbose=args.verbose,
             severity=args.severity or "medium")
     return 0
