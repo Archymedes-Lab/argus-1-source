@@ -1,6 +1,6 @@
 """Evaluate stored indicators against what is actually on this machine.
 
-intel.py answers "what is being used against machines like this one?".
+research.py answers "what is being used against machines like this one?".
 This module answers the only question that matters: "is any of it here?"
 
 Every check is a comparison against state jarvis already collects — the process
@@ -16,11 +16,7 @@ is exact and a second local check runs before anything is reported:
   * a hash match is reported at critical because a 256-bit collision is not a
     false positive
 
-The ATT&CK side is different in kind. Technique IDs cannot be "found" on a
-host, so instead they are compared against what jarvis's own collectors check,
-turning current intel into a gap list for the tool itself. coverage.py asks
-whether jarvis is running; gaps() asks whether it is looking at the right
-things.
+The ATT&CK side is different in kind and lives in gaps.py.
 """
 
 import base64
@@ -29,102 +25,10 @@ import json
 import os
 
 from jarvis.collectors.process.detect import TRUSTED_PATHS
-from jarvis.collectors.telemetry import auditd, sysmon_linux
 from jarvis.core import vet
 from jarvis.core.util import dpkg_owns, now
 from jarvis.platform.windows import ps_json
 from jarvis.core.finding import finding as _finding
-
-# Which jarvis audit covers which ATT&CK technique. Parent technique ids cover
-# their sub-techniques unless a sub-technique is listed on its own.
-COVERAGE = {
-    "T1014":     "hidden / evasion — rootkit detection",
-    "T1055":     "hidden — process injection artefacts",
-    "T1027":     "detect — obfuscated/encoded command lines",
-    "T1036":     "detect — masquerading (name vs executable)",
-    "T1053":     "control — scheduled tasks and cron",
-    "T1543":     "control — service and systemd unit creation",
-    "T1547":     "control / startup — boot and logon autostart",
-    "T1546":     "asep — event-triggered execution",
-    "T1574":     "asep — hijacked execution flow",
-    "T1562":     "control — impaired defenses",
-    "T1564":     "evasion — hidden files, streams and artefacts",
-    "T1070":     "evasion — indicator removal and log tampering",
-    "T1056":     "spy — input capture",
-    "T1113":     "spy — screen capture",
-    "T1123":     "spy — audio capture",
-    "T1125":     "spy — video capture",
-    "T1021":     "firewall — remote services and inbound access",
-    "T1571":     "firewall / peers — non-standard ports",
-    "T1071":     "monitor — application layer C2 egress",
-    "T1059":     "detect — command and scripting interpreter",
-    "T1105":     "detect — ingress tool transfer (download-and-run)",
-    "T1204":     "intrusion — user execution artefacts",
-    "T1219":     "control — remote access software",
-    "T1218":     "detect / asep — signed binary proxy execution",
-    "T1620":     "hidden — in-memory / reflective loading",
-    "T1497":     "hidden — sandbox and analysis evasion",
-    "T1082":     "scan — system information discovery",
-    # Closed by the modules added alongside the intel engine.
-    "T1556":     "implant / backdoor — PAM stack and auth configuration",
-    "T1553":     "implant — root certificate trust store",
-    "T1557":     "netwatch — gateway MAC and DNS changes",
-    "T1090":     "implant — proxy, PAC and portproxy",
-    "T1548":     "backdoor — sudo, setuid and elevation grants",
-    "T1098":     "backdoor / posture — account and group inventory",
-    "T1136":     "backdoor — new and hidden accounts",
-    "T1078":     "backdoor / posture — account inventory",
-    "T1133":     "backdoor / firewall — external remote services",
-    "T1518":     "posture — installed defenses and their state",
-    "T1600":     "implant — cryptographic trust weakening",
-    "T1595":     "netwatch — wireless association history",
-    # Added with the bruteforce collector and by wiring existing modules to the
-    # techniques they already answer.
-    "T1110":     "bruteforce — failed-auth spikes and account lockouts",
-    "T1552":     "secrets — plaintext credentials on disk (files, history, config)",
-    "T1539":     "intrusion — browser session and cookie theft artefacts",
-    "T1555.003": "intrusion — browser credential stores",
-    "T1003.001": "sysmon — LSASS process-access events (Windows, needs Sysmon)",
-    "T1040":     "sniffing — promiscuous NICs, raw sockets, capture drivers/tools",
-    "T1197":     "intrusion — BITS transfer jobs outside the known updaters",
-    "T1505.003": "webshell — dispatcher-shaped scripts in web document roots",
-    "T1112":     "asep / control / posture — autostart and security-relevant "
-                 "registry surface",
-    # Added with the toolchain collector: the developer trust surface, where
-    # execution comes from a config file rather than from a service or a key.
-    "T1176":     "toolchain / intrusion — software extensions",
-    "T1176.001": "intrusion — browser extension artefacts",
-    "T1176.002": "toolchain — IDE/editor extension inventory, version drift and "
-                 "post-install modification",
-    "T1195.001": "toolchain — package registry and index redirection "
-                 "(~/.npmrc, pip.conf)",
-    "T1546.016": "toolchain — executable .pth lines that run on every Python "
-                 "interpreter start",
-    "T1059.006": "toolchain / sysmon_linux — Python execution, including "
-                 "site-triggered startup code",
-}
-
-# Techniques worth naming explicitly as uncovered when intel raises them, with
-# the reason they are hard rather than merely missing.
-KNOWN_BLIND = {
-    "T1555": "credential stores beyond browsers — Windows Credential Manager "
-             "and OS keyrings are not read",
-    # Narrowed by the toolchain collector, not closed: registry redirection,
-    # editor-extension drift and repo-supplied agent/MCP/git hooks are checked,
-    # but the contents of an installed package are still taken on trust.
-    "T1195": "supply chain compromise — package *sources* and developer-tool "
-             "configuration are audited by `toolchain`, but installed package "
-             "contents are not verified against their publisher",
-    "T1554": "compromised host binary — no integrity baseline for system files",
-    "T1505": "server software component — no web/server module auditing",
-    "T1567": "exfiltration to web service — egress is seen but not classified",
-    "T1611": "container escape — no container runtime auditing",
-    "T1610": "malicious container deployment — no container runtime auditing",
-    "T1003": "credential dumping beyond LSASS memory (SAM, LSA secrets, NTDS, "
-             "DCSync) — sysmon covers LSASS access; the rest needs "
-             "registry/file/replication auditing",
-}
-
 
 def _win_to_wsl(path):
     """C:\\Users\\x -> /mnt/c/Users/x so Windows paths are checkable from here."""
@@ -557,103 +461,6 @@ def hunt(store, hosts=("wsl", "win")):
     store.set_meta("hunt_last_run", ts)
     store.commit()
     return findings
-
-
-# Tactics whose techniques are defined by runtime behaviour rather than by
-# anything left on disk. A monitor that samples state on an interval cannot
-# see them at all — that is the sampling blind spot coverage.py already
-# reports, not a missing collector. Listing them as work to do would bury the
-# gaps that could actually be closed.
-BEHAVIOURAL_TACTICS = {
-    "discovery", "collection", "execution", "impact", "exfiltration",
-    "lateral-movement", "privilege-escalation", "reconnaissance",
-    "resource-development", "initial-access",
-}
-
-_INTERCEPT = None
-
-
-def _intercept_active():
-    """(active, name) — is a syscall-interception layer recording on this box?
-
-    auditd or Sysmon for Linux (eBPF). When one is, the behavioural bucket is
-    covered rather than merely unobservable. Probed once per process.
-    """
-    global _INTERCEPT
-    if _INTERCEPT is None:
-        _INTERCEPT = (False, "")
-        for mod, label in ((auditd, "auditd"), (sysmon_linux, "Sysmon for Linux")):
-            try:
-                if mod.active():
-                    _INTERCEPT = (True, label)
-                    break
-            except Exception:
-                continue
-    return _INTERCEPT
-
-
-def gaps(store, min_docs=1):
-    """Techniques current intel is talking about, against what jarvis checks.
-
-    Three outcomes, and the distinction is the whole point of the report:
-
-      * covered      — a collector already looks for this
-      * closeable    — leaves host artefacts, nothing looks for them yet
-      * behavioural  — needs syscall interception; no collector here can help
-
-    Only the middle group is a work queue.
-    """
-    rows = store.db.execute(
-        "SELECT norm, doc_count, context, source_url FROM indicators "
-        "WHERE kind='attack' AND status='active' AND doc_count>=? "
-        "ORDER BY doc_count DESC", (min_docs,)).fetchall()
-
-    cat = {r["tid"]: (r["name"], r["tactics"]) for r in
-           store.db.execute("SELECT tid,name,tactics FROM attack_techniques")}
-
-    covered, closeable, behavioural = [], [], []
-    for r in rows:
-        tid, n = r["norm"], r["doc_count"]
-        parent = tid.split(".")[0]
-        where = COVERAGE.get(tid) or COVERAGE.get(parent)
-        if where:
-            covered.append((tid, n, where))
-            continue
-        name, tactics = cat.get(tid) or cat.get(parent) or ("", "")
-        why = (KNOWN_BLIND.get(tid) or KNOWN_BLIND.get(parent)
-               or "no collector checks this")
-        if not name:
-            behavioural.append((tid, n, "deprecated or unrecognised "
-                                        "technique id", ""))
-            continue
-        tset = {t for t in (tactics or "").split(",") if t}
-        if tset and tset <= BEHAVIOURAL_TACTICS:
-            intercept_on, intercept_name = _intercept_active()
-            if intercept_on:
-                covered.append((tid, n,
-                                f"{intercept_name} — syscall interception active"))
-            else:
-                behavioural.append((tid, n, "runtime behaviour — needs syscall "
-                                            "interception (auditd/Sysmon)", name))
-        else:
-            closeable.append((tid, n, why, name))
-
-    out = []
-    for tid, n, why, name in closeable:
-        # Weight by how many separate writeups raised it: a technique three
-        # independent teams wrote about this year is a better use of an
-        # afternoon than one mentioned once.
-        sev = "high" if n >= 5 else "medium" if n >= 2 else "low"
-        out.append(_finding(
-            "coverage gap", sev, f"{tid} {name}".strip(),
-            f"{why} — mentioned in {n} intelligence document{'s' if n > 1 else ''}; "
-            "this is a detection coverage gap, not observed activity on this host"))
-    for tid, n, why, name in behavioural:
-        out.append(_finding(
-            "not observable", "low", f"{tid} {name}".strip(),
-            f"{why} — mentioned in {n} intelligence document{'s' if n > 1 else ''}; "
-            "this is a visibility limitation, not observed activity on this host"))
-    return out, covered, closeable
 
 
 def sort_findings(findings):

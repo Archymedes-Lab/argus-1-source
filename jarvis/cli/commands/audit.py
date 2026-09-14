@@ -10,7 +10,7 @@ from jarvis.collectors.network import sniffing, webshell, firewall, netwatch
 from jarvis.collectors.identity import bruteforce, secrets
 from jarvis.service import coverage
 from jarvis.collectors.process import hidden, evasion, memscan, monitor
-from jarvis.intel import hunt, research as intel
+from jarvis.intel import gaps, hunt, research as intel
 from jarvis.core.util import iso, short
 from ..output import (color, is_tty, selected_hosts, print_process_finding, render_findings,
                       simple_command)
@@ -384,7 +384,7 @@ def cmd_hunt(args, store):
 def cmd_gaps(args, store):
     """What current intel talks about that no collector checks."""
     t = is_tty()
-    findings, covered, closeable = hunt.gaps(store, min_docs=args.min_docs)
+    findings, covered, closeable = gaps.gaps(store, min_docs=args.min_docs)
     if args.json:
         print(json.dumps({"gaps": findings,
                           "covered": [{"id": c[0], "docs": c[1], "by": c[2]}
