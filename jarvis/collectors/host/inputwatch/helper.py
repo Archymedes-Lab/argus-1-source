@@ -5,7 +5,7 @@ import os
 import subprocess
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
-from jarvis.core.util import iso, now
+from jarvis.core.util import now
 from .common import HOOK_PS1
 
 

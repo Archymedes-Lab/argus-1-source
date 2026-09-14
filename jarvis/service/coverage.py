@@ -27,7 +27,7 @@ import time
 from jarvis.platform import windows as collect_windows
 from jarvis.collectors.process import hidden
 from jarvis.core.store import DEFAULT_DB, Store
-from jarvis.core.util import iso
+from jarvis.service.schedule import JOBS
 
 
 def _finding(category, severity, title, detail, where="", host="wsl"):
@@ -46,8 +46,6 @@ def _cmd(args, timeout=10):
 
 def job_health(db_path=DEFAULT_DB):
     """Is every collector actually producing fresh results?"""
-    from jarvis.service.schedule import JOBS
-
     out = []
     try:
         store = Store(db_path)

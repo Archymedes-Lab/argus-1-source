@@ -23,14 +23,16 @@ whether jarvis is running; gaps() asks whether it is looking at the right
 things.
 """
 
+import base64
 import ipaddress
+import json
 import os
-import subprocess
 
-from jarvis.core import vet
 from jarvis.collectors.process.detect import TRUSTED_PATHS
-from jarvis.core.store import Store
+from jarvis.collectors.telemetry import auditd, sysmon_linux
+from jarvis.core import vet
 from jarvis.core.util import dpkg_owns, now
+from jarvis.platform.windows import ps_json
 
 # Which jarvis audit covers which ATT&CK technique. Parent technique ids cover
 # their sub-techniques unless a sub-technique is listed on its own.
@@ -333,9 +335,6 @@ def _microsoft_signed(paths):
     """
     if not paths:
         return set()
-    import base64
-    import json
-    from jarvis.platform.windows import ps_json
     blob = base64.b64encode(json.dumps(sorted(paths)).encode()).decode()
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
@@ -589,16 +588,10 @@ def _intercept_active():
     global _INTERCEPT
     if _INTERCEPT is None:
         _INTERCEPT = (False, "")
-        for name in ("auditd", "sysmon_linux"):
+        for mod, label in ((auditd, "auditd"), (sysmon_linux, "Sysmon for Linux")):
             try:
-                # Lazy: only the gap report needs these, once per process.
-                if name == "auditd":
-                    from jarvis.collectors.telemetry import auditd as mod
-                else:
-                    from jarvis.collectors.telemetry import sysmon_linux as mod
                 if mod.active():
-                    _INTERCEPT = (True, "auditd" if name == "auditd"
-                                  else "Sysmon for Linux")
+                    _INTERCEPT = (True, label)
                     break
             except Exception:
                 continue

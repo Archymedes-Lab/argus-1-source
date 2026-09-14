@@ -19,6 +19,8 @@ import os
 import shutil
 import subprocess
 
+from . import sysmon_linux
+
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
 # Rule keys that common rulesets (Neo23x0/auditd, CIS) attach to high-signal
@@ -133,7 +135,6 @@ def _auditd_start_rejected_by_kernel():
 
 def _sysmon_linux_running():
     try:
-        from . import sysmon_linux
         installed, running = sysmon_linux.state()
         if running:
             return " Sysmon for Linux (eBPF) is running and covers this."

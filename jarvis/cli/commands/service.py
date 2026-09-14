@@ -82,6 +82,7 @@ def cmd_control(args, store):
 
 
 def cmd_serve(args, store):
+    # Lazy: the daemon's full job graph is not needed by any other subcommand.
     from jarvis.web import server
     store.close()  # the daemon opens its own handles per thread
     server.serve(db_path=args.db, port=args.port, hosts=selected_hosts(args))

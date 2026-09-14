@@ -127,6 +127,7 @@ def cmd_spy(args, store):
 
 def cmd_boot(args, store):
     if getattr(args, 'trace', False) or getattr(args, 'watch_seconds', None):
+        # Lazy: only the tracing flags need it, and every CLI call pays for imports.
         from jarvis.response import flash
         argv = ['--watch-seconds', str(args.watch_seconds)] if args.watch_seconds else []
         return flash.main(argv)

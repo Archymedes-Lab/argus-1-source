@@ -4,6 +4,8 @@ One PowerShell round-trip, every block independently guarded so a provider
 that is unavailable degrades that row instead of losing the sample.
 """
 
+from jarvis.platform.windows import ps_json
+
 PS_IMPERSONATION = r"""
 $ErrorActionPreference = 'SilentlyContinue'
 $o = @{ me=''; logons=@(); console=-1; locked=-1; rdp=@(); creds=@();
@@ -73,5 +75,4 @@ $json = $o | ConvertTo-Json -Depth 6 -Compress
 
 
 def sample():
-    from jarvis.platform.windows import ps_json
     return ps_json(PS_IMPERSONATION)

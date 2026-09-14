@@ -22,6 +22,7 @@ from jarvis.core.paths import STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.service import sdnotify
+from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler, watchdog_loop
 
@@ -238,7 +239,6 @@ class Handler(BaseHTTPRequestHandler):
                 build_state(self.db_path, self.scheduler), default=str))
 
         if url.path in ("/api/health", "/api/live"):
-            from jarvis.service.protection import health
             state = health(self.db_path, self.scheduler)
             ok = state['live'] if url.path == '/api/live' else state['healthy']
             return self._send(200 if ok else 503, json.dumps(state))

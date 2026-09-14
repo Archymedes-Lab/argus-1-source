@@ -13,7 +13,7 @@ whether the ones that must stay open are at least protected.
 
 import os
 
-from jarvis.platform.windows import aslist
+from jarvis.platform.windows import aslist, ps_json
 from .common import finding
 
 # Remote-access and capture products, by executable name. Presence is a
@@ -218,6 +218,5 @@ def audit(hosts=("wsl", "win")):
     if "wsl" in hosts:
         out.extend(rules_linux())
     if "win" in hosts:
-        from jarvis.platform.windows import ps_json
         out.extend(rules_windows(ps_json(PS_SCREEN)))
     return out

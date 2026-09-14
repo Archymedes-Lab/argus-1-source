@@ -8,7 +8,6 @@ without touching another.
 
 import json
 import os
-import shutil
 import time
 
 from . import sources

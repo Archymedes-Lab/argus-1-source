@@ -34,6 +34,8 @@ import time
 import urllib.error
 import urllib.request
 
+from jarvis.intel import research as intel
+
 from . import fixit
 from .reporting import commands as report_commands
 from .reporting import diff as report_diff
@@ -434,7 +436,6 @@ def advisory_report(store, jobs):
         total, docs = 0, 0
     last_refresh = int(store.get_meta("intel_last_refresh", 0) or 0)
     try:
-        from jarvis.intel import research as intel
         intel_state = {
             "total": total, "docs": docs,
             "last_refresh": last_refresh,

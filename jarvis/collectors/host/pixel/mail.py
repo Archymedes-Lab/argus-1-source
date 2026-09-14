@@ -10,9 +10,10 @@ content by default, and whether JARVIS's own alert mail carries tracking —
 a security tool that beacons every time you read an alert is its own problem.
 """
 
-import json
 import os
 import re
+
+from jarvis.platform.windows import aslist, ps_json
 
 from .common import finding
 
@@ -120,7 +121,6 @@ $json = $o | ConvertTo-Json -Depth 5 -Compress
 
 
 def rules_outlook(data):
-    from jarvis.platform.windows import aslist
     out = []
     entries = aslist((data or {}).get("outlook"))
     if data is not None and not entries:
@@ -165,6 +165,5 @@ def audit(hosts=("wsl", "win"), home=None):
                                "no Thunderbird profile on the Linux side",
                                "nothing to configure here", "", host="wsl"))
     if "win" in hosts:
-        from jarvis.platform.windows import ps_json
         out.extend(rules_outlook(ps_json(PS_MAIL)))
     return out

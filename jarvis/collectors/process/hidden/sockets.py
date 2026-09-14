@@ -2,6 +2,9 @@
 
 import errno
 import os
+
+from jarvis.platform.linux import socket_table
+
 from .common import PROC
 
 
@@ -9,8 +12,6 @@ def orphan_sockets():
     """Socket inodes bound to a connection that no visible process holds an fd
     for. Under-privileged scans see plenty of these (you cannot read another
     user's fd table), so this is only reported when we are root."""
-    from jarvis.platform.linux import socket_table
-
     table = socket_table()
     claimed = set()
     for entry in os.listdir(PROC):
@@ -105,7 +106,6 @@ def _visible_tcp_ports():
 
 
 def _socket_table_safe():
-    from jarvis.platform.linux import socket_table
     try:
         return socket_table()
     except Exception:

@@ -2,7 +2,7 @@
 
 import json
 import os
-from jarvis.core.util import iso, now
+from jarvis.core.util import now
 from .common import READ_CAP, _M_DUPES, _M_OVERSIZE
 from .helper import _paths
 

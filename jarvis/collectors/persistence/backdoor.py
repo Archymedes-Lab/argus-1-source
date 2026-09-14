@@ -20,7 +20,6 @@ import os
 import pwd
 import re
 import stat
-import subprocess
 
 from jarvis.core.util import dpkg_owns
 from jarvis.platform.windows import aslist, ps_json

@@ -31,9 +31,8 @@ cannot be read produces exactly the same silence as a machine with nothing
 wrong.
 """
 
-import json
 
-from jarvis.core import vet
+from jarvis.core import collection, vet
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.util import iso, now
 
@@ -201,7 +200,6 @@ def _base(path):
 
 
 def audit(store=None, hours=24, hosts=("win",), incremental=False):
-    from jarvis.core import collection
     if "win" not in hosts:
         return []
 

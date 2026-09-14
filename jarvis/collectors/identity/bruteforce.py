@@ -18,13 +18,11 @@ is the signal. It cannot see a slow, low-volume guess that stays under the
 threshold, and it says so.
 """
 
-import os
 import re
 import subprocess
 
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
-from jarvis.core.util import now
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 

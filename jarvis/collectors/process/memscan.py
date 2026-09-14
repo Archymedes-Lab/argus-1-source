@@ -28,7 +28,6 @@ else says how much and where — not "malware". Sampling memory also cannot prov
 absence: a region can be allocated, executed and freed between two passes.
 """
 
-import os
 
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.paths import win_script

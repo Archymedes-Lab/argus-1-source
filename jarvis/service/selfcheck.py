@@ -28,7 +28,6 @@ finite age escalation so a timer running every few minutes cannot flood an
 inbox during a persistent outage.
 """
 
-import json
 import os
 import subprocess
 import time

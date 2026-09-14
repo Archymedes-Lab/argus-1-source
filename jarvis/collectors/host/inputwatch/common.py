@@ -1,7 +1,6 @@
 """Constants shared by more than one part of inputwatch."""
 
 import hashlib
-import os
 
 from jarvis.core.paths import win_script
 

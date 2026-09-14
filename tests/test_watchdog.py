@@ -15,7 +15,6 @@ for five days while Task Scheduler still reported the task Ready:
 Both are shape errors a reader skims past, so they are asserted here.
 """
 
-import os
 import shutil
 import subprocess
 import unittest

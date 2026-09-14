@@ -8,7 +8,7 @@ tell "the artefact changed under us" from "our copy is fine".
 import json
 import os
 
-from .paths import FILE_MODE, secure_file
+from .paths import secure_file
 
 MANIFEST = "manifest.json"
 SUMS = "SHA256SUMS.txt"

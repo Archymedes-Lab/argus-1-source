@@ -28,10 +28,6 @@ What the transitions mean:
                         hardware. That is what ARP spoofing looks like.
 """
 
-import json
-import os
-import re
-import subprocess
 import time
 
 from jarvis.platform.windows import aslist, ps_json
