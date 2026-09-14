@@ -1,5 +1,5 @@
 # Deep OS hardening for the findings `jarvis posture`, `jarvis firewall` and
-# `jarvis backdoor` report that remediate-windows.ps1 does not already cover.
+# `jarvis backdoor` report that ..\repair\remediate-windows.ps1 does not already cover.
 #
 # The two scripts are additive, not alternatives:
 #   remediate-windows.ps1  removes specific exposures that were found (orphaned

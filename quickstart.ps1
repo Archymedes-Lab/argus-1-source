@@ -8,7 +8,7 @@
 #   .\quickstart.ps1 -Remove                        unregister the wake task
 #
 # No elevation required. Firewall logging and browser hardening are a separate,
-# elevated step: .\secure-internet.ps1 -Firewall  /  -Browsers
+# elevated step: .\scripts\harden\secure-internet.ps1 -Firewall  /  -Browsers
 [CmdletBinding()]
 param(
     [string]$Distro = 'Ubuntu',
@@ -61,7 +61,7 @@ else     { Say "dashboard not answering on :$Port yet - check 'journalctl -u jar
 Write-Host @"
 
   dashboard:  http://127.0.0.1:$Port   (open the "ops & setup" tab)
-  hardening:  .\secure-internet.ps1 -Firewall   (elevated)
-              .\secure-internet.ps1 -Browsers
+  hardening:  .\scripts\harden\secure-internet.ps1 -Firewall   (elevated)
+              .\scripts\harden\secure-internet.ps1 -Browsers
   remove:     .\quickstart.ps1 -Remove
 "@

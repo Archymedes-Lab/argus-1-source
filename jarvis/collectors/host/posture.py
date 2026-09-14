@@ -542,7 +542,7 @@ def audit(hosts=("win",), elevate=False):
             "the default terminal is Windows Terminal (or 'Let Windows decide'), "
             "which ignores -WindowStyle Hidden, so JARVIS's scheduled PowerShell "
             "monitors open visible windows every minute",
-            r"powershell -ExecutionPolicy Bypass -File fix-console-host.ps1"))
+            r"powershell -ExecutionPolicy Bypass -File scripts\repair\fix-console-host.ps1"))
 
     upd = d.get("updates") or {}
     hot = aslist(d.get("hotfix"))

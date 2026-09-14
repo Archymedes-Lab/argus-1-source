@@ -7,7 +7,7 @@ HELPER='/usr/local/sbin/jarvis-repair'
 
 def command(args, store):
     if not os.path.isfile(HELPER):
-        print('Repair helper is not installed. Run sudo bash install-repair-helper.sh.')
+        print('Repair helper is not installed. Run sudo bash scripts/repair/install-repair-helper.sh.')
         return 1
     result=subprocess.run(['/usr/bin/sudo','-n',HELPER,args.action],timeout=150)
     return result.returncode

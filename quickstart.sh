@@ -63,8 +63,8 @@ windows_phase() {
 
   echo "browser defaults (reversible, no elevation)..."
   local win_ps1
-  win_ps1="$(wslpath -w "$HERE/secure-internet.ps1" 2>/dev/null)" \
-    || win_ps1='\\wsl.localhost\Ubuntu'"${HERE//\//\\}"'\secure-internet.ps1'
+  win_ps1="$(wslpath -w "$HERE/scripts/harden/secure-internet.ps1" 2>/dev/null)" \
+    || win_ps1='\\wsl.localhost\Ubuntu'"${HERE//\//\\}"'\scripts\harden\secure-internet.ps1'
   powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
     -File "$win_ps1" -Browsers 2>&1 | tr -d '\r' | sed 's/^/  /' || true
 
@@ -73,7 +73,7 @@ windows_phase() {
   [ -n "$lad" ] || { echo "  could not resolve %LOCALAPPDATA% — skipping elevated step"; return 0; }
   local dir_wsl ; dir_wsl="$(wslpath -u "$lad")/Jarvis"
   mkdir -p "$dir_wsl"
-  cp "$HERE/harden-elevated.ps1" "$dir_wsl/harden-elevated.ps1"
+  cp "$HERE/scripts/harden/harden-elevated.ps1" "$dir_wsl/harden-elevated.ps1"
   local dir_win="$lad\\Jarvis\\harden-elevated.ps1"
 
   echo "elevated step: firewall logging + ASR rules (audit mode)"

@@ -33,7 +33,7 @@ manager, no sudo), `--check` (health summary and exit).
 | Health | `./quickstart.sh --check` |
 | Dashboard | `http://127.0.0.1:8787` → **ops & setup** tab |
 | Enforce ASR (after a few clean days) | `powershell -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\Jarvis\harden-elevated.ps1" -Enforce` |
-| Undo Windows hardening | same path with `-Undo` (browsers: `.\secure-internet.ps1 -Browsers -Undo`) |
+| Undo Windows hardening | same path with `-Undo` (browsers: `.\scripts\harden\secure-internet.ps1 -Browsers -Undo`) |
 | Credential Guard | Settings → Device security → Core isolation → Memory integrity = On, reboot (needs BIOS virtualization) |
 
 ## What one command cannot do

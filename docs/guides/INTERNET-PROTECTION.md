@@ -29,9 +29,9 @@ From Windows PowerShell, using the checkout's Windows/WSL path:
 
 ```powershell
 # As the normal browser user:
-.\secure-internet.ps1 -Browsers
+.\scripts\harden\secure-internet.ps1 -Browsers
 # In elevated Windows PowerShell:
-.\secure-internet.ps1 -Firewall
+.\scripts\harden\secure-internet.ps1 -Firewall
 ```
 
 Browser defaults enable standard Safe Browsing or SmartScreen and HTTPS-only

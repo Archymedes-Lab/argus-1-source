@@ -56,7 +56,7 @@ read.
 
 ### Learning and protecting daily Windows apps
 
-`secure-daily-apps.ps1` counts top-level application launches so security work
+`scripts/harden/secure-daily-apps.ps1` counts top-level application launches so security work
 can follow actual use instead of a guessed software list. Its privacy boundary
 is narrow: executable name, executable path and launch time only — never command
 lines, window titles, URLs, documents or input. Chromium child processes are
@@ -65,12 +65,12 @@ deduplicated, and all data remains under `%LOCALAPPDATA%\Jarvis\AppGuard`.
 Run from Windows PowerShell:
 
 ```powershell
-.\secure-daily-apps.ps1 -Install                 # learn, report only
-.\secure-daily-apps.ps1 -Install -AutoHarden     # harden after 7 learning days
-.\secure-daily-apps.ps1 -Report                  # counts + publisher signatures
-.\secure-daily-apps.ps1 -Harden                  # harden learned browsers now
-.\secure-daily-apps.ps1 -Undo                    # restore prior browser policies
-.\secure-daily-apps.ps1 -Remove                  # remove task; preserve usage data
+.\scripts\harden\secure-daily-apps.ps1 -Install                 # learn, report only
+.\scripts\harden\secure-daily-apps.ps1 -Install -AutoHarden     # harden after 7 learning days
+.\scripts\harden\secure-daily-apps.ps1 -Report                  # counts + publisher signatures
+.\scripts\harden\secure-daily-apps.ps1 -Harden                  # harden learned browsers now
+.\scripts\harden\secure-daily-apps.ps1 -Undo                    # restore prior browser policies
+.\scripts\harden\secure-daily-apps.ps1 -Remove                  # remove task; preserve usage data
 ```
 
 An app becomes "essential" after at least three launches on two separate days
@@ -85,7 +85,7 @@ signature; a lookalike named `chrome.exe` is reported, not trusted. `-Report`
 also writes `browser-protection.json`. Registry values mean *configured*, not
 necessarily *enforced*: confirm them in `chrome://policy`, `edge://policy`,
 `brave://policy`, or Firefox `about:policies`. The elevated
-`harden-windows.ps1` supplies the system-wide internet edge beneath browsers:
+`scripts/harden/harden-windows.ps1` supplies the system-wide internet edge beneath browsers:
 Defender download/script/PUA/network blocking, enabled firewalls with
 default-deny inbound, and non-bypassable Windows/Edge SmartScreen.
 
@@ -800,7 +800,7 @@ intel corpus. Three collectors were added to close its highest-signal misses:
   command line, a write to `authorized_keys` / cron / a systemd unit, one
   process reading another's memory, a deleted log file, a recon burst — and
   correlates observed destinations against the indicator corpus. Install steps
-  are in `jarvis/sysmon_linux.py`; `sysmon/config.xml` is a tightened policy
+  are in `jarvis/collectors/telemetry/sysmon_linux.py`; `sysmon/config.xml` is a tightened policy
   that turns on the network, memory-access and persistence-write events those
   rules need without a volume blow-up, and the collector flags it if they are
   missing. Under heavy event load the journal rotates events out in hours —
@@ -1050,26 +1050,31 @@ A trait on an approved process still gets flagged.
 
 ## Files
 
+The package is layered; a module imports only from its own layer or the ones
+above it in this table (`tests/test_layers.py` enforces it). See
+`docs/architecture/TARGET.md` for the rules.
+
 | path | purpose |
 |---|---|
-| `jarvis/collect_linux.py` | `/proc` walker: processes, fds, socket inode → connection |
-| `jarvis/collect_windows.py` | one-shot PowerShell collector over WSL interop |
-| `jarvis/detect.py` | trait rules, scoring, severity |
-| `jarvis/hidden.py` | cross-view enumeration, hidden-process detection |
-| `jarvis/spyware.py` | capability ledger, autostart signatures, input devices |
-| `jarvis/startup.py` | boot reconstruction, window-flash attribution |
-| `jarvis/firewall.py` | firewall posture, inbound rules and connections, logons |
-| `jarvis/asep.py` | autostart extensibility points, masquerade + parentage |
-| `jarvis/evasion.py` | kernel integrity, ADS, LNK abuse, dead-drop C2, Unicode |
-| `jarvis/coverage.py` | self-audit: collector health, blind spots, continuity |
-| `jarvis/control.py` | persistence / remote-access / defense audit |
-| `jarvis/toolchain.py` | MCP servers, agent hooks, editor extensions, git hooks, `.pth` |
-| `jarvis/ledger.py` | durable record of every alert sent, and what became of it |
-| `jarvis/monitor.py` | scan orchestration |
-| `jarvis/server.py` | scheduler + localhost dashboard server |
-| `jarvis/static/dashboard.html` | the dashboard, self-contained |
-| `jarvis/store.py` | SQLite baseline, peers, events |
-| `jarvis/cli.py` | command-line interface |
+| `jarvis/core/` | SQLite store, retention policy, indicator vetting, shared paths and helpers |
+| `jarvis/platform/` | `/proc` walker (`linux.py`), WSL interop and the PowerShell runner (`windows.py`), `win/*.ps1` payloads, Windows sensor ingest (`native/`) |
+| `jarvis/collectors/process/` | scan orchestration, trait scoring, hidden processes, memory, evasion, resource pressure |
+| `jarvis/collectors/telemetry/` | Sysmon, Sysmon for Linux, auditd |
+| `jarvis/collectors/persistence/` | autostarts, startup reconstruction, control surfaces, implants, backdoors |
+| `jarvis/collectors/network/` | firewall, network state, internet-facing apps, packet capture, web shells |
+| `jarvis/collectors/identity/` | failed-auth spikes, plaintext secrets, impersonation |
+| `jarvis/collectors/host/` | posture, spyware, injected input, intrusion artefacts, developer toolchain, devices, capture/tracking pixels |
+| `jarvis/intel/` | threat-intel research, bulk feeds, the indicator hunt and coverage gaps |
+| `jarvis/response/` | alerting, digests and advisory (`reporting/`), remediation, the alert ledger, evidence cases, startup tracing |
+| `jarvis/service/` | job table, job runner, scheduler, self-audit and watchdogs |
+| `jarvis/web/` | localhost dashboard server and `static/dashboard.html` |
+| `jarvis/cli/` | command-line interface |
+| `scripts/harden/` | Linux and Windows hardening |
+| `scripts/repair/` | targeted repair and remediation scripts, repair-helper installer |
+| `scripts/maintenance/` | re-wrapping the installed Windows monitor tasks |
+| `wake-jarvis.ps1`, `deadman-jarvis.ps1`, `connectivity-jarvis.ps1` | Windows watchdog tasks; they stay at the root because installed copies sync from this path |
+| `systemd/`, `sysmon/` | units, drop-ins, sudoers rules, Sysmon for Linux policy |
+| `docs/guides/`, `docs/reports/` | operating guides and dated investigation reports |
 
 State lives in `~/.jarvis/jarvis.db`.
 
@@ -1078,7 +1083,7 @@ State lives in `~/.jarvis/jarvis.db`.
 `jarvis repair status` verifies the Linux monitor, Sysmon, journal, and Windows
 mount. `jarvis repair all` repairs unhealthy components; individual actions are
 `monitor`, `telemetry`, `journal`, and `mount`. Install the root-owned helper with
-`sudo bash install-repair-helper.sh`. Its sudo rules permit only these fixed
+`sudo bash scripts/repair/install-repair-helper.sh`. Its sudo rules permit only these fixed
 actions; Windows administrator operations still require Windows elevation.
 
 `deadman-jarvis.ps1` runs from `%LOCALAPPDATA%\Jarvis\Deadman` as a native
