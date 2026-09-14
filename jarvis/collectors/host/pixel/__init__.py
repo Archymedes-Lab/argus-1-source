@@ -10,7 +10,9 @@ Three surfaces, one question each:
     third-party cookies that make them useful?
 """
 
-from .common import SEV_ORDER, finding, sort_findings
+from jarvis.core.finding import win_finding as finding
+
+from .common import SEV_ORDER, sort_findings
 from .run import audit
 from . import mail, screen, web
 

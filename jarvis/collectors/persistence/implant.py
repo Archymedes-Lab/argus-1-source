@@ -39,14 +39,10 @@ import subprocess
 
 from jarvis.core.util import dpkg_owns
 from jarvis.platform.windows import aslist, ps_json
+from jarvis.core.finding import win_finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"interception": 0, "boundary": 1, "trust": 2, "implant": 3}
-
-
-def _finding(category, severity, title, detail, where="", host="win"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _cmd(args, timeout=15):

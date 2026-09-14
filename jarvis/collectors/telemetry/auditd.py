@@ -20,6 +20,7 @@ import shutil
 import subprocess
 
 from . import sysmon_linux
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
@@ -29,11 +30,6 @@ NOTABLE_KEYS = ("susp_activity", "sbin_susp", "shell_profiles", "T1055",
                 "T1059", "T1071", "sshd_config", "sudoers", "cron",
                 "pam", "passwd_changes", "power_abuse", "recon",
                 "code_injection", "web_shells")
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def sort_findings(f):

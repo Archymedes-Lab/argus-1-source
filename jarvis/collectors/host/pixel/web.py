@@ -15,7 +15,7 @@ import json
 import os
 import re
 
-from .common import finding
+from jarvis.core.finding import win_finding as finding
 
 # Firefox: 0 accepts every cookie, 1 blocks third-party, 4 blocks trackers,
 # 5 is total cookie protection (the modern default).

@@ -22,6 +22,7 @@ import subprocess
 
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
@@ -61,11 +62,6 @@ _EVAL_DECODE = re.compile(
     r"preg_replace\s*\(\s*['\"].*?/e['\"]|"
     r"\beval\s*\(\s*(request|Request|\$_)",
     re.I)
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def sort_findings(f):

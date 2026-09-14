@@ -1,7 +1,9 @@
 """Running every tracking and capture check together."""
 
 from . import mail, screen, web
-from .common import finding, sort_findings
+from jarvis.core.finding import win_finding as finding
+
+from .common import sort_findings
 
 # Modules, not bound functions: each module's audit is resolved at call
 # time so the surface stays substitutable.

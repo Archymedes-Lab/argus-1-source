@@ -32,6 +32,7 @@ import time
 
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.util import iso, now
+from jarvis.core.finding import win_finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
@@ -405,11 +406,6 @@ def _ingest_wlanlog(store, rows, kindmap):
                VALUES(?,?,?,?,?,?,?)""",
             (ts, "", kind, sev, (r.get("msg") or "")[:400], "", stamp))
         seen.add(stamp)
-
-
-def _finding(category, severity, title, detail, where="", host="win"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def audit(store, hours=24):

@@ -28,11 +28,7 @@ from jarvis.platform import windows as collect_windows
 from jarvis.collectors.process import hidden
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.service.schedule import JOBS
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
+from jarvis.core.finding import finding as _finding
 
 
 def _cmd(args, timeout=10):

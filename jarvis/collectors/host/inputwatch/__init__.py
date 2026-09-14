@@ -12,7 +12,9 @@ included, so existing callers keep working unchanged.
 
 from .analysis import (SEV_ORDER, _cadence_findings, _latency_findings,
                        _typing_findings, audit, sort_findings)
-from .common import HOOK_PS1, _finding, _mget_int, _sha256
+from jarvis.core.finding import win_finding as _finding
+
+from .common import HOOK_PS1, _mget_int, _sha256
 from .helper import (_alive_mtime, _alive_path, _paths, _pid_path,
                      _pidfile_pid, _staged_matches_source, _stop_all,
                      ensure, running, start, stop)

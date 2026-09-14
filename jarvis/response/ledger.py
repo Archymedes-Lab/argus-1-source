@@ -32,6 +32,7 @@ not a state that means the same thing after one hour and after one month.
 
 import json
 import time
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"recurring": 0, "outstanding": 1, "stale": 2, "resolved": 3}
@@ -42,11 +43,6 @@ DAY = 86400
 # ledger raises it as a finding in its own right. A critical nobody touched for
 # two days is its own emergency; a low is a housekeeping note for a month.
 OVERDUE_DAYS = {"critical": 2, "high": 7, "medium": 21, "low": 45}
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _age_days(ts, now_ts):

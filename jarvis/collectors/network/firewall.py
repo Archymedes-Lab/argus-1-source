@@ -18,6 +18,7 @@ from jarvis.platform.linux import read_file, socket_table
 from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.util import classify_ip
+from jarvis.core.finding import win_finding as _finding
 
 USER_WRITABLE = re.compile(r"\\appdata\\|\\temp\\|\\users\\public\\|\\downloads\\|"
                            r"\\programdata\\", re.I)
@@ -45,11 +46,6 @@ HOST_NETWORKING = re.compile(
     r"[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}",
     re.I,
 )
-
-
-def _finding(category, severity, title, detail, where="", host="win"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 # ---------------------------------------------------------------------------

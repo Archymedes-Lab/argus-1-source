@@ -23,6 +23,7 @@ import subprocess
 
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
@@ -35,11 +36,6 @@ _LINUX_FAIL = re.compile(
     r"Failed password for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+)"
     r"|authentication failure;.*?(?:user=(?P<user2>\S+))?.*?rhost=(?P<ip2>\S+)"
     r"|Invalid user (?P<user3>\S+) from (?P<ip3>\S+)")
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def sort_findings(f):

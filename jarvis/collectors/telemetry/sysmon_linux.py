@@ -39,6 +39,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 from jarvis.core.util import now
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CHANNEL = "journal:sysmon"
@@ -183,11 +184,6 @@ def _payload(cmd):
     # bash single-quote escaping: an apostrophe inside a '…' string is written
     # as '"'"'. Left in place it splits words and hides what actually ran.
     return real.replace(_SQ_ESCAPE, chr(39)).strip()
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def sort_findings(f):

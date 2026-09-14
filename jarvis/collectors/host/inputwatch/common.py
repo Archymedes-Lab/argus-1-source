@@ -15,11 +15,6 @@ _M_DUPES = "input_hook_dupe_pids"       # "<local ts>:<pid,pid>" seen this drain
 _M_OVERSIZE = "input_hook_oversized_at"  # local ts the output file blew READ_CAP
 
 
-def _finding(category, severity, title, detail, where="", host="win"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
-
-
 def _sha256(path):
     try:
         with open(path, "rb") as fh:

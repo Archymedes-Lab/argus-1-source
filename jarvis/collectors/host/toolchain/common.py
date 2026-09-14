@@ -4,6 +4,7 @@ import json
 import hashlib
 import os
 import re
+from jarvis.core.finding import finding as _finding
 
 
 MAX_REPOS = 200
@@ -17,11 +18,6 @@ PAYLOAD_RE = re.compile(
     r"|\beval\s*\("
     r"|\bnc\b\s+(-[a-z]*e|.*-e\s)",
     re.I)
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _read(path, limit=400000):

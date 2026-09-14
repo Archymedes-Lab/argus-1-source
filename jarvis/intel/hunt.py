@@ -33,6 +33,7 @@ from jarvis.collectors.telemetry import auditd, sysmon_linux
 from jarvis.core import vet
 from jarvis.core.util import dpkg_owns, now
 from jarvis.platform.windows import ps_json
+from jarvis.core.finding import finding as _finding
 
 # Which jarvis audit covers which ATT&CK technique. Parent technique ids cover
 # their sub-techniques unless a sub-technique is listed on its own.
@@ -123,11 +124,6 @@ KNOWN_BLIND = {
              "DCSync) — sysmon covers LSASS access; the rest needs "
              "registry/file/replication auditing",
 }
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _win_to_wsl(path):

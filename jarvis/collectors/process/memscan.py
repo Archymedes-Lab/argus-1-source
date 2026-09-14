@@ -31,6 +31,7 @@ absence: a region can be allocated, executed and freed between two passes.
 
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.paths import win_script
+from jarvis.core.finding import win_finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"injected code": 0, "hooked syscalls": 1, "mitigations": 2,
@@ -79,11 +80,6 @@ KNOWN_HOOKERS = {
     "cyoptics", "wdfilter", "cyveraservice", "vgk", "vgtray", "vanguard",
     "easyanticheat", "battleye", "faceit",
 }
-
-
-def _finding(category, severity, title, detail, where="", host="win"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _run(timeout=420):

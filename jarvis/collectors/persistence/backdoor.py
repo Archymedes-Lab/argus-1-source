@@ -23,6 +23,7 @@ import stat
 
 from jarvis.core.util import dpkg_owns
 from jarvis.platform.windows import aslist, ps_json
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"remote access": 0, "privilege": 1, "persistence": 2,
@@ -40,11 +41,6 @@ PAYLOAD_RE = re.compile(
     r"|socat\s+.*exec"
     r"|\bncat\b.*--exec",
     re.I)
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _read(path, limit=200000):

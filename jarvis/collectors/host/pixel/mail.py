@@ -15,7 +15,7 @@ import re
 
 from jarvis.platform.windows import aslist, ps_json
 
-from .common import finding
+from jarvis.core.finding import win_finding as finding
 
 # A beacon is a remote image that is too small to be content, or one whose URL
 # is a tracking endpoint. Neither test alone is reliable, so both are reported

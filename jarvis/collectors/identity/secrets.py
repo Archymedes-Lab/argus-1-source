@@ -30,6 +30,7 @@ import os
 import re
 import stat
 import subprocess
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"reachable": 0, "tracked": 1, "present": 2, "visibility": 3}
@@ -146,11 +147,6 @@ CREDENTIAL_FILES = (
     ".aws/credentials", ".config/gh/hosts.yml", ".docker/config.json",
     ".kube/config", ".config/gcloud/credentials.db",
 )
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _entropy(s):

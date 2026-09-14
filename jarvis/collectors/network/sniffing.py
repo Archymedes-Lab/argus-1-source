@@ -25,6 +25,7 @@ import subprocess
 
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import aslist, ps_json
+from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
@@ -35,11 +36,6 @@ CAPTURE_TOOLS = ("tcpdump", "tshark", "dumpcap", "wireshark", "windump",
 # Interface name prefixes that are promiscuous as part of normal operation.
 BENIGN_IFACE = ("br-", "docker", "veth", "virbr", "vnet", "lxc", "cni",
                 "flannel", "cali", "tap", "tun", "kube")
-
-
-def _finding(category, severity, title, detail, where="", host="wsl"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def sort_findings(f):

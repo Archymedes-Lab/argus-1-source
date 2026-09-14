@@ -5,7 +5,9 @@ import os
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
 from jarvis.core.util import iso, now
-from .common import HOOK_PS1, READ_CAP, _M_DUPES, _M_OVERSIZE, _finding, _mget_int, _sha256
+from jarvis.core.finding import win_finding as _finding
+
+from .common import HOOK_PS1, READ_CAP, _M_DUPES, _M_OVERSIZE, _mget_int, _sha256
 from .helper import _alive_mtime, _alive_path, _paths, _pid_path, _pidfile_pid, _staged_matches_source, _stop_all, running, start, stop
 from .ingest import ingest
 from .analysis import _latency_findings, _typing_findings, sort_findings

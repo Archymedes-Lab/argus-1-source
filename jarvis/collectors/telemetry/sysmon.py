@@ -35,6 +35,7 @@ wrong.
 from jarvis.core import collection, vet
 from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.util import iso, now
+from jarvis.core.finding import win_finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"credential access": 0, "injection": 1, "tampering": 2,
@@ -68,11 +69,6 @@ SYSTEM_INJECTORS = {
     "sihost.exe", "runtimebroker.exe", "dllhost.exe", "conhost.exe",
     "searchindexer.exe", "wmiprvse.exe", "msmpeng.exe", "mssense.exe",
 }
-
-
-def _finding(category, severity, title, detail, where="", host="win"):
-    return {"category": category, "severity": severity, "title": title,
-            "detail": detail, "where": where, "host": host}
 
 
 def _ps(script, timeout=240):
