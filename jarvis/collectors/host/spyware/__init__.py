@@ -15,7 +15,7 @@ module reads:
     enumerable.
 """
 
+from .common import SEV_ORDER, sort_findings
+from .linux import audit_linux
 from .run import audit
 from .windows import audit_windows
-from .linux import audit_linux
-from .common import sort_findings, SEV_ORDER

@@ -30,6 +30,7 @@ import os
 import re
 import stat
 import subprocess
+
 from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}

@@ -12,9 +12,9 @@ Three surfaces, one question each:
 
 from jarvis.core.finding import win_finding as finding
 
+from . import mail, screen, web
 from .common import SEV_ORDER, sort_findings
 from .run import audit
-from . import mail, screen, web
 
 __all__ = ["SEV_ORDER", "audit", "finding", "sort_findings",
            "mail", "screen", "web"]

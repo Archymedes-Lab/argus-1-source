@@ -26,12 +26,12 @@ only ever ADD suspicion has to hold for every source without exception.
 import csv
 import gzip
 import io
-import zipfile
 import json
 import re
 import time
 import urllib.error
 import urllib.request
+import zipfile
 
 from jarvis.core import vet
 from jarvis.core.util import now

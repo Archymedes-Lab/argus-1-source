@@ -91,9 +91,9 @@ class PackagedDataTests(unittest.TestCase):
     """
 
     def test_every_shipped_data_file_referenced_by_a_module_exists(self):
+        from jarvis.collectors.host.inputwatch import common as iw_common
         from jarvis.collectors.process import memscan
         from jarvis.core import paths
-        from jarvis.collectors.host.inputwatch import common as iw_common
 
         for label, path in (
             ("inputwatch HOOK_PS1", iw_common.HOOK_PS1),

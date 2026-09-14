@@ -20,9 +20,9 @@ import os
 import re
 import subprocess
 
+from jarvis.core.finding import finding as _finding
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
-from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 

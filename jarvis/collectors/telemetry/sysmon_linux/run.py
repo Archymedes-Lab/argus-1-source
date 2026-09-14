@@ -1,15 +1,20 @@
 """The audit: rules over new events, remembered hits, and capture-health checks."""
 
-from jarvis.core.util import now
 from jarvis.core.finding import finding as _finding
+from jarvis.core.util import now
 
 from .journal import CHANNEL, _event_utc, _parse, _raw, state
 from .rules import (
-    LOG_DELETE_SUFFIX, LOG_DELETE_TITLE, PERSIST_WRITE_TITLE, RAW_ACCESS_TITLE,
-    RAW_LEGACY_SUFFIX, RAW_UNRESOLVED_TITLE, _expected_log_maintenance,
-    _expected_persistence, _rules,
+    LOG_DELETE_SUFFIX,
+    LOG_DELETE_TITLE,
+    PERSIST_WRITE_TITLE,
+    RAW_ACCESS_TITLE,
+    RAW_LEGACY_SUFFIX,
+    RAW_UNRESOLVED_TITLE,
+    _expected_log_maintenance,
+    _expected_persistence,
+    _rules,
 )
-
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 

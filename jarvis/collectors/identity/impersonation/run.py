@@ -1,6 +1,7 @@
 """Running the identity audit, correlated with what the input hook saw."""
 
 from jarvis.core.util import now
+
 from . import rules
 from .collect import sample
 

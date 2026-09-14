@@ -33,9 +33,9 @@ wrong.
 
 
 from jarvis.core import collection, vet
-from jarvis.platform.windows import aslist, ps_json
-from jarvis.core.util import iso, now
 from jarvis.core.finding import win_finding as _finding
+from jarvis.core.util import iso, now
+from jarvis.platform.windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"credential access": 0, "injection": 1, "tampering": 2,

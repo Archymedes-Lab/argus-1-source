@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from jarvis.collectors.host import toolchain as tc
+
 # Patch where each name is looked up: tc re-exports these, but the callers
 # resolve them inside their own module, so rebinding on tc has no effect.
 from jarvis.collectors.host.toolchain import extensions as tc_extensions

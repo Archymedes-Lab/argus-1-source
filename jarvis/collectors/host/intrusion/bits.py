@@ -2,7 +2,6 @@
 
 import re
 
-
 # BITS job names Windows Update and vendor updaters use.
 _BITS_BENIGN = re.compile(
     r"windows ?update|wuauclt|delivery optimization|msedge|edgeupdate|"

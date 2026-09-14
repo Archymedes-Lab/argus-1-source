@@ -3,8 +3,19 @@
 import glob
 import os
 import re
-from .common import MAX_REPOS, PAYLOAD_RE, _diff, _finding, _hash, _home, _json, _read, _short, repos
 
+from .common import (
+    MAX_REPOS,
+    PAYLOAD_RE,
+    _diff,
+    _finding,
+    _hash,
+    _home,
+    _json,
+    _read,
+    _short,
+    repos,
+)
 
 _M_HOOKS = "toolchain_hooks"
 

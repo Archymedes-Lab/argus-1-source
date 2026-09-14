@@ -1,8 +1,8 @@
 """The Windows half of the hidden-process audit."""
 
 from jarvis.platform.windows import aslist, ps_json
-from .common import _finding
 
+from .common import _finding
 
 PS_HIDDEN = r"""
 $ErrorActionPreference = 'SilentlyContinue'

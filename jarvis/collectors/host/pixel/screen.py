@@ -13,8 +13,8 @@ whether the ones that must stay open are at least protected.
 
 import os
 
-from jarvis.platform.windows import aslist, ps_json
 from jarvis.core.finding import win_finding as finding
+from jarvis.platform.windows import aslist, ps_json
 
 # Remote-access and capture products, by executable name. Presence is a
 # prompt to confirm the session is yours, never a verdict on its own.

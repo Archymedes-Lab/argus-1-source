@@ -7,7 +7,6 @@ from jarvis.platform.windows import aslist
 
 from .common import _finding
 
-
 # The driver stack for these two classes, on a machine nobody has inserted
 # anything into. Anything else in the list is a filter driver seeing input
 # before the applications do.

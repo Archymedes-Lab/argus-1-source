@@ -8,7 +8,6 @@ from jarvis.core.finding import finding as _finding
 from .harness import _payload
 from .journal import CHANNEL, _base, _clean
 
-
 WORLD_WRITABLE = ("/tmp/", "/dev/shm/", "/var/tmp/", "/run/user/", "/var/lib/php/")
 
 

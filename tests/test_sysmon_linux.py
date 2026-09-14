@@ -1,11 +1,11 @@
-import unittest
 import os
 import tempfile
+import unittest
 from datetime import datetime, timezone
 
 from jarvis.collectors.telemetry import sysmon_linux
-from jarvis.core.util import now
 from jarvis.core.store import Store
+from jarvis.core.util import now
 
 
 class SysmonHealthTests(unittest.TestCase):

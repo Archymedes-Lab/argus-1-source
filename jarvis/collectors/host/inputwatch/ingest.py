@@ -2,11 +2,11 @@
 
 import json
 import os
+
 from jarvis.core.util import now
-from .common import READ_CAP, _M_DUPES, _M_OVERSIZE
+
+from .common import _M_DUPES, _M_OVERSIZE, READ_CAP
 from .helper import _paths
-
-
 
 _BEAT_COLS = ("real_keys", "injected_keys", "real_clicks", "injected_clicks",
               "real_moves", "injected_moves", "injected_keyups",

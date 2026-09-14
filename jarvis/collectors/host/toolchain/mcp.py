@@ -3,8 +3,8 @@
 import glob
 import os
 import re
-from .common import PAYLOAD_RE, _diff, _finding, _hash, _home, _json, _short, repos
 
+from .common import PAYLOAD_RE, _diff, _finding, _hash, _home, _json, _short, repos
 
 _M_MCP = "toolchain_mcp"
 

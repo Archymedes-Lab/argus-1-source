@@ -8,10 +8,10 @@ import json
 import os
 import sys
 
-from jarvis.response.evidence.collect import collect_profile, profile_names
 from jarvis.response.evidence import scan as scan_mod
 from jarvis.response.evidence import sources
 from jarvis.response.evidence.case import Case, adopt, list_cases
+from jarvis.response.evidence.collect import collect_profile, profile_names
 from jarvis.response.evidence.paths import EVIDENCE_ROOT
 
 

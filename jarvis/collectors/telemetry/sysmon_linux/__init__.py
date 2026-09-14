@@ -31,10 +31,15 @@ as `chris`, so `chris` must be in the `systemd-journal` or `adm` group (usually
 already true on Ubuntu); the module falls back to /var/log/syslog otherwise.
 """
 
-from .journal import CHANNEL, state, active, _run, _parse, _event_utc
 from .harness import _SQ_ESCAPE, _payload
+from .journal import CHANNEL, _event_utc, _parse, _run, active, state
 from .rules import (
-    DOWNLOAD_RUN, LOG_DELETE_TITLE, PERSIST_WRITE_TITLE, RAW_ACCESS_TITLE,
-    RAW_UNRESOLVED_TITLE, RAW_LEGACY_SUFFIX, _rules,
+    DOWNLOAD_RUN,
+    LOG_DELETE_TITLE,
+    PERSIST_WRITE_TITLE,
+    RAW_ACCESS_TITLE,
+    RAW_LEGACY_SUFFIX,
+    RAW_UNRESOLVED_TITLE,
+    _rules,
 )
-from .run import SEV_ORDER, sort_findings, _remember, _health, audit
+from .run import SEV_ORDER, _health, _remember, audit, sort_findings

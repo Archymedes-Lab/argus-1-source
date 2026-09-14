@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from jarvis.response.flash import analyze, save
 from jarvis.response.evidence.manifest import Manifest
+from jarvis.response.flash import analyze, save
 
 
 def event(kind, time, record, **data):

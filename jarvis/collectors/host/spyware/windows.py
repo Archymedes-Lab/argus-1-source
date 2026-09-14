@@ -9,7 +9,6 @@ from jarvis.platform.windows import aslist, ps_json
 from .common import INPUT_VENDORS, STALKERWARE, _finding
 from .keyboard import _keyboard_findings
 
-
 PS_SPY = r"""
 $ErrorActionPreference = 'SilentlyContinue'
 $o = [ordered]@{}

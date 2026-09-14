@@ -11,7 +11,6 @@ app uses the microphone; nothing asks here.
 import os
 import re
 
-
 _SOCKET_FD = re.compile(r"^socket:\[(\d+)\]$")
 
 

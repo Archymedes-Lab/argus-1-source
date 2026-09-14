@@ -19,12 +19,11 @@ import os
 import re
 import subprocess
 
-from jarvis.platform.windows import aslist, ps_json
 from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.core.util import short
+from jarvis.platform.windows import aslist, ps_json
 
 from .trusted_tasks import verified_maintenance_task
-
 
 # PowerShell's -EncodedCommand, as a real flag rather than any string containing
 # "enc" (Proton's "ms-encodedlaunch:" URI matched a looser pattern).

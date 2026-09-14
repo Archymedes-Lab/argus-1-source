@@ -26,9 +26,10 @@ import os
 
 from jarvis.collectors.process.detect import TRUSTED_PATHS
 from jarvis.core import vet
+from jarvis.core.finding import finding as _finding
 from jarvis.core.util import dpkg_owns, now
 from jarvis.platform.windows import ps_json
-from jarvis.core.finding import finding as _finding
+
 
 def _win_to_wsl(path):
     """C:\\Users\\x -> /mnt/c/Users/x so Windows paths are checkable from here."""

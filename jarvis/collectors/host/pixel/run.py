@@ -1,8 +1,8 @@
 """Running every tracking and capture check together."""
 
-from . import mail, screen, web
 from jarvis.core.finding import win_finding as finding
 
+from . import mail, screen, web
 from .common import sort_findings
 
 # Modules, not bound functions: each module's audit is resolved at call

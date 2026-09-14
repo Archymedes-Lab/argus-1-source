@@ -2,7 +2,6 @@
 
 import subprocess
 
-
 DEFAULT_SWEEP = 65536
 
 PROC = "/proc"

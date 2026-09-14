@@ -3,8 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from jarvis.collectors.identity.secrets import (audit, scan_file, _private_blocks,
-                                                fingerprint)
+from jarvis.collectors.identity.secrets import _private_blocks, audit, fingerprint, scan_file
 
 
 class SecretScannerSyntaxTests(unittest.TestCase):

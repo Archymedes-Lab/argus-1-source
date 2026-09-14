@@ -15,7 +15,6 @@ import re
 from jarvis.core.paths import REPO_ROOT
 from jarvis.platform.windows import aslist
 
-
 TRUSTED_IDE_TASKS = {
     "wsl ide keepalive": {
         "script": "wsl-ide-keepalive-supervisor.ps1",

@@ -1,11 +1,10 @@
 import json
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import patch
 
-from jarvis.collectors.network.internetwatch import (analyze, audit, firewall_summary,
-                                                     scope, latest)
+from jarvis.collectors.network.internetwatch import analyze, audit, firewall_summary, latest, scope
 from jarvis.core.store import Store
 
 

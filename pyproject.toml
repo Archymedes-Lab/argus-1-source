@@ -10,10 +10,14 @@ line-length = 100
 extend-exclude = ["docs", "windows-sensor"]
 
 [tool.ruff.lint]
-# Correctness only: pyflakes (F) and syntax errors (E9). Style is left to the
-# surrounding code; a formatter pass would bury real changes in churn.
-select = ["F", "E9"]
+# Correctness (pyflakes F, syntax errors E9) plus import ordering (I). Other
+# style is left to the surrounding code; a formatter pass would bury real
+# changes in churn.
+select = ["F", "E9", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 # Package __init__ modules re-export their submodules' names.
 "**/__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["jarvis"]

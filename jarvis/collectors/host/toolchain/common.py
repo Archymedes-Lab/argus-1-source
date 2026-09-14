@@ -1,11 +1,11 @@
 """Constants shared by more than one part of toolchain."""
 
-import json
 import hashlib
+import json
 import os
 import re
-from jarvis.core.finding import finding as _finding
 
+from jarvis.core.finding import finding as _finding
 
 MAX_REPOS = 200
 

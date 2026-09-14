@@ -1,5 +1,5 @@
-import unittest
 import os
+import unittest
 
 from jarvis.collectors.persistence import trusted_tasks
 from jarvis.core import paths

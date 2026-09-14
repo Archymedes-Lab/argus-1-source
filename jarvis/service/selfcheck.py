@@ -32,9 +32,9 @@ import os
 import subprocess
 import time
 
-from jarvis.response import alert
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import iso, now
+from jarvis.response import alert
 
 UNIT = "jarvis.service"
 

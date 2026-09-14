@@ -4,8 +4,8 @@ import json
 import sys
 
 from jarvis.collectors.process import detect
-from jarvis.response import fixit
 from jarvis.core.util import short
+from jarvis.response import fixit
 
 C = {
     "critical": "\033[1;97;41m", "high": "\033[1;31m", "medium": "\033[33m",

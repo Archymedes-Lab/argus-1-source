@@ -2,18 +2,25 @@
 
 import json
 
-from jarvis.collectors.persistence import asep, backdoor, control, implant, startup
-from jarvis.collectors.telemetry import auditd, sysmon, sysmon_linux
-from jarvis.collectors.host import (pixel, intrusion, inputwatch, posture, spyware,
-                                    toolchain)
-from jarvis.collectors.network import sniffing, webshell, firewall, netwatch
+from jarvis.collectors.host import inputwatch, intrusion, pixel, posture, spyware, toolchain
 from jarvis.collectors.identity import bruteforce, secrets
-from jarvis.service import coverage
-from jarvis.collectors.process import hidden, evasion, memscan, monitor
-from jarvis.intel import gaps, hunt, research as intel
+from jarvis.collectors.network import firewall, netwatch, sniffing, webshell
+from jarvis.collectors.persistence import asep, backdoor, control, implant, startup
+from jarvis.collectors.process import evasion, hidden, memscan, monitor
+from jarvis.collectors.telemetry import auditd, sysmon, sysmon_linux
 from jarvis.core.util import iso, short
-from ..output import (color, is_tty, selected_hosts, print_process_finding, render_findings,
-                      simple_command)
+from jarvis.intel import gaps, hunt
+from jarvis.intel import research as intel
+from jarvis.service import coverage
+
+from ..output import (
+    color,
+    is_tty,
+    print_process_finding,
+    render_findings,
+    selected_hosts,
+    simple_command,
+)
 
 
 def cmd_scan(args, store):

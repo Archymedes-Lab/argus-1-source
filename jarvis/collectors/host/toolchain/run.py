@@ -2,13 +2,12 @@
 
 from .common import _finding, reset_cache
 
-
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
 CAT_ORDER = {"agent": 0, "editor": 1, "vcs": 2, "packages": 3, "visibility": 4}
-from .mcp import check_mcp
 from .agents import check_agent_hooks
 from .extensions import check_extensions
+from .mcp import check_mcp
 from .packaging import check_git_hooks, check_package_config
 
 

@@ -2,7 +2,6 @@
 
 import re
 
-
 # Names used by consumer monitoring, parental-control and stalkerware products.
 # Matching one is a prompt to look, not a verdict.
 STALKERWARE = re.compile(

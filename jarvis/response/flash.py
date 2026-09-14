@@ -5,10 +5,11 @@ import os
 import re
 from datetime import datetime
 
+from jarvis.core.paths import win_script
 from jarvis.platform.windows import aslist, ps_json
+
 from .evidence.manifest import Manifest, sha256_file
 from .evidence.paths import case_dir
-from jarvis.core.paths import win_script
 
 CONSOLES = {'cmd.exe', 'powershell.exe', 'pwsh.exe', 'wsl.exe', 'conhost.exe',
             'openconsole.exe', 'cscript.exe', 'wscript.exe', 'mshta.exe'}

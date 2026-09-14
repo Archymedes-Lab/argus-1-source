@@ -3,13 +3,14 @@
 import json
 import time
 
-from jarvis.response import alert, fixit
-from jarvis.platform import windows as collect_windows
 from jarvis.collectors.persistence import control
-from jarvis.service import deadman, selfcheck
 from jarvis.collectors.process import monitor
 from jarvis.core.util import iso
-from ..output import color, is_tty, selected_hosts, print_process_finding
+from jarvis.platform import windows as collect_windows
+from jarvis.response import alert, fixit
+from jarvis.service import deadman, selfcheck
+
+from ..output import color, is_tty, print_process_finding, selected_hosts
 
 
 def cmd_watch(args, store):

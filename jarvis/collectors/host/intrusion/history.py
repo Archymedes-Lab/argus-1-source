@@ -7,7 +7,6 @@ from jarvis.platform.windows import aslist
 
 from .common import _finding
 
-
 SUSPICIOUS_HISTORY = re.compile(
     r"\b(irm|invoke-restmethod|iwr|invoke-webrequest|curl|wget)\b[^|;\n]*\|\s*(iex|invoke-expression)\b|"
     r"frombase64string|-enc(odedcommand)?\s+[A-Za-z0-9+/=]{30,}|"

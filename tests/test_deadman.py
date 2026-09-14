@@ -129,6 +129,7 @@ class InspectCommandTests(unittest.TestCase):
     def test_selfcheck_reports_the_windows_monitor(self):
         import io
         from contextlib import redirect_stdout
+
         from jarvis.cli.commands import service
 
         buf = io.StringIO()

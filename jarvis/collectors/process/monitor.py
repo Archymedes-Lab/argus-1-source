@@ -2,9 +2,11 @@
 
 import json
 
-from jarvis.platform import linux as collect_linux, windows as collect_windows
-from . import detect
 from jarvis.core.util import classify_ip, iso, now, reverse_dns
+from jarvis.platform import linux as collect_linux
+from jarvis.platform import windows as collect_windows
+
+from . import detect
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 

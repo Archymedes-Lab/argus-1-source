@@ -3,10 +3,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from jarvis.core.store import Store
 from jarvis.response import alert
 from jarvis.response.reporting import advisory, notifications
-from jarvis.core.store import Store
-
 
 CONF = {
     "resend_api_key": "test-key",

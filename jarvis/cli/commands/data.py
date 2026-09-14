@@ -3,9 +3,11 @@
 import json
 
 from jarvis.collectors.process import detect, monitor
-from jarvis.intel import feeds, research as intel
-from jarvis.response import ledger as ledger_mod
 from jarvis.core.util import iso, now, short
+from jarvis.intel import feeds
+from jarvis.intel import research as intel
+from jarvis.response import ledger as ledger_mod
+
 from ..output import color, is_tty, selected_hosts
 
 

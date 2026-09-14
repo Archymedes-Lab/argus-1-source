@@ -26,10 +26,12 @@ question to ask and the one most often skipped: has the antivirus already found
 something and been ignored?
 """
 
-from .run import audit
-from .common import sort_findings, SEV_ORDER
+from .bits import _bits_hosts, _bits_is_vendor
+from .common import SEV_ORDER, sort_findings
 from .history import (
-    SUSPICIOUS_HISTORY, _history_findings, _history_malware_hosts,
+    SUSPICIOUS_HISTORY,
+    _history_findings,
+    _history_malware_hosts,
     _history_severity,
 )
-from .bits import _bits_is_vendor, _bits_hosts
+from .run import audit

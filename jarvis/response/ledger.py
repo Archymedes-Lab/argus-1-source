@@ -32,6 +32,7 @@ not a state that means the same thing after one hour and after one month.
 
 import json
 import time
+
 from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}

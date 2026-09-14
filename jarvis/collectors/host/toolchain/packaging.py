@@ -3,8 +3,8 @@
 import glob
 import os
 import re
-from .common import PAYLOAD_RE, _finding, _home, _read, _short, repos
 
+from .common import PAYLOAD_RE, _finding, _home, _read, _short, repos
 
 _PTH_SHIMS = (
     (re.compile(r"^distutils-precedence\.pth$"),

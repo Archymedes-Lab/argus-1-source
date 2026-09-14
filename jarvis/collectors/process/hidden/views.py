@@ -7,8 +7,8 @@ import errno
 import os
 import re
 import struct
-from .common import DEFAULT_SWEEP, PROC, _read
 
+from .common import DEFAULT_SWEEP, PROC, _read
 
 SYS_getdents64 = {"x86_64": 217, "aarch64": 61, "armv7l": 217, "i686": 220}
 

@@ -2,9 +2,9 @@
 
 import os
 import time
+
 from .common import _diff, _finding, _hash, _json, _short
 from .mcp import _windows_profiles
-
 
 _M_EXT = "toolchain_ext"
 

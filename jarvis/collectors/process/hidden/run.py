@@ -2,13 +2,31 @@
 
 import os
 import time
+
 from .common import DEFAULT_SWEEP, PROC, _finding
 
-
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
-from .views import _alive, _describe, is_thread, pid_max, view_getdents, view_kill_probe, view_readdir, view_sched_debug, view_stat_sweep
+from .kernel import (
+    bpf_hidden_pins,
+    bpf_programs,
+    ftrace_hooks,
+    hidden_modules,
+    injected_processes,
+    io_uring_state,
+    proc_overmounts,
+)
 from .sockets import hidden_listeners, orphan_sockets
-from .kernel import bpf_hidden_pins, bpf_programs, ftrace_hooks, hidden_modules, injected_processes, io_uring_state, proc_overmounts
+from .views import (
+    _alive,
+    _describe,
+    is_thread,
+    pid_max,
+    view_getdents,
+    view_kill_probe,
+    view_readdir,
+    view_sched_debug,
+    view_stat_sweep,
+)
 from .windows import audit_windows
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}

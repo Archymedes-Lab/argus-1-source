@@ -24,11 +24,11 @@ import shutil
 import subprocess
 import time
 
-from jarvis.platform import windows as collect_windows
 from jarvis.collectors.process import hidden
-from jarvis.core.store import DEFAULT_DB, Store
-from jarvis.service.schedule import JOBS
 from jarvis.core.finding import finding as _finding
+from jarvis.core.store import DEFAULT_DB, Store
+from jarvis.platform import windows as collect_windows
+from jarvis.service.schedule import JOBS
 
 
 def _cmd(args, timeout=10):

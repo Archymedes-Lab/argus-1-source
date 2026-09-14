@@ -10,23 +10,21 @@ scheduler's worker thread, and a sqlite handle must not cross threads.
 
 from contextlib import contextmanager
 
-from jarvis.collectors.host import (controlwatch, inputwatch, pixel, posture,
-                                    spyware, toolchain)
+from jarvis.collectors.host import controlwatch, inputwatch, pixel, posture, spyware, toolchain
 from jarvis.collectors.host import intrusion as intrusion_mod
 from jarvis.collectors.identity import bruteforce, impersonation, secrets
-from jarvis.collectors.network import (firewall, internetwatch, netwatch,
-                                       sniffing, webshell)
-from jarvis.collectors.persistence import backdoor, control, implant, startup
+from jarvis.collectors.network import firewall, internetwatch, netwatch, sniffing, webshell
 from jarvis.collectors.persistence import asep as asep_mod
-from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
+from jarvis.collectors.persistence import backdoor, control, implant, startup
 from jarvis.collectors.process import evasion as evasion_mod
+from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
 from jarvis.collectors.telemetry import auditd, sysmon, sysmon_linux
 from jarvis.core import retention
 from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
 from jarvis.intel import research as intel
-from jarvis.response.reporting.cadence import run as report_due
 from jarvis.response import ledger as ledger_mod
+from jarvis.response.reporting.cadence import run as report_due
 from jarvis.service import connectivity, deadman, selfcheck
 from jarvis.service import coverage as coverage_mod
 from jarvis.service.schedule import JOBS

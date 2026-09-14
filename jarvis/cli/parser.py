@@ -2,21 +2,16 @@
 
 import argparse
 
-from jarvis.intel import feeds, research as intel
-from jarvis.service import selfcheck
 from jarvis.core.store import DEFAULT_DB, Store
-from .commands import evidence as evidence_cli
-from .commands import impersonation as impersonation_cli
-from .commands import pixel as pixel_cli
-from .commands import repair as repair_cli
-from .commands import retention as retention_cli
+from jarvis.intel import feeds
+from jarvis.intel import research as intel
+from jarvis.service import selfcheck
+
 from .commands import (
     cmd_alert,
-    cmd_auditd,
-    cmd_sniffing,
-    cmd_webshell,
     cmd_approve,
     cmd_asep,
+    cmd_auditd,
     cmd_backdoor,
     cmd_baseline,
     cmd_boot,
@@ -45,12 +40,20 @@ from .commands import (
     cmd_secrets,
     cmd_selfcheck,
     cmd_serve,
+    cmd_sniffing,
     cmd_spy,
     cmd_status,
     cmd_sysmon,
     cmd_sysmon_linux,
     cmd_toolchain,
-    cmd_watch)
+    cmd_watch,
+    cmd_webshell,
+)
+from .commands import evidence as evidence_cli
+from .commands import impersonation as impersonation_cli
+from .commands import pixel as pixel_cli
+from .commands import repair as repair_cli
+from .commands import retention as retention_cli
 
 
 def build_parser():

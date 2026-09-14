@@ -2,7 +2,6 @@
 
 import re
 
-
 # Claude Code and similar agent harnesses run every command through a fixed
 # wrapper: `bash -c 'source <shell-snapshot.sh> ... && eval '<the real
 # command>' < /dev/null && pwd -P >| /tmp/claude-<id>-cwd'`. The scaffolding —

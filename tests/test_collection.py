@@ -4,11 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from jarvis.platform import windows as collect_windows
-from jarvis.core import collection
 from jarvis.collectors.telemetry import sysmon
-from jarvis.service.protection import health
+from jarvis.core import collection
 from jarvis.core.store import Store
+from jarvis.platform import windows as collect_windows
+from jarvis.service.protection import health
 
 
 class CollectionTests(unittest.TestCase):

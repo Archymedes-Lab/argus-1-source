@@ -1,6 +1,7 @@
 """Supervise the independent connectivity guard from its persisted observations."""
 import os
 import time
+
 from .deadman import read_state
 
 STATE = '/mnt/c/Users/%s/AppData/Local/Jarvis/Connectivity/state.json' % os.environ.get('WSL_USER', 'chris')

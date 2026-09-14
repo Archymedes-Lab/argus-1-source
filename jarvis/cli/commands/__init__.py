@@ -1,8 +1,44 @@
 """Subcommand implementations, grouped by what they act on."""
 
-from .audit import (cmd_asep, cmd_auditd, cmd_sniffing, cmd_webshell, cmd_backdoor, cmd_boot, cmd_bruteforce, cmd_coverage, cmd_evasion, cmd_firewall, cmd_gaps, cmd_hidden, cmd_hunt, cmd_implant, cmd_inputwatch, cmd_intrusion, cmd_investigate, cmd_memscan, cmd_netwatch, cmd_posture, cmd_scan, cmd_secrets, cmd_spy, cmd_sysmon, cmd_sysmon_linux, cmd_toolchain)
-from .data import (cmd_approve, cmd_baseline, cmd_events, cmd_feeds, cmd_intel, cmd_outstanding, cmd_peers, cmd_procs)
-from .service import (cmd_alert, cmd_control, cmd_selfcheck, cmd_serve, cmd_status, cmd_watch)
+from .audit import (
+    cmd_asep,
+    cmd_auditd,
+    cmd_backdoor,
+    cmd_boot,
+    cmd_bruteforce,
+    cmd_coverage,
+    cmd_evasion,
+    cmd_firewall,
+    cmd_gaps,
+    cmd_hidden,
+    cmd_hunt,
+    cmd_implant,
+    cmd_inputwatch,
+    cmd_intrusion,
+    cmd_investigate,
+    cmd_memscan,
+    cmd_netwatch,
+    cmd_posture,
+    cmd_scan,
+    cmd_secrets,
+    cmd_sniffing,
+    cmd_spy,
+    cmd_sysmon,
+    cmd_sysmon_linux,
+    cmd_toolchain,
+    cmd_webshell,
+)
+from .data import (
+    cmd_approve,
+    cmd_baseline,
+    cmd_events,
+    cmd_feeds,
+    cmd_intel,
+    cmd_outstanding,
+    cmd_peers,
+    cmd_procs,
+)
+from .service import cmd_alert, cmd_control, cmd_selfcheck, cmd_serve, cmd_status, cmd_watch
 
 __all__ = [
     "cmd_alert",

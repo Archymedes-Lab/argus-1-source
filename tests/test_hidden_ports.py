@@ -1,7 +1,8 @@
-import tempfile
 import pathlib
+import tempfile
 import unittest
 from unittest.mock import patch
+
 # Patch where each name is looked up: both live in hidden.sockets, and
 # rebinding them on the package would not affect the callers.
 from jarvis.collectors.process.hidden import sockets

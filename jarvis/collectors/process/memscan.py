@@ -29,9 +29,9 @@ absence: a region can be allocated, executed and freed between two passes.
 """
 
 
-from jarvis.platform.windows import aslist, ps_json
-from jarvis.core.paths import win_script
 from jarvis.core.finding import win_finding as _finding
+from jarvis.core.paths import win_script
+from jarvis.platform.windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"injected code": 0, "hooked syscalls": 1, "mitigations": 2,

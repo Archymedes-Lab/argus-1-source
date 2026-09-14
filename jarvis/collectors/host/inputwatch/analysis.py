@@ -1,13 +1,13 @@
 """Turning input telemetry into findings about synthetic input."""
 
 import statistics
-from jarvis.platform.windows import ps_json
-from jarvis.core.util import iso, now
+
 from jarvis.core.finding import win_finding as _finding
+from jarvis.core.util import iso, now
+from jarvis.platform.windows import ps_json
+
 from .helper import running
 from .ingest import ingest
-
-
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 

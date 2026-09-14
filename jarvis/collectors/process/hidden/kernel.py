@@ -2,9 +2,9 @@
 
 import os
 import re
+
 from .common import PROC, _finding, _read, _run_capture
 from .views import _describe
-
 
 BPF_HIDE_MAPS = re.compile(r"hidden_(pids?|names?|inodes?|files?|ports?)|"
                            r"(pid|name|inode|port)s?_to_hide|hide_(pid|list|map)",

@@ -3,11 +3,12 @@ paths and pids that describe it."""
 
 import os
 import subprocess
+
+from jarvis.core.util import now
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
-from jarvis.core.util import now
-from .common import HOOK_PS1
 
+from .common import HOOK_PS1
 
 _PATHS_CACHE = None
 

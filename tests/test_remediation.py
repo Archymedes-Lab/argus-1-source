@@ -2,9 +2,10 @@ import json
 import tempfile
 import unittest
 from unittest.mock import patch
+
 from jarvis.core import collection
-from jarvis.response import remediation as r
 from jarvis.core.store import Store
+from jarvis.response import remediation as r
 
 
 class RemediationTests(unittest.TestCase):
@@ -82,8 +83,8 @@ class RemediationTests(unittest.TestCase):
         self.assertIn(threat, findings)
 
     def test_verified_repair_does_not_mail_original_outage(self):
-        from jarvis.response.reporting import notifications
         from jarvis.response import alert
+        from jarvis.response.reporting import notifications
         findings, error = self.run_repair()
         with patch.object(alert, 'send_email') as send:
             notifications.dispatch(self.store, {}, 'sysmon_linux', findings, error)

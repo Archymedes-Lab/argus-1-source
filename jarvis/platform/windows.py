@@ -13,8 +13,8 @@ import shutil
 import stat
 import subprocess
 
-from jarvis.core.util import fingerprint
 from jarvis.core import collection
+from jarvis.core.util import fingerprint
 
 HOST = "win"
 
