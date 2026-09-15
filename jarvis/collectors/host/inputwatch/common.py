@@ -14,6 +14,8 @@ _M_DUPES = "input_hook_dupe_pids"       # "<local ts>:<pid,pid>" seen this drain
 
 _M_OVERSIZE = "input_hook_oversized_at"  # local ts the output file blew READ_CAP
 
+_M_SESSION = "input_hook_session"   # "<helper session>:<desktop session>" from the newest beat
+
 
 def _sha256(path):
     try:

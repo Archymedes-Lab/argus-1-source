@@ -97,6 +97,45 @@ def available() -> bool:
     return bool(_PS) and os.path.isfile(_PS) and ensure_interop()
 
 
+_SESSION_PROBE = ("\"$((Get-Process -Id $PID).SessionId):"
+                  "$((Get-Process explorer -EA SilentlyContinue | Select-Object -First 1).SessionId)\"")
+
+
+def desktop_interop() -> str:
+    """An interop socket whose Windows processes land on the user's desktop.
+
+    Each socket belongs to the wsl.exe that created it, and a Windows process
+    launched through it inherits that launcher's session. When WSL was started
+    by a background task, its sockets reach session 0, which has no desktop or
+    keyboard. Anything that has to see the user's input or windows — a
+    low-level keyboard hook above all — is blind there while looking perfectly
+    alive. So each socket is asked where it lands, and only one reaching the
+    session Explorer runs in is returned. "" when none does (no WSL terminal is
+    open on the desktop).
+    """
+    if not (_PS or find_powershell()):
+        return ""
+    try:
+        sockets = sorted((os.path.join("/run/WSL", n) for n in os.listdir("/run/WSL")
+                          if n.endswith("_interop")), key=os.path.getmtime, reverse=True)
+    except OSError:
+        return ""
+    for sock in sockets:
+        if os.path.islink(sock) or not stat.S_ISSOCK(os.stat(sock).st_mode):
+            continue
+        try:
+            r = subprocess.run([_PS or find_powershell(), "-NoProfile", "-NonInteractive",
+                                "-Command", _SESSION_PROBE],
+                               capture_output=True, text=True, errors="replace", timeout=30,
+                               cwd="/", env={**os.environ, "WSL_INTEROP": sock})
+        except (OSError, subprocess.SubprocessError):
+            continue
+        own, _, desktop = r.stdout.strip().partition(":")
+        if own.isdigit() and own == desktop and own != "0":
+            return sock
+    return ""
+
+
 def _split_args(cmd: str):
     """Tokenize a Windows command line, honoring double quotes."""
     return [t.strip('"') for t in re.findall(r'"[^"]*"|\S+', cmd or "")]

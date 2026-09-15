@@ -9,7 +9,7 @@ from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
 
 from .analysis import _latency_findings, _typing_findings, sort_findings
-from .common import _M_DUPES, _M_OVERSIZE, HOOK_PS1, READ_CAP, _mget_int, _sha256
+from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, HOOK_PS1, READ_CAP, _mget_int, _sha256
 from .helper import (
     _alive_mtime,
     _alive_path,
@@ -164,6 +164,16 @@ def _dupes(store):
     return (age, pids) if age < 180 else None
 
 
+def _outside_desktop(store):
+    """(helper session, desktop session) when the newest beat shows the hook
+    running somewhere it cannot see the user's input, else None."""
+    own, _, desktop = (store.get_meta(_M_SESSION, "") or "").partition(":")
+    if own.lstrip("-").isdigit() and desktop.lstrip("-").isdigit() \
+            and int(desktop) >= 0 and own != desktop:
+        return int(own), int(desktop)
+    return None
+
+
 def _flap_finding(store):
     recent = [t for t in _restart_log(store) if now() - t < FLAP_WINDOW]
     if len(recent) < FLAP_N:
@@ -229,6 +239,26 @@ def supervise(store, deep=False):
                or _jsonl_size(store) > 0)
     if state == "new" and not present:
         state, misses = "stale", MISS_LIMIT
+
+    outside = _outside_desktop(store) if state in ("fresh", "new") else None
+    if outside:
+        # Alive, heartbeating, and deaf: a hook in another session never sees
+        # this desktop's keyboard. Observed 2026-09-15 after WSL was restarted
+        # by a background task — 85 minutes of zero keys reported as healthy.
+        store.set_meta(_M_SESSION, "")
+        _stop_all()
+        store.set_meta(_M_LASTTRY, now())
+        store.set_meta(_M_PROBE, "")
+        err = start()
+        store.set_meta(_M_FAILS, 0 if not err else fails + 1)
+        out.append(_finding(
+            "input", "high",
+            "the input hook was running outside the desktop session",
+            f"helper in Windows session {outside[0]}, desktop in session {outside[1]} — it "
+            f"saw no keyboard or mouse input at all. Stopped it"
+            + (f"; restart failed: {err}" if err else " and restarted it on the desktop"),
+            "inputwatch"))
+        return [], sort_findings(out + _flap_finding(store))
 
     if state in ("fresh", "new"):
         # Alive. Reset the failure counter and re-emit any flap finding.

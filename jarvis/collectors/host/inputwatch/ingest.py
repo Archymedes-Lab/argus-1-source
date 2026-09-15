@@ -5,7 +5,7 @@ import os
 
 from jarvis.core.util import now
 
-from .common import _M_DUPES, _M_OVERSIZE, READ_CAP
+from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, READ_CAP
 from .helper import _paths
 
 _BEAT_COLS = ("real_keys", "injected_keys", "real_clicks", "injected_clicks",
@@ -48,6 +48,7 @@ def ingest(store):
         store.set_meta(_M_OVERSIZE, now())
 
     beats, windows, events, beat_pids = [], [], [], set()
+    session = None
     controls = []
     for line in body.splitlines():
         line = line.strip()
@@ -68,6 +69,8 @@ def ingest(store):
                     int(window.get(k) or 0) for k in _WINDOW_COLS))
             if rec.get("pid"):
                 beat_pids.add(int(rec["pid"]))
+            if "session" in rec:
+                session = f"{int(rec['session'])}:{int(rec.get('desktop', -1))}"
         elif rec.get("kind") in ("control-key", "control-state"):
             # Control activations are kept in full, with their own timestamp:
             # they carry no text, and the whole point is being able to say
@@ -105,6 +108,8 @@ def ingest(store):
         store.db.executemany(
             "INSERT INTO input_events(ts,kind,lower_il,class,fg) VALUES(?,?,?,?,?)",
             events)
+    if session is not None:
+        store.set_meta(_M_SESSION, session)
     # Heartbeats from more than one PID in a single drain means two helpers are
     # writing to the same file and double-counting. Cheap and local — no
     # interop — so the healthy path can check it too.

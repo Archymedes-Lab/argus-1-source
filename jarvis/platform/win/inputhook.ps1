@@ -423,11 +423,16 @@ Set-Content -Path $pidFile -Value $PID -Encoding ascii
 # died and a genuinely quiet keyboard look identical.
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = $HeartbeatSeconds * 1000
+# The heartbeat also says which session this helper and the desktop are in: a
+# hook outside the desktop session is alive and counting nothing.
+$ownSession = (Get-Process -Id $PID).SessionId
 $timer.Add_Tick({
     $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     $c  = [JarvisInputHook]::Counters()
     $w  = [JarvisInputHook]::TakeWindowCounters()
-    Add-Content -Path $OutFile -Value ("{""ts"":$ts,""kind"":""heartbeat"",""pid"":$PID,""counters"":$c,""window"":$w}")
+    $desk = (Get-Process explorer -EA SilentlyContinue | Select-Object -First 1).SessionId
+    if ($null -eq $desk) { $desk = -1 }
+    Add-Content -Path $OutFile -Value ("{""ts"":$ts,""kind"":""heartbeat"",""pid"":$PID,""session"":$ownSession,""desktop"":$desk,""counters"":$c,""window"":$w}")
 })
 $timer.Start()
 

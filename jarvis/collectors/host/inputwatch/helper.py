@@ -108,6 +108,12 @@ def start():
         pass
     if not collect_windows.available():
         return "the Windows interop bridge is not available"
+    # A hook launched into session 0 installs fine, heartbeats fine, and sees
+    # no input at all. Refuse to start one there.
+    desktop = collect_windows.desktop_interop()
+    if not desktop:
+        return ("no WSL connection reaches the Windows desktop session (WSL was "
+                "started in the background); open a WSL terminal on the desktop")
     script_win, win_out, err = _stage_helper()
     if err:
         return err
@@ -121,7 +127,8 @@ def start():
            + script_win + "','-OutFile','" + win_out + "'")
     try:
         subprocess.run([collect_windows._PS, "-NoProfile", "-NonInteractive",
-                        "-Command", cmd], capture_output=True, timeout=90, cwd="/")
+                        "-Command", cmd], capture_output=True, timeout=90, cwd="/",
+                       env={**os.environ, "WSL_INTEROP": desktop})
     except (OSError, subprocess.SubprocessError) as exc:
         return f"could not start the helper: {exc}"
     return ""
