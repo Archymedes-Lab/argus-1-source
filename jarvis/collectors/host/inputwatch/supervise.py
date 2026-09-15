@@ -198,7 +198,7 @@ def supervise(store, deep=False):
     dup = _dupes(store)
     if dup:
         store.set_meta(_M_DUPES, "")
-        _stop_all()
+        _stop_all(pids=dup[1].split(","))
         store.set_meta(_M_LASTTRY, now())
         store.set_meta(_M_PROBE, "")
         err = start()

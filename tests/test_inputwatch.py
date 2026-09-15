@@ -2,6 +2,7 @@ import importlib
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 
 from jarvis.collectors.host import inputwatch
@@ -144,6 +145,30 @@ class DesktopSessionTests(unittest.TestCase):
                 self.assertIn(expected, helper.start())
                 desktop.assert_not_called()
                 run.assert_not_called()
+
+    def test_stop_all_also_targets_heartbeat_pids_it_cannot_see_by_command_line(self):
+        from unittest import mock
+
+        helper = importlib.import_module("jarvis.collectors.host.inputwatch.helper")
+        with mock.patch.object(helper, "ps_json") as ps, \
+             mock.patch.object(helper, "_paths", return_value=("C:\\x", os.path.join(self.tmp.name, "input.jsonl"))):
+            helper._stop_all(pids=["13544", "7560", "1; Stop-Computer", ""])
+        script = ps.call_args.args[0]
+        self.assertIn("@(13544,7560)", script)
+        self.assertNotIn("Stop-Computer", script)
+        self.assertIn("ProcessName -eq 'powershell'", script)
+
+    def test_duplicate_reconciliation_stops_the_pids_that_wrote_heartbeats(self):
+        from unittest import mock
+
+        supervise = importlib.import_module("jarvis.collectors.host.inputwatch.supervise")
+        self.store.set_meta("input_hook_dupe_pids", f"{int(time.time())}:13544,7560")
+        with mock.patch.object(supervise, "_verify_pin", return_value=[]), \
+             mock.patch.object(supervise, "ingest"), \
+             mock.patch.object(supervise, "_stop_all") as stop_all, \
+             mock.patch.object(supervise, "start", return_value=""):
+            supervise.supervise(self.store)
+        stop_all.assert_called_once_with(pids=["13544", "7560"])
 
     def test_desktop_interop_picks_the_socket_that_lands_on_the_desktop(self):
         import stat

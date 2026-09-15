@@ -181,19 +181,25 @@ def stop():
     return ""  # note: under the daemon, the watchdog will start it again
 
 
-def _stop_all():
+def _stop_all(pids=()):
     """Kill every hook helper, not just the one in the pid file.
 
-    A race in `start()` (now locked) could once leave two helpers writing to
-    the same file and double-counting. Reconciliation is: stop them all, clear
-    the state files, and let the caller start exactly one.
+    Helpers are found by command line and, because that is not always
+    readable, also by `pids` — the processes seen writing heartbeats. A helper
+    launched into session 0 returned a null command line, survived every
+    stop-all, and kept writing zero heartbeats beside the real hook, so each
+    reconciliation killed the working helper instead. Explicit pids are only
+    stopped if they are PowerShell processes. The caller starts exactly one.
     """
+    explicit = ",".join(str(int(p)) for p in pids if str(p).strip().isdigit()) or "0"
     ps_json(
-        "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
-        "Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and "
-        "$_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id "
-        "$_.ProcessId -Force -EA SilentlyContinue; Wait-Process -Id $_.ProcessId "
-        "-Timeout 5 -EA SilentlyContinue };"
+        "$targets = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
+        "Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and $_.ProcessId -ne $PID } | "
+        "ForEach-Object { $_.ProcessId });"
+        f"$targets += @({explicit}) | Where-Object {{ $_ -gt 0 -and $_ -ne $PID -and "
+        "(Get-Process -Id $_ -EA SilentlyContinue).ProcessName -eq 'powershell' };"
+        "$targets | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force "
+        "-EA SilentlyContinue; Wait-Process -Id $_ -Timeout 5 -EA SilentlyContinue };"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(ConvertTo-Json @{ok=1})))", timeout=90)
     for p in (_pid_path(), _alive_path(), _lock_path()):
