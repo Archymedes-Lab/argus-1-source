@@ -18,7 +18,7 @@ the daemon retries on its own. Anything unrecognised defaults to you_confirm:
 an unhandled finding must never read as taken care of.
 """
 
-from jarvis.response import alert, fixit, remediation
+from jarvis.response import acknowledge, alert, fixit, remediation
 
 from .commands import command_for
 
@@ -61,7 +61,13 @@ _FIREWALL_SCRIPT = ("elevated PowerShell: powershell -ExecutionPolicy Bypass -Fi
 
 
 def classify(finding, job=""):
-    """{owner, action, command} for one finding."""
+    """{owner, action, command, id} for one finding."""
+    result = _classify(finding, job)
+    result["id"] = acknowledge.finding_id(finding, job)
+    return result
+
+
+def _classify(finding, job):
     f = finding or {}
     category = (f.get("category") or "").lower()
     title = f.get("title") or ""
@@ -143,16 +149,18 @@ def group(items):
     return out
 
 
-def current(snapshots, levels=("critical", "high", "medium")):
+def current(snapshots, levels=("critical", "high", "medium"), acks=None, now=None):
     """(finding, job) for every actionable finding in the latest snapshots.
 
     Churn and meta categories (per-process, per-peer, coverage gaps, the alert
-    ledger) are left out, as they are from paging.
+    ledger) are left out, as they are from paging, and so is anything you have
+    acknowledged while that acknowledgement holds.
     """
     out = []
     for job, snap in sorted((snapshots or {}).items()):
         for f in (snap or {}).get("findings") or ():
             if (isinstance(f, dict) and f.get("severity") in levels
-                    and f.get("category") not in alert.NOPAGE_CATEGORIES):
+                    and f.get("category") not in alert.NOPAGE_CATEGORIES
+                    and not (acks and acknowledge.is_acknowledged(acks, f, job, now))):
                 out.append((f, job))
     return out

@@ -260,6 +260,18 @@ _VOLATILE = re.compile(
     r"\b[0-9a-f]{16,}\b|\b\d{10,}\b")
 
 
+# Detail text also carries clock times and sighting counters that change on
+# every observation; an identity built from detail must ignore them.
+_VOLATILE_DETAIL = re.compile(
+    r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?(\.\d+)?|\[(?:last )?seen[^\]]*\]|"
+    r"\bseen \d+×|\b\d+ (?:times|events|sampled)\b")
+
+
+def stable_text(text):
+    """Text with pids, counters, long hex, clock times and sighting counts removed."""
+    return _VOLATILE.sub("", _VOLATILE_DETAIL.sub("", text or "")).strip(" -—|")
+
+
 def finding_key(f):
     title = _VOLATILE.sub("", f.get("title", "")).strip(" -—|")
     return f"{f.get('category', '')}|{title}|{f.get('where', '')}"

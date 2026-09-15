@@ -7,7 +7,7 @@ from jarvis.collectors.persistence import control
 from jarvis.collectors.process import monitor
 from jarvis.core.util import iso
 from jarvis.platform import windows as collect_windows
-from jarvis.response import alert, fixit
+from jarvis.response import acknowledge, alert, fixit
 from jarvis.response.reporting import score
 from jarvis.service import deadman, selfcheck
 from jarvis.service.schedule import JOBS
@@ -200,7 +200,7 @@ def cmd_status(args, store):
     print(f"fingerprints  {total} known, {appr} approved")
     print(f"peers         {len(store.list_peers(limit=100000))} recorded")
     print(f"last event    {iso(ev[0]['ts']) if ev else '—'}")
-    health = score.compute(store.get_snapshots(), JOBS)
+    health = score.compute(store.get_snapshots(), JOBS, acks=acknowledge.load(store))
     print(f"security      {score.bar(health['score'])} {health['score']}% "
           f"{health['grade']} (monitoring coverage {health['coverage']}%)")
     print(f"windows side  "

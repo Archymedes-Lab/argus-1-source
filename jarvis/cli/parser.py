@@ -7,6 +7,7 @@ from jarvis.intel import feeds
 from jarvis.intel import research as intel
 from jarvis.service import selfcheck
 
+from .commands import ack as ack_cli
 from .commands import (
     cmd_alert,
     cmd_approve,
@@ -66,6 +67,7 @@ def build_parser():
     p.add_argument("--host", choices=["wsl", "win", "all"], default="all")
     sub = p.add_subparsers(dest="cmd", required=True)
     repair_cli.add_parser(sub)
+    ack_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
     b.add_argument("--reset", action="store_true",

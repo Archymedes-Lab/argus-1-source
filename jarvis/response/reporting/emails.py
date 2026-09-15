@@ -8,7 +8,7 @@ the same structure for clients that do not render HTML.
 
 import time
 
-from jarvis.response import alert
+from jarvis.response import acknowledge, alert
 
 from . import email_ui as ui
 from . import score, triage
@@ -35,6 +35,8 @@ def _text_group(owner, entries, limit=25):
         lines.append(f"   → {t['action']}")
         if t.get("command"):
             lines.append(f"   $ {t['command']}")
+        if owner == triage.YOU_CONFIRM and t.get("id"):
+            lines.append(f"   if this was you: jarvis ack {t['id']} --reason \"…\"")
         meta = " · ".join(x for x in (job, f.get("host"), f.get("where")) if x)
         if meta:
             lines.append(f"   ({meta})")
@@ -125,17 +127,18 @@ def digest(ordered, urgent, health, delta, now):
 
 # ── daily security health ─────────────────────────────────────────────────
 
-def health(result, delta, snapshots, now):
+def health(result, delta, snapshots, now, store=None):
     """-> (subject, text, html) for the once-a-day health email."""
     # The daily email is a to-do list, not an inventory: critical and high only,
     # one entry per distinct finding. Mediums are counted, not listed.
+    acks = acknowledge.load(store) if store is not None else {}
     seen, top = set(), []
-    for f, job in triage.current(snapshots, levels=("critical", "high")):
+    for f, job in triage.current(snapshots, levels=("critical", "high"), acks=acks, now=now):
         key = (job, f.get("title"))
         if key not in seen:
             seen.add(key)
             top.append((f, job, ""))
-    lower = len(triage.current(snapshots, levels=("medium",)))
+    lower = len(triage.current(snapshots, levels=("medium",), acks=acks, now=now))
     grouped = _grouped(top)
     counts = _counts(grouped)
     need = _needs_you(counts)
@@ -155,7 +158,7 @@ def health(result, delta, snapshots, now):
                       f"Your system is {result['score']}% of the way to secure",
                       time.strftime("%A %d %B", time.localtime(now)))
     inner += ui.section(ui.health_panel(result, delta))
-    inner += ui.section(ui.owner_summary(counts), "px-5 pt-1 pb-1")
+    inner += ui.section(ui.owner_summary(counts, result.get("acknowledged", 0)), "px-5 pt-1 pb-1")
     for owner in triage.ORDER:
         inner += ui.owner_section(owner, grouped[owner], limit=8, show_detail=False)
     if lower:
@@ -175,5 +178,5 @@ def health_email(store, conf, now=None):
         return "no security score recorded yet"
     now = int(time.time() if now is None else now)
     subject, text, html = health(result, score.change_since(store, 86400, now),
-                                 store.get_snapshots(), now)
+                                 store.get_snapshots(), now, store)
     return alert.send_email(conf, subject, text, html=html)

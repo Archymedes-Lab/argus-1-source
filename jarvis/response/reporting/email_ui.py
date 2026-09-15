@@ -209,8 +209,8 @@ def health_panel(result, delta=None):
         + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" {tw("mt-4")}>{"".join(rows)}</table>')
 
 
-def owner_summary(counts):
-    """Three stat tiles: action / confirm / handled."""
+def owner_summary(counts, confirmed=0):
+    """Three stat tiles: action / confirm / handled, and a confirmed-by-you note."""
     cells = []
     for owner in ORDER:
         style = OWNER_STYLE[owner]
@@ -219,8 +219,10 @@ def owner_summary(counts):
             f'<div {tw("rounded-xl p-3 border-l-4 " + style["accent"] + " " + style["tint"])}>'
             f'<div {tw("text-2xl font-bold text-slate-900")}>{counts.get(owner, 0)}</div>'
             f'<div {tw("text-xs font-semibold text-slate-600")}>{esc(LABEL[owner])}</div></div></td>')
+    note = (f'<div {tw("text-xs text-slate-500 mt-2 px-1")}>{confirmed} finding(s) you confirmed '
+            f'as expected are not counted. List them with jarvis ack list.</div>') if confirmed else ""
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
-            f'<tr>{"".join(cells)}</tr></table>')
+            f'<tr>{"".join(cells)}</tr></table>{note}')
 
 
 def finding_card(finding, job, triage_result, tag="", detail_limit=240, show_detail=True):
@@ -243,6 +245,10 @@ def finding_card(finding, job, triage_result, tag="", detail_limit=240, show_det
         f'<div {tw("text-sm text-slate-800 leading-snug")}><b>{style["icon"]}</b> {esc(triage_result["action"])}</div>'
         + (f'<div {tw("font-mono text-xs text-slate-900 bg-white border border-slate-200 rounded-md px-2 py-1.5 mt-2 break-all")}>'
            f"{esc(command)}</div>" if command else "")
+        + (f'<div {tw("text-xs text-slate-600 mt-2")}>If this was you, confirm it so it stops counting against the score:</div>'
+           f'<div {tw("font-mono text-xs text-slate-900 bg-white border border-slate-200 rounded-md px-2 py-1.5 mt-1 break-all")}>'
+           f'jarvis ack {esc(triage_result["id"])} --reason "…"</div>'
+           if triage_result["owner"] == "you_confirm" and triage_result.get("id") else "")
         + "</div></div>")
 
 

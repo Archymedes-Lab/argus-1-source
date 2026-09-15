@@ -22,7 +22,7 @@ Three rules keep the number honest:
 import json
 import time
 
-from jarvis.response import alert
+from jarvis.response import acknowledge, alert
 
 # Protection areas, in display order, and the jobs whose findings describe them.
 # Jobs absent here do not describe the machine's safety and are not scored:
@@ -71,17 +71,20 @@ def _freshness(snap, interval, now):
     return "current"
 
 
-def _scored(findings):
+def _scored(findings, job="", acks=None, now=None):
     """Findings that describe risk. Per-process and per-peer churn (and meta
     categories) are the same ones alerting never pages on: they change by the
-    minute and would make the bar jitter rather than track progress."""
+    minute and would make the bar jitter rather than track progress. Findings
+    you have acknowledged as expected are left out while the acknowledgement
+    holds."""
     return [f for f in findings or () if isinstance(f, dict)
-            and f.get("category") not in alert.NOPAGE_CATEGORIES]
+            and f.get("category") not in alert.NOPAGE_CATEGORIES
+            and not (acks and acknowledge.is_acknowledged(acks, f, job, now))]
 
 
 def _job_penalty(findings):
     counts = {}
-    for f in _scored(findings):
+    for f in findings:
         sev = f.get("severity")
         counts[sev] = counts.get(sev, 0) + 1
     return (WEIGHT["critical"] * counts.get("critical", 0)
@@ -93,11 +96,12 @@ def _area_score(penalty):
     return round(100 * K / (K + penalty))
 
 
-def compute(snapshots, jobs, now=None):
-    """Score from stored snapshots. `jobs` is the schedule: name -> (interval, label)."""
+def compute(snapshots, jobs, now=None, acks=None):
+    """Score from stored snapshots. `jobs` is the schedule: name -> (interval, label).
+    `acks` is acknowledge.load(store): findings you confirmed as expected."""
     now = int(time.time() if now is None else now)
     areas, next_steps = [], []
-    observed_jobs = scored_jobs = 0
+    observed_jobs = scored_jobs = acknowledged = 0
     for area, members in AREAS:
         penalty, counts, blind = 0, {}, []
         present = [j for j in members if j in jobs]
@@ -109,12 +113,14 @@ def compute(snapshots, jobs, now=None):
                 blind.append({"job": job, "state": state})
                 continue
             observed_jobs += 1
-            p, c = _job_penalty(snap.get("findings"))
+            kept = _scored(snap.get("findings"), job, acks, now)
+            acknowledged += len(_scored(snap.get("findings"))) - len(kept)
+            p, c = _job_penalty(kept)
             penalty += p
             for sev, n in c.items():
                 if sev in WEIGHT and sev != "ok":
                     counts[sev] = counts.get(sev, 0) + n
-            for f in _scored(snap.get("findings")):
+            for f in kept:
                 w = WEIGHT.get(f.get("severity"), 0)
                 if w:
                     next_steps.append({"area": area, "job": job, "weight": w,
@@ -143,6 +149,7 @@ def compute(snapshots, jobs, now=None):
         "coverage": round(coverage * 100),
         "areas": areas,
         "next_steps": next_steps[:8],
+        "acknowledged": acknowledged,
         "at": now,
     }
 
@@ -156,7 +163,7 @@ def bar(score, width=20):
 
 def record(store, jobs, now=None):
     """Compute, and append to the stored history (one point per call)."""
-    result = compute(store.get_snapshots(), jobs, now)
+    result = compute(store.get_snapshots(), jobs, now, acknowledge.load(store))
     history = history_of(store)
     history.append([result["at"], result["score"]])
     store.set_meta(HISTORY_META, json.dumps(history[-HISTORY_KEEP:]))

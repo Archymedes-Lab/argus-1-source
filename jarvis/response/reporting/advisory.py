@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 
 from jarvis.intel import research as intel
-from jarvis.response import alert, fixit
+from jarvis.response import acknowledge, alert, fixit
 
 from . import commands as report_commands
 from . import diff as report_diff
@@ -318,12 +318,15 @@ def advisory_report(store, jobs):
     changed_text = report_diff.describe(movement, trend)
 
     grouped = {owner: [] for owner in triage.ORDER}
+    acks = acknowledge.load(store)
     for f in actionable:
         if f.get("category") in alert.NOPAGE_CATEGORIES:
             continue    # per-process churn and meta findings are not tasks
+        if acknowledge.is_acknowledged(acks, f, f.get("job", ""), generated):
+            continue    # you confirmed this as expected
         t = triage.classify(f, f.get("job", ""))
         grouped[t["owner"]].append((f, f.get("job", ""), t, ""))
-    security = score.compute(snapshots, jobs, generated)
+    security = score.compute(snapshots, jobs, generated, acks)
     security_delta = score.change_since(store, 86400, generated)
     lines = [
         "JARVIS SECURITY ADVISORY",

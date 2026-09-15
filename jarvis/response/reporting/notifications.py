@@ -2,7 +2,7 @@
 import json
 import time
 
-from jarvis.response import alert, fixit
+from jarvis.response import acknowledge, alert, fixit
 
 from . import emails, score
 
@@ -119,6 +119,14 @@ def flush(store, conf):
     queue = _load(store, QUEUE)
     if conf.get('alert_on_clear', False) is not True:
         queue = {k: v for k, v in queue.items() if v.get('tag') != 'RESOLVED'}
+        store.set_meta(QUEUE, json.dumps(queue))
+    # A change you have since acknowledged is not worth an email.
+    acks = acknowledge.load(store)
+    confirmed = [k for k, v in queue.items() if v.get('tag') != 'RESOLVED'
+                 and acknowledge.is_acknowledged(acks, v['finding'], v['job'], now)]
+    if confirmed:
+        for k in confirmed:
+            queue.pop(k, None)
         store.set_meta(QUEUE, json.dumps(queue))
     if not queue or now < int(store.get_meta(RETRY_AT,0) or 0):
         return False
