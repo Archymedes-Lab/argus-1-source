@@ -8,6 +8,7 @@ tool, acknowledge a finding, approve a proposal, or mutate the store.
 import base64
 import json
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -15,6 +16,10 @@ import urllib.request
 from jarvis.platform.windows import ps_json
 from jarvis.response import acknowledge, alert
 from jarvis.response.reporting import diff, score, triage
+
+# CPU inference serves one request at a time; concurrent calls would only queue
+# inside Ollama while each pins a dashboard thread for up to the full timeout.
+_MODEL_LOCK = threading.Lock()
 
 
 def _current(store):
@@ -166,5 +171,12 @@ def answer(store, question, conf=None, jobs=None):
         return {"answer": ("Confirmation changes JARVIS state. Use the exact command shown by "
                            "`jarvis answer` or `jarvis ack <id> --reason \"...\"` after you "
                            "verify the finding."), "source": "builtin"}
-    text, source = _ollama(store, question, conf)
+    if not _MODEL_LOCK.acquire(blocking=False):
+        return {"answer": ("The local model is still answering another question. Try again "
+                           "shortly, or ask what needs you, your score, or what changed."),
+                "source": "busy"}
+    try:
+        text, source = _ollama(store, question, conf)
+    finally:
+        _MODEL_LOCK.release()
     return {"answer": text, "source": source}

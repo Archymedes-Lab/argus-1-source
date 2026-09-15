@@ -34,6 +34,18 @@ class AssistantTests(unittest.TestCase):
             result = assistant.answer(self.store, "could these two findings be related?")
         self.assertEqual(result, {"answer": "analysis", "source": "ollama"})
 
+    def test_concurrent_open_question_is_refused_not_queued(self):
+        with assistant._MODEL_LOCK, mock.patch.object(assistant, "_ollama") as model:
+            result = assistant.answer(self.store, "could these two findings be related?")
+        self.assertEqual(result["source"], "busy")
+        model.assert_not_called()
+
+    def test_model_failure_releases_the_lock(self):
+        with mock.patch.object(assistant, "_ollama", side_effect=RuntimeError):
+            with self.assertRaises(RuntimeError):
+                assistant.answer(self.store, "could these two findings be related?")
+        self.assertFalse(assistant._MODEL_LOCK.locked())
+
     def test_windows_loopback_bridge_is_used_when_wsl_loopback_is_separate(self):
         reply = {"message": {"content": "Local evidence explanation"}}
         with mock.patch.object(assistant.urllib.request, "urlopen",

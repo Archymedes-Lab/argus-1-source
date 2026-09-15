@@ -791,6 +791,7 @@ async function askJarvis(event) {
     output.innerHTML = esc(data.answer) + `<div class="chat-source">${
       data.source === "ollama" ? "offline Ollama synthesis · no action taken" :
       data.source === "builtin" ? "exact answer from JARVIS data" :
+      data.source === "busy" ? "local model busy" :
       "local model unavailable"}</div>`;
   } catch (error) {
     output.textContent = "Could not answer: " + error.message;
