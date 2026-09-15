@@ -77,6 +77,7 @@ _OUTAGE_MARKERS = (
     "has stopped", "cannot be restarted", "could not restart", "keeps dying",
     "has restarted", "is stale", "has never produced", "is failing",
     "heartbeat is overdue", "hook has stopped", "interop bridge",
+    "outside the desktop session", "saw no keyboard", "cannot be started",
 )
 _OUTAGE_CATEGORIES = ("input", "collectors", "daemon")
 

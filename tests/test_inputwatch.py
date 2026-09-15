@@ -120,18 +120,63 @@ class DesktopSessionTests(unittest.TestCase):
         self.assertIn("the input hook was running outside the desktop session", titles)
         self.assertNotIn("the injected-input monitor is healthy", titles)
 
-    def test_start_refuses_when_no_connection_reaches_the_desktop(self):
+    def _start_with(self, task_reply, desktop=""):
         from unittest import mock
 
         helper = importlib.import_module("jarvis.collectors.host.inputwatch.helper")
+        paths = ("C:\\Jarvis\\input.jsonl", os.path.join(self.tmp.name, "input.jsonl"))
         with mock.patch.object(helper, "helper_count", return_value=0), \
-             mock.patch.object(helper, "_lock_path", return_value=os.path.join(self.tmp.name, "l")), \
+             mock.patch.object(helper, "_paths", return_value=paths), \
+             mock.patch.object(helper, "_stage_helper",
+                               return_value=("C:\\Jarvis\\inputhook.ps1", paths[0], "")), \
              mock.patch.object(helper.collect_windows, "available", return_value=True), \
-             mock.patch.object(helper.collect_windows, "desktop_interop", return_value=""), \
-             mock.patch.object(helper.subprocess, "run") as run:
-            err = helper.start()
-        self.assertIn("desktop session", err)
-        run.assert_not_called()
+             mock.patch.object(helper.collect_windows, "desktop_interop", return_value=desktop), \
+             mock.patch.object(helper, "ps_json", return_value=task_reply) as task, \
+             mock.patch.object(helper, "subprocess") as sub:
+            return helper.start(), task, sub
+
+    def test_the_scheduled_task_is_the_normal_way_the_hook_starts(self):
+        err, task, sub = self._start_with({"registered": True, "started": True})
+        self.assertEqual(err, "")
+        sub.run.assert_not_called()          # no direct WSL launch needed
+        script = task.call_args.args[0]
+        for required in ("JARVIS input hook", "-LogonType Interactive", "-RunLevel Limited",
+                         "-MultipleInstances IgnoreNew", "-RestartCount 3",
+                         "conhost.exe", "--headless", "Start-ScheduledTask"):
+            self.assertIn(required, script)
+
+    def test_a_refused_task_falls_back_to_a_desktop_launch(self):
+        err, _task, sub = self._start_with({"error": "Access is denied"},
+                                           desktop="/run/WSL/3309_interop")
+        self.assertEqual(err, "")
+        self.assertEqual(sub.run.call_args.kwargs["env"]["WSL_INTEROP"], "/run/WSL/3309_interop")
+
+    def test_no_task_and_no_desktop_connection_is_reported_not_guessed(self):
+        err, _task, sub = self._start_with({"error": "Access is denied"}, desktop="")
+        self.assertIn("Access is denied", err)
+        self.assertIn("desktop", err)
+        sub.run.assert_not_called()
+
+    def test_the_task_definition_is_one_jarvis_verifies_as_its_own(self):
+        from jarvis.collectors.persistence import trusted_tasks
+        helper = importlib.import_module("jarvis.collectors.host.inputwatch.helper")
+        local = r"C:\Users\chris\AppData\Local"
+        arguments = helper.task_arguments(local + r"\Jarvis\inputhook.ps1",
+                                          local + r"\Jarvis\input.jsonl")
+        task = {"name": helper.TASK_NAME, "runLevel": "Limited", "user": "DESKTOP\\chris",
+                "logonType": "Interactive",
+                "actions": [{"execute": r"C:\Windows\System32\conhost.exe",
+                             "arguments": '--headless "C:\\Windows\\System32\\WindowsPowerShell'
+                                          '\\v1.0\\powershell.exe" ' + arguments,
+                             "targetHash": trusted_tasks.normalized_text_hash(
+                                 str(trusted_tasks.win_script("inputhook.ps1")))}]}
+        data = {"currentUser": "DESKTOP\\chris", "localAppData": local}
+        self.assertEqual(trusted_tasks.verified_maintenance_task(task, data)[0], True)
+
+        tampered = {**task, "actions": [{**task["actions"][0], "targetHash": "0" * 64}]}
+        ok, why = trusted_tasks.verified_maintenance_task(tampered, data)
+        self.assertFalse(ok)
+        self.assertIn("fingerprint", why)
 
     def test_start_never_launches_beside_an_existing_or_uncountable_helper(self):
         from unittest import mock

@@ -12,6 +12,13 @@ from .common import HOOK_PS1
 
 _PATHS_CACHE = None
 
+# Windows keeps the hook in the desktop session for us: a task that runs only
+# while its user is logged on always starts there, whoever triggers it, and
+# Windows restarts it on failure and refuses a second instance. Launching
+# through WSL interop cannot promise any of that — the socket JARVIS happens
+# to hold may reach session 0, where a keyboard hook sees nothing.
+TASK_NAME = "JARVIS input hook"
+
 
 def _paths():
     """Where the helper writes, in both Windows and WSL spelling.
@@ -105,6 +112,45 @@ def helper_count():
         return -1
 
 
+def task_arguments(script_win, win_out):
+    """The PowerShell arguments the task runs, and the only ones trusted_tasks
+    accepts for it."""
+    return ('-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
+            f'-File "{script_win}" -OutFile "{win_out}"')
+
+
+def _ensure_task_script(script_win, win_out):
+    """PowerShell that registers the task when missing or changed, then runs it."""
+    inner = task_arguments(script_win, win_out).replace("'", "''")
+    return (
+        "$ErrorActionPreference='Stop';"
+        f"$name='{TASK_NAME}';"
+        "$conhost=\"$env:SystemRoot\\System32\\conhost.exe\";"
+        "$ps=\"$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\";"
+        f"$arg='--headless \"' + $ps + '\" ' + '{inner}';"
+        "$o=@{registered=$false;started=$false;error=''};"
+        "try{"
+        "  $me=\"$env:USERDOMAIN\\$env:USERNAME\";"
+        "  $t=Get-ScheduledTask -TaskName $name -EA SilentlyContinue;"
+        "  if(-not $t -or @($t.Actions).Count -ne 1 -or $t.Actions[0].Execute -ne $conhost"
+        "     -or $t.Actions[0].Arguments -ne $arg){"
+        "    $action=New-ScheduledTaskAction -Execute $conhost -Argument $arg;"
+        "    $trigger=New-ScheduledTaskTrigger -AtLogOn -User $me;"
+        "    $principal=New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive"
+        "       -RunLevel Limited;"
+        "    $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries"
+        "       -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew"
+        "       -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3"
+        "       -RestartInterval (New-TimeSpan -Minutes 1);"
+        "    Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger"
+        "       -Principal $principal -Settings $settings -Force | Out-Null;"
+        "    $o.registered=$true};"
+        "  Start-ScheduledTask -TaskName $name;"
+        "  $o.started=$true"
+        "}catch{$o.error=[string]$_.Exception.Message};"
+        "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($o|ConvertTo-Json -Compress)))")
+
+
 def _lock_path():
     _win, wsl_out = _paths()
     return os.path.splitext(wsl_out)[0] + ".starting"
@@ -131,12 +177,6 @@ def start():
         pass
     if not collect_windows.available():
         return "the Windows interop bridge is not available"
-    # A hook launched into session 0 installs fine, heartbeats fine, and sees
-    # no input at all. Refuse to start one there.
-    desktop = collect_windows.desktop_interop()
-    if not desktop:
-        return ("no WSL connection reaches the Windows desktop session (WSL was "
-                "started in the background); open a WSL terminal on the desktop")
     script_win, win_out, err = _stage_helper()
     if err:
         return err
@@ -145,15 +185,29 @@ def start():
             fh.write(str(now()))
     except OSError:
         pass
+
+    task = ps_json(_ensure_task_script(script_win, win_out), timeout=90) or {}
+    if task.get("started"):
+        return ""
+    task_error = str(task.get("error") or "the scheduled task did not start")
+
+    # Fallback while the task cannot run (not yet registrable, or Task
+    # Scheduler refused): launch it directly, but only through a socket that
+    # reaches the desktop — a hook in session 0 heartbeats and sees nothing.
+    desktop = collect_windows.desktop_interop()
+    if not desktop:
+        return (f"{task_error}; and no WSL connection reaches the Windows desktop "
+                f"session, so the hook cannot be started where it can see input")
     cmd = ("Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "
-           "'-NoProfile','-ExecutionPolicy','Bypass','-File','"
+           "'-NoProfile','-NonInteractive','-WindowStyle','Hidden',"
+           "'-ExecutionPolicy','Bypass','-File','"
            + script_win + "','-OutFile','" + win_out + "'")
     try:
         subprocess.run([collect_windows._PS, "-NoProfile", "-NonInteractive",
                         "-Command", cmd], capture_output=True, timeout=90, cwd="/",
                        env={**os.environ, "WSL_INTEROP": desktop})
     except (OSError, subprocess.SubprocessError) as exc:
-        return f"could not start the helper: {exc}"
+        return f"{task_error}; direct start failed too: {exc}"
     return ""
 
 
@@ -195,6 +249,7 @@ def _stop_all(pids=()):
     """
     explicit = ",".join(str(int(p)) for p in pids if str(p).strip().isdigit()) or "0"
     collect_windows.run_in_every_session(
+        f"Stop-ScheduledTask -TaskName '{TASK_NAME}' -EA SilentlyContinue;"
         "$targets = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
         "Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and $_.ProcessId -ne $PID } | "
         "ForEach-Object { $_.ProcessId });"

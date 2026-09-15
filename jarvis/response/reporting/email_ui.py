@@ -277,11 +277,20 @@ def owner_section(owner, items, limit=12, show_detail=True):
         + cards + more)
 
 
+_BRIEF_MONO = "text-sm text-slate-800 font-mono mt-2 break-words"
+
+
+def _is_command(line):
+    stripped = line.strip()
+    return (stripped.startswith(("jarvis ", "manage-bde", "$ "))
+            or " | " in stripped and stripped.startswith("jarvis"))
+
+
 def briefing(lines):
     """JARVIS's protocol for today: the rendered briefing lines, commands in mono."""
-    title = lines[0].split("·", 1)[-1].rsplit("[", 1)[0].strip()
+    title = lines[0].rsplit("[", 1)[0].strip()
     body = "".join(
-        f'<div {tw("text-sm text-slate-800 font-mono mt-2 break-words" if line.lstrip().startswith("jarvis ") else "text-sm text-slate-700 mt-2 leading-relaxed")}>'
+        f'<div {tw(_BRIEF_MONO if _is_command(line) else "text-sm text-slate-700 mt-2 leading-relaxed")}>'
         f"{esc(line.strip())}</div>" for line in lines[1:])
     return section(
         f'<div {tw("rounded-xl border-l-4 border-l-violet-600 bg-violet-50 px-4 py-3")}>'

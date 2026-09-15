@@ -131,10 +131,11 @@ def digest(ordered, urgent, health, delta, now, conf=None):
 
 # ── daily security health ─────────────────────────────────────────────────
 
-def health(result, delta, snapshots, now, store=None, conf=None, briefing=None):
+def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=()):
     """-> (subject, text, html) for the once-a-day health email.
 
-    `briefing` is the protocol JARVIS raises today (protocols.next_briefing)."""
+    `protocol_state` is protocols.evaluate(): today's protocol is carried in
+    full, steps included, because mail is where you read it."""
     # The daily email is a to-do list, not an inventory: critical and high only,
     # one entry per distinct finding. Mediums are counted, not listed.
     acks = acknowledge.load(store) if store is not None else {}
@@ -161,8 +162,10 @@ def health(result, delta, snapshots, now, store=None, conf=None, briefing=None):
     text += _text_health(result, delta)
     for owner in triage.ORDER:
         text += _text_group(owner, grouped[owner], limit=10)
-    if briefing:
-        text += ["", RULE, *protocols.render(briefing, full=False), RULE]
+    briefing = protocols.pick_next(protocol_state)
+    brief_lines = protocols.email_lines(briefing, protocol_state) if briefing else []
+    if brief_lines:
+        text += ["", RULE, "TODAY'S PROTOCOL", RULE, *brief_lines]
     text += ["", f"Plus {lower} medium-severity findings on the dashboard.",
              "Every finding and its history: the local JARVIS dashboard."]
 
@@ -174,8 +177,8 @@ def health(result, delta, snapshots, now, store=None, conf=None, briefing=None):
     inner += ui.section(ui.owner_summary(counts, result.get("acknowledged", 0)), "px-5 pt-1 pb-1")
     for owner in triage.ORDER:
         inner += ui.owner_section(owner, grouped[owner], limit=8, show_detail=False)
-    if briefing:
-        inner += ui.briefing(protocols.render(briefing, full=False))
+    if brief_lines:
+        inner += ui.briefing(brief_lines)
     if lower:
         inner += ui.section(f'<div {ui.tw("text-sm text-slate-500")}>Plus {lower} medium-severity '
                             f'findings, listed on the dashboard rather than here.</div>', "px-6 pb-5")
@@ -191,7 +194,7 @@ def health_email(store, conf, now=None, jobs=None):
     if result is None:
         return "no security score recorded yet"
     now = int(time.time() if now is None else now)
-    briefing = protocols.next_briefing(store, jobs, now) if jobs else None
+    state = protocols.evaluate(store, jobs, now) if jobs else ()
     subject, text, html = health(result, score.change_since(store, 86400, now),
-                                 store.get_snapshots(), now, store, conf, briefing)
+                                 store.get_snapshots(), now, store, conf, state)
     return alert.send_email(conf, subject, text, html=html)

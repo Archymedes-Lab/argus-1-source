@@ -253,14 +253,18 @@ def projected_all(store, schedule, now=None):
             _projected_score(PROTOCOLS, snapshots, schedule, acks, now))
 
 
-def next_briefing(store, schedule, now=None):
-    """The one protocol JARVIS would raise with you now, or None."""
-    items = evaluate(store, schedule, now)
+def pick_next(items):
+    """The one protocol JARVIS would raise from an evaluated list, or None."""
     for wanted in (READY, WAITING):
         for item in items:
             if item["state"] == wanted:
                 return item
     return None
+
+
+def next_briefing(store, schedule, now=None):
+    """The one protocol JARVIS would raise with you now, or None."""
+    return pick_next(evaluate(store, schedule, now))
 
 
 def answer(store, protocol_id, choice, now=None):
@@ -288,6 +292,41 @@ def answer(store, protocol_id, choice, now=None):
 
 
 # ── words ─────────────────────────────────────────────────────────────────
+
+def email_lines(item, items=()):
+    """The briefing as a mail reader needs it: every step, in one place.
+
+    The CLI withholds steps until the readiness questions are answered, because
+    there it can ask. Mail is one-way, so the question is stated first and the
+    steps follow it — nobody should have to run a command to find out how to
+    turn on encryption.
+    """
+    p = item["protocol"]
+    lines = [f"{p.title} [{item['state']}]", p.brief]
+    gain = item["score_after"] - item["score_now"]
+    if item["open"] and gain > 0:
+        lines.append(f"Expected effect: security score {item['score_now']}% → "
+                     f"{item['score_after']}%.")
+    if item["state"] == BLOCKED:
+        lines.append("First: " + ", ".join(BY_ID[b].title for b in item["blockers"])
+                     + ". Doing these out of order causes trouble.")
+    if item["question"]:
+        lines.append(f"Answer first: {item['question'].ask}")
+        lines.append(f"  jarvis brief yes {p.id}   |   jarvis brief no {p.id}")
+        if item["declined"]:
+            lines.append(f"  {item['question'].if_no}")
+    lines += [f"{n}. {step}" for n, step in enumerate(p.steps, 1)]
+    if p.alternative:
+        lines.append("Or, in an elevated terminal:")
+        lines += [f"  {cmd}" for cmd in p.alternative]
+    if p.caution:
+        lines.append(f"Caution: {p.caution}")
+    queued = [i["protocol"].title for i in items
+              if i["state"] in (READY, BLOCKED, WAITING) and i is not item]
+    if queued:
+        lines.append("Queued after this: " + ", ".join(queued) + ".")
+    return lines
+
 
 def render(item, full=True):
     """Plain-text briefing lines for one evaluated protocol."""

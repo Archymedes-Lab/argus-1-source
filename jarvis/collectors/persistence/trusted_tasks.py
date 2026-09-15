@@ -12,7 +12,7 @@ import hashlib
 import os
 import re
 
-from jarvis.core.paths import REPO_ROOT
+from jarvis.core.paths import REPO_ROOT, win_script
 from jarvis.platform.windows import aslist
 
 TRUSTED_IDE_TASKS = {
@@ -48,7 +48,9 @@ def verified_maintenance_task(task, data):
     remains a critical persistence finding.
     """
     name = (task.get("name") or "").casefold()
-    if name not in TRUSTED_IDE_TASKS and name not in ("jarvis wake watchdog", "jarvis independent health monitor", "jarvis connectivity guard"):
+    if name not in TRUSTED_IDE_TASKS and name not in (
+            "jarvis wake watchdog", "jarvis independent health monitor",
+            "jarvis connectivity guard", "jarvis input hook"):
         return False, "not a known maintenance task"
 
     actions = aslist(task.get("actions"))
@@ -91,6 +93,16 @@ def verified_maintenance_task(task, data):
         expected_args = (
             rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
             rf'-File "{re.escape(local)}\\Jarvis\\Deadman\\deadman-jarvis\.ps1"$')
+    elif name == "jarvis input hook":
+        # Registered by inputwatch.helper so the keystroke monitor keeps
+        # running in the desktop session; the staged script is fingerprinted
+        # against the copy in this checkout.
+        spec = {"script": "inputhook.ps1", "logon": "interactive",
+                "hash": normalized_text_hash(str(win_script("inputhook.ps1")))}
+        expected_args = (
+            rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
+            rf'-File "{re.escape(local)}\\Jarvis\\inputhook\.ps1" '
+            rf'-OutFile "{re.escape(local)}\\Jarvis\\input\.jsonl"$')
     elif name == "jarvis wake watchdog":
         spec = {
             "script": "wake-jarvis.ps1",

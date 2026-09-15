@@ -622,7 +622,19 @@ Three costs, all real, all worth stating before you turn it on.
 
 **It is an agent.** Everything else here samples state and exits. This runs
 resident, and if it dies the record stops — so it emits a heartbeat, because
-otherwise "no injected input" and "not watching" look identical.
+otherwise "no injected input" and "not watching" look identical. A heartbeat
+alone is not enough either: a hook installed in Windows session 0 pulses
+forever and sees no keyboard, so the heartbeat carries its session and a hook
+outside your desktop is stopped and restarted rather than reported healthy.
+
+**It is kept up by Windows, not by luck.** `inputwatch` registers a scheduled
+task (`JARVIS input hook`) that runs only while you are logged on, so it always
+starts in the desktop session whoever triggers it; Windows restarts it on
+failure and will not run a second instance. The task's definition and the
+staged script's fingerprint are what the control audit verifies, so an edited
+task or script becomes a critical persistence finding instead of a trusted
+name. Starting through WSL interop remains only as a fallback, and JARVIS
+refuses to start a helper beside an existing one.
 
 **It does not record what you type.** A low-level keyboard hook sees every
 keystroke, and one that stored key values would be a keylogger writing your
@@ -733,6 +745,14 @@ Resolution comes from the owning collector's successful result. Delivery failure
 retain queued changes for retry; hourly caps defer delivery without discarding it.
 Monitoring outages bypass the severity filter. Ordinary mail uses
 `alert_hourly_cap` (default 12); urgent changes have a separate ceiling of 60.
+
+The daily health email carries today's protocol in full — the readiness
+question, every manual step (Secure Boot in the firmware, Memory Integrity,
+turning on BitLocker and where to keep the recovery key), the command
+alternative, the caution, and what is queued behind it — so the instructions
+are in the mail rather than behind a command. A monitor that is down, the
+keystroke hook included, is recorded as a failed observation, so the score,
+coverage, the dashboard greeting and the outage email all show it.
 
 Change digests and the daily health email open with a line in JARVIS's own
 voice. With `"email_voice": true` the local Ollama model writes it

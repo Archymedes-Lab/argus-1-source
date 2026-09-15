@@ -103,15 +103,29 @@ class ProtocolTests(unittest.TestCase):
         _, all_done = protocols.projected_all(self.store, SCHEDULE)
         self.assertGreater(all_done, item["score_after"])
 
-    def test_next_briefing_is_raised_in_the_health_email_and_by_the_assistant(self):
-        self.observe([SECURE_BOOT_OFF])
-        briefing = protocols.next_briefing(self.store, SCHEDULE)
+    def test_the_email_carries_the_whole_protocol_including_its_steps(self):
+        self.observe([SECURE_BOOT_OFF, NOT_ENCRYPTED])
+        state = protocols.evaluate(self.store, SCHEDULE)
         result = score.compute(self.store.get_snapshots(), SCHEDULE)
         _s, text, html = emails.health(result, None, self.store.get_snapshots(),
-                                       int(time.time()), self.store, briefing=briefing)
-        self.assertIn("Switch on Secure Boot", text)
+                                       int(time.time()), self.store, protocol_state=state)
+        for expected in ("Switch on Secure Boot", "Answer first",
+                         "UEFI Firmware Settings", "Caution:",
+                         "Queued after this: Encrypt the system drive"):
+            self.assertIn(expected, text)
         self.assertIn("JARVIS briefing", html)
         self.assertIn("jarvis brief yes secure-boot", html)
+
+    def test_the_email_gives_bitlocker_its_manual_steps_and_its_command_route(self):
+        self.observe([NOT_ENCRYPTED])
+        lines = protocols.email_lines(self.states()["disk-encryption"])
+        joined = "\n".join(lines)
+        for expected in ("Manage BitLocker", "recovery key", "Encrypt used disk space only",
+                         "manage-bde -on C:", "Caution:"):
+            self.assertIn(expected, joined)
+
+    def test_assistant_still_answers_what_to_do_next(self):
+        self.observe([SECURE_BOOT_OFF])
         answer = assistant.answer(self.store, "what should I do next?", conf={}, jobs=SCHEDULE)
         self.assertEqual(answer["source"], "builtin")
         self.assertIn("Secure Boot", answer["answer"])

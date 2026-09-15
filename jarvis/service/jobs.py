@@ -19,10 +19,11 @@ from jarvis.collectors.persistence import backdoor, control, implant, startup
 from jarvis.collectors.process import evasion as evasion_mod
 from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
 from jarvis.collectors.telemetry import auditd, sysmon, sysmon_linux
-from jarvis.core import retention
+from jarvis.core import collection, retention
 from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
 from jarvis.intel import research as intel
+from jarvis.response import alert
 from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting.cadence import run as report_due
 from jarvis.service import connectivity, deadman, selfcheck
@@ -138,6 +139,12 @@ def _input(deep):
             # detection when it is not. "input_hook" is the short-interval
             # watchdog; "input" additionally runs the full injected-event audit.
             pids, findings = inputwatch.supervise(store, deep=deep)
+            # A monitor that is down is not a successful observation: recording
+            # it as one would leave the score, coverage, the dashboard and the
+            # daily email all reporting input monitoring as fine.
+            outage = next((f for f in findings if alert.is_outage(f)), None)
+            if outage:
+                collection.failed("input-hook", outage.get("title", "monitor down"))
             if deep:
                 findings += inputwatch.audit(store, pids=pids, supervised=True)
             return findings
