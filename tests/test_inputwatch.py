@@ -150,10 +150,10 @@ class DesktopSessionTests(unittest.TestCase):
         from unittest import mock
 
         helper = importlib.import_module("jarvis.collectors.host.inputwatch.helper")
-        with mock.patch.object(helper, "ps_json") as ps, \
+        with mock.patch.object(helper.collect_windows, "run_in_every_session") as run, \
              mock.patch.object(helper, "_paths", return_value=("C:\\x", os.path.join(self.tmp.name, "input.jsonl"))):
             helper._stop_all(pids=["13544", "7560", "1; Stop-Computer", ""])
-        script = ps.call_args.args[0]
+        script = run.call_args.args[0]
         self.assertIn("@(13544,7560)", script)
         self.assertNotIn("Stop-Computer", script)
         self.assertIn("ProcessName -eq 'powershell'", script)
@@ -169,6 +169,19 @@ class DesktopSessionTests(unittest.TestCase):
              mock.patch.object(supervise, "start", return_value=""):
             supervise.supervise(self.store)
         stop_all.assert_called_once_with(pids=["13544", "7560"])
+
+    def test_cleanup_runs_through_every_live_socket(self):
+        import subprocess
+        from unittest import mock
+
+        from jarvis.platform import windows
+        with mock.patch.object(windows, "_PS", "powershell.exe"), \
+             mock.patch.object(windows, "interop_sockets", return_value=["/run/WSL/2_interop", "/run/WSL/3309_interop"]), \
+             mock.patch.object(windows.subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+            self.assertEqual(windows.run_in_every_session("Stop-Process -Id 1"), 2)
+        self.assertEqual([c.kwargs["env"]["WSL_INTEROP"] for c in run.call_args_list],
+                         ["/run/WSL/2_interop", "/run/WSL/3309_interop"])
 
     def test_desktop_interop_picks_the_socket_that_lands_on_the_desktop(self):
         import stat

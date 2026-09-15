@@ -101,6 +101,28 @@ _SESSION_PROBE = ("\"$((Get-Process -Id $PID).SessionId):"
                   "$((Get-Process explorer -EA SilentlyContinue | Select-Object -First 1).SessionId)\"")
 
 
+def interop_sockets():
+    """Live interop sockets, newest first. Each reaches its own Windows session."""
+    try:
+        paths = [os.path.join("/run/WSL", n) for n in os.listdir("/run/WSL")
+                 if n.endswith("_interop")]
+        live = [p for p in paths
+                if not os.path.islink(p) and stat.S_ISSOCK(os.stat(p).st_mode)]
+        return sorted(live, key=os.path.getmtime, reverse=True)
+    except OSError:
+        return []
+
+
+def _run_via(sock, script, timeout):
+    try:
+        return subprocess.run([_PS or find_powershell(), "-NoProfile", "-NonInteractive",
+                               "-Command", script],
+                              capture_output=True, text=True, errors="replace",
+                              timeout=timeout, cwd="/", env={**os.environ, "WSL_INTEROP": sock})
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def desktop_interop() -> str:
     """An interop socket whose Windows processes land on the user's desktop.
 
@@ -115,25 +137,25 @@ def desktop_interop() -> str:
     """
     if not (_PS or find_powershell()):
         return ""
-    try:
-        sockets = sorted((os.path.join("/run/WSL", n) for n in os.listdir("/run/WSL")
-                          if n.endswith("_interop")), key=os.path.getmtime, reverse=True)
-    except OSError:
-        return ""
-    for sock in sockets:
-        if os.path.islink(sock) or not stat.S_ISSOCK(os.stat(sock).st_mode):
-            continue
-        try:
-            r = subprocess.run([_PS or find_powershell(), "-NoProfile", "-NonInteractive",
-                                "-Command", _SESSION_PROBE],
-                               capture_output=True, text=True, errors="replace", timeout=30,
-                               cwd="/", env={**os.environ, "WSL_INTEROP": sock})
-        except (OSError, subprocess.SubprocessError):
-            continue
-        own, _, desktop = r.stdout.strip().partition(":")
+    for sock in interop_sockets():
+        r = _run_via(sock, _SESSION_PROBE, 30)
+        own, _, desktop = (r.stdout.strip() if r else "").partition(":")
         if own.isdigit() and own == desktop and own != "0":
             return sock
     return ""
+
+
+def run_in_every_session(script, timeout=60):
+    """Run an idempotent PowerShell command once through every interop socket.
+
+    Windows refuses to terminate a process in another logon session: a stop
+    issued from the desktop is denied for a session-0 helper and succeeds from
+    session 0. Cleanup that must reach every session therefore runs from each.
+    Returns how many runs completed.
+    """
+    if not (_PS or find_powershell()):
+        return 0
+    return sum(1 for sock in interop_sockets() if _run_via(sock, script, timeout))
 
 
 def _split_args(cmd: str):

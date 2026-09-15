@@ -189,19 +189,20 @@ def _stop_all(pids=()):
     launched into session 0 returned a null command line, survived every
     stop-all, and kept writing zero heartbeats beside the real hook, so each
     reconciliation killed the working helper instead. Explicit pids are only
-    stopped if they are PowerShell processes. The caller starts exactly one.
+    stopped if they are PowerShell processes, and the stop runs from every
+    session, because Windows denies terminating another session's process.
+    The caller starts exactly one.
     """
     explicit = ",".join(str(int(p)) for p in pids if str(p).strip().isdigit()) or "0"
-    ps_json(
+    collect_windows.run_in_every_session(
         "$targets = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
         "Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and $_.ProcessId -ne $PID } | "
         "ForEach-Object { $_.ProcessId });"
         f"$targets += @({explicit}) | Where-Object {{ $_ -gt 0 -and $_ -ne $PID -and "
         "(Get-Process -Id $_ -EA SilentlyContinue).ProcessName -eq 'powershell' };"
         "$targets | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force "
-        "-EA SilentlyContinue; Wait-Process -Id $_ -Timeout 5 -EA SilentlyContinue };"
-        "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
-        "(ConvertTo-Json @{ok=1})))", timeout=90)
+        "-EA SilentlyContinue; Wait-Process -Id $_ -Timeout 5 -EA SilentlyContinue }",
+        timeout=90)
     for p in (_pid_path(), _alive_path(), _lock_path()):
         try:
             os.remove(p)
