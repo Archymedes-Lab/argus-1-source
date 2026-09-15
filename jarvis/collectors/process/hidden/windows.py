@@ -30,11 +30,15 @@ def audit_windows():
         return "unknown"
 
     # WMI and the process API disagreeing is the classic userland-hook tell.
-    for pid in sorted(set(wmi) - set(api) - {0, 4}):
+    # Only disagreements that survived a per-pid re-query count (see
+    # PS_HIDDEN); the raw listings were taken moments apart.
+    wmi_only = {p for p in aslist(data.get("wmiOnly")) if isinstance(p, int)}
+    api_only = {p for p in aslist(data.get("apiOnly")) if isinstance(p, int)}
+    for pid in sorted(wmi_only & (set(wmi) - set(api))):
         out.append(_finding("high", "process visible to WMI but not to the process API",
                             f"pid {pid} ({label(pid)}) — {wmi[pid].get('path') or 'no path'}",
                             "Win32_Process vs Get-Process"))
-    for pid in sorted(set(api) - set(wmi) - {0, 4}):
+    for pid in sorted(api_only & (set(api) - set(wmi))):
         out.append(_finding("high", "process visible to the process API but not to WMI",
                             f"pid {pid} ({label(pid)}) — WMI provider may be tampered with",
                             "Get-Process vs Win32_Process"))

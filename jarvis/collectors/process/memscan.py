@@ -139,17 +139,27 @@ def audit(hosts=("win",)):
             jit_total += 1
             continue
         g = groups.setdefault(name, {"pids": [], "regions": 0, "bytes": 0,
-                                     "rwx": 0})
+                                     "rwx": 0, "runtimes": set(), "unexplained": 0})
         g["pids"].append(p.get("pid"))
         g["regions"] += regions
         g["bytes"] += int(p.get("bytes") or 0)
         g["rwx"] += int(p.get("rwx") or 0)
+        if p.get("runtime"):
+            g["runtimes"].add(p["runtime"])
+        else:
+            g["unexplained"] += 1
 
     for name, g in groups.items():
         # RWX is the stronger signal: writable *and* executable at once is what
         # a stager needs and what most legitimate code deliberately avoids.
         sev = "high" if g["rwx"] else "medium"
         if g["bytes"] < 8192 and not g["rwx"]:
+            sev = "low"
+        # Every process of this program has a JIT engine loaded, which accounts
+        # for the memory. Kept as inventory rather than dropped, so a program
+        # that stops loading its runtime and keeps the memory shows up again.
+        jit = sorted(g["runtimes"]) if not g["unexplained"] else []
+        if jit:
             sev = "low"
         n_pids = len(g["pids"])
         where = (f"pid {g['pids'][0]}" if n_pids == 1
@@ -162,9 +172,11 @@ def audit(hosts=("win",)):
             f"{'s' if g['regions'] > 1 else ''}, {_human(g['bytes'])}"
             + (f", {g['rwx']} writable at the same time (RWX)"
                if g["rwx"] else "")
-            + " — code written into the process at runtime rather than loaded "
-              "from disk. Confirm with a memory dump before acting; packers, "
-              "installers and anti-cheat do this legitimately.",
+            + (f" — the process hosts the {', '.join(jit)} JIT runtime, which "
+               "compiles code into exactly this kind of memory." if jit else
+               " — code written into the process at runtime rather than loaded "
+               "from disk. Confirm with a memory dump before acting; packers, "
+               "installers and anti-cheat do this legitimately."),
             where))
     if jit_total:
         out.append(_finding(

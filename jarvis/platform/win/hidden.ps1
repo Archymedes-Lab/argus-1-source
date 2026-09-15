@@ -172,5 +172,19 @@ $o.ghostPerf    = Confirm-Ghosts $o.perfpids
 $o.ghostSvc     = Confirm-Ghosts $o.svcpids
 $o.ghostNet     = Confirm-Ghosts $o.netpids
 
+# WMI and the process API were listed one after the other at the start, so a
+# process that started or exited between the two reads as hidden from one of
+# them -- short-lived brokers (RuntimeBroker, HxTsr) did exactly that. Each
+# disagreement is asked again of both views, by pid, now; only a process one
+# view still sees and the other still does not is reported.
+$wmiPids = @{}; $o.wmi | ForEach-Object { $wmiPids[[int]$_.pid] = $true }
+$apiPids = @{}; $o.api | ForEach-Object { $apiPids[[int]$_.pid] = $true }
+function In-Wmi([int]$id) { [bool](Get-CimInstance Win32_Process -Filter "ProcessId=$id") }
+function In-Api([int]$id) { [bool](Get-Process -Id $id -ErrorAction SilentlyContinue) }
+$o.apiOnly = @($apiPids.Keys | Where-Object { $_ -gt 4 -and -not $wmiPids.ContainsKey($_) -and
+                                              (In-Api $_) -and -not (In-Wmi $_) })
+$o.wmiOnly = @($wmiPids.Keys | Where-Object { $_ -gt 4 -and -not $apiPids.ContainsKey($_) -and
+                                              (In-Wmi $_) -and -not (In-Api $_) })
+
 $json = [pscustomobject]$o | ConvertTo-Json -Depth 5 -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))

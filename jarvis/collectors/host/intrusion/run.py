@@ -28,6 +28,8 @@ BROAD_PERMS = re.compile(r"<all_urls>|\*://\*/\*|http://\*/\*|https://\*/\*|"
 
 PS_INTRUSION = load_win_script("intrusion.ps1")
 
+EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
 
 # Extensions that ship with the browser or are installed by Windows itself.
 STOCK_EXT = re.compile(r"^(Chrome Web Store Payments|Google Docs Offline|"
@@ -150,7 +152,12 @@ def audit():
         in_temp = re.search(r"\\temp\\|\\public\\", path, re.I)
         if sig == "Valid":
             continue
-        if in_temp or sig in ("HashMismatch", "NotTrusted"):
+        if (f.get("sha256") or "").lower() == EMPTY_SHA256:
+            # Zero bytes cannot execute, and an empty file has no signature to
+            # check — Authenticode reports UnknownError for it. Temp is full of
+            # placeholder files that tools create and never fill.
+            sev = "low"
+        elif in_temp or sig in ("HashMismatch", "NotTrusted"):
             sev = "high"
         else:
             sev = "low"

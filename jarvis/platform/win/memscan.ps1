@@ -52,8 +52,40 @@ public static class JarvisMem
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool ReadProcessMemory(IntPtr h, IntPtr addr, byte[] buf,
         int size, out IntPtr read);
+    [DllImport("psapi.dll", SetLastError = true)]
+    static extern bool EnumProcessModulesEx(IntPtr h, [Out] IntPtr[] mods, int cb,
+        out int needed, uint filter);
+    [DllImport("psapi.dll", CharSet = CharSet.Unicode)]
+    static extern uint GetModuleBaseName(IntPtr h, IntPtr mod, StringBuilder name, int size);
     [DllImport("kernel32.dll")]
     static extern IntPtr GetModuleHandle(string name);
+
+    // Engines that compile code at run time. Loaded, one of these explains
+    // private executable memory; a name on an allowlist only claims to.
+    static readonly string[] JitRuntimes = {
+        "coreclr.dll", "clr.dll", "mscorwks.dll", "clrjit.dll", "mrt100_app.dll",
+        "EmbeddedBrowserWebView.dll", "libcef.dll", "v8.dll", "jscript9.dll",
+        "chakra.dll", "jvm.dll",
+    };
+
+    public static string Runtime(IntPtr h)
+    {
+        var mods = new IntPtr[2048];
+        int needed;
+        // 3 = LIST_MODULES_ALL, so a 32-bit runtime in a WOW64 process counts.
+        if (!EnumProcessModulesEx(h, mods, IntPtr.Size * mods.Length, out needed, 3)) return "";
+        int count = Math.Min(needed / IntPtr.Size, mods.Length);
+        var name = new StringBuilder(260);
+        for (int i = 0; i < count; i++)
+        {
+            name.Length = 0;
+            if (GetModuleBaseName(h, mods[i], name, name.Capacity) == 0) continue;
+            string n = name.ToString();
+            foreach (var jit in JitRuntimes)
+                if (string.Equals(n, jit, StringComparison.OrdinalIgnoreCase)) return jit;
+        }
+        return "";
+    }
     [DllImport("kernel32.dll", CharSet = CharSet.Ansi)]
     static extern IntPtr GetProcAddress(IntPtr mod, string name);
 
@@ -142,6 +174,7 @@ public static class JarvisMem
                     total += r.Size;
                     if (r.Protect == PAGE_EXECUTE_READWRITE) rwx++;
                 }
+                string runtime = regions.Count > 0 ? Runtime(h) : "";
                 if (!first) sb.Append(",");
                 first = false;
                 sb.Append("{\"pid\":").Append(p.Id)
@@ -149,6 +182,7 @@ public static class JarvisMem
                   .Append(",\"regions\":").Append(regions.Count)
                   .Append(",\"bytes\":").Append(total)
                   .Append(",\"rwx\":").Append(rwx)
+                  .Append(",\"runtime\":\"").Append(runtime).Append("\"")
                   .Append(",\"stubs\":\"").Append(stubs).Append("\"}");
             }
             catch { }
