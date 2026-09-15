@@ -14,22 +14,27 @@
 | Import ordering | ruff `I` enabled with `jarvis` as first-party, and 88 import blocks sorted. |
 | `idx_ind_kind` possibly redundant | Not redundant. `EXPLAIN QUERY PLAN` shows the hunt's hot `kind=? AND status='active'` query and the gaps query use it. It stays. |
 
+## Resolved (2026-09-15, third pass)
+
+| Item | Outcome |
+|---|---|
+| Embedded PowerShell payloads | 21 payloads moved to `platform/win/*.ps1` and load via `core.paths.load_win_script()` with newline translation off. Every loaded payload is byte-identical to the old string constant. `.gitattributes` pins LF, and tests check each file exists and that the templated placeholders survive. |
+| `secrets.py` (518) | Package: `patterns`, `exposure`, `run`. A home-directory scan gives the same 50 credential findings. |
+| `research.py` (516) | Package: `extraction`, `client`, `run`. The search request, `summary()`, and a synthetic ingest (16 candidates, 8 kept) are identical. |
+| `netwatch.py` (493) | Package: `sample`, `record`, `run`. The audit over the live timeline is identical (14 findings). |
+
 ## Still open
 
+- **`CRED_STORES` / `BROWSER_PROC` and the "credential stores" coverage
+  claim.** Both patterns date from the initial commit and have never been
+  read. PowerShell section 6 of `intrusion.ps1` collects `credAccess` (store
+  paths and last-write times), which nothing reads either. Meanwhile
+  `intel/gaps.py` lists T1555.003 as covered by intrusion. The intended check
+  ("who has the browser credential stores open") was never built, so the
+  coverage claim is currently false. Decide: build a real check, or remove the
+  dead code and the claim.
 - **Transient alert during the first move (2026-09-14, about 22:20).** Kept as
   a lesson, not a task: restart `jarvis.service` after any commit that moves
-  files, since the daemon runs from this checkout.
-- **About 90 package-internal underscore imports** remain (`toolchain/common`,
-  `inputwatch/common|helper`, `hidden/common|views`, and the new packages'
-  `common` modules). The layer rules allow them. Promote one if its package
-  grows a second consumer.
-- **Embedded PowerShell payloads** still live as Python strings (`PS_SPY`,
-  `PS_INTRUSION`, `PS_POSTURE`, `PS_CONTROL`, …). Moving them to
-  `platform/win/*.ps1` would shorten the collectors, but some are templated
-  with `str.replace`, so each needs a byte-identical check of the loaded text.
-- **Modules near the size cap** with no obvious seam yet: `collectors/identity/
-  secrets.py` (518), `intel/research.py` (516), `collectors/network/netwatch.py`
-  (493).
-- **`intrusion/run.py` defines `CRED_STORES` and `BROWSER_PROC`**, but no
-  Python code reads them. Check whether they were meant to feed the
-  PowerShell payload before deleting them.
+  files.
+- **About 90 package-internal underscore imports** remain. The layer rules
+  allow them.
