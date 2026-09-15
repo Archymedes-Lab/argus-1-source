@@ -23,16 +23,10 @@
 | `research.py` (516) | Package: `extraction`, `client`, `run`. The search request, `summary()`, and a synthetic ingest (16 candidates, 8 kept) are identical. |
 | `netwatch.py` (493) | Package: `sample`, `record`, `run`. The audit over the live timeline is identical (14 findings). |
 
+| Credential-store check (`CRED_STORES` / `BROWSER_PROC`) | Built. `intrusion/credentials.py` flags any running non-browser process whose command line names a browser password or cookie store (the infostealer copy step). The payload marks itself on its first line so the collector never flags its own command line. Proven live: a planted process naming `Login Data` was reported high, and after it stopped the check returned to clean with 4 stores present. The gaps coverage text now says exactly what is checked. |
+
 ## Still open
 
-- **`CRED_STORES` / `BROWSER_PROC` and the "credential stores" coverage
-  claim.** Both patterns date from the initial commit and have never been
-  read. PowerShell section 6 of `intrusion.ps1` collects `credAccess` (store
-  paths and last-write times), which nothing reads either. Meanwhile
-  `intel/gaps.py` lists T1555.003 as covered by intrusion. The intended check
-  ("who has the browser credential stores open") was never built, so the
-  coverage claim is currently false. Decide: build a real check, or remove the
-  dead code and the claim.
 - **Transient alert during the first move (2026-09-14, about 22:20).** Kept as
   a lesson, not a task: restart `jarvis.service` after any commit that moves
   files.

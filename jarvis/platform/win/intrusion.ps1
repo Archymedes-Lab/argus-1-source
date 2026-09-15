@@ -1,4 +1,5 @@
 
+# jarvis-intrusion-payload (first line on purpose: see section 6)
 $ErrorActionPreference = 'SilentlyContinue'
 $o = [ordered]@{}
 
@@ -121,7 +122,16 @@ $o.recentExe = @(Get-ChildItem -File -ErrorAction SilentlyContinue -Path @(
                        signer=if($s.SignerCertificate){[string]$s.SignerCertificate.Subject}else{''}
                        sha256=[string]$h.Hash } })
 
-# --- 6. Who has the browser credential stores open ------------------------
+# --- 6. Browser credential stores, and what else references them -------
+# Infostealers usually copy the store before decrypting it (the browser holds a
+# lock on the live file), and the copy step names the file on a command line:
+# esentutl /y "...\Login Data", robocopy, a script given the profile path.
+# This sees command lines of running processes only; a program that opens the
+# files through the API without naming them on its command line is not seen.
+#
+# The marker on this script's first line: its own command line names the store
+# files too, so a process carrying the marker is this collector, not a thief. It
+# sits first so it survives the 400-character command-line truncation below.
 $o.credAccess = @()
 try {
   $stores = Get-ChildItem -File -ErrorAction SilentlyContinue -Path @(
@@ -131,6 +141,21 @@ try {
     ForEach-Object { [pscustomobject]@{ path=$_.FullName
                                         written=$_.LastWriteTime.ToString('o') } }
   $o.credAccess = @($stores)
+} catch {}
+$o.credReaders = @()
+$o.credReadersOk = $false
+try {
+  $storeRx = '(?i)[\\/](Login Data|Cookies|Web Data|Local State|key4\.db|logins\.json|cookies\.sqlite|places\.sqlite)(["''\s]|$)'
+  $o.credReaders = @(Get-CimInstance Win32_Process -ErrorAction Stop |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and
+                   $_.CommandLine -match $storeRx -and
+                   $_.CommandLine -notmatch 'jarvis-intrusion-payload' } |
+    ForEach-Object { [pscustomobject]@{
+      pid  = [int]$_.ProcessId
+      name = [string]$_.Name
+      exe  = [string]$_.ExecutablePath
+      cmd  = [string]$_.CommandLine.Substring(0, [Math]::Min(400, $_.CommandLine.Length)) } })
+  $o.credReadersOk = $true
 } catch {}
 
 # --- 7. BITS transfer jobs (T1197) --------------------------------------

@@ -7,6 +7,7 @@ from jarvis.platform.windows import aslist, ps_json
 
 from .bits import _bits_is_vendor
 from .common import _finding
+from .credentials import credential_findings
 from .history import _history_findings
 
 # Command shapes that show up in ClickFix lures and in pasted-payload attacks.
@@ -17,17 +18,6 @@ PASTE_ATTACK = re.compile(
     r"\.hta\b|\bwscript\b|\bcscript\b|http://|https://|\\\\[^\\]+\\",
     re.I,
 )
-
-
-# Browser credential and session stores. Anything but the browser reading these
-# is worth knowing about.
-CRED_STORES = re.compile(
-    r"\\(Login Data|Cookies|Web Data|Local State|key4\.db|logins\.json|"
-    r"cookies\.sqlite|places\.sqlite)$", re.I)
-
-
-BROWSER_PROC = re.compile(r"^(chrome|msedge|firefox|opera|brave|vivaldi|"
-                          r"chromium|thorium)\.exe$", re.I)
 
 
 # Extension permissions that allow reading every page, including session tokens.
@@ -75,6 +65,7 @@ def audit():
 
     # -- 2. PowerShell history --------------------------------------------
     out.extend(_history_findings(data))
+    out.extend(credential_findings(data))
 
     # -- 3. Defender's own findings ---------------------------------------
     # Grade on what is still true, not on the fact that Defender once said the

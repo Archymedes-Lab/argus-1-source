@@ -57,7 +57,8 @@ COVERAGE = {
     "T1110":     "bruteforce — failed-auth spikes and account lockouts",
     "T1552":     "secrets — plaintext credentials on disk (files, history, config)",
     "T1539":     "intrusion — browser session and cookie theft artefacts",
-    "T1555.003": "intrusion — browser credential stores",
+    "T1555.003": "intrusion — non-browser processes naming browser credential "
+                 "stores on a command line",
     "T1003.001": "sysmon — LSASS process-access events (Windows, needs Sysmon)",
     "T1040":     "sniffing — promiscuous NICs, raw sockets, capture drivers/tools",
     "T1197":     "intrusion — BITS transfer jobs outside the known updaters",
