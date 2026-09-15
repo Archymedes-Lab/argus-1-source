@@ -73,6 +73,11 @@ DUAL_USE_DOMAINS = {
     "myexternalip.com", "wtfismyip.com", "ipapi.co", "ipwhois.io", "ident.me",
     "whatismyipaddress.com", "api.myip.com", "ipconfig.io", "ipv4.icanhazip.com",
     "checkip.amazonaws.com", "ipv6.icanhazip.com", "ip.sb", "myip.com",
+    # Connectivity checks. Windows resolves these on every network change
+    # (NCSI), Android and Firefox have their own; malware uses them to test
+    # for internet access. Measured: ipv6.msftconnecttest.com flagged.
+    "msftconnecttest.com", "msftncsi.com", "connectivitycheck.gstatic.com",
+    "detectportal.firefox.com", "captive.apple.com",
 }
 
 # Package registries and their CDNs. These appear throughout URLhaus and
@@ -243,6 +248,15 @@ CLOUDFLARE_IPV4 = tuple(ipaddress.ip_network(value) for value in (
     "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22",
     "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
     "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+))
+
+# GitHub's shared web edge: every *.github.io site and raw.githubusercontent.com
+# answer from these, so a writeup that links one malicious repo file puts an
+# address in the feed that also serves the rest of GitHub. Measured: firefox to
+# 185.199.108.153 flagged as a supply-chain IP. Keep aligned with the "web" and
+# "pages" entries of https://api.github.com/meta.
+GITHUB_SHARED_IPV4 = tuple(ipaddress.ip_network(value) for value in (
+    "185.199.108.0/22", "192.30.252.153/32", "192.30.252.154/32",
 ))
 
 # Windows components that appear in writeups constantly because attackers abuse

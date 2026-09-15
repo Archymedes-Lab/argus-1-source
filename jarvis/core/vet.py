@@ -40,6 +40,7 @@ from .vet_lists import (
     DUAL_USE_DOMAINS,
     FILENAME_RE,
     GENERIC_PROCESS,
+    GITHUB_SHARED_IPV4,
     HEX64,
     JUNK_DIGESTS,
     KERNEL_SYM,
@@ -55,6 +56,8 @@ from .vet_lists import (
     SYSCALL_WORDS,
     WINDOWS_SYSTEM_BIN,
 )
+
+_DUAL_USE_REASON = "public IP-lookup or connectivity-check service, used by benign software too"
 
 
 def refang(value: str) -> str:
@@ -99,6 +102,8 @@ def vet_ipv4(value: str):
         return None, "public DNS or shared infrastructure"
     if any(addr in network for network in CLOUDFLARE_IPV4):
         return None, "shared Cloudflare anycast address"
+    if any(addr in network for network in GITHUB_SHARED_IPV4):
+        return None, "shared GitHub Pages / raw content address"
     return str(addr), ""
 
 
@@ -121,11 +126,11 @@ def vet_domain(value: str):
         if ".".join(parts_pi[i:]) in PACKAGE_INFRA:
             return None, "package registry or its CDN, used by everyone"
     if v in DUAL_USE_DOMAINS:
-        return None, "public IP-lookup service, used by benign software too"
+        return None, _DUAL_USE_REASON
     parts_du = v.split(".")
     for i in range(len(parts_du) - 1):
         if ".".join(parts_du[i:]) in DUAL_USE_DOMAINS:
-            return None, "public IP-lookup service, used by benign software too"
+            return None, _DUAL_USE_REASON
     # Also reject any subdomain of a denied registrable domain. SHARED_HOSTING
     # is deliberately excluded here: its subdomains are exactly what we want.
     parts = v.split(".")
