@@ -50,10 +50,13 @@ def _rule_name(detail):
 #              fix(title, detail, where) -> str)
 _RULES = [
     (lambda t, d, w: t.startswith("Credential Guard is not running"),
-     lambda t, d, w: "elevated PowerShell, then reboot: "
-                     "Set-ItemProperty -Path "
-                     "'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\LSA' "
-                     "-Name LsaCfgFlags -Value 1 -Type DWord"),
+     # 2 = enabled without UEFI lock. 1 locks it into firmware, after which it
+     # cannot be turned off from Windows. Credential Guard also needs
+     # virtualization-based security, which the posture check reports apart.
+     lambda t, d, w: "elevated PowerShell: scripts\\repair\\apply-reported-hardening.ps1 "
+                     "(or set HKLM\\SYSTEM\\CurrentControlSet\\Control\\DeviceGuard "
+                     "EnableVirtualizationBasedSecurity=1 and ...\\Control\\LSA "
+                     "LsaCfgFlags=2), then reboot"),
 
     (lambda t, d, w: "ASR rules are not enforcing" in t,
      lambda t, d, w: _ASR_CMD),
