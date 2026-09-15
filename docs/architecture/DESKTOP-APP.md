@@ -29,18 +29,18 @@ desktop shell adds only the things a browser tab cannot do:
 | Global hotkey ("what changed?") | needs an OS-level hook |
 | Window that cannot be navigated away | the shell pins one origin |
 
-## The shell: Tauri first, Electron if you want it
+## The shell: Tauri (decided 2026-09-16)
 
-Recommended: **Tauri 2** (Rust shell, uses the system WebView2 on Windows).
+**Tauri 2** (Rust shell, uses the system WebView2 on Windows).
 A ~5 MB binary, one process tree, no bundled browser, and a small dependency
 set — which matters for a tool whose own audits flag unsigned binaries,
 unexpected autostart entries and supply-chain risk. JARVIS shipping hundreds
 of npm packages to display its own findings is the kind of thing JARVIS
 reports on.
 
-**Electron** is the alternative and is a reasonable choice if you want the
-richer native API surface and the familiar toolchain. The trade-offs are real
-and manageable:
+**Electron** was the alternative, and would have been a reasonable choice for
+its richer native API surface and familiar toolchain. If it is ever picked up
+instead, these are the terms:
 
 - a bundled Chromium per install (~150 MB) and a large npm dependency tree —
   pin with a lockfile, vendor it, and review updates like any other supply
@@ -52,11 +52,11 @@ and manageable:
 - ASAR integrity on, so the app's own files are fingerprinted the way JARVIS
   fingerprints its scheduled-task scripts.
 
-Either way the UI is the same web app, so the choice is reversible and not
-worth blocking on. A third option costing almost nothing: install the existing
+Either way the UI is the same web app, so the choice stays reversible. A
+stopgap costing almost nothing until the shell exists: install the existing
 dashboard as a PWA (Edge "Install this site as an app"), which already gives a
-window, a taskbar entry and autostart — a good stopgap and a way to test the
-shell-shaped questions before writing one.
+window, a taskbar entry and autostart, and answers some of the shell-shaped
+questions before one is written.
 
 ## Live insight instead of polling
 
@@ -109,7 +109,7 @@ As with messaging, text from the local model has no route to any of these.
    the list of what is actually missing.
 2. **Stream:** `/api/stream` plus an SSE client in the page — the biggest
    single improvement, and it benefits the browser too.
-3. **Shell:** Tauri (or Electron) window, tray, notifications, autostart,
+3. **Shell:** the Tauri window, tray, notifications, autostart and
    single instance.
 4. **Native touches:** global hotkey, jump list / quick actions, per-finding
    deep links.
