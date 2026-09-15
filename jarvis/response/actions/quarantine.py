@@ -38,7 +38,9 @@ class QuarantineFile(Action):
     def match(self, finding, job):
         # Only files that actually exist on the Linux side, named by a
         # threat-intel path match or a staged-executable finding.
-        if (finding or {}).get("host") != "wsl":
+        if (finding or {}).get("host") != "wsl" or job != "hunt":
+            return None
+        if (finding or {}).get("category") not in ("sample match", "dropped file"):
             return None
         path = (finding or {}).get("where") or ""
         if not path.startswith("/") or not os.path.isfile(path):
@@ -48,6 +50,14 @@ class QuarantineFile(Action):
         if real.startswith(("/usr/", "/bin/", "/sbin/", "/lib/", "/etc/", "/boot/")):
             return None
         return {"path": path}
+
+    def auto_eligible(self, finding, job, target):
+        # Exact SHA-256 sample matches are collision-resistant corroboration.
+        # Path and filename indicators can collide with legitimate files and
+        # therefore remain proposals even when their severity is high.
+        return (job == "hunt" and finding.get("category") == "sample match"
+                and finding.get("severity") == "critical"
+                and "SHA-256 " in (finding.get("detail") or ""))
 
     def evidence(self, target):
         return [target["path"]]

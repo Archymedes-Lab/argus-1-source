@@ -6,12 +6,15 @@ from unittest import mock
 from jarvis.core.store import Store
 from jarvis.response import defense, questions
 from jarvis.response.actions import base, quarantine, suspend
+from jarvis.response.evidence import paths as evidence_paths
 
 
-def dropped(path, sev="high"):
-    return {"category": "dropped file", "severity": sev, "host": "wsl",
+def dropped(path, sev="high", category="dropped file"):
+    detail = ("SHA-256 " + "a" * 64 + " — known sample"
+              if category == "sample match" else "listed as an attacker-created path")
+    return {"category": category, "severity": sev, "host": "wsl",
             "title": "a file named in threat intelligence exists here", "where": path,
-            "detail": "listed as an attacker-created path"}
+            "detail": detail}
 
 
 class QuarantineActionTests(unittest.TestCase):
@@ -40,6 +43,8 @@ class QuarantineActionTests(unittest.TestCase):
         self.assertIsNone(self.action.match(dropped("/usr/bin/python3"), "hunt"))
         self.assertIsNone(self.action.match(dropped(p + ".gone"), "hunt"))
         self.assertIsNone(self.action.match({**dropped(p), "host": "win"}, "hunt"))
+        self.assertIsNone(self.action.match(dropped(p), "scan"))
+        self.assertIsNone(self.action.match({**dropped(p), "category": "process"}, "hunt"))
 
     def test_apply_moves_and_undo_restores_the_bytes(self):
         p = self._file(body="payload-body")
@@ -85,10 +90,18 @@ class SuspendActionTests(unittest.TestCase):
     def test_apply_and_undo_pause_resume_a_real_process(self):
         import signal
         import subprocess
+        import time
         proc = subprocess.Popen(["sleep", "30"])
         try:
             action = suspend.SuspendProcess()
-            target = action.match({"host": "wsl", "pid": proc.pid}, "sysmon_linux")
+            # Popen returns just before the child completes execve; during that
+            # small window /proc still reports the protected parent name.
+            for _ in range(50):
+                if suspend._name(proc.pid) == "sleep":
+                    break
+                time.sleep(0.01)
+            target = action.match({"host": "wsl", "pid": proc.pid,
+                                   "category": "sysmon-linux"}, "sysmon_linux")
             self.assertIsNotNone(target)
             ok, record, _ = action.apply(target, None)
             self.assertTrue(ok)
@@ -110,11 +123,15 @@ class LadderTests(unittest.TestCase):
         self.qpatch = mock.patch.object(quarantine, "QUARANTINE_DIR",
                                         os.path.join(self.qroot.name, "q"))
         self.qpatch.start()
+        self.epatch = mock.patch.object(evidence_paths, "EVIDENCE_ROOT",
+                                       os.path.join(self.tmp.name, "evidence"))
+        self.epatch.start()
         self.file = os.path.join(self.tmp.name, "drop.sh")
         with open(self.file, "w") as fh:
             fh.write("evil")
 
     def tearDown(self):
+        self.epatch.stop()
         self.qpatch.stop()
         self.store.close()
         self.tmp.cleanup()
@@ -130,9 +147,10 @@ class LadderTests(unittest.TestCase):
 
     def test_enabled_and_high_severity_acts_and_is_undoable(self):
         conf = {"autonomous_defense": True, "auto_quarantine": True}
-        rung, action, _ = defense.decide(dropped(self.file), "hunt", conf, {})
+        finding = dropped(self.file, "critical", "sample match")
+        rung, action, _ = defense.decide(finding, "hunt", conf, {})
         self.assertEqual(rung, defense.AUTO)
-        out = defense.process(self.store, conf, "hunt", [dropped(self.file)])
+        out = defense.process(self.store, conf, "hunt", [finding])
         self.assertFalse(os.path.exists(self.file))           # quarantined
         eid = out[0]["defense"]["id"]
         self.assertEqual(out[0]["defense"]["status"], "applied")
@@ -144,6 +162,51 @@ class LadderTests(unittest.TestCase):
         conf = {"autonomous_defense": True, "auto_quarantine": True}
         rung, _, _ = defense.decide(dropped(self.file, "medium"), "hunt", conf, {})
         self.assertEqual(rung, defense.PROPOSE)
+
+    def test_high_severity_filename_indicator_still_needs_approval(self):
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        rung, _, _ = defense.decide(dropped(self.file), "hunt", conf, {})
+        self.assertEqual(rung, defense.PROPOSE)
+
+    def test_failed_evidence_capture_prevents_automatic_action(self):
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        finding = dropped(self.file, "critical", "sample match")
+        with mock.patch.object(defense, "Case", side_effect=OSError("disk full")):
+            out = defense.process(self.store, conf, "hunt", [finding])
+        self.assertTrue(os.path.exists(self.file))
+        self.assertEqual(out[0]["defense"]["status"], "failed")
+
+    def test_repeated_finding_does_not_repeat_an_applied_action(self):
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        finding = dropped(self.file, "critical", "sample match")
+        first = defense.process(self.store, conf, "hunt", [finding])[0]
+        with mock.patch.object(quarantine.QuarantineFile, "apply") as apply:
+            second = defense.process(self.store, conf, "hunt", [
+                dropped(self.file, "critical", "sample match")])[0]
+        apply.assert_not_called()
+        # The quarantined path no longer matches on the next scan. Its original
+        # action remains the sole ledger entry and no second mutation occurs.
+        self.assertNotIn("defense", second)
+        self.assertEqual(list(defense.load(self.store)), [first["defense"]["id"]])
+
+    def test_undo_prevents_automatic_reapplication(self):
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        finding = dropped(self.file, "critical", "sample match")
+        first = defense.process(self.store, conf, "hunt", [finding])[0]
+        self.assertTrue(defense.undo(self.store, first["defense"]["id"])[0])
+        second = defense.process(self.store, conf, "hunt", [
+            dropped(self.file, "critical", "sample match")])[0]
+        self.assertEqual(second["defense"]["rung"], defense.PROPOSE)
+        self.assertTrue(os.path.exists(self.file))
+
+    def test_failed_action_waits_before_retrying(self):
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        finding = dropped(self.file, "critical", "sample match")
+        with mock.patch.object(defense, "Case", side_effect=OSError("disk full")):
+            defense.process(self.store, conf, "hunt", [finding])
+        with mock.patch.object(defense, "_apply") as apply:
+            defense.process(self.store, conf, "hunt", [finding])
+        apply.assert_not_called()
 
     def test_approve_runs_a_proposal_and_records_it(self):
         defense.process(self.store, {}, "hunt", [dropped(self.file)])

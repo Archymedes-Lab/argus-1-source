@@ -50,6 +50,15 @@ class Action(ABC):
         """Files worth preserving before acting. Missing ones are skipped."""
         return []
 
+    def auto_eligible(self, finding, job, target):
+        """Whether this exact evidence is strong enough for unattended use.
+
+        Severity alone is not confidence. A high-severity filename collision,
+        for example, still needs a person; an exact malware hash can qualify.
+        Actions opt in with a narrow, detector-specific rule.
+        """
+        return False
+
     @abstractmethod
     def preview(self, target):
         """One sentence a human reads before approving. No side effects."""

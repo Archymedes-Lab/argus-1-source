@@ -124,6 +124,9 @@ default-deny inbound, and non-bypassable Windows/Edge SmartScreen.
 | `sysmon-linux` | eBPF syscall events (execve, connect, ptrace, file writes) with rules. |
 | `serve` | Run everything continuously behind a local dashboard. |
 | `alert` | Email me when a collector stops recording or something critical fires. |
+| `ask` | Answer from current JARVIS data; use local Ollama for open questions. |
+| `defend` | Show, approve or undo evidence-backed containment actions. |
+| `inspect` | Hash and scan a file or capture process context into an evidence case. |
 
 ```bash
 jarvis baseline          # learn the current state as known-good (do this once)
@@ -141,6 +144,9 @@ jarvis events --since 24      # alert history
 jarvis procs --approved 0     # fingerprints not yet approved
 jarvis approve <fp> --note "my build script"
 jarvis status
+jarvis ask "what needs me?"
+jarvis defend
+jarvis inspect 'C:\Users\me\Downloads\suspicious.exe'
 
 jarvis intel --set-key <exa-key>   # once
 jarvis intel                      # refresh the least-recently-updated topic

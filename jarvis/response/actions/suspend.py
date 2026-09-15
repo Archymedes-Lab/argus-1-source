@@ -58,6 +58,12 @@ class SuspendProcess(Action):
     def match(self, finding, job):
         if (finding or {}).get("host") != "wsl":
             return None
+        # A PID on an unrelated finding must never become authority to freeze
+        # a process. Only process/runtime detectors can propose this action.
+        if (finding or {}).get("category") not in (
+                "process", "sysmon-linux", "credential access", "injection",
+                "tampering", "intel match", "sample match"):
+            return None
         pid = (finding or {}).get("pid")
         if not isinstance(pid, int) or pid <= 1 or not _alive(pid):
             return None
@@ -65,6 +71,12 @@ class SuspendProcess(Action):
         if name in PROTECTED:
             return None
         return {"pid": pid, "name": name, "started": _started(pid)}
+
+    def auto_eligible(self, finding, job, target):
+        # No current collector carries enough live process identity plus
+        # independent corroboration to freeze a process unattended. Keep the
+        # reversible action available for explicit approval.
+        return False
 
     def preview(self, target):
         return (f"Pause process {target['pid']} ({target.get('name') or '?'}) "

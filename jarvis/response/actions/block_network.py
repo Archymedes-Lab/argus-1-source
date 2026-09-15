@@ -51,6 +51,12 @@ class BlockAddress(Action):
         return (f"Add a Windows Firewall outbound rule blocking all traffic to "
                 f"{target['ip']}. Reversible.")
 
+    def auto_eligible(self, finding, job, target):
+        # The hunt promotes only high-confidence feed entries to critical.
+        # Lower-confidence IPs and CIDR matches remain approval proposals.
+        return job == "hunt" and finding.get("category") == "c2 match" \
+            and finding.get("severity") == "critical"
+
     def _run(self, script):
         return ps_json(script, timeout=30)
 

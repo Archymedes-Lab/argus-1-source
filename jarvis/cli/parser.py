@@ -8,6 +8,7 @@ from jarvis.intel import research as intel
 from jarvis.service import selfcheck
 
 from .commands import ack as ack_cli
+from .commands import ask as ask_cli
 from .commands import (
     cmd_alert,
     cmd_approve,
@@ -53,6 +54,7 @@ from .commands import (
 from .commands import defend as defend_cli
 from .commands import evidence as evidence_cli
 from .commands import impersonation as impersonation_cli
+from .commands import inspect as inspect_cli
 from .commands import pixel as pixel_cli
 from .commands import repair as repair_cli
 from .commands import retention as retention_cli
@@ -69,7 +71,9 @@ def build_parser():
     sub = p.add_subparsers(dest="cmd", required=True)
     repair_cli.add_parser(sub)
     ack_cli.add_parser(sub)
+    ask_cli.add_parser(sub)
     defend_cli.add_parser(sub)
+    inspect_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
     b.add_argument("--reset", action="store_true",

@@ -158,6 +158,15 @@
   .kindrow .tag b { color:var(--fg); }
   h3.sub { margin:10px 10px 4px; font-size:11px; text-transform:uppercase;
            letter-spacing:.08em; color:var(--faint); font-weight:600; }
+  .chat { display:grid; grid-template-columns:1fr auto; gap:8px; padding:12px 13px; }
+  .chat input { min-width:0; width:100%; padding:8px 10px; font-size:12px; }
+  .chat button { padding:8px 14px; }
+  .chat-answer { margin:0 13px 13px; padding:11px 12px; border-radius:7px;
+                 background:var(--panel2); white-space:pre-wrap; min-height:42px; }
+  .chat-source { color:var(--faint); font-size:10px; margin-top:7px; }
+  .question { margin:0 13px 10px; padding:10px 12px; border:1px solid var(--line);
+              border-radius:7px; display:grid; gap:7px; }
+  .question-actions { display:flex; gap:7px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -177,6 +186,17 @@
   <div class="card" id="healthcard">
     <h2>Security health <span class="cnt" id="healthsub"></span></h2>
     <div class="health" id="health">computing…</div>
+  </div>
+
+  <div class="card" id="chatcard">
+    <h2>Ask JARVIS <span class="cnt">local data · offline model for open questions</span></h2>
+    <form class="chat" onsubmit="askJarvis(event)">
+      <input id="askq" autocomplete="off" maxlength="4000"
+             placeholder="What needs me? What's my score? Explain a finding…">
+      <button id="askbtn" type="submit">ask</button>
+    </form>
+    <div class="chat-answer" id="askanswer">Built-in questions answer instantly. Open questions use Ollama when its local service and configured model are available.</div>
+    <div id="jarvisquestions"></div>
   </div>
 
   <div class="tiles" id="tiles"></div>
@@ -305,6 +325,7 @@ function render(s) {
   renderFindings();
   renderChecks(s);
   renderSide(s);
+  renderQuestions(s);
   voiceBrief(s, false);
 
   const b = s.baseline_at ? ago(Number(s.baseline_at)) : "never";
@@ -316,6 +337,18 @@ function render(s) {
     `<br><span style="color:var(--faint)">shortcuts: ` +
     `<kbd>/</kbd> search &nbsp; <kbd>r</kbd> refresh &nbsp; <kbd>space</kbd> pause ` +
     `&nbsp; <kbd>v</kbd> speak briefing &nbsp; <kbd>esc</kbd> clear filters</span>`;
+}
+
+function renderQuestions(s) {
+  const el = document.getElementById("jarvisquestions");
+  const qs = s.questions || [];
+  if (!qs.length) { el.innerHTML = ""; return; }
+  el.innerHTML = qs.slice(0, 4).map(q => `<div class="question">
+    <div><span class="sev c-${esc(q.severity)}">${esc(q.severity)}</span> ${esc(q.prompt)}</div>
+    <div class="question-actions">
+      <button onclick="answerQuestion('${esc(q.id)}','yes')">yes · ${esc(q.yes)}</button>
+      <button onclick="answerQuestion('${esc(q.id)}','no')">no · ${esc(q.no)}</button>
+    </div></div>`).join("");
 }
 
 function scoreColor(v) {
@@ -736,6 +769,52 @@ async function runAll() {
     await fetch("/api/run?job=" + encodeURIComponent(j.name), { method: "POST" });
   }
   setTimeout(tick, 400);
+}
+
+async function askJarvis(event) {
+  event.preventDefault();
+  const input = document.getElementById("askq");
+  const button = document.getElementById("askbtn");
+  const output = document.getElementById("askanswer");
+  const question = input.value.trim();
+  if (!question) return;
+  button.disabled = true;
+  button.textContent = "thinking…";
+  output.textContent = "Reading current JARVIS state…";
+  try {
+    const response = await fetch("/api/ask", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({question})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || response.status);
+    output.innerHTML = esc(data.answer) + `<div class="chat-source">${
+      data.source === "ollama" ? "offline Ollama synthesis · no action taken" :
+      data.source === "builtin" ? "exact answer from JARVIS data" :
+      "local model unavailable"}</div>`;
+  } catch (error) {
+    output.textContent = "Could not answer: " + error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "ask";
+  }
+}
+
+async function answerQuestion(id, choice) {
+  const output = document.getElementById("askanswer");
+  try {
+    const response = await fetch("/api/answer", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({id, choice})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || data.error || response.status);
+    output.innerHTML = esc(data.message) +
+      `<div class="chat-source">explicit answer recorded by JARVIS</div>`;
+    await tick();
+  } catch (error) {
+    output.textContent = "Could not record answer: " + error.message;
+  }
 }
 
 /* ---------- spoken security briefing ----------

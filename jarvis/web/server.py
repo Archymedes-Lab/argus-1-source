@@ -21,7 +21,7 @@ from jarvis.collectors.network import internetwatch
 from jarvis.core.paths import STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
-from jarvis.response import acknowledge
+from jarvis.response import acknowledge, alert, assistant, questions
 from jarvis.response.reporting import score
 from jarvis.service import sdnotify
 from jarvis.service.protection import health
@@ -156,6 +156,7 @@ def build_state(db_path, scheduler):
             # from the history the report job records every five minutes.
             "security": {**score.compute(snaps, JOBS, acks=acknowledge.load(store)),
                          "history": score.history_of(store)[-300:]},
+            "questions": questions.build(store, snaps, alert.load_conf())[:12],
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
         }
@@ -225,6 +226,44 @@ class Handler(BaseHTTPRequestHandler):
             job = (parse_qs(url.query).get("job") or [""])[0]
             ok = self.scheduler.force(job)
             return self._send(200 if ok else 404, json.dumps({"queued": ok}))
+        if url.path == "/api/ask":
+            try:
+                length = int(self.headers.get("Content-Length") or "0")
+            except ValueError:
+                length = 0
+            if length <= 0 or length > 16_384:
+                return self._send(400, json.dumps({"error": "invalid request size"}))
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8", "replace"))
+                question = str(payload.get("question") or "")[:4000]
+            except (ValueError, AttributeError):
+                return self._send(400, json.dumps({"error": "invalid JSON"}))
+            store = Store(self.db_path)
+            try:
+                result = assistant.answer(store, question, jobs=JOBS)
+            finally:
+                store.close()
+            return self._send(200, json.dumps(result))
+        if url.path == "/api/answer":
+            try:
+                length = int(self.headers.get("Content-Length") or "0")
+            except ValueError:
+                length = 0
+            if length <= 0 or length > 4096:
+                return self._send(400, json.dumps({"error": "invalid request size"}))
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8", "replace"))
+                qid = str(payload.get("id") or "")[:32]
+                choice = str(payload.get("choice") or "")[:16]
+            except (ValueError, AttributeError):
+                return self._send(400, json.dumps({"error": "invalid JSON"}))
+            store = Store(self.db_path)
+            try:
+                ok, message = questions.answer(store, qid, choice)
+            finally:
+                store.close()
+            return self._send(200 if ok else 400,
+                              json.dumps({"ok": ok, "message": message}))
         return self._send(404, json.dumps({"error": "not found"}))
 
     def do_GET(self):

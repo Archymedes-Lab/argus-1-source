@@ -21,12 +21,13 @@ import hashlib
 import json
 import time
 
-from jarvis.response import acknowledge, alert
+from jarvis.response import acknowledge, alert, tools
 from jarvis.response.actions import base
 from jarvis.response.evidence.case import Case
 
 LEDGER_META = "defense_ledger_v1"
 KEEP = 500
+FAILED_RETRY_SECONDS = 3600
 
 AUTO, PROPOSE, ASK, WATCH = "auto", "propose", "ask", "watch"
 
@@ -36,7 +37,11 @@ AUTO_MIN_SEVERITY = ("critical", "high")
 
 
 def _entry_id(action_id, finding, job):
-    key = f"{action_id}|{job}|{alert.finding_key(finding or {})}"
+    # Response annotations are presentation state added after the first pass.
+    # They must not make the same detector finding look like a new action.
+    stable_finding = dict(finding or {})
+    stable_finding.pop("defense", None)
+    key = f"{action_id}|{job}|{alert.finding_key(stable_finding)}"
     return hashlib.sha1(key.encode("utf-8", "replace")).hexdigest()[:8]
 
 
@@ -76,31 +81,56 @@ def decide(finding, job, conf, acks):
         if not target:
             continue
         strong = f.get("severity") in AUTO_MIN_SEVERITY
-        if _enabled(conf, action) and strong:
+        if _enabled(conf, action) and strong and action.auto_eligible(f, job, target):
             return AUTO, action, target
         return PROPOSE, action, target
     return WATCH, None, None
 
 
 def _capture(finding, job, action, target):
-    """Open an evidence case and collect what the action names. Best effort."""
+    """Open an evidence case before acting. Returns (name, results, complete).
+
+    The finding and exact target are always evidence. If an action names source
+    files, every one must be copied successfully before a mutation may run.
+    """
     files = action.evidence(target)
-    if not files:
-        return "", []
-    name = f"defense-{action.id}-{int(time.time())}"
+    # Nanoseconds keep simultaneous actions and fast tests in separate cases.
+    name = f"defense-{action.id}-{time.time_ns()}"
     try:
         case = Case(name)
         case.manifest.meta.update({"reason": finding.get("title", ""), "job": job,
                                    "action": action.id})
+        case.add_text("finding.json", {"finding": finding, "job": job,
+                                       "action": action.id, "target": target},
+                      kind="response-context")
         results = [case.add_file(p, kind="target") for p in files]
+        pid = target.get("pid") if isinstance(target, dict) else None
+        if isinstance(pid, int):
+            case.add_text("process-tree.json", tools.process_tree(pid),
+                          kind="process-context")
         case.manifest.save()
-        return case.name, results
+        return case.name, results, all(r.get("ok") for r in results)
     except Exception:
-        return "", []
+        return "", [], False
 
 
 def _apply(store, conf, finding, job, action, target):
-    case_name, _ = _capture(finding, job, action, target)
+    case_name, _, captured = _capture(finding, job, action, target)
+    if not captured:
+        eid = _entry_id(action.id, finding, job)
+        entry = {"action": action.id, "title": action.title, "target": target,
+                 "finding": {"title": finding.get("title"),
+                             "severity": finding.get("severity"),
+                             "category": finding.get("category"),
+                             "where": finding.get("where"),
+                             "host": finding.get("host")},
+                 "job": job, "preview": action.preview(target), "evidence": case_name,
+                 "at": int(time.time()), "detail": "evidence capture failed; no action taken",
+                 "status": "failed", "record": {}}
+        ledger = load(store)
+        ledger[eid] = entry
+        _save(store, ledger)
+        return eid, entry, False
     case = None
     try:
         if case_name:
@@ -109,14 +139,16 @@ def _apply(store, conf, finding, job, action, target):
         case = None
     ok, record, detail = action.apply(target, case)
     eid = _entry_id(action.id, finding, job)
+    ledger = load(store)
+    prior = ledger.get(eid) or {}
     entry = {"action": action.id, "title": action.title, "target": target,
              "finding": {"title": finding.get("title"), "severity": finding.get("severity"),
                          "category": finding.get("category"), "where": finding.get("where"),
                          "host": finding.get("host")},
              "job": job, "preview": action.preview(target), "evidence": case_name,
              "at": int(time.time()), "detail": detail,
-             "status": "applied" if ok else "failed", "record": record}
-    ledger = load(store)
+             "status": "applied" if ok else "failed", "record": record,
+             "attempts": (prior.get("attempts") or [])[-9:] + [int(time.time())]}
     ledger[eid] = entry
     _save(store, ledger)
     return eid, entry, ok
@@ -154,7 +186,28 @@ def process(store, conf, job, findings):
             continue
         rung, action, target = decide(finding, job, conf, acks)
         if rung == AUTO:
-            eid, entry, ok = _apply(store, conf, finding, job, action, target)
+            eid = _entry_id(action.id, finding, job)
+            existing = load(store).get(eid)
+            if existing and existing.get("status") == "applied":
+                entry = existing
+            elif existing and existing.get("status") == "undone":
+                # Undo is a human override. Do not immediately fight it on the
+                # next collector pass; turn the recurrence into a proposal.
+                existing.update(status="proposed", at=int(time.time()),
+                                detail="previous automatic action was undone; approval required")
+                ledger = load(store)
+                ledger[eid] = existing
+                _save(store, ledger)
+                finding["defense"] = {
+                    "rung": PROPOSE, "id": eid, "action": action.id,
+                    "preview": existing.get("preview") or action.preview(target),
+                    "approve": f"jarvis defend approve {eid}"}
+                continue
+            elif (existing and existing.get("status") == "failed"
+                  and time.time() - int(existing.get("at") or 0) < FAILED_RETRY_SECONDS):
+                entry = existing
+            else:
+                eid, entry, _ok = _apply(store, conf, finding, job, action, target)
             finding["defense"] = {"rung": AUTO, "id": eid, "action": action.id,
                                   "status": entry["status"], "detail": entry["detail"],
                                   "undo": f"jarvis defend undo {eid}"}
@@ -181,7 +234,12 @@ def approve(store, eid, now=None):
     if not action:
         return False, "that action no longer exists"
     finding = {**entry["finding"]}
-    case_name, _ = _capture(finding, entry["job"], action, entry["target"])
+    case_name, _, captured = _capture(finding, entry["job"], action, entry["target"])
+    if not captured:
+        entry.update(status="failed", detail="evidence capture failed; no action taken",
+                     evidence=case_name or entry.get("evidence", ""))
+        _save(store, ledger)
+        return False, entry["detail"]
     case = None
     try:
         case = Case(case_name, create=False) if case_name else None

@@ -215,17 +215,23 @@ def audit_windows():
                 "wsl ide keepalive watchdog"):
             sev = "critical"
             action = f"{action} [verification failed: {trust_detail}]"
-        out.append(_finding("persistence", sev, "scheduled task",
-                            f"{t.get('name')} → {short(action, 90)}",
-                            (t.get("path") or "") + str(t.get("name"))))
+        finding = _finding("persistence", sev, "scheduled task",
+                           f"{t.get('name')} → {short(action, 90)}",
+                           (t.get("path") or "") + str(t.get("name")))
+        finding["response_target"] = {"kind": "task", "name": t.get("name") or "",
+                                      "path": t.get("path") or "\\"}
+        out.append(finding)
 
     for k in aslist(data.get("runkeys")):
         val = k.get("value") or ""
         sev = "high" if REMOTE_AGENTS.search(val) else "medium"
         if OBFUSCATED.search(val) or re.search(r"\\temp\\|\\downloads\\", val, re.I):
             sev = "critical"
-        out.append(_finding("persistence", sev, "autostart registry entry",
-                            f"{k.get('name')} = {short(val, 90)}", k.get("key", "")))
+        finding = _finding("persistence", sev, "autostart registry entry",
+                           f"{k.get('name')} = {short(val, 90)}", k.get("key", ""))
+        finding["response_target"] = {"kind": "runkey", "name": k.get("name") or "",
+                                      "key": k.get("key") or "", "value": val}
+        out.append(finding)
 
     for s in aslist(data.get("startup")):
         out.append(_finding("persistence", "medium", "startup folder item",

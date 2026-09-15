@@ -31,6 +31,8 @@ cannot be read produces exactly the same silence as a machine with nothing
 wrong.
 """
 
+import os
+import re
 
 from jarvis.core import collection, vet
 from jarvis.core.finding import win_finding as _finding
@@ -38,8 +40,8 @@ from jarvis.core.util import iso, now
 from jarvis.platform.windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
-CAT_ORDER = {"credential access": 0, "injection": 1, "tampering": 2,
-             "intel match": 3, "telemetry": 4, "visibility": 5}
+CAT_ORDER = {"impact": 0, "credential access": 1, "injection": 2,
+             "tampering": 3, "intel match": 4, "telemetry": 5, "visibility": 6}
 
 CHANNEL = "Microsoft-Windows-Sysmon/Operational"
 
@@ -56,6 +58,19 @@ LSASS_EXPECTED = {
     "taskmgr.exe", "procexp64.exe", "procexp.exe", "perfmon.exe",
     "securityhealthservice.exe", "mpcmdrun.exe", "vgk.exe", "vgc.exe",
 }
+
+# Commands used to destroy Windows recovery paths before encryption. The
+# command and destructive argument must occur together; merely running one of
+# these administration tools is inventory, not ransomware behaviour.
+RANSOM_RECOVERY = re.compile(
+    r"(?i)(vssadmin(?:\.exe)?\s+delete\s+shadows|"
+    r"wmic(?:\.exe)?\s+shadowcopy\s+delete|"
+    r"wbadmin(?:\.exe)?\s+delete\s+(catalog|systemstatebackup)|"
+    r"bcdedit(?:\.exe)?.*?/(set|deletevalue).*?(recoveryenabled\s+no|"
+    r"bootstatuspolicy\s+ignoreallfailures)|"
+    r"reagentc(?:\.exe)?\s+/disable)")
+
+WRITABLE_DLL_DIRS = ("/users/", "/programdata/", "/windows/temp/", "/temp/", "/public/")
 
 
 # Windows creates threads across its own processes as normal operation — the
@@ -249,6 +264,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
 
     lsass_hits, remote_threads, tampering = [], [], []
     unsigned, dns_names, proc_hashes = {}, {}, {}
+    recovery_tamper, sideloads = [], []
 
     for e in events:
         eid = int(e.get("id") or 0)
@@ -272,8 +288,14 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             tampering.append((image, e.get("type"), e.get("time")))
         elif eid == 7:
             if str(e.get("signed") or "").lower() == "false":
-                unsigned.setdefault(_base(e.get("loaded")), [0, image])
-                unsigned[_base(e.get("loaded"))][0] += 1
+                loaded = e.get("loaded") or ""
+                unsigned.setdefault(_base(loaded), [0, image])
+                unsigned[_base(loaded)][0] += 1
+                loader_dir = os.path.dirname(image.replace("\\", "/").lower())
+                loaded_dir = os.path.dirname(loaded.replace("\\", "/").lower())
+                if (loaded.lower().endswith(".dll") and loader_dir and loader_dir == loaded_dir
+                        and any(part in loaded_dir + "/" for part in WRITABLE_DLL_DIRS)):
+                    sideloads.append((image, loaded, e.get("time")))
         elif eid == 22:
             q = (e.get("query") or "").lower().rstrip(".")
             if q:
@@ -282,6 +304,9 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             h = _sha256_of(e.get("hashes"))
             if h:
                 proc_hashes.setdefault(h, (image, e.get("time")))
+            cmdline = e.get("cmdline") or ""
+            if RANSOM_RECOVERY.search(cmdline):
+                recovery_tamper.append((image, cmdline, e.get("time")))
 
     # -- credential access -------------------------------------------------
     for image, granted, when, read in lsass_hits:
@@ -330,6 +355,20 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             "tampering", "medium", f"unsigned image loaded: {name}",
             f"loaded {count}×, most recently by {_base(loader)} — an unsigned "
             f"module runs with the full trust of whatever loaded it", loader))
+
+    for loader, loaded, when in sideloads[:20]:
+        out.append(_finding(
+            "tampering", "high", f"possible DLL side-loading by {_base(loader)}",
+            f"unsigned {_base(loaded)} was loaded beside its host executable in a "
+            f"user-writable directory at {iso_of(when)}. Portable applications can "
+            f"look the same; verify both signatures and origin before containment.", loaded))
+
+    for image, cmdline, when in recovery_tamper[:20]:
+        out.append(_finding(
+            "impact", "critical", f"{_base(image)} attempted to disable Windows recovery",
+            f"{iso_of(when)} — {cmdline[:240]}. Destroying shadow copies or recovery "
+            f"configuration commonly precedes ransomware encryption; confirm whether an "
+            f"administrator or backup tool initiated it.", image))
 
     # -- correlation with the intelligence corpus --------------------------
     if store is not None:
