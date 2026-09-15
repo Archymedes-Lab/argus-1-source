@@ -627,10 +627,14 @@ alone is not enough either: a hook installed in Windows session 0 pulses
 forever and sees no keyboard, so the heartbeat carries its session and a hook
 outside your desktop is stopped and restarted rather than reported healthy.
 
-**It is kept up by Windows, not by luck.** `inputwatch` registers a scheduled
-task (`JARVIS input hook`) that runs only while you are logged on, so it always
-starts in the desktop session whoever triggers it; Windows restarts it on
-failure and will not run a second instance. The task's definition and the
+**Its restart path is one mechanism, not luck.** `inputwatch` registers a
+scheduled task (`JARVIS input hook`) that runs only while you are logged on, so
+it always starts in the desktop session whoever triggers it, and Windows starts
+it at logon and refuses a second instance. Between logons the 45-second
+watchdog is what notices a dead hook and starts the task again: measured
+recovery after killing the helper was 120 seconds. (Windows' own
+restart-on-failure does not apply — the launcher exits once the hook is
+running, so the task counts as completed.) The task's definition and the
 staged script's fingerprint are what the control audit verifies, so an edited
 task or script becomes a critical persistence finding instead of a trusted
 name. Starting through WSL interop remains only as a fallback, and JARVIS
