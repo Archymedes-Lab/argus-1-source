@@ -19,14 +19,36 @@ function Show-JarvisToast([string]$title,[string]$body) {
     [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
 }
 function Send-JarvisMail([string]$title,[string]$body) {
+    # Raw HttpWebRequest for the same reason as the health probe below:
+    # Invoke-RestMethod can block on proxy and first-run state under Task
+    # Scheduler. TLS 1.2 is required by the mail API and is not guaranteed to
+    # be enabled for Windows PowerShell 5.1 by default.
+    [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $cfg=Get-Content -LiteralPath (Join-Path $StateRoot 'mail.json') -Raw | ConvertFrom-Json
     $secure=ConvertTo-SecureString $cfg.key
     $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try {
         $key=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
         $json=@{from=$cfg.from;to=@($cfg.to);subject=$title;text=$body}|ConvertTo-Json -Compress
-        [void](Invoke-RestMethod -Uri 'https://api.resend.com/emails' -Method Post -TimeoutSec 20 -Headers @{Authorization=('Bearer '+$key)} -ContentType 'application/json' -Body $json)
+        $bytes=[Text.Encoding]::UTF8.GetBytes($json)
+        $req=[Net.HttpWebRequest]::Create('https://api.resend.com/emails')
+        $req.Method='POST'; $req.Proxy=$null; $req.Timeout=20000; $req.ReadWriteTimeout=20000
+        $req.ContentType='application/json'; $req.Headers['Authorization']='Bearer '+$key
+        $stream=$req.GetRequestStream()
+        try {$stream.Write($bytes,0,$bytes.Length)} finally {$stream.Dispose()}
+        $req.GetResponse().Dispose()
     } finally {[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr);$key=$null}
+}
+function Get-MailFailure($err) {
+    # Why delivery failed, without anything from the request or the key: the
+    # HTTP status when the API answered, otherwise the network failure kind.
+    $e=$err.Exception
+    while ($e.InnerException -and -not ($e -is [Net.WebException])) {$e=$e.InnerException}
+    if ($e -is [Net.WebException]) {
+        if ($e.Response) {return 'mail API answered HTTP '+[int]$e.Response.StatusCode}
+        return 'network: '+$e.Status
+    }
+    return $e.GetType().Name
 }
 function Get-JarvisHealth {
     # Raw HttpWebRequest, not Invoke-RestMethod. Under Task Scheduler the
@@ -121,7 +143,7 @@ if ($health.healthy) {
         if ($state.emailLevel -ge 0 -and $now-$state.lastMailAttempt -ge 300) {
             $state.lastMailAttempt=$now
             try {Send-JarvisMail '[JARVIS] monitor recovered' 'The independent Windows monitor verified that JARVIS is reachable and its scheduler is progressing.';$state.emailLevel=-1;$state.mailError=''}
-            catch {$state.mailError='Recovery email failed; queued for retry'}
+            catch {$state.mailError='Recovery email failed ('+(Get-MailFailure $_)+'); queued for retry'}
         }
     } elseif ($state.mailError -and $now-[long]$state.lastMailAttempt -ge 3600) {
         # An outage mail that failed leaves emailLevel at -1, so nothing above
@@ -129,7 +151,7 @@ if ($health.healthy) {
         # message proves the path again; retry at most hourly while healthy.
         $state.lastMailAttempt=$now
         try {Send-JarvisMail '[JARVIS] alert email path restored' 'The independent Windows monitor failed to send an earlier email. Delivery is working again and JARVIS is healthy.';$state.mailError=''}
-        catch {$state.mailError='Email delivery still failing; retrying hourly. No credential data logged.'}
+        catch {$state.mailError='Email delivery still failing ('+(Get-MailFailure $_)+'); retrying hourly. No credential data logged.'}
     }
     $state.failures=0;$state.firstFailure=0
 } else {
@@ -149,7 +171,7 @@ if ($health.healthy) {
         if ($level -gt $state.emailLevel -and $now-$state.lastMailAttempt -ge 300) {
             $state.lastMailAttempt=$now
             try {Send-JarvisMail $title $body;$state.emailLevel=$level;$state.mailError=''}
-            catch {$state.mailError='Outage email failed; queued for retry. No credential data logged.'}
+            catch {$state.mailError='Outage email failed ('+(Get-MailFailure $_)+'); queued for retry. No credential data logged.'}
         }
     }
 }
