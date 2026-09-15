@@ -21,7 +21,14 @@ $o.license = @(Get-CimInstance SoftwareLicensingProduct -Filter "PartialProductK
                                       desc=[string]$_.Description
                                       grace=[int]$_.GracePeriodRemaining }})
 
-$o.secureboot = try { [bool](Confirm-SecureBootUEFI) } catch { $null }
+# Confirm-SecureBootUEFI needs elevation, and its access-denied looked the same
+# as a legacy BIOS -- so the unelevated daemon quietly lost a "Secure Boot is
+# off" high that an elevated run had found. The firmware's answer is also
+# published in a registry value any user can read.
+$o.secureboot = try { [bool](Confirm-SecureBootUEFI) } catch {
+  $state = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State').UEFISecureBootEnabled
+  if ($null -ne $state) { [bool]$state } else { $null }
+}
 $o.tpm = Get-Tpm | Select-Object TpmPresent, TpmReady, TpmEnabled, ManagedAuthLevel
 
 $dg = Get-CimInstance -ClassName Win32_DeviceGuard `
@@ -37,6 +44,19 @@ $o.bitlocker = @(Get-BitLockerVolume | ForEach-Object {
                      status=[string]$_.ProtectionStatus
                      method=[string]$_.EncryptionMethod
                      pct=[int]$_.EncryptionPercentage }})
+# Get-BitLockerVolume returns nothing unelevated. The shell's per-volume
+# property does not need elevation; only its unambiguous values are used
+# (1/6 protected, 2 not protected), anything else stays unreadable.
+if (-not $o.bitlocker.Count) {
+  $shell = New-Object -ComObject Shell.Application
+  $o.bitlocker = @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' } |
+    ForEach-Object {
+      $v = $shell.NameSpace($_.Name).Self.ExtendedProperty('System.Volume.BitLockerProtection')
+      $status = switch ([int]$v) { 1 { 'On' } 6 { 'On' } 2 { 'Off' } default { $null } }
+      if ($status) { [pscustomobject]@{ mount=$_.Name.TrimEnd('\'); status=$status
+                                        method='unreadable unelevated'; pct=-1 } }
+    })
+}
 
 function RVal($p,$n){ (Get-ItemProperty -Path $p -Name $n).$n }
 $sys = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System'
