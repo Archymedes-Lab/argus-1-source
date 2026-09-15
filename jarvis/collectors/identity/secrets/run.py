@@ -37,6 +37,9 @@ SKIP_PATH_PARTS = (
     "/pkg/mod/", "/pnpm/store/", "/share/uv/", "-server/bin/", "/.git/",
     "/dist/", "/coverage/", "/.next/", "/testdata/", "/fixtures/",
     "/node_modules/", "/site-packages/", "/.trash/", "/logs/",
+    # Manual pages and bundled documentation quote example keys to show their
+    # format (npm's config.7 carries a sample private key block).
+    "/share/man/", "/share/doc/",
     # AI tool working state: conversation caches, file-history snapshots and
     # plugin sources. These mirror content that already exists elsewhere, so
     # reporting them doubles every finding and points at a path the user
@@ -82,7 +85,11 @@ def walk(roots, max_files=60000):
         for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
             dirnames[:] = [d for d in dirnames
                            if d not in SKIP_DIRS and not d.startswith(".cache")]
-            low_dir = dirpath.lower()
+            # Trailing slash: every entry in SKIP_PATH_PARTS is written as a
+            # whole path component ("/.claude/paste-cache/"), which the
+            # directory itself only contains once its own name is closed off.
+            # Without it the directory named by an entry was still scanned.
+            low_dir = dirpath.lower() + "/"
             if any(part in low_dir for part in SKIP_PATH_PARTS):
                 dirnames[:] = []
                 continue

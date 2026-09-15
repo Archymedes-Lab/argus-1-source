@@ -47,5 +47,19 @@ class CredentialAccessTests(unittest.TestCase):
         self.assertIn("unavailable", out[0]["title"])
 
 
+class StagingDedupeTests(unittest.TestCase):
+    def test_temp_searched_twice_reports_a_file_once(self):
+        from unittest import mock
+
+        from jarvis.collectors.host.intrusion import run
+        item = {"path": r"C:\Users\me\AppData\Local\Temp\x.tmp.js", "sig": "NotSigned",
+                "written": "2026-09-02T02:48:42", "sha256": "ab" * 32}
+        data = {"recentExe": [item, dict(item, path=item["path"].upper())], "credReadersOk": True}
+        with mock.patch.object(run, "ps_json", return_value=data):
+            out = run.audit()
+        staged = [f for f in out if f["title"] == "recently written unsigned executable"]
+        self.assertEqual(len(staged), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -99,5 +99,18 @@ class SecretScannerSyntaxTests(unittest.TestCase):
         self.assertEqual(hits, [])
 
 
+class WalkSkipTests(unittest.TestCase):
+    def test_a_skipped_directory_is_skipped_itself_not_only_below_it(self):
+        from jarvis.collectors.identity.secrets import run
+        with tempfile.TemporaryDirectory() as root:
+            for rel in (".claude/paste-cache/a.txt", "node_modules/b.env", "app/.env",
+                        ".nvm/share/man/man7/config.7"):
+                path = os.path.join(root, rel)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                open(path, "w").write("x")
+            walked = sorted(os.path.relpath(p, root) for p in run.walk([root]))
+        self.assertEqual(walked, ["app/.env"])
+
+
 if __name__ == "__main__":
     unittest.main()

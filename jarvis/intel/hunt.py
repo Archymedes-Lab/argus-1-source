@@ -311,6 +311,7 @@ def check_processes(store):
     names = {r["norm"]: r for r in _active(store, "process")}
     if not names:
         return out
+    pending = []
     for row in store.db.execute(
             "SELECT name, exe, host, cmdline, last_seen FROM procs"):
         name = (row["name"] or "").lower()
@@ -321,12 +322,29 @@ def check_processes(store):
         exe = (row["exe"] or "").lower().replace("\\", "/")
         if exe.startswith(TRUSTED_PATHS):
             continue        # the real binary, in the place it belongs
-        sev = "high" if exe else "medium"
+        pending.append((row, hit, exe))
+    # Microsoft's own updaters live in per-user AppData (OneDriveSetup.exe,
+    # Teams, Edge's installer), outside TRUSTED_PATHS. A valid Microsoft
+    # signature on the exact file that ran settles those; anything unsigned
+    # or signed by anyone else is still reported.
+    signed = _microsoft_signed({row["exe"] for row, _hit, exe in pending
+                                if row["host"] == "win" and row["exe"]})
+    for row, hit, exe in pending:
+        if row["host"] == "win" and row["exe"] in signed:
+            continue
+        # With no executable path there is nothing to compare against where a
+        # legitimate copy lives (another user's process, or a Windows pseudo-
+        # process such as Registry), so the name match is all there is — the
+        # evidence this docstring says is not enough on its own. It stays
+        # listed, at low.
+        sev = "high" if exe else "low"
         out.append(_finding(
             "named process", sev,
             f"a process matching a known malware name ran: {row['name']}",
             (hit["context"] or "name listed in threat intelligence")
-            + f" — {(row['cmdline'] or '')[:110]}",
+            + f" — {(row['cmdline'] or '')[:110]}"
+            + ("" if exe else " — executable path unknown, so a legitimate copy cannot be "
+                              "told from a masquerade"),
             hit["source_url"] or (row["exe"] or ""), row["host"]))
     return out
 

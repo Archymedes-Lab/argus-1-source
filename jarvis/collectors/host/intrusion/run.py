@@ -136,7 +136,15 @@ def audit():
                         f"{len(exts)} installed across all browsers", ""))
 
     # -- 5. staged executables --------------------------------------------
-    recent_code = aslist(data.get("recentExe"))[:250]
+    # %TEMP% and %LOCALAPPDATA%\Temp are normally the same directory and both
+    # are searched, so the same file can arrive twice.
+    recent_code, seen_paths = [], set()
+    for item in aslist(data.get("recentExe"))[:250]:
+        key = (item.get("path") or "").lower() if isinstance(item, dict) else None
+        if key is None or key in seen_paths:
+            continue
+        seen_paths.add(key)
+        recent_code.append(item)
     for f in recent_code:
         path, sig = f.get("path") or "", f.get("sig") or ""
         in_temp = re.search(r"\\temp\\|\\public\\", path, re.I)

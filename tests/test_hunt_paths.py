@@ -36,5 +36,32 @@ class CheckPathsTest(unittest.TestCase):
         self.assertEqual(sig.call_args[0][0], set())
 
 
+class CheckProcessesTest(unittest.TestCase):
+    def rows(self, *procs):
+        store = mock.MagicMock()
+        store.db.execute.return_value = [
+            {"name": n, "exe": e, "host": h, "cmdline": "", "last_seen": 0} for n, e, h in procs]
+        return store
+
+    def run_check(self, store, signed=()):
+        hit = {"norm": "onedrivesetup.exe", "context": "c", "source_url": "u"}
+        with mock.patch.object(hunt, "_active", return_value=[hit]), \
+             mock.patch.object(hunt, "_microsoft_signed", side_effect=lambda p: set(p) & set(signed)):
+            return hunt.check_processes(store)
+
+    def test_microsoft_signed_binary_is_not_reported(self):
+        exe = r"C:\Users\me\AppData\Local\Microsoft\OneDrive\Update\OneDriveSetup.exe"
+        self.assertEqual(self.run_check(self.rows(("OneDriveSetup.exe", exe, "win")), signed={exe}), [])
+
+    def test_unverifiable_binary_is_still_high(self):
+        exe = r"C:\Users\me\AppData\Local\Temp\OneDriveSetup.exe"
+        out = self.run_check(self.rows(("OneDriveSetup.exe", exe, "win")))
+        self.assertEqual([f["severity"] for f in out], ["high"])
+
+    def test_name_without_a_path_is_low(self):
+        out = self.run_check(self.rows(("OneDriveSetup.exe", "", "win")))
+        self.assertEqual([f["severity"] for f in out], ["low"])
+
+
 if __name__ == '__main__':
     unittest.main()
