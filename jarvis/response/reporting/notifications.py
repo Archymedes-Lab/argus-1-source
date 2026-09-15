@@ -4,6 +4,7 @@ import time
 
 from jarvis.response import alert, fixit
 
+from . import score
 from .commands import command_for
 
 QUEUE = 'alert_pending_changes'
@@ -136,6 +137,9 @@ def flush(store, conf):
         return False  # Nothing is acknowledged or discarded.
     ordered = sorted(batch.items(), key=lambda kv: alert.SEV_RANK.get(kv[1]['finding'].get('severity'),9))
     lines = ['JARVIS CHANGE DIGEST' if not urgent else 'JARVIS PRIORITY CHANGES', '']
+    health = score.latest(store)
+    if health:
+        lines += score.summary_lines(health, score.change_since(store, 86400, now)) + ['']
     for key, item in ordered:
         f = item['finding']
         if item['tag'] == 'RESOLVED':

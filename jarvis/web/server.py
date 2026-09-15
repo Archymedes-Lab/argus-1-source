@@ -21,6 +21,7 @@ from jarvis.collectors.network import internetwatch
 from jarvis.core.paths import STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
+from jarvis.response.reporting import score
 from jarvis.service import sdnotify
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS
@@ -150,6 +151,10 @@ def build_state(db_path, scheduler):
                 "events": _count("SELECT COUNT(*) FROM events"),
             },
             "intel": _intel_state(store),
+            # Live from the same snapshots the page shows; the trend comes
+            # from the history the report job records every five minutes.
+            "security": {**score.compute(snaps, JOBS),
+                         "history": score.history_of(store)[-300:]},
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
         }

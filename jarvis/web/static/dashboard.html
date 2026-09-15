@@ -60,6 +60,21 @@
   .scroll { overflow-x:auto; }
   .vscroll { max-height:520px; overflow-y:auto; }
 
+  .health { display:grid; grid-template-columns:minmax(220px,300px) 1fr; gap:18px;
+            align-items:center; padding:14px 16px; }
+  @media (max-width:760px) { .health { grid-template-columns:1fr; } }
+  .health .big { font-size:40px; font-weight:750; line-height:1; }
+  .health .grade { font-size:12px; color:var(--dim); margin-top:4px; }
+  .meter { height:12px; background:var(--panel2); border:1px solid var(--line);
+           border-radius:99px; overflow:hidden; margin-top:10px; }
+  .meter > i { display:block; height:100%; border-radius:99px; transition:width .4s; }
+  .meter.sm { height:7px; margin-top:0; }
+  .areas { display:grid; grid-template-columns:auto 1fr auto; gap:5px 12px;
+           align-items:center; font-size:12px; }
+  .areas .nm { white-space:nowrap; } .areas .pc { text-align:right; white-space:nowrap; color:var(--dim); }
+  .spark { margin-top:9px; height:28px; width:100%; }
+  .gains { margin:10px 0 0; padding-left:18px; font-size:11.5px; color:var(--dim); }
+
   .tiles { display:grid; gap:11px; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); }
   .tile { background:var(--panel); border:1px solid var(--line); border-radius:9px;
           padding:12px 10px; text-align:center; cursor:pointer; transition:border-color .12s; }
@@ -159,6 +174,11 @@
 </header>
 
 <main>
+  <div class="card" id="healthcard">
+    <h2>Security health <span class="cnt" id="healthsub"></span></h2>
+    <div class="health" id="health">computing…</div>
+  </div>
+
   <div class="tiles" id="tiles"></div>
 
   <div class="row split">
@@ -276,6 +296,7 @@ function render(s) {
   document.getElementById("meta").textContent =
     `updated ${new Date().toLocaleTimeString()}`;
 
+  renderHealth(s);
   renderTiles(s);
   renderJobs(s);
   renderChart(s);
@@ -295,6 +316,46 @@ function render(s) {
     `<br><span style="color:var(--faint)">shortcuts: ` +
     `<kbd>/</kbd> search &nbsp; <kbd>r</kbd> refresh &nbsp; <kbd>space</kbd> pause ` +
     `&nbsp; <kbd>v</kbd> speak briefing &nbsp; <kbd>esc</kbd> clear filters</span>`;
+}
+
+function scoreColor(v) {
+  if (v === null || v === undefined) return "var(--low)";
+  return v >= 75 ? "var(--ok)" : v >= 50 ? "var(--med)" : "var(--crit)";
+}
+
+function renderHealth(s) {
+  const h = s.security;
+  const el = document.getElementById("health");
+  if (!h) { el.textContent = "no score yet"; return; }
+  const meter = (v, cls) =>
+    `<div class="meter ${cls || ""}"><i style="width:${v ?? 0}%;background:${scoreColor(v)}"></i></div>`;
+  const hist = (h.history || []).filter(p => p[0] >= Date.now() / 1000 - 86400);
+  let spark = "", trend = "";
+  if (hist.length > 1) {
+    const xs = hist.map(p => p[0]), x0 = xs[0], span = Math.max(1, xs[xs.length - 1] - x0);
+    const pts = hist.map(p => `${((p[0] - x0) / span * 100).toFixed(1)},${(28 - p[1] / 100 * 26 - 1).toFixed(1)}`);
+    spark = `<svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none">` +
+      `<polyline fill="none" stroke="${scoreColor(h.score)}" stroke-width="1.4" ` +
+      `vector-effect="non-scaling-stroke" points="${pts.join(" ")}"/></svg>`;
+    const d = hist[hist.length - 1][1] - hist[0][1];
+    trend = d ? ` · ${d > 0 ? "+" : ""}${d} in 24h` : " · steady over 24h";
+  }
+  const areas = h.areas.map(a => {
+    const open = SEV.filter(k => k !== "low" && (a.open || {})[k])
+      .map(k => `<span class="c-${k}">${a.open[k]}${k[0]}</span>`).join(" ");
+    const pct = a.score === null ? "unverified" : `${a.score}%`;
+    const blind = a.blind && a.blind.length ? ` <span class="c-high" title="${esc(a.blind.map(b => b.job + " " + b.state).join(", "))}">⚠</span>` : "";
+    return `<span class="nm">${esc(a.name)}${blind}</span>${meter(a.score, "sm")}<span class="pc">${pct} ${open}</span>`;
+  }).join("");
+  const gains = (h.next_steps || []).slice(0, 3).map(g =>
+    `<li><span class="c-${g.severity}">${esc(g.severity)}</span> ${esc(g.title)} <span style="color:var(--faint)">(${esc(g.job)})</span></li>`).join("");
+  el.innerHTML =
+    `<div><div class="big" style="color:${scoreColor(h.score)}">${h.score}%</div>` +
+    `<div class="grade">${esc(h.grade)} · monitoring coverage ${h.coverage}%${trend}</div>` +
+    meter(h.score) + spark + `</div>` +
+    `<div><div class="areas">${areas}</div>` +
+    (gains ? `<ol class="gains">${gains}</ol>` : "") + `</div>`;
+  document.getElementById("healthsub").textContent = "fix findings to fill the bar";
 }
 
 function renderTiles(s) {

@@ -21,6 +21,7 @@ from jarvis.response import alert, fixit
 
 from . import commands as report_commands
 from . import diff as report_diff
+from . import score
 
 
 def _age(seconds):
@@ -140,7 +141,7 @@ def _theme(f):
 
 
 def _report_html(health, findings, actionable, blind_spots, checks,
-                 intel_state, ai_text, ai_note, generated):
+                 intel_state, ai_text, ai_note, generated, security=None, security_delta=None):
     esc = lambda value: html_mod.escape(str(value or ""))
     colors = {"critical": "#b42318", "high": "#d92d20",
               "medium": "#dc6803", "low": "#475467", "ok": "#067647"}
@@ -177,6 +178,7 @@ def _report_html(health, findings, actionable, blind_spots, checks,
 <body style='margin:0;background:#f2f4f7;color:#101828;font-family:Segoe UI,Arial,sans-serif'>
 <style>.wrap{{max-width:760px;margin:auto;background:#fff}}.hero{{padding:30px;background:#101828;color:#fff}}.hero p{{color:#d0d5dd}}.section{{padding:24px 30px;border-bottom:1px solid #eaecf0}}.cards{{display:flex;gap:10px;flex-wrap:wrap}}.card{{padding:12px 16px;background:#f9fafb;border:1px solid #eaecf0;border-radius:10px;min-width:110px}}.card b{{display:block;font-size:22px}}h2{{margin:0 0 14px}}h3{{margin:22px 0 8px}}.action{{display:flex;gap:12px;padding:14px 0;border-top:1px solid #eaecf0}}.num{{width:28px;height:28px;border-radius:50%;background:#101828;color:white;text-align:center;line-height:28px;flex:none}}.next{{color:#067647;margin-top:5px}}.why,.finding p{{color:#475467;margin:5px 0}}.finding{{padding:12px;border:1px solid #eaecf0;border-radius:8px;margin:8px 0}}.sev{{color:white;font-size:10px;font-weight:700;padding:3px 7px;border-radius:12px;margin-right:8px}}small{{color:#667085}}.notice{{padding:15px;background:#fffaeb;border:1px solid #fedf89;border-radius:8px}}.ai{{padding:18px;background:#f4f3ff;border-radius:8px}}.pre{{white-space:pre-wrap;line-height:1.5}}ul{{padding-left:20px}}li{{margin:7px 0}}</style>
 <div class='wrap'><div class='hero'><div style='font-size:12px;letter-spacing:1.5px'>JARVIS · DAILY SECURITY ADVISORY</div><h1 style='margin:8px 0'>Your system security, prioritized</h1><p>Generated {esc(time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(generated)))} · Worst recorded severity: {esc(worst.upper())}. No endpoint monitor can guarantee complete security; this report shows the strongest evidence and the next defensible steps.</p></div>
+{"<div class='section'>" + score.html_block(security, esc, security_delta) + "</div>" if security else ""}
 <div class='section'><h2>Coverage at a glance</h2><div class='cards'><div class='card'><b>{len(health['current'])}</b>current</div><div class='card'><b>{len(health['stale'])}</b>stale</div><div class='card'><b>{len(health['failing'])}</b>failing</div><div class='card'><b>{len(health['missing'])}</b>missing</div><div class='card'><b>{len(actionable)}</b>actions</div></div><p><small>Stale: {esc(', '.join(health['stale']) or 'none')} · Failing: {esc(', '.join(health['failing']) or 'none')} · Missing: {esc(', '.join(health['missing']) or 'none')}</small></p></div>
 <div class='section'><h2>Secure next</h2>{action_html}</div>
 <div class='section'>{ai_html}</div>
@@ -278,12 +280,16 @@ def advisory_report(store, jobs):
         report_diff.counts(findings))
     changed_text = report_diff.describe(movement, trend)
 
+    security = score.compute(snapshots, jobs, generated)
+    security_delta = score.change_since(store, 86400, generated)
     lines = [
         "JARVIS SECURITY ADVISORY",
         time.strftime("Generated %Y-%m-%d %H:%M:%S %Z", time.localtime(generated)),
         (("Comparing against the report from "
           + time.strftime("%Y-%m-%d %H:%M", time.localtime(previous_ts)))
          if previous_ts else "First report — nothing to compare against yet."),
+        "",
+        *score.summary_lines(security, security_delta),
         "",
         "WHAT CHANGED",
         changed_text or "  Nothing moved since the last report.",
@@ -373,7 +379,7 @@ def advisory_report(store, jobs):
         headline = f"no change, worst {worst.upper()}"
     subject = f"[JARVIS] security report — {headline}"
     html = _report_html(health, findings, actionable, blind_spots, checks,
-                        intel_state, ai_text, ai_note, generated)
+                        intel_state, ai_text, ai_note, generated, security, security_delta)
     err = alert.send_email(conf, subject, "\n".join(lines) + "\n", html=html)
     if err:
         store.set_meta(alert.REPORT_ERROR_META, f"{generated}: {err}"[:300])
