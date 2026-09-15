@@ -9,6 +9,7 @@ from jarvis.service import selfcheck
 
 from .commands import ack as ack_cli
 from .commands import ask as ask_cli
+from .commands import brief as brief_cli
 from .commands import (
     cmd_alert,
     cmd_approve,
@@ -72,6 +73,7 @@ def build_parser():
     repair_cli.add_parser(sub)
     ack_cli.add_parser(sub)
     ask_cli.add_parser(sub)
+    brief_cli.add_parser(sub)
     defend_cli.add_parser(sub)
     inspect_cli.add_parser(sub)
 

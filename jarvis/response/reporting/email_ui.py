@@ -277,6 +277,17 @@ def owner_section(owner, items, limit=12, show_detail=True):
         + cards + more)
 
 
+def briefing(lines):
+    """JARVIS's protocol for today: the rendered briefing lines, commands in mono."""
+    title = lines[0].split("·", 1)[-1].rsplit("[", 1)[0].strip()
+    body = "".join(
+        f'<div {tw("text-sm text-slate-800 font-mono mt-2 break-words" if line.lstrip().startswith("jarvis ") else "text-sm text-slate-700 mt-2 leading-relaxed")}>'
+        f"{esc(line.strip())}</div>" for line in lines[1:])
+    return section(
+        f'<div {tw("rounded-xl border-l-4 border-l-violet-600 bg-violet-50 px-4 py-3")}>'
+        + heading("JARVIS briefing", title) + body + "</div>")
+
+
 def footer(text):
     return (f'<tr><td {tw("bg-slate-50 px-6 py-4 border-0")}>'
             f'<div {tw("text-xs text-slate-500 leading-relaxed")}>{esc(text)}</div></td></tr>')

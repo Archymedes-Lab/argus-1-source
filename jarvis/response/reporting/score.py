@@ -61,7 +61,7 @@ def grade(score):
     return GRADES[-1][1]
 
 
-def _freshness(snap, interval, now):
+def freshness(snap, interval, now):
     if not snap or not snap.get("ts"):
         return "missing"
     if snap.get("error"):
@@ -107,7 +107,7 @@ def compute(snapshots, jobs, now=None, acks=None):
         present = [j for j in members if j in jobs]
         for job in present:
             snap = snapshots.get(job)
-            state = _freshness(snap, jobs[job][0], now)
+            state = freshness(snap, jobs[job][0], now)
             scored_jobs += 1
             if state != "current":
                 blind.append({"job": job, "state": state})

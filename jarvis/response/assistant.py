@@ -9,7 +9,7 @@ import json
 import re
 import time
 
-from jarvis.response import acknowledge, alert, llm
+from jarvis.response import acknowledge, alert, llm, protocols
 from jarvis.response.reporting import diff, score, triage
 
 
@@ -50,6 +50,13 @@ def _score(store, jobs):
     for item in result.get("next_steps", [])[:3]:
         lines.append(f"- {item['severity'].upper()}: {item['title']} ({item['job']})")
     return "\n".join(lines)
+
+
+def _briefing(store, jobs):
+    item = protocols.next_briefing(store, jobs)
+    if not item:
+        return "No protocol needs you right now. I shall keep looking."
+    return "\n".join(protocols.render(item, full=True))
 
 
 def _changed(store):
@@ -118,6 +125,9 @@ def answer(store, question, conf=None, jobs=None):
         return {"answer": _needs(store), "source": "builtin"}
     if "score" in q or "security health" in q:
         return {"answer": _score(store, jobs), "source": "builtin"}
+    if any(p in q for p in ("what should i do", "next step", "how do i secure", "brief",
+                            "protocol", "what now")):
+        return {"answer": _briefing(store, jobs), "source": "builtin"}
     if "what changed" in q or "changed today" in q:
         return {"answer": _changed(store), "source": "builtin"}
     if q.startswith("explain") or "explain this finding" in q:

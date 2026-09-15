@@ -125,6 +125,7 @@ default-deny inbound, and non-bypassable Windows/Edge SmartScreen.
 | `serve` | Run everything continuously behind a local dashboard. |
 | `alert` | Email me when a collector stops recording or something critical fires. |
 | `ask` | Answer from current JARVIS data; use local Ollama for open questions. |
+| `brief` | JARVIS's step-by-step protocols for securing this machine, verified by fresh scans. |
 | `defend` | Show, approve or undo evidence-backed containment actions. |
 | `inspect` | Hash and scan a file or capture process context into an evidence case. |
 
@@ -145,6 +146,7 @@ jarvis procs --approved 0     # fingerprints not yet approved
 jarvis approve <fp> --note "my build script"
 jarvis status
 jarvis ask "what needs me?"
+jarvis brief                  # the protocol JARVIS raises now; `brief list`, `brief yes|no`, `brief check`
 jarvis defend
 jarvis inspect 'C:\Users\me\Downloads\suspicious.exe'
 

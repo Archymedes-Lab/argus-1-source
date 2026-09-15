@@ -8,7 +8,7 @@ the same structure for clients that do not render HTML.
 
 import time
 
-from jarvis.response import acknowledge, alert
+from jarvis.response import acknowledge, alert, protocols
 
 from . import email_ui as ui
 from . import score, triage, voice
@@ -131,8 +131,10 @@ def digest(ordered, urgent, health, delta, now, conf=None):
 
 # ── daily security health ─────────────────────────────────────────────────
 
-def health(result, delta, snapshots, now, store=None, conf=None):
-    """-> (subject, text, html) for the once-a-day health email."""
+def health(result, delta, snapshots, now, store=None, conf=None, briefing=None):
+    """-> (subject, text, html) for the once-a-day health email.
+
+    `briefing` is the protocol JARVIS raises today (protocols.next_briefing)."""
     # The daily email is a to-do list, not an inventory: critical and high only,
     # one entry per distinct finding. Mediums are counted, not listed.
     acks = acknowledge.load(store) if store is not None else {}
@@ -159,6 +161,8 @@ def health(result, delta, snapshots, now, store=None, conf=None):
     text += _text_health(result, delta)
     for owner in triage.ORDER:
         text += _text_group(owner, grouped[owner], limit=10)
+    if briefing:
+        text += ["", RULE, *protocols.render(briefing, full=False), RULE]
     text += ["", f"Plus {lower} medium-severity findings on the dashboard.",
              "Every finding and its history: the local JARVIS dashboard."]
 
@@ -170,6 +174,8 @@ def health(result, delta, snapshots, now, store=None, conf=None):
     inner += ui.section(ui.owner_summary(counts, result.get("acknowledged", 0)), "px-5 pt-1 pb-1")
     for owner in triage.ORDER:
         inner += ui.owner_section(owner, grouped[owner], limit=8, show_detail=False)
+    if briefing:
+        inner += ui.briefing(protocols.render(briefing, full=False))
     if lower:
         inner += ui.section(f'<div {ui.tw("text-sm text-slate-500")}>Plus {lower} medium-severity '
                             f'findings, listed on the dashboard rather than here.</div>', "px-6 pb-5")
@@ -179,12 +185,13 @@ def health(result, delta, snapshots, now, store=None, conf=None):
     return subject, "\n".join(text) + "\n", ui.document(subject, line, inner)
 
 
-def health_email(store, conf, now=None):
+def health_email(store, conf, now=None, jobs=None):
     """Send the daily health email. Returns an error string, or "" on success."""
     result = score.latest(store)
     if result is None:
         return "no security score recorded yet"
     now = int(time.time() if now is None else now)
+    briefing = protocols.next_briefing(store, jobs, now) if jobs else None
     subject, text, html = health(result, score.change_since(store, 86400, now),
-                                 store.get_snapshots(), now, store, conf)
+                                 store.get_snapshots(), now, store, conf, briefing)
     return alert.send_email(conf, subject, text, html=html)

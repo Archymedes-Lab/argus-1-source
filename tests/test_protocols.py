@@ -1,0 +1,125 @@
+"""JARVIS's protocols: ordered, question-gated, and verified by fresh collector runs."""
+
+import os
+import tempfile
+import time
+import unittest
+
+from jarvis.core.store import Store
+from jarvis.response import assistant, protocols
+from jarvis.response.reporting import emails, score
+
+SCHEDULE = {"posture": (7200, "posture"), "evasion": (7200, "evasion")}
+SECURE_BOOT_OFF = {"category": "platform integrity", "severity": "high", "host": "win",
+                   "title": "Secure Boot is off"}
+NOT_ENCRYPTED = {"category": "data at rest", "severity": "high", "host": "win",
+                 "title": "the system drive C: is not encrypted"}
+HVCI_OFF = {"category": "evasion", "severity": "high", "host": "win",
+            "title": "Memory Integrity (HVCI) is OFF"}
+
+
+class ProtocolTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(os.path.join(self.tmp.name, "t.db"))
+
+    def tearDown(self):
+        self.store.close()
+        self.tmp.cleanup()
+
+    def observe(self, posture=(), evasion=()):
+        self.store.save_snapshot("posture", list(posture))
+        self.store.save_snapshot("evasion", list(evasion))
+
+    def states(self):
+        return {i["protocol"].id: i for i in protocols.evaluate(self.store, SCHEDULE)}
+
+    def test_secure_boot_comes_first_and_asks_before_giving_steps(self):
+        self.observe([SECURE_BOOT_OFF, NOT_ENCRYPTED], [HVCI_OFF])
+        items = self.states()
+        self.assertEqual(items["secure-boot"]["state"], protocols.READY)
+        self.assertEqual(items["disk-encryption"]["state"], protocols.BLOCKED)
+        self.assertEqual(items["memory-integrity"]["state"], protocols.BLOCKED)
+        text = "\n".join(protocols.render(items["secure-boot"]))
+        self.assertIn("A question first", text)
+        self.assertNotIn("UEFI Firmware Settings", text)
+
+    def test_no_answer_withholds_steps_and_yes_releases_them(self):
+        self.observe([SECURE_BOOT_OFF])
+        ok, message = protocols.answer(self.store, "secure-boot", "no")
+        self.assertTrue(ok)
+        self.assertIn("signed", message)
+        item = self.states()["secure-boot"]
+        self.assertEqual(item["state"], protocols.WAITING)
+        self.assertNotIn("UEFI Firmware Settings", "\n".join(protocols.render(item)))
+
+        protocols.answer(self.store, "secure-boot", "yes")
+        item = self.states()["secure-boot"]
+        self.assertEqual(item["state"], protocols.READY)
+        self.assertIn("UEFI Firmware Settings", "\n".join(protocols.render(item)))
+
+    def test_questions_are_asked_one_at_a_time(self):
+        self.observe([NOT_ENCRYPTED])
+        _, message = protocols.answer(self.store, "disk-encryption", "yes")
+        self.assertIn("backed up", message)
+        protocols.answer(self.store, "disk-encryption", "yes")
+        _, message = protocols.answer(self.store, "disk-encryption", "yes")
+        self.assertIn("steps are yours", message)
+        self.assertFalse(protocols.answer(self.store, "disk-encryption", "yes")[0])
+
+    def test_done_needs_a_fresh_run_without_the_finding(self):
+        self.observe([NOT_ENCRYPTED])
+        items = self.states()
+        self.assertEqual(items["secure-boot"]["state"], protocols.DONE)
+        self.assertEqual(items["disk-encryption"]["state"], protocols.READY)
+
+    def test_a_stale_collector_cannot_mark_a_protocol_done(self):
+        self.observe([NOT_ENCRYPTED])
+        stale = int(time.time()) - 86400
+        self.store.db.execute("UPDATE snapshots SET ts=?", (stale,))
+        self.store.commit()
+        items = self.states()
+        self.assertEqual(items["secure-boot"]["state"], protocols.UNVERIFIED)
+        self.assertEqual(items["disk-encryption"]["state"], protocols.BLOCKED)
+
+    def test_blocked_protocol_still_shows_its_steps_when_asked_in_full(self):
+        self.observe([SECURE_BOOT_OFF, NOT_ENCRYPTED])
+        for _ in protocols.BY_ID["disk-encryption"].questions:
+            protocols.answer(self.store, "disk-encryption", "yes")
+        item = self.states()["disk-encryption"]
+        full, brief = protocols.render(item, full=True), protocols.render(item, full=False)
+        self.assertIn("Manage BitLocker", "\n".join(full))
+        self.assertIn("First: Switch on Secure Boot", "\n".join(full))
+        self.assertNotIn("Manage BitLocker", "\n".join(brief))
+
+    def test_projected_score_is_the_real_score_without_those_findings(self):
+        self.observe([SECURE_BOOT_OFF, NOT_ENCRYPTED], [HVCI_OFF])
+        item = self.states()["secure-boot"]
+        expected = score.compute(
+            {"posture": {"ts": int(time.time()), "findings": [NOT_ENCRYPTED]},
+             "evasion": {"ts": int(time.time()), "findings": [HVCI_OFF]}}, SCHEDULE)["score"]
+        self.assertEqual(item["score_after"], expected)
+        self.assertGreater(item["score_after"], item["score_now"])
+        _, all_done = protocols.projected_all(self.store, SCHEDULE)
+        self.assertGreater(all_done, item["score_after"])
+
+    def test_next_briefing_is_raised_in_the_health_email_and_by_the_assistant(self):
+        self.observe([SECURE_BOOT_OFF])
+        briefing = protocols.next_briefing(self.store, SCHEDULE)
+        result = score.compute(self.store.get_snapshots(), SCHEDULE)
+        _s, text, html = emails.health(result, None, self.store.get_snapshots(),
+                                       int(time.time()), self.store, briefing=briefing)
+        self.assertIn("Switch on Secure Boot", text)
+        self.assertIn("JARVIS briefing", html)
+        self.assertIn("jarvis brief yes secure-boot", html)
+        answer = assistant.answer(self.store, "what should I do next?", conf={}, jobs=SCHEDULE)
+        self.assertEqual(answer["source"], "builtin")
+        self.assertIn("Secure Boot", answer["answer"])
+
+    def test_nothing_to_raise_when_every_protocol_is_done(self):
+        self.observe()
+        self.assertIsNone(protocols.next_briefing(self.store, SCHEDULE))
+
+
+if __name__ == "__main__":
+    unittest.main()
