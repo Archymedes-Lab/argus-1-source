@@ -121,5 +121,33 @@ class ProtocolTests(unittest.TestCase):
         self.assertIsNone(protocols.next_briefing(self.store, SCHEDULE))
 
 
+    def test_greeting_leads_with_status_then_the_pending_protocol_question(self):
+        self.observe([SECURE_BOOT_OFF])
+        greeting = assistant.greeting(self.store, SCHEDULE)
+        lines = greeting["text"].splitlines()
+        self.assertTrue(lines[1].startswith("Security stands at"))
+        self.assertIn("Switch on Secure Boot", greeting["text"])
+        self.assertEqual(greeting["pending"]["protocol"], "secure-boot")
+
+        protocols.answer(self.store, "secure-boot", "no")
+        greeting = assistant.greeting(self.store, SCHEDULE)
+        self.assertIsNone(greeting["pending"])
+        self.assertIn("Still waiting on this", greeting["text"])
+
+    def test_greeting_warns_first_when_monitoring_is_blind(self):
+        self.observe([SECURE_BOOT_OFF])
+        self.store.db.execute("UPDATE snapshots SET ts=? WHERE kind='evasion'",
+                              (int(time.time()) - 86400,))
+        self.store.commit()
+        lines = assistant.greeting(self.store, SCHEDULE)["text"].splitlines()
+        self.assertIn("not reporting (evasion)", lines[1])
+
+    def test_greeting_salutation_follows_the_clock(self):
+        for hour, expected in ((8, "Good morning."), (14, "Good afternoon."),
+                               (20, "Good evening."), (1, "Working late, I see.")):
+            with self.subTest(hour=hour):
+                moment = time.mktime((2026, 9, 16, hour, 0, 0, 0, 0, -1))
+                self.assertEqual(assistant._salutation(moment), expected)
+
 if __name__ == "__main__":
     unittest.main()

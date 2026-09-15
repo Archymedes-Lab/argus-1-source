@@ -52,6 +52,80 @@ def _score(store, jobs):
     return "\n".join(lines)
 
 
+def _salutation(now):
+    hour = time.localtime(now).tm_hour
+    if 5 <= hour < 12:
+        return "Good morning."
+    if 12 <= hour < 18:
+        return "Good afternoon."
+    if 18 <= hour < 23:
+        return "Good evening."
+    return "Working late, I see."
+
+
+def greeting(store, jobs, now=None):
+    """What JARVIS says first when you open the dashboard. Deterministic, no model.
+
+    Order follows what matters: monitoring that has gone blind (without it
+    nothing else below can be trusted), the score and its direction, what
+    needs your hands, then the protocol JARVIS would take on next — with its
+    pending question, so the answer is one click away.
+    """
+    now = int(time.time() if now is None else now)
+    snapshots, acks = store.get_snapshots(), acknowledge.load(store)
+    result = score.compute(snapshots, jobs, now, acks)
+    lines = [_salutation(now)]
+
+    blind = [b["job"] for area in result["areas"] for b in area["blind"]]
+    if blind:
+        lines.append(f"First, a caution: {len(blind)} of my collectors are not reporting "
+                     f"({', '.join(blind[:4])}{'…' if len(blind) > 4 else ''}), so treat "
+                     f"everything below as partial.")
+
+    delta = score.change_since(store, 86400, now)
+    trend = ("" if not delta else
+             f", up {delta} since yesterday" if delta > 0 else f", down {-delta} since yesterday")
+    lines.append(f"Security stands at {result['score']}% — {result['grade']}{trend}.")
+
+    # Counted the way the daily email counts: critical and high, once per
+    # distinct finding. Mediums are inventory, not a to-do list.
+    act, confirm, seen = [], 0, set()
+    for finding, job in triage.current(snapshots, levels=("critical", "high"), acks=acks, now=now):
+        if (job, finding.get("title")) in seen:
+            continue
+        seen.add((job, finding.get("title")))
+        owner = triage.classify(finding, job)["owner"]
+        if owner == triage.YOU_DO:
+            act.append(finding)
+        elif owner == triage.YOU_CONFIRM:
+            confirm += 1
+    if act:
+        worst = min(act, key=lambda f: alert.SEV_RANK.get(f.get("severity"), 9))
+        lines.append(f"{len(act)} matter{'s' if len(act) != 1 else ''} need your hands; the most "
+                     f"pressing is {worst.get('title')}.")
+    if confirm:
+        lines.append(f"{confirm} more only you can confirm — ask me \"what needs me\" for the list.")
+    if not act and not confirm:
+        lines.append("Nothing needs you at the moment. I shall keep watching regardless.")
+
+    item = protocols.next_briefing(store, jobs, now)
+    pending = None
+    if item:
+        p = item["protocol"]
+        gain = item["score_after"] - item["score_now"]
+        lines.append(f"Today's protocol: {p.title}"
+                     + (f", worth {gain} point{'s' if gain != 1 else ''}" if gain > 0 else "")
+                     + ".")
+        if item["question"] and item["declined"]:
+            lines.append(f"Still waiting on this: {item['question'].if_no}")
+        elif item["question"]:
+            lines.append(item["question"].ask)
+            pending = {"protocol": p.id, "question": item["question"].ask}
+        else:
+            lines.append("You're cleared for it — ask me for the \"brief\" when you're ready.")
+    return {"text": "\n".join(lines), "pending": pending}
+
+
 def _briefing(store, jobs):
     item = protocols.next_briefing(store, jobs)
     if not item:

@@ -195,7 +195,7 @@
              placeholder="What needs me? What's my score? Explain a finding…">
       <button id="askbtn" type="submit">ask</button>
     </form>
-    <div class="chat-answer" id="askanswer">Built-in questions answer instantly. Open questions use Ollama when its local service and configured model are available.</div>
+    <div class="chat-answer" id="askanswer" aria-live="polite">JARVIS is reading the current state…</div>
     <div id="jarvisquestions"></div>
   </div>
 
@@ -801,6 +801,51 @@ async function askJarvis(event) {
   }
 }
 
+/* ---------- JARVIS speaks first ----------
+   The chat opens with a briefing built from live data on the server (no model,
+   so it is instant and cannot invent a status), and any question JARVIS is
+   waiting on comes with its answer buttons. */
+function showJarvis(text, pending, source) {
+  const buttons = pending ? `
+    <div class="question-actions" style="margin-top:9px">${["yes", "no"].map(choice =>
+      `<button data-protocol="${esc(pending.protocol)}" data-choice="${choice}"
+               onclick="answerProtocol(this)">${choice === "yes" ? "Yes" : "No"}</button>`).join("")}
+    </div>` : "";
+  document.getElementById("askanswer").innerHTML =
+    esc(text) + buttons + `<div class="chat-source">${esc(source)}</div>`;
+}
+
+async function greet() {
+  try {
+    const response = await fetch("/api/greeting", { cache: "no-store" });
+    if (!response.ok) throw new Error(response.status);
+    const data = await response.json();
+    showJarvis(data.text, data.pending, "JARVIS · briefing from live data");
+    say(data.text.split("\n").slice(0, 3).join(" "));
+  } catch (error) {
+    document.getElementById("askanswer").textContent =
+      "JARVIS could not brief you yet: " + error.message;
+  }
+}
+
+async function answerProtocol(button) {
+  const {protocol, choice} = button.dataset;
+  button.parentElement.querySelectorAll("button").forEach(b => b.disabled = true);
+  try {
+    const response = await fetch("/api/brief", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({protocol, choice})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || data.error || response.status);
+    const next = data.pending ? "\n\n" + data.pending.question : "";
+    showJarvis(data.message + next, data.pending, "answer recorded by JARVIS");
+    say(data.message);
+  } catch (error) {
+    document.getElementById("askanswer").textContent = "Could not record answer: " + error.message;
+  }
+}
+
 async function answerQuestion(id, choice) {
   const output = document.getElementById("askanswer");
   try {
@@ -986,6 +1031,7 @@ async function tick() {
   }
 }
 tick();
+greet();
 timer = setInterval(tick, 5000);
 </script>
 </body>

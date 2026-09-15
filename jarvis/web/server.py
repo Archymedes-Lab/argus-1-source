@@ -21,7 +21,7 @@ from jarvis.collectors.network import internetwatch
 from jarvis.core.paths import STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
-from jarvis.response import acknowledge, alert, assistant, questions
+from jarvis.response import acknowledge, alert, assistant, protocols, questions
 from jarvis.response.reporting import score
 from jarvis.service import sdnotify
 from jarvis.service.protection import health
@@ -202,6 +202,20 @@ class Handler(BaseHTTPRequestHandler):
         return any(origin == f"http://{h}:{self.server.server_address[1]}"
                    for h in ("localhost", "127.0.0.1"))
 
+    def _json_body(self, limit):
+        """The request's JSON object, or None when it is missing, oversized or malformed."""
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            return None
+        if length <= 0 or length > limit:
+            return None
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8", "replace"))
+        except ValueError:
+            return None
+        return payload if isinstance(payload, dict) else None
+
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, str):
             body = body.encode("utf-8")
@@ -227,36 +241,35 @@ class Handler(BaseHTTPRequestHandler):
             ok = self.scheduler.force(job)
             return self._send(200 if ok else 404, json.dumps({"queued": ok}))
         if url.path == "/api/ask":
-            try:
-                length = int(self.headers.get("Content-Length") or "0")
-            except ValueError:
-                length = 0
-            if length <= 0 or length > 16_384:
-                return self._send(400, json.dumps({"error": "invalid request size"}))
-            try:
-                payload = json.loads(self.rfile.read(length).decode("utf-8", "replace"))
-                question = str(payload.get("question") or "")[:4000]
-            except (ValueError, AttributeError):
-                return self._send(400, json.dumps({"error": "invalid JSON"}))
+            payload = self._json_body(16_384)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            question = str(payload.get("question") or "")[:4000]
             store = Store(self.db_path)
             try:
                 result = assistant.answer(store, question, jobs=JOBS)
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
+        if url.path == "/api/brief":
+            payload = self._json_body(4096)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                ok, message = protocols.answer(store, str(payload.get("protocol") or "")[:40],
+                                               str(payload.get("choice") or "")[:8])
+                follow = assistant.greeting(store, JOBS)
+            finally:
+                store.close()
+            return self._send(200 if ok else 400, json.dumps(
+                {"ok": ok, "message": message, "pending": follow["pending"]}))
         if url.path == "/api/answer":
-            try:
-                length = int(self.headers.get("Content-Length") or "0")
-            except ValueError:
-                length = 0
-            if length <= 0 or length > 4096:
-                return self._send(400, json.dumps({"error": "invalid request size"}))
-            try:
-                payload = json.loads(self.rfile.read(length).decode("utf-8", "replace"))
-                qid = str(payload.get("id") or "")[:32]
-                choice = str(payload.get("choice") or "")[:16]
-            except (ValueError, AttributeError):
-                return self._send(400, json.dumps({"error": "invalid JSON"}))
+            payload = self._json_body(4096)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            qid = str(payload.get("id") or "")[:32]
+            choice = str(payload.get("choice") or "")[:16]
             store = Store(self.db_path)
             try:
                 ok, message = questions.answer(store, qid, choice)
@@ -278,6 +291,13 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, fh.read(), "text/html; charset=utf-8")
             except OSError:
                 return self._send(500, "dashboard.html missing", "text/plain")
+
+        if url.path == "/api/greeting":
+            store = Store(self.db_path)
+            try:
+                return self._send(200, json.dumps(assistant.greeting(store, JOBS)))
+            finally:
+                store.close()
 
         if url.path == "/api/state":
             return self._send(200, json.dumps(
