@@ -107,3 +107,32 @@ class TrustedScheduledTaskTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SystemdAliasTests(unittest.TestCase):
+    def test_alias_into_a_packaged_unit_is_inventory_but_other_links_stay_medium(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        from jarvis.collectors.persistence import control
+        with tempfile.TemporaryDirectory() as root:
+            packaged, etc = os.path.join(root, "pkg") + "/", os.path.join(root, "etc")
+            os.makedirs(packaged); os.makedirs(etc)
+            open(os.path.join(packaged, "rsyslog.service"), "w").close()
+            open(os.path.join(root, "evil.service"), "w").close()
+            os.symlink(os.path.join(packaged, "rsyslog.service"), os.path.join(etc, "syslog.service"))
+            os.symlink(os.path.join(root, "evil.service"), os.path.join(etc, "evil.service"))
+            units = sorted(os.path.join(etc, n) for n in os.listdir(etc))
+
+            def fake_glob(pattern):
+                return units if pattern == "/etc/systemd/system/*.service" else []
+
+            with mock.patch.object(control, "PACKAGED_UNIT_DIRS", (packaged,)), \
+                 mock.patch.object(control.glob, "glob", side_effect=fake_glob), \
+                 mock.patch.object(control, "_run", return_value=""):
+                out = {f["where"]: f for f in control.audit_linux()
+                       if "systemd" in f["title"] and f["where"] in units}
+        self.assertEqual(out[units[1]]["severity"], "low")       # syslog -> packaged
+        self.assertEqual(out[units[0]]["severity"], "medium")    # evil -> elsewhere
+        self.assertEqual(out[units[0]]["title"], "custom systemd service")

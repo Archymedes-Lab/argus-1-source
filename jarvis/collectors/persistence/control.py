@@ -54,6 +54,8 @@ def _finding(category, severity, title, detail, where=""):
 # Linux / WSL side
 # ---------------------------------------------------------------------------
 
+PACKAGED_UNIT_DIRS = ("/usr/lib/systemd/system/", "/lib/systemd/system/")
+
 SHELL_RC = ["~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zshrc",
             "~/.bash_login", "~/.config/autostart"]
 
@@ -94,6 +96,14 @@ def audit_linux():
     for pattern in ("/etc/systemd/system/*.service", os.path.expanduser(
             "~/.config/systemd/user/*.service")):
         for path in glob.glob(pattern):
+            target = os.path.realpath(path)
+            if os.path.islink(path) and target.startswith(PACKAGED_UNIT_DIRS):
+                # `systemctl enable` writes aliases like syslog.service ->
+                # rsyslog.service. The unit itself belongs to a package; a link
+                # to anywhere else stays a custom service below.
+                out.append(_finding("persistence", "low", "systemd alias to a packaged unit",
+                                    f"{os.path.basename(path)} -> {target}", path))
+                continue
             out.append(_finding("persistence", "medium", "custom systemd service",
                                 os.path.basename(path), path))
 
