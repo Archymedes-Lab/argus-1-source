@@ -3,7 +3,7 @@ import time
 
 from jarvis.response import alert
 
-from . import advisory, notifications, score
+from . import advisory, emails, notifications, score
 
 
 def daily_due(store, conf, now=None):
@@ -42,7 +42,7 @@ def run(store, jobs):
         now = int(time.time())
         if (conf.get('health_email_enabled', True) is not False and health_due(store, conf, now)
                 and now >= int(store.get_meta('health_email_retry_at',0) or 0)):
-            err = score.health_email(store, conf, now)
+            err = emails.health_email(store, conf, now)
             if err:
                 store.set_meta('health_email_retry_at', now + 900)
                 store.set_meta('alert_last_error', f'{now}: {err}'[:300])

@@ -19,7 +19,6 @@ Three rules keep the number honest:
     bury everything else.
 """
 
-import html as html_mod
 import json
 import time
 
@@ -195,30 +194,6 @@ def change_since(store, seconds, now=None):
     return history[-1][1] - past[1]
 
 
-def health_email(store, conf, now=None):
-    """The short daily security-health email: the bar and what would raise it."""
-    result = latest(store)
-    if result is None:
-        return "no security score recorded yet"
-    delta = change_since(store, 86400, now)
-    lines = ["JARVIS SECURITY HEALTH", ""] + summary_lines(result, delta) + [
-        "", "Details and every finding: the local JARVIS dashboard."]
-    body = html_block(result, lambda v: html_mod.escape(str(v or "")), delta)
-    steps = "".join(
-        f"<li>{html_mod.escape(s['severity'])}: {html_mod.escape(s['title'])} "
-        f"<small>({html_mod.escape(s['job'])})</small></li>"
-        for s in result["next_steps"][:5])
-    page = ("<!doctype html><html><body style='margin:0;background:#f2f4f7;"
-            "font-family:Segoe UI,Arial,sans-serif;color:#101828'>"
-            "<div style='max-width:640px;margin:auto;background:#fff;padding:24px 28px'>"
-            f"{body}"
-            + (f"<h3 style='margin:18px 0 6px'>Biggest gains</h3><ol>{steps}</ol>" if steps else "")
-            + "<p style='color:#57606a;font-size:12px'>Details and every finding are on "
-              "the local JARVIS dashboard.</p></div></body></html>")
-    trend = "" if not delta else f" ({'+' if delta > 0 else ''}{delta})"
-    subject = f"[JARVIS] security health {result['score']}% — {result['grade']}{trend}"
-    return alert.send_email(conf, subject, "\n".join(lines) + "\n", html=page)
-
 
 def summary_lines(result, delta=None):
     """Plain-text block for emails: the overall bar, then one bar per area."""
@@ -242,34 +217,3 @@ def summary_lines(result, delta=None):
         for s in result["next_steps"][:3]:
             lines.append(f"    fix {s['severity']}: {s['title']} ({s['job']})")
     return lines
-
-
-def html_block(result, esc, delta=None):
-    """The same content as summary_lines, as inline-styled HTML for email."""
-    def colour(score):
-        if score is None:
-            return "#7d8590"
-        return "#1a7f37" if score >= 75 else "#9a6700" if score >= 50 else "#cf222e"
-
-    def meter(score, height):
-        pct = 0 if score is None else max(0, min(100, int(score)))
-        return (f"<div style='background:#e6e9ed;border-radius:6px;height:{height}px;"
-                f"overflow:hidden'><div style='width:{pct}%;height:{height}px;"
-                f"background:{colour(score)}'></div></div>")
-
-    trend = "" if delta is None else (
-        f" · {'+' if delta > 0 else ''}{delta} in 24h" if delta else " · no change in 24h")
-    rows = []
-    for a in result["areas"]:
-        label = "unverified" if a["score"] is None else f"{a['score']}%"
-        rows.append(
-            f"<tr><td style='padding:3px 10px 3px 0;white-space:nowrap'>{esc(a['name'])}</td>"
-            f"<td style='width:60%'>{meter(a['score'], 8)}</td>"
-            f"<td style='padding-left:10px;white-space:nowrap'>{esc(label)}</td></tr>")
-    return (
-        f"<div style='margin:6px 0 4px;font-size:13px;letter-spacing:1px'>SECURITY HEALTH</div>"
-        f"<div style='font-size:28px;font-weight:700;color:{colour(result['score'])}'>"
-        f"{result['score']}% <span style='font-size:14px;font-weight:400;color:#57606a'>"
-        f"{esc(result['grade'])} · coverage {result['coverage']}%{esc(trend)}</span></div>"
-        f"{meter(result['score'], 14)}"
-        f"<table style='width:100%;margin-top:10px;font-size:13px'>{''.join(rows)}</table>")

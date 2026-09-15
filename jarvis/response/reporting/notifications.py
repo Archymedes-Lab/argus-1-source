@@ -4,8 +4,7 @@ import time
 
 from jarvis.response import alert, fixit
 
-from . import score
-from .commands import command_for
+from . import emails, score
 
 QUEUE = 'alert_pending_changes'
 LAST_DIGEST = 'alert_digest_last_ok'
@@ -136,29 +135,10 @@ def flush(store, conf):
         store.set_meta('alert_capped_at',now)
         return False  # Nothing is acknowledged or discarded.
     ordered = sorted(batch.items(), key=lambda kv: alert.SEV_RANK.get(kv[1]['finding'].get('severity'),9))
-    lines = ['JARVIS CHANGE DIGEST' if not urgent else 'JARVIS PRIORITY CHANGES', '']
     health = score.latest(store)
-    if health:
-        lines += score.summary_lines(health, score.change_since(store, 86400, now)) + ['']
-    for key, item in ordered:
-        f = item['finding']
-        if item['tag'] == 'RESOLVED':
-            lines += [f"NO LONGER OBSERVED: {f.get('title','')}",
-                      '  Absent from the latest collector result; this alone does not prove remediation.', '']
-            continue
-        lines += [f"[{f.get('severity','high').upper()}] {item['tag']}: {f.get('title','')}",
-                  f"  {f.get('detail','')}", f"  Where: {f.get('where','') or '—'}; collector: {item['job']}"]
-        if item['tag'] == 'ESCALATED':
-            lines.append(f"  Unresolved for {(now-item['first'])//3600} hours; escalation {item['level']}.")
-        cmd = command_for(item['job'])
-        response = f.get('remediation', {})
-        lines.append('  Response: ' + response.get('reason',
-                     'No safe automatic repair is defined for this finding; investigation or a manual decision is needed.'))
-        if cmd: lines.append(f'  Inspect: {cmd}')
-        lines.append('')
-    lines.append('Unchanged findings stay on the dashboard and in the daily advisory; they do not generate STILL emails.')
-    subject = f"[JARVIS] {'priority changes' if urgent else 'change digest'}: {len(batch)} update(s)"
-    err = alert.send_email(conf, subject, '\n'.join(lines))
+    subject, text, html = emails.digest(
+        ordered, urgent, health, score.change_since(store, 86400, now) if health else None, now)
+    err = alert.send_email(conf, subject, text, html=html)
     if err:
         store.set_meta('alert_last_error',f'{now}: {err}'[:300])
         store.set_meta(RETRY_AT,now + 300)

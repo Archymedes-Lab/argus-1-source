@@ -118,7 +118,7 @@ class ScoreHistoryAndEmailTests(unittest.TestCase):
         self.assertIn("%", health[0])
         html = next(c.kwargs["html"] for c in self.send.call_args_list
                     if "security health" in c[0][1])
-        self.assertIn("SECURITY HEALTH", html)
+        self.assertIn("Security health", html)
 
     def test_daily_health_email_can_be_turned_off(self):
         conf = {**CONF, "report_daily_enabled": False, "report_hour": 0,

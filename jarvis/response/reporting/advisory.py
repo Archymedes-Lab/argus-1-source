@@ -7,7 +7,6 @@ and destinations do not belong in routine outbound mail. Delivery settings and
 transport come from response.alert.
 """
 
-import html as html_mod
 import json
 import os
 import re
@@ -21,7 +20,8 @@ from jarvis.response import alert, fixit
 
 from . import commands as report_commands
 from . import diff as report_diff
-from . import score
+from . import email_ui as ui
+from . import score, triage
 
 
 def _age(seconds):
@@ -141,52 +141,89 @@ def _theme(f):
 
 
 def _report_html(health, findings, actionable, blind_spots, checks,
-                 intel_state, ai_text, ai_note, generated, security=None, security_delta=None):
-    esc = lambda value: html_mod.escape(str(value or ""))
-    colors = {"critical": "#b42318", "high": "#d92d20",
-              "medium": "#dc6803", "low": "#475467", "ok": "#067647"}
-    groups = {}
-    for finding in findings:
-        groups.setdefault(_theme(finding), []).append(finding)
-
-    action_html = "".join(
-        f"<div class='action'><div class='num'>{i}</div><div><strong>{esc(f.get('title'))}</strong>"
-        f"<div class='next'>Next: {esc(_next_action(f))}</div>"
-        f"<div class='why'>{esc(f.get('detail'))}</div></div></div>"
-        for i, f in enumerate(actionable[:15], 1)) or "<p>No urgent action is currently recorded.</p>"
-    group_html = ""
-    for heading, items in groups.items():
-        rows = "".join(
-            f"<div class='finding'><span class='sev' style='background:{colors.get(f.get('severity'), '#475467')}'>{esc(f.get('severity', '?').upper())}</span>"
-            f"<strong>{esc(f.get('title'))}</strong><p>{esc(f.get('detail'))}</p>"
-            f"<small>{esc(f.get('job'))} · snapshot {_age(f.get('snapshot_age', 0))} old</small></div>"
-            for f in items[:20])
-        group_html += f"<h3>{esc(heading)}</h3>{rows}"
-    checks_html = "".join(f"<li>{esc(f.get('title'))} <small>({esc(f.get('job'))})</small></li>"
-                          for f in checks[:30]) or "<li>No explicit clean checks recorded yet.</li>"
-    intel_html = (
-        f"<strong>{int(intel_state.get('total', 0)):,}</strong> active indicators from "
-        f"<strong>{int(intel_state.get('docs', 0)):,}</strong> research documents. "
-        f"Last refresh: {esc(intel_state.get('last_refresh_label', 'never'))}. "
-        f"Exa spend today: ${float(intel_state.get('spend_today', 0)):.3f} / "
-        f"${float(intel_state.get('budget', 0)):.2f}."
-    )
-    ai_html = (f"<div class='ai'><h2>AI-assisted assessment</h2><div class='pre'>{esc(ai_text)}</div></div>"
-               if ai_text else f"<div class='notice'><strong>Optional deeper AI assessment</strong><br>{esc(ai_note)}</div>")
+                 intel_state, ai_text, ai_note, generated, security=None, security_delta=None,
+                 grouped=None, changed_text=""):
     worst = findings[0].get("severity", "ok") if findings else "ok"
-    return f"""<!doctype html><html><head><meta charset='utf-8'></head>
-<body style='margin:0;background:#f2f4f7;color:#101828;font-family:Segoe UI,Arial,sans-serif'>
-<style>.wrap{{max-width:760px;margin:auto;background:#fff}}.hero{{padding:30px;background:#101828;color:#fff}}.hero p{{color:#d0d5dd}}.section{{padding:24px 30px;border-bottom:1px solid #eaecf0}}.cards{{display:flex;gap:10px;flex-wrap:wrap}}.card{{padding:12px 16px;background:#f9fafb;border:1px solid #eaecf0;border-radius:10px;min-width:110px}}.card b{{display:block;font-size:22px}}h2{{margin:0 0 14px}}h3{{margin:22px 0 8px}}.action{{display:flex;gap:12px;padding:14px 0;border-top:1px solid #eaecf0}}.num{{width:28px;height:28px;border-radius:50%;background:#101828;color:white;text-align:center;line-height:28px;flex:none}}.next{{color:#067647;margin-top:5px}}.why,.finding p{{color:#475467;margin:5px 0}}.finding{{padding:12px;border:1px solid #eaecf0;border-radius:8px;margin:8px 0}}.sev{{color:white;font-size:10px;font-weight:700;padding:3px 7px;border-radius:12px;margin-right:8px}}small{{color:#667085}}.notice{{padding:15px;background:#fffaeb;border:1px solid #fedf89;border-radius:8px}}.ai{{padding:18px;background:#f4f3ff;border-radius:8px}}.pre{{white-space:pre-wrap;line-height:1.5}}ul{{padding-left:20px}}li{{margin:7px 0}}</style>
-<div class='wrap'><div class='hero'><div style='font-size:12px;letter-spacing:1.5px'>JARVIS · DAILY SECURITY ADVISORY</div><h1 style='margin:8px 0'>Your system security, prioritized</h1><p>Generated {esc(time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(generated)))} · Worst recorded severity: {esc(worst.upper())}. No endpoint monitor can guarantee complete security; this report shows the strongest evidence and the next defensible steps.</p></div>
-{"<div class='section'>" + score.html_block(security, esc, security_delta) + "</div>" if security else ""}
-<div class='section'><h2>Coverage at a glance</h2><div class='cards'><div class='card'><b>{len(health['current'])}</b>current</div><div class='card'><b>{len(health['stale'])}</b>stale</div><div class='card'><b>{len(health['failing'])}</b>failing</div><div class='card'><b>{len(health['missing'])}</b>missing</div><div class='card'><b>{len(actionable)}</b>actions</div></div><p><small>Stale: {esc(', '.join(health['stale']) or 'none')} · Failing: {esc(', '.join(health['failing']) or 'none')} · Missing: {esc(', '.join(health['missing']) or 'none')}</small></p></div>
-<div class='section'><h2>Secure next</h2>{action_html}</div>
-<div class='section'>{ai_html}</div>
-<div class='section'><h2>Current findings by protection layer</h2>{group_html or '<p>No active findings.</p>'}</div>
-<div class='section'><h2>Threat research freshness</h2><p>{intel_html}</p><small>Exa results are treated as untrusted leads and vetted locally before they can become findings.</small></div>
-<div class='section'><h2>Verified clean and protected checks</h2><ul>{checks_html}</ul></div>
-<div class='section'><h2>Visibility gaps</h2><p>{len(blind_spots)} gap or design-limit finding(s) are included above. A clean result is only meaningful when its collector is current.</p></div>
-<div class='section'><small>Raw process command lines, credential values, and peer details stay on the local JARVIS dashboard and are not included in this routine email.</small></div></div></body></html>"""
+    grouped = grouped or {owner: [] for owner in triage.ORDER}
+    counts = {owner: len(items) for owner, items in grouped.items()}
+    need = counts.get(triage.YOU_DO, 0) + counts.get(triage.YOU_CONFIRM, 0)
+
+    inner = ui.header("JARVIS · DAILY SECURITY ADVISORY",
+                      f"{need} thing{'s' if need != 1 else ''} need you today" if need
+                      else "Nothing needs you today",
+                      f"Generated {time.strftime('%A %d %B %Y, %H:%M', time.localtime(generated))} · "
+                      f"worst recorded severity {worst.upper()}")
+    if security:
+        inner += ui.section(ui.health_panel(security, security_delta))
+    inner += ui.section(ui.owner_summary(counts), "px-5 pt-1 pb-1")
+    for owner in triage.ORDER:
+        inner += ui.owner_section(owner, grouped[owner], limit=15)
+
+    if changed_text:
+        inner += ui.section(
+            ui.heading("What changed since the last report")
+            + f'<div {ui.tw("font-mono text-xs text-slate-700 bg-slate-50 rounded-lg p-3 mt-2")} '
+              f'style="white-space:pre-wrap">{ui.esc(changed_text)}</div>')
+
+    tiles = "".join(
+        f'<td width="25%" {ui.tw("px-1 align-top")}><div {ui.tw("rounded-xl bg-slate-50 p-3 text-center")}>'
+        f'<div {ui.tw("text-2xl font-bold text-slate-900")}>{len(health[k])}</div>'
+        f'<div {ui.tw("text-xs text-slate-500")}>{label}</div></div></td>'
+        for k, label in (("current", "current"), ("stale", "stale"), ("failing", "failing"),
+                         ("missing", "missing")))
+    blind = ", ".join(health["stale"] + health["failing"] + health["missing"]) or "none"
+    inner += ui.section(
+        ui.heading("Collector coverage", f"Not reporting: {blind}")
+        + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" {ui.tw("mt-3")}><tr>{tiles}</tr></table>')
+
+    layers = {}
+    for finding in findings:
+        layers.setdefault(_theme(finding), []).append(finding)
+    layer_rows = "".join(
+        f'<tr><td {ui.tw("py-1.5 pr-3 text-sm text-slate-700")}>{ui.esc(name)}</td>'
+        f'<td {ui.tw("py-1.5 text-sm text-right whitespace-nowrap")}>'
+        + " ".join(ui.severity_pill(sev) + f' <span {ui.tw("text-slate-600")}>{n}</span>'
+                   for sev, n in _severity_counts(items))
+        + "</td></tr>" for name, items in layers.items())
+    inner += ui.section(
+        ui.heading("Current findings by protection layer")
+        + (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" {ui.tw("mt-2")}>{layer_rows}</table>'
+           if layer_rows else f'<div {ui.tw("text-sm text-slate-600 mt-2")}>No active findings.</div>'))
+
+    if ai_text:
+        inner += ui.section(ui.heading("AI-assisted assessment")
+                            + f'<div {ui.tw("text-sm text-slate-800 leading-relaxed bg-violet-50 rounded-lg p-4 mt-2")} '
+                              f'style="white-space:pre-wrap">{ui.esc(ai_text)}</div>')
+    else:
+        inner += ui.section(f'<div {ui.tw("rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-slate-700")}>'
+                            f'<b>Optional deeper AI assessment</b><br>{ui.esc(ai_note)}</div>')
+
+    checks_html = "".join(
+        f'<div {ui.tw("text-sm text-slate-700 py-0.5")}>&#10003; {ui.esc(f.get("title"))} '
+        f'<span {ui.tw("text-slate-400")}>({ui.esc(f.get("job"))})</span></div>' for f in checks[:30]) \
+        or f'<div {ui.tw("text-sm text-slate-500")}>No explicit clean checks recorded yet.</div>'
+    inner += ui.section(ui.heading("Verified clean and protected", f"{len(checks)} checks passed")
+                        + f'<div {ui.tw("mt-2")}>{checks_html}</div>')
+    inner += ui.section(
+        ui.heading("Threat research freshness")
+        + f'<div {ui.tw("text-sm text-slate-700 mt-2")}><b>{int(intel_state.get("total", 0)):,}</b> active indicators '
+          f'from <b>{int(intel_state.get("docs", 0)):,}</b> research documents · last refresh '
+          f'{ui.esc(intel_state.get("last_refresh_label", "never"))} · spend today '
+          f'${float(intel_state.get("spend_today", 0)):.3f} of ${float(intel_state.get("budget", 0)):.2f}</div>')
+    inner += ui.footer("Raw process command lines, credential values and peer details stay on the local "
+                       "JARVIS dashboard and are not included in this email. No endpoint monitor can "
+                       "guarantee complete security; this report shows the strongest evidence and the "
+                       "next defensible steps.")
+    return ui.document("JARVIS security advisory",
+                       f"{need} need you · security health {security['score']}%" if security else f"{need} need you",
+                       inner)
+
+
+def _severity_counts(items):
+    counts = {}
+    for f in items:
+        counts[f.get("severity")] = counts.get(f.get("severity"), 0) + 1
+    return [(sev, counts[sev]) for sev in ("critical", "high", "medium", "low") if counts.get(sev)]
 
 
 def advisory_report(store, jobs):
@@ -280,6 +317,12 @@ def advisory_report(store, jobs):
         report_diff.counts(findings))
     changed_text = report_diff.describe(movement, trend)
 
+    grouped = {owner: [] for owner in triage.ORDER}
+    for f in actionable:
+        if f.get("category") in alert.NOPAGE_CATEGORIES:
+            continue    # per-process churn and meta findings are not tasks
+        t = triage.classify(f, f.get("job", ""))
+        grouped[t["owner"]].append((f, f.get("job", ""), t, ""))
     security = score.compute(snapshots, jobs, generated)
     security_delta = score.change_since(store, 86400, generated)
     lines = [
@@ -313,16 +356,20 @@ def advisory_report(store, jobs):
     else:
         lines.append("  No active non-volatile findings in the latest snapshots.")
 
-    lines.extend(["", "SECURE NEXT — PRIORITIZED ACTIONS"])
-    if actionable:
-        for number, f in enumerate(actionable[:15], 1):
-            lines.extend([
-                f"{number}. [{f.get('severity', '?').upper()}] {f.get('title', '')}",
-                f"   Next: {_next_action(f)}",
-                f"   Why: {f.get('detail', '')}",
-            ])
-    else:
-        lines.append("  No critical/high/medium action is currently recorded.")
+    lines.extend(["", "SECURE NEXT — WHO HAS TO ACT"])
+    for owner in triage.ORDER:
+        entries = grouped[owner]
+        lines.extend(["", f"{triage.LABEL[owner].upper()} ({len(entries)})",
+                      f"  {triage.BLURB[owner]}"])
+        if not entries:
+            lines.append("  Nothing here.")
+        for number, (f, job, t, _tag) in enumerate(entries[:15], 1):
+            lines.append(f"{number}. [{f.get('severity', '?').upper()}] {f.get('title', '')}")
+            lines.append(f"   → {t['action']}")
+            if t.get("command"):
+                lines.append(f"   $ {t['command']}")
+            elif _next_action(f):
+                lines.append(f"   Next: {_next_action(f)}")
 
     lines.extend(["", "VISIBILITY GAPS AND DESIGN LIMITS"])
     if blind_spots:
@@ -379,7 +426,8 @@ def advisory_report(store, jobs):
         headline = f"no change, worst {worst.upper()}"
     subject = f"[JARVIS] security report — {headline}"
     html = _report_html(health, findings, actionable, blind_spots, checks,
-                        intel_state, ai_text, ai_note, generated, security, security_delta)
+                        intel_state, ai_text, ai_note, generated, security, security_delta,
+                        grouped, changed_text)
     err = alert.send_email(conf, subject, "\n".join(lines) + "\n", html=html)
     if err:
         store.set_meta(alert.REPORT_ERROR_META, f"{generated}: {err}"[:300])

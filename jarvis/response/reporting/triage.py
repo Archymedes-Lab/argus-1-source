@@ -1,0 +1,158 @@
+"""Who has to act on a finding: JARVIS, or you — and what exactly to do.
+
+Every email groups findings by this answer, because a list of problems is only
+useful once it says which ones will fix themselves and which ones are waiting
+on a person:
+
+  jarvis       JARVIS repairs or retries this itself. Nothing to do unless it
+               keeps coming back.
+  you_do       A concrete task only you can perform (rotate a key, approve an
+               elevated change, add a passphrase). The step is spelled out.
+  you_confirm  A detection only you can judge: it is either something you did
+               or something you did not. JARVIS cannot know which, so it will
+               not guess and will not silence it.
+
+The rules never promote a finding to "jarvis" unless an automatic action is
+actually defined for it (response.remediation) or it is a monitoring outage
+the daemon retries on its own. Anything unrecognised defaults to you_confirm:
+an unhandled finding must never read as taken care of.
+"""
+
+from jarvis.response import alert, fixit, remediation
+
+from .commands import command_for
+
+JARVIS, YOU_DO, YOU_CONFIRM = "jarvis", "you_do", "you_confirm"
+
+LABEL = {
+    JARVIS: "JARVIS is handling",
+    YOU_DO: "Needs you — action",
+    YOU_CONFIRM: "Needs you — confirm",
+}
+BLURB = {
+    JARVIS: "Repaired or retried automatically. No action unless it keeps coming back.",
+    YOU_DO: "Only you can do these. Each one says exactly what to run or change.",
+    YOU_CONFIRM: "JARVIS cannot tell whether you caused these. If you did, they are "
+                 "expected; if you did not, treat them as suspicious.",
+}
+ORDER = (YOU_DO, YOU_CONFIRM, JARVIS)
+
+# Posture-style categories whose finding already carries its fix in `where`.
+_SETTING_CATEGORIES = {"malware defense", "platform integrity", "data at rest",
+                       "account & access", "attack surface", "licensing"}
+
+# Monitoring limits and upkeep: JARVIS keeps checking, restarts what it
+# supervises, and retries refreshes. Nothing here is a task for you.
+_MONITORING_CATEGORIES = {"visibility", "limits", "intel", "feed", "telemetry",
+                          "auditd", "reporting"}
+
+# Files a tool manages as its own credential store. The right step is to keep
+# them private, not to "move the secret out" of the place the tool reads it.
+_TOOL_STORES = (".claude/.credentials.json", ".config/gh/hosts.yml",
+                ".config/cursor/auth.json", ".docker/config.json", ".fly/config.yml",
+                ".config/gcloud/", ".aws/credentials", ".netrc", ".npmrc")
+
+# A suggested command that only reads (verify, list, inspect) is a way to
+# confirm, not a fix.
+_READ_ONLY = ("get-", "select-", "test-", "dir ", "ls ", "cat ", "type ", "verify ")
+
+_FIREWALL_SCRIPT = ("elevated PowerShell: powershell -ExecutionPolicy Bypass -File "
+                    "scripts\\repair\\repair-reported-firewall.ps1 (keeps a rollback record)")
+
+
+def classify(finding, job=""):
+    """{owner, action, command} for one finding."""
+    f = finding or {}
+    category = (f.get("category") or "").lower()
+    title = f.get("title") or ""
+    where = f.get("where") or ""
+    inspect = command_for(job) if job else ""
+    repair = f.get("remediation") or {}
+
+    if repair.get("status") in ("verified", "attempting"):
+        return _r(JARVIS, repair.get("reason") or "Automatic repair in progress.", inspect)
+    if repair.get("status") in ("failed", "blocked"):
+        return _r(YOU_DO, (repair.get("reason") or "Automatic repair could not finish.")
+                  + " Run the repair yourself.", fixit.suggest(f) or "jarvis repair status")
+    if category in alert.NOPAGE_CATEGORIES:
+        return _r(JARVIS, "Recorded on the dashboard and in the advisory; not a task.", inspect)
+    if job and remediation.action_for(job, f):
+        return _r(JARVIS, "An automatic repair is defined and runs before any alert.", inspect)
+    if (alert.is_outage(f) or category in ("daemon", "collectors")
+            or (category == "input" and "monitor" in title.lower())):
+        return _r(JARVIS, "JARVIS retries or restarts this on its own. If it persists for "
+                          "a day, run the command below.", "jarvis selfcheck")
+    if category in _MONITORING_CATEGORIES:
+        return _r(JARVIS, "A known monitoring limit; JARVIS keeps checking. Nothing to do "
+                          "unless you want deeper visibility.", inspect)
+
+    fix = fixit.suggest(f)
+    if category == "present" or job == "secrets":
+        path = where.split(":")[0]
+        on_path = (lambda cmd: f"{cmd} {path}" if path else "")
+        if "/.claude/paste-cache/" in path:
+            return _r(YOU_DO, "A pasted copy of a secret sits in the Claude paste cache. "
+                              "Delete the cached file; the original is unaffected.",
+                      on_path("rm"))
+        if any(marker in path for marker in _TOOL_STORES):
+            return _r(YOU_DO, "This is a tool's own credential store, so leave the secret "
+                              "where the tool reads it, but make sure only you can read the "
+                              "file (and sign out of the tool if you no longer use it).",
+                      on_path("chmod 600"))
+        if "private key" in title:
+            return _r(YOU_DO, "Add a passphrase to this key (or delete it if unused).",
+                      on_path("ssh-keygen -p -f"))
+        return _r(YOU_DO, "Rotate this credential at its provider, then move it out of the "
+                          "plaintext file (a secret manager or an env var loaded at runtime) "
+                          "and restrict the file to your account.",
+                  on_path("chmod 600"))
+    if job == "firewall" and category == "rules":
+        return _r(YOU_DO, "Remove or narrow this inbound rule. Changing the firewall needs "
+                          "Windows administrator approval, which JARVIS does not have.",
+                  fix or _FIREWALL_SCRIPT)
+    if category == "accounts":
+        return _r(YOU_CONFIRM, "Confirm you created this account (sandboxes and dev tools "
+                               "sometimes do). If not, the command below reverses it.",
+                  fix or inspect)
+    if fix:
+        verb = fix.split(":", 1)[-1].strip().lower() if fix.lower().startswith("elevated") else fix.lower()
+        if verb.startswith(_READ_ONLY):
+            return _r(YOU_CONFIRM, "Verify this with the command below; it only reads.", fix)
+        return _r(YOU_DO, "Apply this fix.", fix)
+    if category in _SETTING_CATEGORIES:
+        return _r(YOU_DO, "Turn this protection on.", where or inspect)
+    if category in ("agent", "editor", "vcs", "packages"):
+        return _r(YOU_CONFIRM, "Confirm this developer-tool configuration is yours before "
+                               "the next time the tool runs.", inspect)
+    return _r(YOU_CONFIRM, "Confirm whether this was you. Inspect it first; do not delete "
+                           "anything based on this alone.", inspect)
+
+
+def _r(owner, action, command):
+    return {"owner": owner, "action": action, "command": command or ""}
+
+
+def group(items):
+    """items: iterable of (finding, job) -> {owner: [(finding, job, triage)]} in ORDER."""
+    out = {owner: [] for owner in ORDER}
+    for finding, job in items:
+        t = classify(finding, job)
+        out[t["owner"]].append((finding, job, t))
+    for owner in out:
+        out[owner].sort(key=lambda it: alert.SEV_RANK.get(it[0].get("severity"), 9))
+    return out
+
+
+def current(snapshots, levels=("critical", "high", "medium")):
+    """(finding, job) for every actionable finding in the latest snapshots.
+
+    Churn and meta categories (per-process, per-peer, coverage gaps, the alert
+    ledger) are left out, as they are from paging.
+    """
+    out = []
+    for job, snap in sorted((snapshots or {}).items()):
+        for f in (snap or {}).get("findings") or ():
+            if (isinstance(f, dict) and f.get("severity") in levels
+                    and f.get("category") not in alert.NOPAGE_CATEGORIES):
+                out.append((f, job))
+    return out
