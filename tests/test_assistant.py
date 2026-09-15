@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 from jarvis.core.store import Store
-from jarvis.response import assistant
+from jarvis.response import assistant, llm
 from jarvis.service.schedule import JOBS
 
 
@@ -35,26 +35,33 @@ class AssistantTests(unittest.TestCase):
         self.assertEqual(result, {"answer": "analysis", "source": "ollama"})
 
     def test_concurrent_open_question_is_refused_not_queued(self):
-        with assistant._MODEL_LOCK, mock.patch.object(assistant, "_ollama") as model:
-            result = assistant.answer(self.store, "could these two findings be related?")
-        self.assertEqual(result["source"], "busy")
-        model.assert_not_called()
+        with llm.LOCK, mock.patch.object(llm, "_request") as request:
+            text, source = assistant._ollama(self.store, "could these be related?", {})
+        self.assertEqual(source, "busy")
+        request.assert_not_called()
 
     def test_model_failure_releases_the_lock(self):
-        with mock.patch.object(assistant, "_ollama", side_effect=RuntimeError):
+        with mock.patch.object(llm, "_request", side_effect=RuntimeError):
             with self.assertRaises(RuntimeError):
-                assistant.answer(self.store, "could these two findings be related?")
-        self.assertFalse(assistant._MODEL_LOCK.locked())
+                llm.chat({}, "system", "user")
+        self.assertFalse(llm.LOCK.locked())
 
     def test_windows_loopback_bridge_is_used_when_wsl_loopback_is_separate(self):
         reply = {"message": {"content": "Local evidence explanation"}}
-        with mock.patch.object(assistant.urllib.request, "urlopen",
-                               side_effect=assistant.urllib.error.URLError("offline")), \
-             mock.patch.object(assistant, "ps_json", return_value=reply) as bridge:
+        with mock.patch.object(llm.urllib.request, "urlopen",
+                               side_effect=llm.urllib.error.URLError("offline")), \
+             mock.patch.object(llm, "ps_json", return_value=reply) as bridge:
             text, source = assistant._ollama(self.store, "what links these?", {
                 "ollama_model": "qwen3:4b-instruct"})
         self.assertEqual((text, source), ("Local evidence explanation", "ollama"))
         bridge.assert_called_once()
+
+    def test_bridge_error_is_reported_not_treated_as_an_answer(self):
+        with mock.patch.object(llm.urllib.request, "urlopen",
+                               side_effect=llm.urllib.error.URLError("offline")), \
+             mock.patch.object(llm, "ps_json", return_value={"_jarvis_error": "refused"}):
+            text, error = llm.chat({}, "system", "user")
+        self.assertEqual((text, error), ("", "refused"))
 
 
 if __name__ == "__main__":

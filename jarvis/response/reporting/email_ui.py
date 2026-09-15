@@ -170,6 +170,16 @@ def header(kicker, title, subtitle=""):
             + "</td></tr>")
 
 
+def voice(line, by_model=False):
+    """JARVIS's opening note, set apart from the report it introduces."""
+    credit = "written by the local model · the report below is not" if by_model else "JARVIS"
+    return section(
+        f'<div {tw("border-l-4 border-l-sky-500 bg-sky-50 rounded-lg px-4 py-3")}>'
+        f'<div {tw("text-base text-slate-800 leading-relaxed", "font-style:italic")}>{esc(line)}</div>'
+        f'<div {tw("text-xs text-slate-500 mt-1")}>— {esc(credit)}</div></div>',
+        "px-6 pt-5 pb-1")
+
+
 def section(inner, classes="px-6 py-5"):
     return f'<tr><td {tw(classes)}>{inner}</td></tr>'
 

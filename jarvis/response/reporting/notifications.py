@@ -145,7 +145,8 @@ def flush(store, conf):
     ordered = sorted(batch.items(), key=lambda kv: alert.SEV_RANK.get(kv[1]['finding'].get('severity'),9))
     health = score.latest(store)
     subject, text, html = emails.digest(
-        ordered, urgent, health, score.change_since(store, 86400, now) if health else None, now)
+        ordered, urgent, health, score.change_since(store, 86400, now) if health else None, now,
+        conf)
     err = alert.send_email(conf, subject, text, html=html)
     if err:
         store.set_meta('alert_last_error',f'{now}: {err}'[:300])

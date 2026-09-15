@@ -732,6 +732,17 @@ retain queued changes for retry; hourly caps defer delivery without discarding i
 Monitoring outages bypass the severity filter. Ordinary mail uses
 `alert_hourly_cap` (default 12); urgent changes have a separate ceiling of 60.
 
+Change digests and the daily health email open with a line in JARVIS's own
+voice. With `"email_voice": true` the local Ollama model writes it
+(`email_voice_model`, default `llama3.2:3b`; the 1B model invented events in
+testing); otherwise a built-in line is used. Only that line comes from the
+model. The subject, counts, findings, severities and commands stay
+deterministic. Before use, the line is checked: no commands, links, lists or
+questions, no number the facts do not contain, no restated severity, no score
+direction that contradicts the trend, and no claim that JARVIS acted. Any line
+that fails, times out or finds the model busy is replaced by the built-in one,
+so mail is never held up by the model.
+
 Independently of change alerts, `jarvis serve` sends a daily posture advisory
 after `report_hour` in the host's local timezone, checking eligibility every five
 minutes. It uses the same configured Resend recipient and reports which

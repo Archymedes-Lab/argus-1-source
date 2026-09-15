@@ -11,7 +11,7 @@ import time
 from jarvis.response import acknowledge, alert
 
 from . import email_ui as ui
-from . import score, triage
+from . import score, triage, voice
 
 RULE = "─" * 58
 
@@ -66,7 +66,7 @@ def _needs_you(counts):
 
 # ── change digest / priority changes ──────────────────────────────────────
 
-def digest(ordered, urgent, health, delta, now):
+def digest(ordered, urgent, health, delta, now, conf=None):
     """ordered: [(key, queue item)] -> (subject, text, html)."""
     active = [(item["finding"], item["job"], item["tag"]) for _key, item in ordered
               if item["tag"] != "RESOLVED"]
@@ -79,10 +79,14 @@ def digest(ordered, urgent, health, delta, now):
     headline = (f"{need} need{'s' if need == 1 else ''} you" if need
                 else "nothing needs you")
     subject = f"[JARVIS] {kind}: {len(ordered)} update(s) — {headline}"
+    line, by_model = voice.opener(conf, voice.facts_for(
+        "change digest", counts, urgent, health, delta, len(resolved),
+        [f.get("title") for f, _job, _tag in active]),
+        time.strftime("%Y-%m-%d", time.localtime(now)))
 
     text = ["JARVIS PRIORITY CHANGES" if urgent else "JARVIS CHANGE DIGEST",
             f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS"
-            + (f" · {len(resolved)} no longer observed" if resolved else ""), ""]
+            + (f" · {len(resolved)} no longer observed" if resolved else ""), "", line, ""]
     if health:
         text += _text_health(health, delta)
     for owner in triage.ORDER:
@@ -106,6 +110,7 @@ def digest(ordered, urgent, health, delta, now):
     inner = ui.header("JARVIS · " + ("priority changes" if urgent else "change digest"),
                       headline[0].upper() + headline[1:],
                       time.strftime("%A %d %B, %H:%M", time.localtime(now)))
+    inner += ui.voice(line, by_model)
     inner += ui.section(ui.owner_summary(counts), "px-5 pt-5 pb-1")
     for owner in triage.ORDER:
         inner += ui.owner_section(owner, grouped[owner])
@@ -120,14 +125,13 @@ def digest(ordered, urgent, health, delta, now):
         inner += ui.section(ui.health_panel(health, delta), "px-6 py-5 bg-slate-50")
     inner += ui.footer("Unchanged findings stay on the dashboard and in the daily advisory; "
                        "they do not generate repeat emails. Credential values are never included.")
-    html = ui.document(subject, f"{headline} · security health {health['score']}%" if health else headline,
-                       inner)
+    html = ui.document(subject, line, inner)
     return subject, "\n".join(text) + "\n", html
 
 
 # ── daily security health ─────────────────────────────────────────────────
 
-def health(result, delta, snapshots, now, store=None):
+def health(result, delta, snapshots, now, store=None, conf=None):
     """-> (subject, text, html) for the once-a-day health email."""
     # The daily email is a to-do list, not an inventory: critical and high only,
     # one entry per distinct finding. Mediums are counted, not listed.
@@ -145,9 +149,13 @@ def health(result, delta, snapshots, now, store=None):
     trend = "" if not delta else f" ({'+' if delta > 0 else ''}{delta})"
     subject = (f"[JARVIS] security health {result['score']}% — {result['grade']}{trend} · "
                f"{need} need you")
+    line, by_model = voice.opener(conf, voice.facts_for(
+        "daily security health", counts, False, result, delta,
+        top=[f.get("title") for f, _job, _tag in top]),
+        time.strftime("%Y-%m-%d", time.localtime(now)))
 
     text = ["JARVIS SECURITY HEALTH",
-            f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS", ""]
+            f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS", "", line, ""]
     text += _text_health(result, delta)
     for owner in triage.ORDER:
         text += _text_group(owner, grouped[owner], limit=10)
@@ -157,6 +165,7 @@ def health(result, delta, snapshots, now, store=None):
     inner = ui.header("JARVIS · daily security health",
                       f"Your system is {result['score']}% of the way to secure",
                       time.strftime("%A %d %B", time.localtime(now)))
+    inner += ui.voice(line, by_model)
     inner += ui.section(ui.health_panel(result, delta))
     inner += ui.section(ui.owner_summary(counts, result.get("acknowledged", 0)), "px-5 pt-1 pb-1")
     for owner in triage.ORDER:
@@ -167,8 +176,7 @@ def health(result, delta, snapshots, now, store=None):
     inner += ui.footer("Fixing items under “Needs you — action” raises the score the most. "
                        "Every finding and its history: the local JARVIS dashboard. "
                        "Set health_email_enabled to false to stop this email.")
-    return subject, "\n".join(text) + "\n", ui.document(
-        subject, f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS", inner)
+    return subject, "\n".join(text) + "\n", ui.document(subject, line, inner)
 
 
 def health_email(store, conf, now=None):
@@ -178,5 +186,5 @@ def health_email(store, conf, now=None):
         return "no security score recorded yet"
     now = int(time.time() if now is None else now)
     subject, text, html = health(result, score.change_since(store, 86400, now),
-                                 store.get_snapshots(), now, store)
+                                 store.get_snapshots(), now, store, conf)
     return alert.send_email(conf, subject, text, html=html)

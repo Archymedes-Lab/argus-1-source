@@ -5,21 +5,12 @@ be sent to a local Ollama endpoint; its text is advisory only and cannot call a
 tool, acknowledge a finding, approve a proposal, or mutate the store.
 """
 
-import base64
 import json
 import re
-import threading
 import time
-import urllib.error
-import urllib.request
 
-from jarvis.platform.windows import ps_json
-from jarvis.response import acknowledge, alert
+from jarvis.response import acknowledge, alert, llm
 from jarvis.response.reporting import diff, score, triage
-
-# CPU inference serves one request at a time; concurrent calls would only queue
-# inside Ollama while each pins a dashboard thread for up to the full timeout.
-_MODEL_LOCK = threading.Lock()
 
 
 def _current(store):
@@ -90,8 +81,6 @@ def _explain(store, query):
 
 
 def _ollama(store, question, conf):
-    model = (conf.get("ollama_model") or "llama3.2:1b").strip()
-    base = (conf.get("ollama_url") or "http://127.0.0.1:11434").rstrip("/")
     context = []
     for finding in _current(store)[:8]:
         item = {k: str(finding.get(k) or "")[:160] for k in
@@ -106,49 +95,15 @@ def _ollama(store, question, conf):
         "verification command or say that human approval is needed. Answer in at most "
         "70 words and finish the final sentence."
     )
-    body = json.dumps({
-        "model": model, "stream": False, "keep_alive": "5m",
-        "options": {"temperature": 0.2, "num_ctx": 2048, "num_predict": 110},
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": "<DATA>" + json.dumps(context) +
-             "</DATA>\nQUESTION: " + question[:2000]},
-        ],
-    }).encode()
-    req = urllib.request.Request(base + "/api/chat", data=body, method="POST",
-                                 headers={"Content-Type": "application/json"})
-    data = None
-    direct_error = None
-    try:
-        with urllib.request.urlopen(req, timeout=90) as response:
-            data = json.loads(response.read().decode("utf-8", "replace"))
-    except (urllib.error.URLError, OSError, ValueError) as exc:
-        direct_error = exc
-        # Windows Ollama deliberately listens only on Windows loopback. WSL's
-        # loopback is separate on NAT-based installs, so cross that boundary
-        # through the existing constrained PowerShell bridge without exposing
-        # Ollama to the LAN.
-        if base in ("http://127.0.0.1:11434", "http://localhost:11434"):
-            blob = base64.b64encode(body).decode("ascii")
-            script = (
-                "$ErrorActionPreference='Stop';"
-                f"$b=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'));"
-                "try{$r=Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/chat' "
-                "-Method Post -ContentType 'application/json' -Body $b -TimeoutSec 90;"
-                "$j=$r|ConvertTo-Json -Depth 10 -Compress}"
-                "catch{$j=@{_jarvis_error=[string]$_.Exception.Message}|ConvertTo-Json -Compress};"
-                "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($j))")
-            data = ps_json(script, timeout=100)
-    if isinstance(data, dict) and not data.get("_jarvis_error"):
-        text = str((data.get("message") or {}).get("content") or "").strip()
-        return text or "The local model returned no answer.", "ollama"
-    error = ((data or {}).get("_jarvis_error") if isinstance(data, dict) else None)
-    if not error:
-        error = direct_error
+    user = "<DATA>" + json.dumps(context) + "</DATA>\nQUESTION: " + question[:2000]
+    text, error = llm.chat(conf, system, user)
+    if error == llm.BUSY:
+        return ("The local model is still answering another question. Try again shortly, "
+                "or ask what needs you, your score, or what changed."), "busy"
     if error:
         return ("The deterministic assistant does not know that question, and the local "
-                f"Ollama model `{model}` is unavailable: {error}."), "unavailable"
-    return (f"The local Ollama model `{model}` returned an invalid response.", "unavailable")
+                f"Ollama model `{llm.model_name(conf)}` is unavailable: {error}."), "unavailable"
+    return text, "ollama"
 
 
 def answer(store, question, conf=None, jobs=None):
@@ -171,12 +126,5 @@ def answer(store, question, conf=None, jobs=None):
         return {"answer": ("Confirmation changes JARVIS state. Use the exact command shown by "
                            "`jarvis answer` or `jarvis ack <id> --reason \"...\"` after you "
                            "verify the finding."), "source": "builtin"}
-    if not _MODEL_LOCK.acquire(blocking=False):
-        return {"answer": ("The local model is still answering another question. Try again "
-                           "shortly, or ask what needs you, your score, or what changed."),
-                "source": "busy"}
-    try:
-        text, source = _ollama(store, question, conf)
-    finally:
-        _MODEL_LOCK.release()
+    text, source = _ollama(store, question, conf)
     return {"answer": text, "source": source}
