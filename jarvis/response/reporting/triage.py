@@ -77,6 +77,16 @@ def _classify(finding, job):
     inspect = command_for(job) if job else ""
     repair = f.get("remediation") or {}
 
+    # The response ladder had its say first. An action JARVIS already took is
+    # its to explain (with the undo); one it proposed is yours to approve.
+    guard = f.get("defense") or {}
+    if guard.get("rung") == "auto" and guard.get("status") == "applied":
+        return _r(JARVIS, f"JARVIS contained this automatically ({guard.get('detail', 'done')}). "
+                          f"Undo if it was a false alarm.", guard.get("undo", ""))
+    if guard.get("rung") == "propose":
+        return _r(YOU_DO, "JARVIS can contain this for you — approve it to run the reversible "
+                          f"action: {guard.get('preview', '')}", guard.get("approve", ""))
+
     if repair.get("status") in ("verified", "attempting"):
         return _r(JARVIS, repair.get("reason") or "Automatic repair in progress.", inspect)
     if repair.get("status") in ("failed", "blocked"):

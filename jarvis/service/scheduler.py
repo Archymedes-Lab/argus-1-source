@@ -14,7 +14,7 @@ import traceback
 
 from jarvis.core import collection
 from jarvis.core.store import Store
-from jarvis.response import alert, remediation
+from jarvis.response import alert, defense, remediation
 from jarvis.response.reporting import notifications
 from jarvis.service import sdnotify
 from jarvis.service.jobs import run_job
@@ -98,9 +98,16 @@ class Scheduler(threading.Thread):
                     with collection.observe() as observation:
                         findings = run_job(name, self.hosts, self.db_path)
                     err = observation.error
+                    conf = alert.load_conf()
                     findings, err = remediation.process(
-                        store, alert.load_conf(), name, findings, err,
+                        store, conf, name, findings, err,
                         lambda: run_job(name, self.hosts, self.db_path))
+                    # The response ladder: contain what is safe to contain
+                    # (only when enabled), propose the rest. Never fatal.
+                    try:
+                        findings = defense.process(store, conf, name, findings)
+                    except Exception:
+                        pass
                     store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
                 except Exception:
                     # One broken collector must never stop the other six.

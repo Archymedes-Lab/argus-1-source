@@ -1,0 +1,100 @@
+"""Quarantine a dropped file: move it out of reach, keep it for evidence.
+
+Deleting a suspected payload destroys the one copy an investigation needs and
+cannot be undone if the detection was wrong. Quarantine is the reversible
+alternative: the file is copied into an evidence case, then moved into a
+locked store where nothing can execute or open it, leaving a marker where it
+was. Undo puts it back byte for byte.
+"""
+
+import json
+import os
+import shutil
+import stat
+import time
+
+from jarvis.response.evidence.paths import STATE_ROOT
+
+from .base import AUTO, Action, register
+
+QUARANTINE_DIR = os.path.join(STATE_ROOT, "quarantine")
+
+
+def _store_dir():
+    os.makedirs(QUARANTINE_DIR, exist_ok=True)
+    os.chmod(QUARANTINE_DIR, 0o700)
+    return QUARANTINE_DIR
+
+
+@register
+class QuarantineFile(Action):
+    id = "quarantine_file"
+    title = "Quarantine a dropped file"
+    autonomy = AUTO
+    reversible = True
+    host = "wsl"
+    enable_flag = "auto_quarantine"
+
+    def match(self, finding, job):
+        # Only files that actually exist on the Linux side, named by a
+        # threat-intel path match or a staged-executable finding.
+        if (finding or {}).get("host") != "wsl":
+            return None
+        path = (finding or {}).get("where") or ""
+        if not path.startswith("/") or not os.path.isfile(path):
+            return None
+        # Never touch a package-owned or system path: those are not drops.
+        real = os.path.realpath(path)
+        if real.startswith(("/usr/", "/bin/", "/sbin/", "/lib/", "/etc/", "/boot/")):
+            return None
+        return {"path": path}
+
+    def evidence(self, target):
+        return [target["path"]]
+
+    def preview(self, target):
+        return (f"Move {target['path']} into the locked quarantine store and "
+                f"leave a marker in its place. Reversible.")
+
+    def apply(self, target, case):
+        path = target["path"]
+        if not os.path.isfile(path):
+            return False, {}, "file is no longer there"
+        try:
+            st = os.stat(path)
+            token = f"{int(time.time())}-{os.getpid()}-{os.path.basename(path)}"
+            dst = os.path.join(_store_dir(), token)
+            shutil.move(path, dst)
+            os.chmod(dst, 0o400)
+            record = {"path": path, "stored": dst, "mode": stat.S_IMODE(st.st_mode),
+                      "uid": st.st_uid, "gid": st.st_gid, "at": int(time.time())}
+            marker = path + ".jarvis-quarantined"
+            try:
+                with open(marker, "w") as fh:
+                    json.dump({"quarantined": record["at"], "stored": dst,
+                               "restore": "jarvis defend undo (see the email)"}, fh)
+            except OSError:
+                marker = ""
+            record["marker"] = marker
+            return True, record, f"quarantined to {dst}"
+        except OSError as exc:
+            return False, {}, f"could not quarantine: {exc.strerror or exc}"
+
+    def undo(self, target, record):
+        stored = record.get("stored")
+        path = record.get("path")
+        if not stored or not os.path.isfile(stored):
+            return False, "the quarantined copy is gone"
+        if os.path.exists(path):
+            return False, f"{path} exists again; not overwriting it"
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            shutil.move(stored, path)
+            if record.get("mode"):
+                os.chmod(path, record["mode"])
+            marker = record.get("marker")
+            if marker and os.path.exists(marker):
+                os.remove(marker)
+            return True, f"restored {path}"
+        except OSError as exc:
+            return False, f"could not restore: {exc.strerror or exc}"

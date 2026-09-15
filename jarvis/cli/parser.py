@@ -50,6 +50,7 @@ from .commands import (
     cmd_watch,
     cmd_webshell,
 )
+from .commands import defend as defend_cli
 from .commands import evidence as evidence_cli
 from .commands import impersonation as impersonation_cli
 from .commands import pixel as pixel_cli
@@ -68,6 +69,7 @@ def build_parser():
     sub = p.add_subparsers(dest="cmd", required=True)
     repair_cli.add_parser(sub)
     ack_cli.add_parser(sub)
+    defend_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
     b.add_argument("--reset", action="store_true",
