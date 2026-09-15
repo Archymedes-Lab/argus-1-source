@@ -18,6 +18,8 @@ the daemon retries on its own. Anything unrecognised defaults to you_confirm:
 an unhandled finding must never read as taken care of.
 """
 
+import os
+
 from jarvis.response import acknowledge, alert, fixit, remediation
 
 from .commands import command_for
@@ -95,23 +97,32 @@ def _classify(finding, job):
     fix = fixit.suggest(f)
     if category == "present" or job == "secrets":
         path = where.split(":")[0]
-        on_path = (lambda cmd: f"{cmd} {path}" if path else "")
+        private = _owner_only(path)
+        # Only a verified owner-only mode drops the step; unknown keeps it.
+        tighten = f"chmod 600 {path}" if path and private is not True else ""
         if "/.claude/paste-cache/" in path:
             return _r(YOU_DO, "A pasted copy of a secret sits in the Claude paste cache. "
                               "Delete the cached file; the original is unaffected.",
-                      on_path("rm"))
+                      f"rm {path}" if path else "")
         if any(marker in path for marker in _TOOL_STORES):
-            return _r(YOU_DO, "This is a tool's own credential store, so leave the secret "
-                              "where the tool reads it, but make sure only you can read the "
-                              "file (and sign out of the tool if you no longer use it).",
-                      on_path("chmod 600"))
+            if private is not True:
+                return _r(YOU_DO, "This is a tool's own credential store. Keep the secret where "
+                                  "the tool reads it, but make sure only you can read the file.",
+                          tighten)
+            return _r(YOU_CONFIRM, "This is a tool's own credential store and it is already "
+                                   "readable only by you. If you still use the tool, that is the "
+                                   "expected place for its token: confirm it. If not, sign out "
+                                   "of the tool so the token is revoked.", "")
         if "private key" in title:
-            return _r(YOU_DO, "Add a passphrase to this key (or delete it if unused).",
-                      on_path("ssh-keygen -p -f"))
+            return _r(YOU_DO, "Add a passphrase to this key (or delete it if unused)"
+                              + ("; the file is also readable by others." if private is False else "."),
+                      (f"{tighten} && " if tighten else "") + (f"ssh-keygen -p -f {path}" if path else ""))
         return _r(YOU_DO, "Rotate this credential at its provider, then move it out of the "
-                          "plaintext file (a secret manager or an env var loaded at runtime) "
-                          "and restrict the file to your account.",
-                  on_path("chmod 600"))
+                          "plaintext file (a secret manager, or an environment variable loaded "
+                          "at runtime)"
+                          + (". The file is already readable only by you." if private is True
+                             else " and make sure only you can read the file."),
+                  tighten)
     if job == "firewall" and category == "rules":
         return _r(YOU_DO, "Remove or narrow this inbound rule. Changing the firewall needs "
                           "Windows administrator approval, which JARVIS does not have.",
@@ -132,6 +143,17 @@ def _classify(finding, job):
                                "the next time the tool runs.", inspect)
     return _r(YOU_CONFIRM, "Confirm whether this was you. Inspect it first; do not delete "
                            "anything based on this alone.", inspect)
+
+
+def _owner_only(path):
+    """True/False for a local file's permissions; None when it cannot be checked
+    (a Windows path, or a file that is gone)."""
+    if not path or not path.startswith("/"):
+        return None
+    try:
+        return os.stat(path).st_mode & 0o077 == 0
+    except OSError:
+        return None
 
 
 def _r(owner, action, command):

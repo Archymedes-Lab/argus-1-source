@@ -32,21 +32,52 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(self.owner(f("visibility", "medium", "running unprivileged"), "coverage"),
                          triage.JARVIS)
 
-    def test_plaintext_secrets_are_your_task_with_the_file_in_the_command(self):
+    def secret_file(self, rel, mode):
+        import os
+        import tempfile
+        self._tmp = getattr(self, "_tmp", None) or tempfile.TemporaryDirectory()
+        path = os.path.join(self._tmp.name, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").write("x")
+        os.chmod(path, mode)
+        return path
+
+    def tearDown(self):
+        if getattr(self, "_tmp", None):
+            self._tmp.cleanup()
+
+    def test_plaintext_secrets_are_your_task(self):
+        path = self.secret_file("app/.env", 0o644)
         t = triage.classify(f("present", "critical", "OpenAI API key in plaintext",
-                              where="/home/me/app/.env:3"), "secrets")
-        self.assertEqual((t["owner"], t["command"]), (triage.YOU_DO, "chmod 600 /home/me/app/.env"))
+                              where=f"{path}:3"), "secrets")
+        self.assertEqual((t["owner"], t["command"]), (triage.YOU_DO, f"chmod 600 {path}"))
         self.assertIn("Rotate", t["action"])
 
-    def test_tool_credential_stores_are_kept_private_not_moved(self):
+    def test_no_chmod_advice_for_a_file_that_is_already_private(self):
+        path = self.secret_file("app/.env", 0o600)
+        t = triage.classify(f("present", "critical", "OpenAI API key in plaintext",
+                              where=f"{path}:3"), "secrets")
+        self.assertEqual((t["owner"], t["command"]), (triage.YOU_DO, ""))
+        self.assertIn("already readable only by you", t["action"])
+
+    def test_a_private_tool_credential_store_is_a_confirmation(self):
+        path = self.secret_file(".config/gh/hosts.yml", 0o600)
         t = triage.classify(f("present", "critical", "GitHub token in plaintext",
-                              where="/home/me/.config/gh/hosts.yml:4"), "secrets")
+                              where=f"{path}:4"), "secrets")
+        self.assertEqual(t["owner"], triage.YOU_CONFIRM)
         self.assertIn("tool's own credential store", t["action"])
 
+    def test_an_exposed_tool_credential_store_is_a_task(self):
+        path = self.secret_file(".config/gh/hosts.yml", 0o644)
+        t = triage.classify(f("present", "critical", "GitHub token in plaintext",
+                              where=f"{path}:4"), "secrets")
+        self.assertEqual((t["owner"], t["command"]), (triage.YOU_DO, f"chmod 600 {path}"))
+
     def test_unencrypted_private_keys_get_a_passphrase_command(self):
+        path = self.secret_file(".ssh/id_ed25519", 0o600)
         t = triage.classify(f("present", "high", "private key block (unencrypted) stored locally",
-                              where="/home/me/.ssh/id_ed25519:1"), "secrets")
-        self.assertEqual(t["command"], "ssh-keygen -p -f /home/me/.ssh/id_ed25519")
+                              where=f"{path}:1"), "secrets")
+        self.assertEqual(t["command"], f"ssh-keygen -p -f {path}")
 
     def test_no_location_means_no_half_command(self):
         t = triage.classify(f("present", "critical", "API key in plaintext"), "secrets")
