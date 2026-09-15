@@ -123,7 +123,7 @@ class DesktopSessionTests(unittest.TestCase):
         from unittest import mock
 
         helper = importlib.import_module("jarvis.collectors.host.inputwatch.helper")
-        with mock.patch.object(helper, "running", return_value=[]), \
+        with mock.patch.object(helper, "helper_count", return_value=0), \
              mock.patch.object(helper, "_lock_path", return_value=os.path.join(self.tmp.name, "l")), \
              mock.patch.object(helper.collect_windows, "available", return_value=True), \
              mock.patch.object(helper.collect_windows, "desktop_interop", return_value=""), \
@@ -131,6 +131,19 @@ class DesktopSessionTests(unittest.TestCase):
             err = helper.start()
         self.assertIn("desktop session", err)
         run.assert_not_called()
+
+    def test_start_never_launches_beside_an_existing_or_uncountable_helper(self):
+        from unittest import mock
+
+        helper = importlib.import_module("jarvis.collectors.host.inputwatch.helper")
+        for count, expected in ((1, "already running"), (-1, "possible duplicate")):
+            with self.subTest(count=count), \
+                 mock.patch.object(helper, "helper_count", return_value=count), \
+                 mock.patch.object(helper.collect_windows, "desktop_interop") as desktop, \
+                 mock.patch.object(helper.subprocess, "run") as run:
+                self.assertIn(expected, helper.start())
+                desktop.assert_not_called()
+                run.assert_not_called()
 
     def test_desktop_interop_picks_the_socket_that_lands_on_the_desktop(self):
         import stat

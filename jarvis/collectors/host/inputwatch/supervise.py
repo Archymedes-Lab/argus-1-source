@@ -6,7 +6,6 @@ import os
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
 from jarvis.platform import windows as collect_windows
-from jarvis.platform.windows import ps_json
 
 from .analysis import _latency_findings, _typing_findings, sort_findings
 from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, HOOK_PS1, READ_CAP, _mget_int, _sha256
@@ -18,6 +17,7 @@ from .helper import (
     _pidfile_pid,
     _staged_matches_source,
     _stop_all,
+    helper_count,
     running,
     start,
     stop,
@@ -129,25 +129,6 @@ def _jsonl_size(store):
         _w, wsl_out = _paths()
         return os.path.getsize(wsl_out)
     except OSError:
-        return -1
-
-
-def _helper_count():
-    """How many hook helpers are actually running. >1 is unexpected.
-
-    Excludes this query's own shell — its command line contains the script
-    name too, which is the trap the pid-file approach in `running()` was
-    written to avoid.
-    """
-    d = ps_json(
-        "$n = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\""
-        " | Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and "
-        "$_.ProcessId -ne $PID }).Count;"
-        "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
-        "(ConvertTo-Json @{n=$n})))", timeout=60)
-    try:
-        return int((d or {}).get("n"))
-    except (TypeError, ValueError):
         return -1
 
 
@@ -299,7 +280,7 @@ def supervise(store, deep=False):
     # Frozen for MISS_LIMIT passes. Confirm across the interop boundary.
     alive = bool(running())
     pid = _pidfile_pid()
-    helpers = _helper_count()
+    helpers = helper_count()
     if helpers > 1:
         _stop_all()
         alive = False
@@ -316,7 +297,7 @@ def supervise(store, deep=False):
             f"pid {pid} is alive, yet its pulse, output file and heartbeat have "
             f"all been frozen for {misses} passes — the low-level hook was "
             f"removed or the message loop is stuck. Cycling it", "inputwatch"))
-        stop()
+        _stop_all()
         alive = False
 
     if not collect_windows.available():

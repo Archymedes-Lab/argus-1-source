@@ -85,6 +85,26 @@ def running():
     return [pid] if (d or {}).get("ok") else []
 
 
+def helper_count():
+    """How many hook helpers are running on Windows right now; -1 if unknown.
+
+    Asked of the process table itself, not the pid file: the helper writes that
+    only once its hook is installed, and every "is it up?" decision taken in
+    that gap launched a duplicate. Excludes this query's own shell, whose
+    command line names the script too.
+    """
+    d = ps_json(
+        "$n = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\""
+        " | Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and "
+        "$_.ProcessId -ne $PID }).Count;"
+        "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
+        "(ConvertTo-Json @{n=$n})))", timeout=60)
+    try:
+        return int((d or {}).get("n"))
+    except (TypeError, ValueError):
+        return -1
+
+
 def _lock_path():
     _win, wsl_out = _paths()
     return os.path.splitext(wsl_out)[0] + ".starting"
@@ -93,13 +113,16 @@ def _lock_path():
 def start():
     """Launch the hook helper, hidden and detached. Returns "" on success.
 
-    Guarded by a short-lived lock file. `running()` reads the pid file, which
-    the helper does not write until its hook is installed a few seconds in, so
-    two supervise cycles racing through that window would each launch a helper
-    — which is exactly the duplicate-process condition the watchdog then flags.
+    Refuses while any helper exists (or the count cannot be taken): the pid
+    file appears only once a hook is installed, and deciding from it launched
+    duplicates. The short-lived lock file covers the moment between counting
+    and the new process appearing, when two callers could both count zero.
     """
-    if running():
+    count = helper_count()
+    if count > 0:
         return "already running"
+    if count < 0:
+        return "could not count running helpers; not starting a possible duplicate"
     try:
         age = now() - os.path.getmtime(_lock_path())
         if age < 45:
@@ -169,7 +192,8 @@ def _stop_all():
         "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
         "Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and "
         "$_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id "
-        "$_.ProcessId -Force -EA SilentlyContinue };"
+        "$_.ProcessId -Force -EA SilentlyContinue; Wait-Process -Id $_.ProcessId "
+        "-Timeout 5 -EA SilentlyContinue };"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(ConvertTo-Json @{ok=1})))", timeout=90)
     for p in (_pid_path(), _alive_path(), _lock_path()):

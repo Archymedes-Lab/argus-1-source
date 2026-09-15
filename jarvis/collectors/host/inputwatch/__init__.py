@@ -30,6 +30,7 @@ from .helper import (
                        _staged_matches_source,
                        _stop_all,
                        ensure,
+                       helper_count,
                        running,
                        start,
                        stop,
@@ -38,7 +39,6 @@ from .ingest import ingest
 from .supervise import (
                        _dupes,
                        _flap_finding,
-                       _helper_count,
                        _jsonl_size,
                        _verify_pin,
                        liveness,
