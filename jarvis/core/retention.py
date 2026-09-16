@@ -45,6 +45,14 @@ class Policy:
 # sighting is worth a fortnight, a high-severity one worth half a year, and a
 # critical one is never removed on age alone.
 POLICIES = [
+    Policy("defender-runs", "defender_runs", 30,
+           "observed_at < ? AND sequence NOT IN "
+           "(SELECT MAX(sequence) FROM defender_runs GROUP BY job) "
+           "AND run_id NOT IN (SELECT last_run_id FROM defender_incidents) "
+           "AND NOT EXISTS (SELECT 1 FROM defender_transitions "
+           "WHERE defender_transitions.run_id=defender_runs.run_id)",
+           "routine collector receipts; preserve latest coverage and every "
+           "receipt referenced by incident history"),
     Policy("events-low", "events", 14,
            "ts < ? AND severity = 'low'",
            "routine sightings; the process baseline already records what ran"),

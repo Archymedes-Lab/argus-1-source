@@ -110,6 +110,56 @@ CREATE TABLE IF NOT EXISTS history (
 
 CREATE INDEX IF NOT EXISTS idx_history_ts ON history(ts DESC);
 
+-- Collector receipts and incident memory are independent of email delivery
+-- and the replaceable dashboard snapshots. A receipt and all of its incident
+-- transitions are committed together before the response layer is invoked.
+CREATE TABLE IF NOT EXISTS defender_runs (
+    sequence     INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       TEXT NOT NULL UNIQUE,
+    job          TEXT NOT NULL,
+    observed_at  REAL NOT NULL,
+    coverage     TEXT NOT NULL CHECK(coverage IN ('complete','partial','unavailable')),
+    error        TEXT NOT NULL,
+    digest       TEXT NOT NULL,
+    finding_count INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_defender_runs_job ON defender_runs(job, sequence DESC);
+CREATE INDEX IF NOT EXISTS idx_defender_runs_time ON defender_runs(observed_at);
+
+CREATE TABLE IF NOT EXISTS defender_incidents (
+    id           TEXT PRIMARY KEY,
+    job          TEXT NOT NULL,
+    host         TEXT NOT NULL,
+    category     TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    locus        TEXT NOT NULL,
+    severity     TEXT NOT NULL,
+    worst_severity TEXT NOT NULL,
+    state        TEXT NOT NULL CHECK(state IN ('active','unobserved','not_observed')),
+    first_seen   REAL NOT NULL,
+    last_seen    REAL NOT NULL,
+    updated_at   REAL NOT NULL,
+    seen_count   INTEGER NOT NULL,
+    recurrences  INTEGER NOT NULL DEFAULT 0,
+    last_run_id  TEXT NOT NULL,
+    evidence     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_defender_incidents_job ON defender_incidents(job, state);
+
+CREATE TABLE IF NOT EXISTS defender_transitions (
+    sequence     INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id  TEXT NOT NULL,
+    run_id       TEXT NOT NULL,
+    observed_at  REAL NOT NULL,
+    previous_state TEXT NOT NULL,
+    state        TEXT NOT NULL,
+    reason       TEXT NOT NULL,
+    evidence     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_defender_transitions_incident
+    ON defender_transitions(incident_id, sequence DESC);
+CREATE INDEX IF NOT EXISTS idx_defender_transitions_run ON defender_transitions(run_id);
+
 -- ── Threat intelligence ────────────────────────────────────────────────
 -- Fetched security writeups. Text is kept only long enough to extract from;
 -- what persists is the extraction, not the article.

@@ -54,6 +54,7 @@ from .commands import (
 )
 from .commands import defend as defend_cli
 from .commands import evidence as evidence_cli
+from .commands import incidents as incidents_cli
 from .commands import impersonation as impersonation_cli
 from .commands import inspect as inspect_cli
 from .commands import pixel as pixel_cli
@@ -75,6 +76,7 @@ def build_parser():
     ask_cli.add_parser(sub)
     brief_cli.add_parser(sub)
     defend_cli.add_parser(sub)
+    incidents_cli.add_parser(sub)
     inspect_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")

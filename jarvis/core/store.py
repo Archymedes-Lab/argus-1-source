@@ -3,7 +3,9 @@
 import os
 import sqlite3
 import time
+import uuid
 
+from . import incidents
 from .schema import SCHEMA
 from .util import now
 
@@ -18,10 +20,10 @@ class Store:
         self.db.row_factory = sqlite3.Row
         # The indicator tables grow into the hundreds of thousands of rows and
         # are written in large batches by the feeds while the dashboard reads
-        # from another thread. WAL keeps readers from blocking on those writes;
-        # the rest trades a little crash-durability for bulk-insert speed, which
-        # is the right trade for a cache that can be rebuilt by re-fetching.
-        for pragma in ("journal_mode=WAL", "synchronous=NORMAL",
+        # from another thread. WAL keeps readers from blocking on those writes.
+        # This database also contains response authority and incident evidence;
+        # it is not just a replaceable feed cache. FULL syncs committed WAL data.
+        for pragma in ("journal_mode=WAL", "synchronous=FULL",
                        "cache_size=-65536", "temp_store=MEMORY",
                        "mmap_size=268435456", "busy_timeout=10000"):
             try:
@@ -230,6 +232,18 @@ class Store:
         self.db.commit()
 
     # -- dashboard snapshots ------------------------------------------------
+
+    def record_observation(self, kind, findings, *, coverage="complete", error="",
+                           observed_at=None, run_id=None):
+        """Commit evidence and incident changes before downstream response."""
+        if self.db.in_transaction:
+            raise RuntimeError("observation requires a connection without pending writes")
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            return incidents.record(
+                self.db, kind, findings, run_id=run_id or uuid.uuid4().hex,
+                observed_at=time.time() if observed_at is None else observed_at,
+                coverage=coverage, error=error)
 
     def save_snapshot(self, kind, payload, duration=0.0, error=""):
         """Store the latest result for one audit, plus a severity data point."""

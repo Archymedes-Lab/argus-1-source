@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from jarvis.collectors.network import internetwatch
+from jarvis.core import incidents
 from jarvis.core.paths import STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
@@ -302,6 +303,23 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/state":
             return self._send(200, json.dumps(
                 build_state(self.db_path, self.scheduler), default=str))
+
+        if url.path == "/api/defender":
+            params = parse_qs(url.query)
+            try:
+                limit = max(1, min(500, int((params.get("limit") or ["100"])[0])))
+            except ValueError:
+                return self._send(400, json.dumps({"error": "limit must be an integer"}))
+            store = Store(self.db_path)
+            try:
+                incident_id = (params.get("id") or [""])[0]
+                result = (incidents.detail(store.db, incident_id, limit) if incident_id
+                          else incidents.overview(store.db, limit))
+            finally:
+                store.close()
+            if result is None:
+                return self._send(404, json.dumps({"error": "unknown incident"}))
+            return self._send(200, json.dumps(result))
 
         if url.path in ("/api/health", "/api/live"):
             state = health(self.db_path, self.scheduler)

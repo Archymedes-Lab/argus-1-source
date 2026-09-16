@@ -5,6 +5,10 @@ Status: restructure complete on branch `restructure/2026-09-14`, from baseline
 layout, the rules that hold it in place, and what changed from the original
 plan.
 
+For the defender engine's runtime contracts, incident foundation, and broader
+product direction, see [DEFENDER-ENGINE.md](DEFENDER-ENGINE.md). That design
+builds on the dependency boundaries recorded here.
+
 ## Layout
 
 ```

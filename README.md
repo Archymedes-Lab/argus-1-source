@@ -9,6 +9,11 @@ have put a Resend key in the config.
 
 ## Start here
 
+The [Defender Engine architecture and feature roadmap](docs/architecture/DEFENDER-ENGINE.md)
+describes JARVIS's evolution toward native protection, durable incident memory,
+data and identity defense, constrained response, and verified recovery. It
+separates implemented foundations from proposed capabilities.
+
 ```bash
 cd ~/jarvis
 ./install.sh --service   # run it 24/7, dashboard at http://127.0.0.1:8787
@@ -127,6 +132,7 @@ default-deny inbound, and non-bypassable Windows/Edge SmartScreen.
 | `ask` | Answer from current JARVIS data; use local Ollama for open questions. |
 | `brief` | JARVIS's step-by-step protocols for securing this machine, verified by fresh scans. |
 | `defend` | Show, approve or undo evidence-backed containment actions. |
+| `incidents` | What has been observed, what became unobservable, and what returned? |
 | `inspect` | Hash and scan a file or capture process context into an evidence case. |
 
 ```bash

@@ -176,6 +176,16 @@ class LadderTests(unittest.TestCase):
         self.assertTrue(os.path.exists(self.file))
         self.assertEqual(out[0]["defense"]["status"], "failed")
 
+    def test_incomplete_coverage_can_only_propose_even_with_auto_enabled(self):
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        for coverage in ("partial", "unavailable", "unknown"):
+            with self.subTest(coverage=coverage):
+                result = defense.process(self.store, conf, "hunt", [
+                    dropped(self.file, "critical", "sample match")], coverage=coverage)
+                self.assertTrue(os.path.exists(self.file))
+                self.assertEqual(result[0]["defense"]["rung"], defense.PROPOSE)
+                self.assertIn("incomplete collection", result[0]["defense"]["reason"])
+
     def test_repeated_finding_does_not_repeat_an_applied_action(self):
         conf = {"autonomous_defense": True, "auto_quarantine": True}
         finding = dropped(self.file, "critical", "sample match")

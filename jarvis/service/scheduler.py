@@ -12,7 +12,7 @@ import threading
 import time
 import traceback
 
-from jarvis.core import collection
+from jarvis.core import collection, incidents
 from jarvis.core.store import Store
 from jarvis.response import alert, defense, remediation
 from jarvis.response.reporting import notifications
@@ -92,27 +92,8 @@ class Scheduler(threading.Thread):
                     time.sleep(1)
                     continue
                 self.current = name
-                started = time.time()
-                findings, err = [], ""
                 try:
-                    with collection.observe() as observation:
-                        findings = run_job(name, self.hosts, self.db_path)
-                    err = observation.error
-                    conf = alert.load_conf()
-                    findings, err = remediation.process(
-                        store, conf, name, findings, err,
-                        lambda: run_job(name, self.hosts, self.db_path))
-                    # The response ladder: contain what is safe to contain
-                    # (only when enabled), propose the rest. Never fatal.
-                    try:
-                        findings = defense.process(store, conf, name, findings)
-                    except Exception:
-                        pass
-                    store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
-                except Exception:
-                    # One broken collector must never stop the other six.
-                    err = traceback.format_exc()[-800:]
-                    store.save_snapshot(name, [], max(0.0, time.time() - started), err)
+                    findings, err = self.run_once(store, name)
                 finally:
                     self.current = None
                     self.next_run[name] = time.time() + JOBS[name][0]
@@ -126,6 +107,46 @@ class Scheduler(threading.Thread):
                     pass
         finally:
             store.close()
+
+    def run_once(self, store, name):
+        """Collect -> durable observation -> bounded response -> presentation.
+
+        Response failure must not erase successfully collected evidence. A
+        journal failure inhibits response and is visible in the job snapshot.
+        Collectors with their own internal maintenance are not sandboxed by
+        this pipeline; the privileged broker remains a separate migration.
+        """
+        started = time.time()
+        findings, err, status = [], "", "unavailable"
+        try:
+            with collection.observe() as observation:
+                findings = list(run_job(name, self.hosts, self.db_path) or [])
+            err, status = observation.error, observation.status
+        except Exception:
+            err = traceback.format_exc()[-800:]
+
+        try:
+            receipt = store.record_observation(name, findings, coverage=status, error=err)
+        except Exception:
+            err = (err + "; defender journal failed; response inhibited: " +
+                   traceback.format_exc()[-500:]).strip("; ")
+        else:
+            try:
+                conf = alert.load_conf()
+                # An explicit visibility finding can mean incomplete coverage
+                # even when a legacy collector did not raise an exception.
+                if receipt["coverage"] != "complete" and not err:
+                    err = "collector coverage incomplete"
+                findings, err = remediation.process(
+                    store, conf, name, findings, err,
+                    lambda: run_job(name, self.hosts, self.db_path))
+                findings = defense.process(store, conf, name, findings,
+                                           coverage=incidents.coverage_status(
+                                               findings, err, receipt["coverage"]))
+            except Exception:
+                err = (err + "; response failed: " + traceback.format_exc()[-500:]).strip("; ")
+        store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
+        return findings, err
 
 
 def watchdog_loop(scheduler):

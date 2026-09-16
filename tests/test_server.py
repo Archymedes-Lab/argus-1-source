@@ -1,9 +1,15 @@
+import json
+import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import Mock, patch
 
+from jarvis.core import collection, incidents
+from jarvis.core.store import Store
 from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler
+from jarvis.web.server import Handler
 
 
 class SchedulerColdStartTests(unittest.TestCase):
@@ -66,6 +72,126 @@ class JobRegistryTests(unittest.TestCase):
         from jarvis.service import jobs
         with self.assertRaises(ValueError):
             jobs.run_job("no-such-job", ("wsl",), ":memory:")
+
+
+class DefenderPipelineTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = str(Path(self.tmp.name) / "state.db")
+        self.store = Store(self.path)
+        self.addCleanup(self.store.close)
+        self.scheduler = Scheduler(self.path, ("win",))
+        self.finding = {"host": "win", "category": "credentials", "severity": "high",
+                        "title": "untrusted reader", "where": "browser store"}
+        self.conf = patch("jarvis.service.scheduler.alert.load_conf", return_value={})
+        self.conf.start()
+        self.addCleanup(self.conf.stop)
+
+    def test_observation_is_committed_before_response_can_see_it(self):
+        def respond(store, conf, job, findings, **kwargs):
+            # A different connection proves this is committed, not just staged.
+            other = Store(self.path)
+            try:
+                self.assertEqual(incidents.overview(other.db)["counts"]["active"], 1)
+            finally:
+                other.close()
+            return findings
+
+        with patch("jarvis.service.scheduler.run_job", return_value=[self.finding]), \
+             patch("jarvis.service.scheduler.defense.process", side_effect=respond) as response:
+            findings, error = self.scheduler.run_once(self.store, "intrusion")
+        response.assert_called_once()
+        self.assertEqual(findings, [self.finding])
+        self.assertEqual(error, "")
+
+    def test_collection_failure_preserves_incident_and_marks_coverage_unavailable(self):
+        self.store.record_observation("intrusion", [self.finding], observed_at=100)
+        with patch("jarvis.service.scheduler.run_job", side_effect=OSError("bridge down")):
+            _, error = self.scheduler.run_once(self.store, "intrusion")
+        result = incidents.overview(self.store.db)
+        self.assertIn("bridge down", error)
+        self.assertEqual(result["sources"][0]["coverage"], "unavailable")
+        self.assertEqual(result["counts"]["unobserved"], 1)
+
+    def test_journal_failure_inhibits_both_response_layers(self):
+        with patch("jarvis.service.scheduler.run_job", return_value=[self.finding]), \
+             patch.object(self.store, "record_observation", side_effect=OSError("disk full")), \
+             patch("jarvis.service.scheduler.remediation.process") as repair, \
+             patch("jarvis.service.scheduler.defense.process") as response:
+            findings, error = self.scheduler.run_once(self.store, "intrusion")
+        repair.assert_not_called()
+        response.assert_not_called()
+        self.assertIn("journal failed", error)
+        self.assertEqual(findings, [self.finding])
+        self.assertIn("journal failed", self.store.get_snapshots()["intrusion"]["error"])
+
+    def test_response_exception_preserves_evidence_and_reports_error(self):
+        with patch("jarvis.service.scheduler.run_job", return_value=[self.finding]), \
+             patch("jarvis.service.scheduler.defense.process", side_effect=RuntimeError("response fault")):
+            findings, error = self.scheduler.run_once(self.store, "intrusion")
+        self.assertEqual(findings, [self.finding])
+        self.assertIn("response failed", error)
+        self.assertEqual(incidents.overview(self.store.db)["total"], 1)
+        self.assertEqual(self.store.get_snapshots()["intrusion"]["findings"], [self.finding])
+
+    def test_partial_collection_is_passed_to_authorization(self):
+        def collect(*args):
+            collection.succeeded("one provider")
+            collection.failed("another provider", "offline")
+            return [self.finding]
+
+        with patch("jarvis.service.scheduler.run_job", side_effect=collect), \
+             patch("jarvis.service.scheduler.defense.process", return_value=[self.finding]) as response:
+            self.scheduler.run_once(self.store, "intrusion")
+        self.assertEqual(response.call_args.kwargs["coverage"], "partial")
+
+    def test_failed_repair_verification_also_inhibits_automatic_defense(self):
+        with patch("jarvis.service.scheduler.run_job", return_value=[self.finding]), \
+             patch("jarvis.service.scheduler.remediation.process",
+                   return_value=([self.finding], "verification incomplete")), \
+             patch("jarvis.service.scheduler.defense.process", return_value=[self.finding]) as response:
+            self.scheduler.run_once(self.store, "intrusion")
+        self.assertEqual(response.call_args.kwargs["coverage"], "partial")
+
+
+class DefenderHTTPTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = str(Path(self.tmp.name) / "state.db")
+        store = Store(self.path)
+        store.record_observation("test", [{"severity": "high", "title": "test incident"}])
+        store.close()
+        self.handler = Handler.__new__(Handler)
+        self.handler.db_path = self.path
+        self.handler.headers = {"Host": "localhost:8787"}
+        self.handler._send = Mock()
+
+    def request(self, path):
+        self.handler.path = path
+        self.handler.do_GET()
+        return self.handler._send.call_args.args
+
+    def test_read_only_endpoint_returns_incident_memory(self):
+        status, body = self.request("/api/defender?limit=2")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["total"], 1)
+
+    def test_bad_host_cannot_read_evidence(self):
+        self.handler.headers = {"Host": "attacker.example"}
+        self.assertEqual(self.request("/api/defender")[0], 403)
+
+    def test_invalid_query_and_unknown_id_have_explicit_errors(self):
+        self.assertEqual(self.request("/api/defender?limit=no")[0], 400)
+        self.assertEqual(self.request("/api/defender?id=unknown")[0], 404)
+
+    def test_detail_includes_the_transition_evidence(self):
+        _, body = self.request("/api/defender")
+        key = json.loads(body)["incidents"][0]["id"]
+        status, detail = self.request("/api/defender?id=" + key)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(detail)["transitions"][0]["reason"], "first observation")
 
 
 if __name__ == "__main__":

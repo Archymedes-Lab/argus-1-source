@@ -53,6 +53,10 @@ machine before enabling more.
 
 Current automatic confidence rules are deliberately narrow:
 
+- the scheduler must durably record the observation before downstream response;
+  a journal failure inhibits both repair and containment, and incomplete
+  collection limits containment to proposals;
+
 - quarantine runs unattended only for an exact SHA-256 malware-sample match;
   filename and path indicators remain proposals because legitimate files can
   share them;
@@ -61,6 +65,12 @@ Current automatic confidence rules are deliberately narrow:
   finding carrying a structured collector target;
 - process suspension remains proposal-only until a collector can bind live
   process identity to independent malicious evidence.
+
+`jarvis incidents` preserves finding history independently of email delivery.
+An absent finding becomes `not_observed` after a complete result or `unobserved`
+after visibility loss; neither state claims verified remediation. See the
+[Defender Engine design](architecture/DEFENDER-ENGINE.md) for the transaction,
+coverage, and proposed native-broker contracts.
 
 Windows Firewall and machine-wide scheduled-task changes require an elevated
 Windows token. An unelevated daemon records a failed action and keeps the

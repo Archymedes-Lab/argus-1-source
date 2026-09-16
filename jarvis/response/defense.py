@@ -171,7 +171,7 @@ def _propose(store, conf, finding, job, action, target):
     return eid, entry, True
 
 
-def process(store, conf, job, findings):
+def process(store, conf, job, findings, *, coverage="complete"):
     """Run the ladder over one job's findings. Returns the findings, annotated.
 
     Each finding that reaches AUTO or PROPOSE gets a `defense` key so the
@@ -185,6 +185,10 @@ def process(store, conf, job, findings):
         if not isinstance(finding, dict):
             continue
         rung, action, target = decide(finding, job, conf, acks)
+        if rung == AUTO and coverage != "complete":
+            # A partial result can support a proposal, but it must not grant
+            # unattended authority. The scheduler supplies the durable receipt.
+            rung = PROPOSE
         if rung == AUTO:
             eid = _entry_id(action.id, finding, job)
             existing = load(store).get(eid)
@@ -217,6 +221,8 @@ def process(store, conf, job, findings):
                 finding["defense"] = {"rung": PROPOSE, "id": eid, "action": action.id,
                                       "preview": entry["preview"],
                                       "approve": f"jarvis defend approve {eid}"}
+                if coverage != "complete":
+                    finding["defense"]["reason"] = "incomplete collection; automatic response inhibited"
     return findings
 
 
