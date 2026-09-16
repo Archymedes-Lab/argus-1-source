@@ -165,3 +165,93 @@ class ProtocolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ActionPlanTests(unittest.TestCase):
+    """The on-request email: every manual task, steps by hand, notes by model."""
+
+    ON = {"email_voice": True}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = Store(os.path.join(self.tmp.name, "t.db"))
+        self.store.save_snapshot("posture", [SECURE_BOOT_OFF, NOT_ENCRYPTED])
+        self.store.save_snapshot("evasion", [HVCI_OFF])
+
+    def tearDown(self):
+        self.store.close()
+        self.tmp.cleanup()
+
+    def plan(self, reply):
+        from unittest import mock
+
+        from jarvis.response import llm
+        state = protocols.evaluate(self.store, SCHEDULE)
+        result = score.compute(self.store.get_snapshots(), SCHEDULE)
+        with mock.patch.object(llm, "chat", return_value=reply):
+            return emails.action_plan(result, state, self.store.get_snapshots(),
+                                      int(time.time()), self.store, self.ON)
+
+    def test_every_task_arrives_in_order_with_all_its_steps(self):
+        _s, text, _h, _n = self.plan(("", "offline"))
+        order = [text.index(t) for t in ("Task 1 · Switch on Secure Boot",
+                                         "Task 2 · Bring Memory Integrity",
+                                         "Task 3 · Encrypt the system drive")]
+        self.assertEqual(order, sorted(order))
+        for step in (*protocols.BY_ID["secure-boot"].steps,
+                     *protocols.BY_ID["disk-encryption"].steps):
+            self.assertIn(step, text)
+
+    def test_model_notes_are_marked_and_counted(self):
+        subject, text, html, personalized = self.plan(("A worthwhile trip into the firmware.", ""))
+        self.assertIn("[local model] A worthwhile trip into the firmware.", text)
+        self.assertIn("— local model", html)
+        self.assertGreaterEqual(personalized, 3)
+        self.assertIn("action plan", subject)
+
+    def test_model_offline_falls_back_to_hand_written_briefs(self):
+        _s, text, _h, personalized = self.plan(("", "offline"))
+        self.assertEqual(personalized, 0)
+        self.assertIn(protocols.BY_ID["secure-boot"].brief, text)
+        self.assertNotIn("[local model]", text)
+
+    def test_a_blocked_task_is_never_urged_on_today(self):
+        from unittest import mock
+
+        from jarvis.response import llm
+        from jarvis.response.reporting import voice
+        blocked = self.states_by_id()["disk-encryption"]
+        with mock.patch.object(llm, "chat", return_value=("Encrypt it right now.", "")):
+            note, by_model = voice.task_note(self.ON, blocked)
+        self.assertFalse(by_model)
+        self.assertEqual(note, protocols.BY_ID["disk-encryption"].brief)
+
+    def test_a_note_claiming_the_task_is_done_is_rejected(self):
+        from unittest import mock
+
+        from jarvis.response import llm
+        from jarvis.response.reporting import voice
+        ready = self.states_by_id()["secure-boot"]
+        for claim in ("Secure Boot is now switched on, a hurdle cleared.",
+                      "With that done, the boot chain is checked.",
+                      "A trio of features waits on this."):
+            with self.subTest(claim=claim), \
+                 mock.patch.object(llm, "chat", return_value=(claim, "")):
+                self.assertEqual(voice.task_note(self.ON, ready)[1], False)
+
+    def test_task_examples_pass_the_rules_they_teach(self):
+        import json
+
+        from jarvis.response.reporting import voice
+        for asked, answered in voice.TASK_EXAMPLES:
+            facts = json.loads(asked)
+            with self.subTest(note=answered):
+                self.assertTrue(voice._within_rules(answered, facts))
+                self.assertIsNone(voice._DONE.search(answered))
+
+    def test_findings_a_task_resolves_are_not_listed_twice(self):
+        _s, text, _h, _n = self.plan(("", "offline"))
+        self.assertEqual(text.count("Secure Boot is off"), 1)
+
+    def states_by_id(self):
+        return {i["protocol"].id: i for i in protocols.evaluate(self.store, SCHEDULE)}

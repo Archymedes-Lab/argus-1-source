@@ -198,3 +198,72 @@ def health_email(store, conf, now=None, jobs=None):
     subject, text, html = health(result, score.change_since(store, 86400, now),
                                  store.get_snapshots(), now, store, conf, state)
     return alert.send_email(conf, subject, text, html=html)
+
+
+# ── the action plan: everything that needs your hands ─────────────────────
+
+def action_plan(result, protocol_state, snapshots, now, store=None, conf=None, delta=None):
+    """-> (subject, text, html, personalized) for the on-request action plan email.
+
+    Every open protocol in the order it has to happen, each with its full
+    hand-written steps, then the other critical and high findings only you can
+    act on. The local model writes the opening note and one line per task on
+    why it matters; each is checked before use, and the steps are never its.
+    `personalized` counts the lines the model wrote that passed.
+    """
+    tasks = [i for i in protocol_state
+             if i["state"] in (protocols.READY, protocols.WAITING, protocols.BLOCKED)]
+    acks = acknowledge.load(store) if store is not None else {}
+    others, seen = [], set()
+    for f, job in triage.current(snapshots, levels=("critical", "high"), acks=acks, now=now):
+        if (job, f.get("title")) in seen or any(i["protocol"].fixes(job, f) for i in tasks):
+            continue
+        seen.add((job, f.get("title")))
+        others.append((f, job, ""))
+    others = _grouped(others)[triage.YOU_DO]
+
+    total = len(tasks) + len(others)
+    subject = f"[JARVIS] your action plan — {total} thing{'s' if total != 1 else ''} need your hands"
+    day = time.strftime("%Y-%m-%d", time.localtime(now))
+    line, by_model = voice.opener(conf, voice.facts_for(
+        "action plan", {triage.YOU_DO: total}, False, result, delta,
+        top=[i["protocol"].title for i in tasks]), day)
+    personalized = int(by_model)
+
+    text = ["JARVIS ACTION PLAN", f"{len(tasks)} protocol(s) in order, then "
+            f"{len(others)} other matter(s) for your hands", "", line, ""]
+    inner = ui.header("JARVIS · action plan", "What needs your hands, in order",
+                      time.strftime("%A %d %B", time.localtime(now)))
+    inner += ui.voice(line, by_model)
+
+    for n, item in enumerate(tasks, 1):
+        note, note_by_model = voice.task_note(conf, item)
+        personalized += int(note_by_model)
+        lines = protocols.email_lines(item)
+        lines[0] = f"Task {n} · {lines[0]}"
+        lines[1] = note
+        text += [RULE, lines[0], (f"[local model] {note}" if note_by_model else note),
+                 *lines[2:], ""]
+        inner += ui.briefing(lines, model_note=note_by_model)
+
+    if others:
+        text += _text_group(triage.YOU_DO, others, limit=15)
+        inner += ui.owner_section(triage.YOU_DO, others, limit=15)
+
+    footer = ("The steps are written by hand; only the italic notes marked \u201clocal model\u201d "
+              "come from the model. After each task, run jarvis brief check <task> — a task counts as done "
+              "only when a fresh scan agrees.")
+    text += ["", footer]
+    inner += ui.footer(footer)
+    return subject, "\n".join(text) + "\n", ui.document(subject, line, inner), personalized
+
+
+def action_plan_email(store, conf, jobs, now=None):
+    """Build and send the action plan. -> (error or "", subject, personalized lines)."""
+    now = int(time.time() if now is None else now)
+    result = score.latest(store) or score.compute(store.get_snapshots(), jobs, now,
+                                                  acknowledge.load(store))
+    subject, text, html, personalized = action_plan(
+        result, protocols.evaluate(store, jobs, now), store.get_snapshots(), now, store, conf,
+        score.change_since(store, 86400, now))
+    return alert.send_email(conf, subject, text, html=html), subject, personalized

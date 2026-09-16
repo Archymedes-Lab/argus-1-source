@@ -5,6 +5,7 @@
     jarvis brief show <id>       the full briefing and steps
     jarvis brief yes|no [<id>]   answer the question JARVIS is waiting on
     jarvis brief check [<id>]    have the daemon re-run the verifying collectors
+    jarvis brief email           mail yourself the full action plan, personalised
 """
 
 import json
@@ -12,7 +13,8 @@ import time
 import urllib.error
 import urllib.request
 
-from jarvis.response import protocols
+from jarvis.response import alert, protocols
+from jarvis.response.reporting import emails
 from jarvis.service.schedule import JOBS
 
 from ..output import color, is_tty
@@ -71,6 +73,20 @@ def cmd_brief(args, store):
         print(message)
         return 0 if ok else 1
 
+    if action == "email":
+        conf = alert.load_conf()
+        if not alert.enabled(conf):
+            print("email is not configured (see alert settings in ~/.jarvis/config.json)")
+            return 1
+        print("composing the action plan — the local model writes the notes, "
+              "this can take a minute", flush=True)
+        err, subject, personalized = emails.action_plan_email(store, conf, JOBS)
+        if err:
+            print(f"not sent: {err}")
+            return 1
+        print(f"sent: {subject}  ({personalized} line(s) personalised by the local model)")
+        return 0
+
     if action == "list":
         for item in protocols.evaluate(store, JOBS):
             p = item["protocol"]
@@ -101,7 +117,7 @@ def cmd_brief(args, store):
 def add_parser(sub):
     p = sub.add_parser("brief", help="JARVIS's step-by-step protocols for securing this machine")
     p.add_argument("action", nargs="?", default="next",
-                   choices=["next", "list", "show", "yes", "no", "check"])
+                   choices=["next", "list", "show", "yes", "no", "check", "email"])
     p.add_argument("id", nargs="?", help="protocol id (default: the one JARVIS raises now)")
     p.add_argument("--port", type=int, default=8787, help="port of the running jarvis serve")
     p.set_defaults(fn=cmd_brief)

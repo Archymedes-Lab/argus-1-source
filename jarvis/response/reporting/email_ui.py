@@ -286,12 +286,22 @@ def _is_command(line):
             or " | " in stripped and stripped.startswith("jarvis"))
 
 
-def briefing(lines):
-    """JARVIS's protocol for today: the rendered briefing lines, commands in mono."""
+def briefing(lines, model_note=False):
+    """A protocol briefing: its rendered lines, commands in mono.
+
+    With `model_note`, the second line was written by the local model and is set
+    apart in italics with a credit, so a reader can always tell it from the
+    hand-written steps."""
     title = lines[0].rsplit("[", 1)[0].strip()
-    body = "".join(
-        f'<div {tw(_BRIEF_MONO if _is_command(line) else "text-sm text-slate-700 mt-2 leading-relaxed")}>'
-        f"{esc(line.strip())}</div>" for line in lines[1:])
+
+    def row(index, line):
+        if model_note and index == 1:
+            return (f'<div {tw("text-sm text-slate-700 mt-2 leading-relaxed", "font-style:italic")}>'
+                    f'{esc(line.strip())} <span {tw("text-xs text-slate-500")}>— local model</span></div>')
+        style = _BRIEF_MONO if _is_command(line) else "text-sm text-slate-700 mt-2 leading-relaxed"
+        return f'<div {tw(style)}>{esc(line.strip())}</div>'
+
+    body = "".join(row(i, line) for i, line in enumerate(lines) if i)
     return section(
         f'<div {tw("rounded-xl border-l-4 border-l-violet-600 bg-violet-50 px-4 py-3")}>'
         + heading("JARVIS briefing", title) + body + "</div>")

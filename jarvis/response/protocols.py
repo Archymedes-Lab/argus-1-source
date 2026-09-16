@@ -237,6 +237,7 @@ def evaluate(store, schedule, now=None):
         states[p.id] = state
         out.append({
             "protocol": p, "state": state, "open": len(open_findings), "blockers": blockers,
+            "blocker_titles": [BY_ID[b].title for b in blockers],
             "question": pending, "declined": declined,
             "score_now": current,
             "score_after": (_projected_score([p], snapshots, schedule, acks, now)
