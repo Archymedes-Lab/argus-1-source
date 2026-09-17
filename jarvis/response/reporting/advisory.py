@@ -353,6 +353,7 @@ def advisory_report(store, jobs):
             lines.extend([
                 f"[{f.get('severity', '?').upper()}] {f.get('title', '')}",
                 f"  {f.get('detail', '')}",
+                *(f"    {line}" for line in f.get("forensics") or ()),
                 f"  source: {f.get('job')} snapshot {_age(f.get('snapshot_age', 0))} old"
                 + (f"; where: {f.get('where')}" if f.get("where") else ""),
             ])

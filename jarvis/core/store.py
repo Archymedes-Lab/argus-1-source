@@ -51,6 +51,12 @@ class Store:
                 self.db.execute(
                     f"ALTER TABLE input_typing_windows ADD COLUMN {col} "
                     "INTEGER NOT NULL DEFAULT 0")
+        events = {r[1] for r in self.db.execute("PRAGMA table_info(input_events)")}
+        for col, decl in (("ms", "INTEGER NOT NULL DEFAULT 0"),
+                          ("burst", "TEXT NOT NULL DEFAULT ''"),
+                          ("record", "TEXT NOT NULL DEFAULT ''")):
+            if col not in events:
+                self.db.execute(f"ALTER TABLE input_events ADD COLUMN {col} {decl}")
         have = {r[1] for r in self.db.execute("PRAGMA table_info(indicators)")}
         for col, decl in (("source", "TEXT NOT NULL DEFAULT 'exa'"),
                           ("malware", "TEXT DEFAULT ''")):

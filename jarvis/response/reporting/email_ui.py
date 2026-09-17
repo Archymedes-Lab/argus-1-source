@@ -235,6 +235,22 @@ def owner_summary(counts, confirmed=0):
             f'<tr>{"".join(cells)}</tr></table>{note}')
 
 
+def forensics_block(lines):
+    """A finding's forensic reconstruction, in full.
+
+    Never truncated and shown even where detail is suppressed: an alert about
+    injected input is only answerable with the exact key, target and suspects
+    in front of you, and the email is where that question gets asked."""
+    if not lines:
+        return ""
+    rows = "".join(
+        f'<div {tw("font-mono text-xs text-slate-800 leading-snug break-words", "white-space:pre-wrap")}>'
+        f"{esc(line)}</div>" for line in lines)
+    return (f'<div {tw("rounded-lg border border-slate-200 bg-slate-50 p-3 mt-3")}>'
+            f'<div {tw("text-xs font-semibold text-slate-600 mb-1")}>Forensic reconstruction</div>'
+            f"{rows}</div>")
+
+
 def finding_card(finding, job, triage_result, tag="", detail_limit=240, show_detail=True):
     f = finding or {}
     style = OWNER_STYLE[triage_result["owner"]]
@@ -251,6 +267,7 @@ def finding_card(finding, job, triage_result, tag="", detail_limit=240, show_det
         + (f'<div {tw("text-sm text-slate-600 mt-1 leading-relaxed break-words")}>{esc(detail)}</div>'
            if show_detail and detail else "")
         + (f'<div {tw("text-xs text-slate-400 mt-1 break-all")}>{esc(meta)}</div>' if meta else "")
+        + forensics_block(f.get("forensics"))
         + f'<div {tw("rounded-lg p-3 mt-3 " + style["tint"])}>'
         f'<div {tw("text-sm text-slate-800 leading-snug")}><b>{style["icon"]}</b> {esc(triage_result["action"])}</div>'
         + (f'<div {tw("font-mono text-xs text-slate-900 bg-white border border-slate-200 rounded-md px-2 py-1.5 mt-2 break-all")}>'

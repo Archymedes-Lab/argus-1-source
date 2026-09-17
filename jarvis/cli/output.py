@@ -113,6 +113,10 @@ def render_findings(findings, verbose=False, severity=None, sev_order=None,
         where = f.get("where") or f.get("evidence") or ""
         if verbose and where:
             print(f"          {color(where, 'dim', t)}")
+        # A forensic reconstruction is the answer to the finding, not extra
+        # verbosity, so it prints whenever the finding does.
+        for line in f.get("forensics") or ():
+            print(f"          {line}")
         fix = fixit.suggest(f)
         if fix:
             print(f"          {color('fix: ' + fix, 'ok', t)}")

@@ -32,6 +32,9 @@ def _text_group(owner, entries, limit=25):
                      + (f" {tag}:" if tag else "") + f" {f.get('title', '')}")
         if f.get("detail"):
             lines.append(f"   {f['detail'][:300]}")
+        if f.get("forensics"):
+            lines.append("   forensic reconstruction:")
+            lines.extend(f"     {line}" for line in f["forensics"])
         lines.append(f"   → {t['action']}")
         if t.get("command"):
             lines.append(f"   $ {t['command']}")

@@ -518,6 +518,7 @@ function findingRow(f, i) {
         <dt>host</dt><dd>${esc(f.host || "—")}</dd>
         <dt>location</dt><dd>${esc(f.where || "—")}</dd>
         <dt>detail</dt><dd>${esc(f.detail)}</dd>
+        ${(f.forensics || []).length ? `<dt>forensics</dt><dd><pre style="white-space:pre-wrap;margin:0">${esc(f.forensics.join("\n"))}</pre></dd>` : ""}
       </dl></td></tr>` : "");
 }
 

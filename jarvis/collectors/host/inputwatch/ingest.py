@@ -26,6 +26,23 @@ _WINDOW_SQL = ("INSERT OR REPLACE INTO input_typing_windows (ts,"
                + ",".join("?" * (len(_WINDOW_COLS) + 1)) + ")")
 
 
+def _clean(value):
+    """JSON text safe for SQLite.
+
+    A VK_PACKET emoji arrives as two events, each carrying half of a surrogate
+    pair. json.loads keeps the lone half, and SQLite's UTF-8 encoder rejects it,
+    so a lone surrogate is spelled out as U+XXXX instead of failing the drain.
+    """
+    if isinstance(value, str):
+        return "".join(f"U+{ord(c):04X}" if 0xD800 <= ord(c) <= 0xDFFF else c
+                       for c in value)
+    if isinstance(value, list):
+        return [_clean(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _clean(v) for k, v in value.items()}
+    return value
+
+
 def ingest(store):
     """Fold new helper output into the database, then truncate the file.
 
@@ -48,6 +65,7 @@ def ingest(store):
         store.set_meta(_M_OVERSIZE, now())
 
     beats, windows, events, beat_pids = [], [], [], set()
+    bursts = []
     session = None
     controls = []
     for line in body.splitlines():
@@ -91,11 +109,23 @@ def ingest(store):
                 detail[:120], int(rec.get("injected") or 0),
                 int(rec.get("lower_il") or 0), keyed, gap,
                 str(rec.get("fg") or "")[:64]))
+        elif rec.get("kind") == "inject-burst":
+            rec = _clean(rec)
+            bursts.append((str(rec.get("burst") or "")[:40],
+                           int(rec.get("ts") or now()),
+                           json.dumps(rec, ensure_ascii=False)[:200_000]))
         else:
+            # Injected keys carry a full forensic record (vk, scan, character,
+            # flags, extra info, ms time); older helper output and the real
+            # punctuation/digit timestamps do not, and keep an empty one.
+            forensic = "ms" in rec
+            rec = _clean(rec)
             events.append(
                 (int(rec.get("ts") or now()), str(rec.get("kind") or "key")[:16],
                  int(rec.get("lower_il") or 0), str(rec.get("class") or "")[:24],
-                 str(rec.get("fg") or "")[:64]))
+                 str(rec.get("fg") or "")[:64], int(rec.get("ms") or 0),
+                 str(rec.get("burst") or "")[:40],
+                 json.dumps(rec, ensure_ascii=False)[:4000] if forensic else ""))
     if controls:
         store.db.executemany(
             "INSERT INTO control_events(ts,kind,control,detail,injected,"
@@ -106,8 +136,12 @@ def ingest(store):
         store.db.executemany(_WINDOW_SQL, windows)
     if events:
         store.db.executemany(
-            "INSERT INTO input_events(ts,kind,lower_il,class,fg) VALUES(?,?,?,?,?)",
-            events)
+            "INSERT INTO input_events(ts,kind,lower_il,class,fg,ms,burst,record) "
+            "VALUES(?,?,?,?,?,?,?,?)", events)
+    if bursts:
+        store.db.executemany(
+            "INSERT OR REPLACE INTO input_bursts(burst,ts,record) VALUES(?,?,?)",
+            bursts)
     if session is not None:
         store.set_meta(_M_SESSION, session)
     # Heartbeats from more than one PID in a single drain means two helpers are
@@ -116,7 +150,7 @@ def ingest(store):
     if len(beat_pids) > 1:
         store.set_meta(_M_DUPES,
                        f"{now()}:{','.join(str(p) for p in sorted(beat_pids))}")
-    if beats or windows or events:
+    if beats or windows or events or bursts:
         # Minute windows give a useful 90-day baseline at only ~130k rows.
         # Raw cumulative beats and injected-event detail need much less history;
         # bounding all three keeps the SQLite file small indefinitely.
@@ -126,6 +160,8 @@ def ingest(store):
         store.db.execute("DELETE FROM input_beats WHERE ts < ?",
                          (stamp - 7 * 86400,))
         store.db.execute("DELETE FROM input_events WHERE ts < ?",
+                         (stamp - 30 * 86400,))
+        store.db.execute("DELETE FROM input_bursts WHERE ts < ?",
                          (stamp - 30 * 86400,))
         store.commit()
     return len(events)

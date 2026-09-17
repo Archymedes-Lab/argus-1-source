@@ -263,10 +263,26 @@ CREATE TABLE IF NOT EXISTS input_events (
     kind     TEXT NOT NULL,
     lower_il INTEGER NOT NULL DEFAULT 0,
     class    TEXT DEFAULT '',
-    fg       TEXT DEFAULT ''
+    fg       TEXT DEFAULT '',
+    ms       INTEGER NOT NULL DEFAULT 0,   -- millisecond time, injected keys only
+    burst    TEXT NOT NULL DEFAULT '',     -- input_bursts.burst it belongs to
+    record   TEXT NOT NULL DEFAULT ''      -- the hook's full forensic record (JSON)
 );
 
 CREATE INDEX IF NOT EXISTS idx_input_ts ON input_events(ts DESC);
+
+-- One row per burst of injected keys: what they spelled (unless redacted as a
+-- probable auto-typed secret), the focused window and control, how long since
+-- real hardware input, and the lower-integrity or just-started processes that
+-- could have sent them. Windows does not name the sender; this is the suspect
+-- list a forensic examiner would start from.
+CREATE TABLE IF NOT EXISTS input_bursts (
+    burst    TEXT PRIMARY KEY,
+    ts       INTEGER NOT NULL,
+    record   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_input_bursts_ts ON input_bursts(ts DESC);
 
 -- Heartbeats, so a dead hook and a quiet keyboard are distinguishable.
 -- Control activations: volume, media and launch keys, and the state changes

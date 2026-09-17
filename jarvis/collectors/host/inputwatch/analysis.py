@@ -6,6 +6,7 @@ from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
 from jarvis.platform.windows import ps_json
 
+from .forensics import explain
 from .helper import running
 from .ingest import ingest
 
@@ -66,10 +67,13 @@ def audit(store, hours=24, pids=None, supervised=False):
         out += _latency_findings(store, beat)
         out += _typing_findings(store, beat)
 
+    # Only injected kinds. input_events also holds the timestamps of real
+    # punctuation and digit presses (punct-key, digit-key) and injected key-ups;
+    # grouping those in reported your own typing as "injected" input.
     rows = store.db.execute(
         """SELECT fg, kind, class, lower_il, COUNT(*) n,
                   MIN(ts) first, MAX(ts) last
-             FROM input_events WHERE ts>=?
+             FROM input_events WHERE ts>=? AND kind IN ('key','click','move')
             GROUP BY fg, kind, class, lower_il
             ORDER BY COUNT(*) DESC""", (since,)).fetchall()
     for r in rows:
@@ -85,13 +89,24 @@ def audit(store, hours=24, pids=None, supervised=False):
                "injected from a lower integrity level — the shape of one "
                "process driving another's window" if r["lower_il"] else
                "no hardware produced this event")
-        out.append(_finding(
+        headline, evidence = "", []
+        if r["kind"] == "key":
+            members = store.db.execute(
+                "SELECT * FROM input_events WHERE ts>=? AND kind='key' AND "
+                "fg IS ? AND class IS ? AND lower_il=? ORDER BY ts DESC, id DESC "
+                "LIMIT 50", (since, r["fg"], r["class"], r["lower_il"])).fetchall()
+            headline, evidence = explain(store, members)
+        finding = _finding(
             "input", sev,
             f"{r['n']} injected {r['class'] or r['kind']}"
-            f"{'s' if r['n'] > 1 else ''} while "
+            f"{'s' if r['n'] > 1 else ''}"
+            f"{' ' + headline if headline else ''} while "
             f"{r['fg'] or 'an unknown window'} had focus",
             f"{why} — first {iso(r['first'])}, last {iso(r['last'])}",
-            "input_events"))
+            "input_events")
+        if evidence:
+            finding["forensics"] = evidence
+        out.append(finding)
     return sort_findings(out)
 
 
