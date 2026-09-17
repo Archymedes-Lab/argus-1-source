@@ -37,6 +37,7 @@ class AcceptanceTests(unittest.TestCase):
 
     def test_reassurance_is_rejected_while_something_needs_you(self):
         self.assertFalse(voice.acceptable("All clear today.", facts(action=1)))
+        self.assertFalse(voice.acceptable("All is right with the world once more.", facts(action=1)))
         self.assertTrue(voice.acceptable("All clear today.", facts(action=0)))
 
     def test_unproven_alarm_and_gendered_address_are_rejected(self):
@@ -142,3 +143,79 @@ class EmailTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpokenTests(unittest.TestCase):
+    def setUp(self):
+        voice._spoken_cache.clear()
+
+    def spoken(self, live=0):
+        f = facts(urgent=bool(live))
+        f["email"] = "spoken dashboard briefing"
+        return f
+
+    def test_examples_and_fallbacks_satisfy_the_rules(self):
+        for asked, answered in voice.SPOKEN_EXAMPLES:
+            view = voice.json.loads(asked)
+            with self.subTest(line=answered):
+                self.assertTrue(voice._within_rules(answered, view))
+                self.assertFalse(voice._contradicts_trend(answered, view))
+                self.assertIsNone(voice._SPOKEN_EXTRA.search(answered))
+        for situation, lines in voice._SPOKEN_FALLBACK.items():
+            state = facts(action=0) if situation == "quiet" else facts(urgent=situation == "urgent")
+            for line in lines:
+                with self.subTest(line=line):
+                    self.assertTrue(voice.acceptable(line, state))
+
+    def test_on_by_default_and_the_line_is_checked(self):
+        with mock.patch.object(llm, "chat", return_value=("One matter needs you, splendid.", "")):
+            self.assertEqual(voice.spoken_opener({}, self.spoken()),
+                             ("One matter needs you, splendid.", True))
+        voice._spoken_cache.clear()
+        with mock.patch.object(llm, "chat", return_value=("You are all clear.", "")):
+            line, by_model = voice.spoken_opener({}, self.spoken())
+        self.assertFalse(by_model)
+        self.assertIn(line, voice._SPOKEN_FALLBACK["needs_you"])
+
+    def test_live_alert_skips_the_model(self):
+        with mock.patch.object(llm, "chat") as chat:
+            line, by_model = voice.spoken_opener({}, self.spoken(live=1))
+        chat.assert_not_called()
+        self.assertFalse(by_model)
+        self.assertIn(line, voice._SPOKEN_FALLBACK["urgent"])
+
+    def test_opt_out_and_busy_model_never_wait(self):
+        with mock.patch.object(llm, "chat") as chat:
+            voice.spoken_opener({"dashboard_voice": False}, self.spoken())
+        chat.assert_not_called()
+        with mock.patch.object(llm, "chat", return_value=("", llm.BUSY)) as chat:
+            _line, by_model = voice.spoken_opener({}, self.spoken())
+        self.assertFalse(by_model)
+        self.assertEqual(chat.call_args.kwargs.get("wait", 0), 0)
+
+    def test_counts_are_not_shown_to_the_model_or_repeatable_by_it(self):
+        f = self.spoken()
+        f["needs_your_action"], f["needs_your_confirmation"] = 5, 10
+        with mock.patch.object(llm, "chat", return_value=("Five and ten ticks closer.", "")) as chat:
+            _line, by_model = voice.spoken_opener({}, f)
+        self.assertFalse(by_model)
+        sent = voice.json.loads(chat.call_args.args[2])
+        self.assertNotIn("needs_your_action", sent)
+        self.assertTrue(sent["work_waiting_for_the_user"])
+
+    def test_same_facts_reuse_the_line(self):
+        with mock.patch.object(llm, "chat", return_value=("Splendid to see you.", "")) as chat:
+            voice.spoken_opener({}, self.spoken(), now=1000)
+            voice.spoken_opener({}, self.spoken(), now=1300)
+        self.assertEqual(chat.call_count, 1)
+
+    def test_invented_intruders_rescues_and_gloom_are_rejected(self):
+        for text in ("It seems someone's been playing with the system.",
+                     "Reinforcements are on the way.",
+                     "Our friends are up to something.",
+                     "A bit of a mess, I must sound the alarm.",
+                     "Progress is a slow, stubborn thing.",
+                     "Now, about that pressing matter..."):
+            voice._spoken_cache.clear()
+            with self.subTest(text=text), mock.patch.object(llm, "chat", return_value=(text, "")):
+                self.assertFalse(voice.spoken_opener({}, self.spoken())[1])

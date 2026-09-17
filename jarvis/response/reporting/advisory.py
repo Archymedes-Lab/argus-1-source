@@ -81,7 +81,9 @@ def _openai_synthesis(conf, findings, health, intel_state):
         "top three actions in exact priority order, data-protection risks, "
         "backdoor/access risks, browser/download risks, unusual resource/process "
         "signals, and evidence gaps. Say explicitly that complete security cannot "
-        "be guaranteed. Prefer safe verification before destructive remediation."
+        "be guaranteed. Prefer safe verification before destructive remediation. "
+        "Keep the tone constructive and proactive: acknowledge what is working, and "
+        "frame each action by the protection it adds, without softening real risk."
     )
     payload = json.dumps({
         "model": model,

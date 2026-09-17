@@ -23,7 +23,7 @@ from jarvis.core.paths import STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.response import acknowledge, alert, assistant, protocols, questions
-from jarvis.response.reporting import score
+from jarvis.response.reporting import score, voice
 from jarvis.service import sdnotify
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS
@@ -252,6 +252,21 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
+        if url.path == "/api/voice":
+            # POST, not GET: a model call costs seconds of CPU, so a cross-site
+            # page must not be able to trigger one with an <img> tag.
+            payload = self._json_body(1024) or {}
+            try:
+                live = max(0, min(99, int(payload.get("live_alerts") or 0)))
+            except (TypeError, ValueError):
+                live = 0
+            store = Store(self.db_path)
+            try:
+                facts = assistant.spoken_facts(store, JOBS, live_alerts=live)
+            finally:
+                store.close()
+            line, by_model = voice.spoken_opener(alert.load_conf(), facts)
+            return self._send(200, json.dumps({"line": line, "by_model": by_model}))
         if url.path == "/api/brief":
             payload = self._json_body(4096)
             if payload is None:

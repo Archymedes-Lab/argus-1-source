@@ -108,7 +108,7 @@ def cmd_brief(args, store):
             return 0
         return _check(store, item, args.port)
     if not item:
-        print("No protocol needs you right now. I shall keep looking.")
+        print("No protocol needs you right now — well done. I shall go looking for the next small victory.")
         return 0
     _print(item, full=True)
     return 0

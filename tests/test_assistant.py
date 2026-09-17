@@ -66,3 +66,19 @@ class AssistantTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpokenFactsTests(unittest.TestCase):
+    def test_facts_are_grounded_and_live_alerts_mark_urgency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "t.db"))
+            try:
+                calm = assistant.spoken_facts(store, JOBS)
+                live = assistant.spoken_facts(store, JOBS, live_alerts=2)
+            finally:
+                store.close()
+        self.assertEqual(calm["email"], "spoken dashboard briefing")
+        self.assertFalse(calm["urgent"])
+        self.assertNotIn("jarvis_is_handling", calm)
+        self.assertTrue(live["urgent"])
+        self.assertEqual(live["top_findings"], [])

@@ -179,6 +179,15 @@ def history_of(store):
         return []
 
 
+def change_within(store, seconds, now=None):
+    """Score change across the recorded points of the last `seconds`, oldest to
+    newest. This is what the dashboard's sparkline shows, so speech and screen
+    agree; None with fewer than two points."""
+    now = int(time.time() if now is None else now)
+    recent = [p for p in history_of(store) if p[0] >= now - seconds]
+    return recent[-1][1] - recent[0][1] if len(recent) > 1 else None
+
+
 def latest(store):
     """The last recorded score, or None if the report job has not run yet."""
     try:

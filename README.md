@@ -775,6 +775,18 @@ direction that contradicts the trend, and no claim that JARVIS acted. Any line
 that fails, times out or finds the model busy is replaced by the built-in one,
 so mail is never held up by the model.
 
+The dashboard's spoken briefing (🔊 voice, or `v`) works the same way. The
+local model writes only the opening line (`dashboard_voice_model`, falling back
+to `email_voice_model`, then `llama3.2:3b`; set `"dashboard_voice": false` to
+use built-in lines only). The browser then speaks the score, live alerts, the
+next step and collector health from its own code. The model sees only the
+score, grade, trend and whether work is waiting, never finding titles or
+counts: given those, it invented intruders ("a sneaky visitor") and read
+counts as score gains. On top of the email checks, spoken lines may not guess
+at attackers, promise help or sound grudging. While a live alert is showing,
+the model is skipped for a fixed line. A line is reused for ten minutes while
+the facts are unchanged, and the page speaks without it after 20 seconds.
+
 Independently of change alerts, `jarvis serve` sends a daily posture advisory
 after `report_hour` in the host's local timezone, checking eligibility every five
 minutes. It uses the same configured Resend recipient and reports which
