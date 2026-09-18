@@ -39,7 +39,7 @@ AREAS = (
     ("Data & privacy", ("secrets", "spy", "pixel", "sniffing")),
     ("Network", ("internet", "netwatch")),
     ("Developer toolchain", ("toolchain",)),
-    ("Monitoring", ("coverage", "bridge", "watchdogs", "native")),
+    ("Monitoring", ("coverage", "bridge", "watchdogs", "native", "arena")),
 )
 UNSCORED = ("gaps", "intel", "feeds", "ledger", "report", "resources", "controls",
             "attackmap")

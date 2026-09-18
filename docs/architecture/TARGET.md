@@ -56,8 +56,8 @@ Kept at the repository root on purpose:
 
 ## Dependency rules (enforced by `tests/test_layers.py`, no exceptions)
 
-`core` 0 < `platform` 1 < `collectors` 2 < `intel` 3 < `response` 4 < `service` 5
-< `lab` 6 < `web` 7 < `cli` 8
+`core` 0 < `platform` 1 < `collectors` 2 < `lab` 3 < `intel` 4 < `response` 5
+< `service` 6 < `web` 7 < `cli` 8
 
 1. A module imports only from its own layer or a lower one.
 2. Collector domains don't import each other. Knowledge they share lives in

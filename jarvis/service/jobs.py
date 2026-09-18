@@ -23,6 +23,7 @@ from jarvis.core import collection, retention
 from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
 from jarvis.intel import research as intel
+from jarvis.lab import audit as arena_audit
 from jarvis.response import alert
 from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting.cadence import run as report_due
@@ -295,6 +296,7 @@ RUNNERS = {
     "sysmon_linux": _with_store(sysmon_linux.audit, incremental=True),
     "sysmon": _with_store(sysmon.audit, incremental=True),
     "native": _with_store(native.audit),
+    "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
     "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),
 }
 

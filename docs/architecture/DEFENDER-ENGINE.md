@@ -714,8 +714,8 @@ are gated, but no OS-executing provider ships); the **native response broker**
 that would let intervened→verified be exercised against a real machine rather
 than a supplied callback; **CALDERA chained-operation execution**; and wiring
 **live Exa retrieval** into `candidates_from` (today it takes already-structured
-behaviors). The layer contract gained a `lab` tier above `service`
-(`tests/test_layers.py`).
+behaviors). The layer contract gained a `lab` tier above `collectors`
+(`tests/test_layers.py`), so the daemon can run it.
 
 ## Validation
 

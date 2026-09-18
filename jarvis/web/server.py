@@ -337,6 +337,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, json.dumps({"error": "unknown incident"}))
             return self._send(200, json.dumps(result))
 
+        if url.path == "/api/arena":
+            from jarvis.lab import regression
+            reg = regression.Regression()
+            try:
+                summary = reg.summary()
+                summary["scenarios_detail"] = [
+                    {"id": r["id"], "title": r["title"], "safety": r["safety"],
+                     "source": r["source"], "techniques": json.loads(r["techniques"] or "[]"),
+                     "last": (lambda x: {"score": x["score"], "ok": bool(x["ok"]),
+                                         "at": x["at"]} if x else None)(reg.latest(r["id"]))}
+                    for r in reg.scenarios()]
+            finally:
+                reg.close()
+            return self._send(200, json.dumps(summary, default=str))
+
         if url.path in ("/api/health", "/api/live"):
             state = health(self.db_path, self.scheduler)
             ok = state['live'] if url.path == '/api/live' else state['healthy']

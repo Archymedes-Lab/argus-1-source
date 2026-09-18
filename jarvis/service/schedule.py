@@ -114,4 +114,7 @@ JOBS = {
     "sysmon":   (600,   "Sysmon telemetry"),
     # ATT&CK coverage, validated by probing the real detectors (attackmap.py).
     "attackmap": (21600, "ATT&CK coverage map"),
+    # JARVIS Arena: run the synthetic validation suite against the real
+    # detectors and flag any regression. Local-only and cheap (no PowerShell).
+    "arena":    (3600,  "Adversarial self-validation"),
 }

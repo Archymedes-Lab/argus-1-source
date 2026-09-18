@@ -1,6 +1,6 @@
 """The package layout is a dependency order; this keeps it one.
 
-    core < platform < collectors < intel < response < service < web < cli
+    core < platform < collectors < lab < intel < response < service < web < cli
 
 A module may import from its own layer or any layer below it, never above.
 Collector domains (process, telemetry, persistence, network, identity, host)
@@ -18,8 +18,8 @@ from pathlib import Path
 
 PKG = Path(__file__).resolve().parent.parent / "jarvis"
 
-RANK = {"core": 0, "platform": 1, "collectors": 2, "intel": 3, "response": 4,
-        "service": 5, "lab": 6, "web": 7, "cli": 8}
+RANK = {"core": 0, "platform": 1, "collectors": 2, "lab": 3, "intel": 4,
+        "response": 5, "service": 6, "web": 7, "cli": 8}
 
 
 def _modules():

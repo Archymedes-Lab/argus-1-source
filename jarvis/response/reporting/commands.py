@@ -50,6 +50,7 @@ JOB_COMMANDS = {
     "sysmon_linux": "sysmon-linux",
     "sysmon": "sysmon",
     "native": "timeline status",
+    "arena": "arena suite",
     "watchdogs": "selfcheck",
     "resources": "status",
     "report": "alert",
