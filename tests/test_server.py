@@ -196,3 +196,61 @@ class DefenderHTTPTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SchedulerLaneTests(unittest.TestCase):
+    """A long audit must not be able to make JARVIS look dead."""
+
+    def setUp(self):
+        from jarvis.service import scheduler as mod
+        self.mod = mod
+        self.scheduler = Scheduler(":memory:", ("wsl", "win"))
+        self.scheduler.cold_start_pending.clear()
+
+    def test_liveness_jobs_have_their_own_lane(self):
+        self.scheduler.next_run = {name: 0.0 for name in JOBS}
+        with patch("jarvis.service.scheduler.time.time", return_value=1_000.0):
+            self.assertIn(self.scheduler._due("fast"), self.mod.FAST)
+            self.assertNotIn(self.scheduler._due("main"), self.mod.FAST)
+
+    def test_forced_jobs_go_to_their_own_lane(self):
+        self.scheduler.next_run = {name: 9e9 for name in JOBS}
+        self.scheduler.force("secrets")
+        self.scheduler.force("bridge")
+        self.assertEqual(self.scheduler._due("fast"), "bridge")
+        self.assertEqual(self.scheduler._due("main"), "secrets")
+        self.assertIsNone(self.scheduler._due("fast"))
+
+    def test_health_uses_required_jobs_that_all_run_in_the_fast_lane(self):
+        # protection.health() judges these by freshness; any of them left in
+        # the main queue could be starved by a multi-minute audit again.
+        self.assertTrue({"scan", "bridge"} <= set(self.mod.FAST))
+
+    def test_fast_lane_stays_fresh_while_the_main_lane_is_busy(self):
+        import threading
+        release = threading.Event()
+        ran = []
+
+        def run_once(store, name):
+            if name == "secrets":
+                release.wait(5)
+            else:
+                ran.append(name)
+            return [], ""
+
+        self.scheduler.next_run = {name: 9e9 for name in JOBS}
+        self.scheduler.force("secrets")
+        with patch.object(self.scheduler, "run_once", side_effect=run_once), \
+             patch.object(self.mod, "Store"), \
+             patch.object(self.mod.notifications, "deliver"):
+            self.scheduler.start()
+            deadline = time.time() + 3
+            while self.scheduler.current != "secrets" and time.time() < deadline:
+                time.sleep(0.01)
+            self.scheduler.force("bridge")
+            while "bridge" not in ran and time.time() < deadline:
+                time.sleep(0.01)
+            busy = self.scheduler.current
+            release.set()
+        self.assertEqual(busy, "secrets")
+        self.assertIn("bridge", ran)

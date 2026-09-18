@@ -10,6 +10,10 @@ from jarvis.core.store import Store
 
 class InternetWatchTests(unittest.TestCase):
     def setUp(self):
+        # Unit tests must not read the live elevated broker's output.
+        broker_patch = patch('jarvis.platform.broker.result', return_value=(None, 'not in tests'))
+        broker_patch.start()
+        self.addCleanup(broker_patch.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
 

@@ -432,3 +432,35 @@ def status(store):
     rows = store.db.execute(
         "SELECT * FROM feed_runs ORDER BY name").fetchall()
     return [dict(r) for r in rows]
+
+
+TRANCO_URL = "https://tranco-list.eu/top-1m.csv.zip"
+
+
+def refresh_tranco(store, force=False):
+    """Weekly Tranco ranking for core.warninglist, the popular-domain filter."""
+    from jarvis.core import warninglist
+    row = store.db.execute(
+        "SELECT last_run FROM feed_runs WHERE name='tranco'").fetchone()
+    if row and not force and now() - row["last_run"] < 7 * 86400:
+        return {"name": "tranco", "skipped": True}
+    try:
+        raw = fetch(TRANCO_URL, 32 * 1024 * 1024, timeout=240)
+        rows = []
+        for line in raw.decode("utf-8", "replace").splitlines()[:warninglist.KEEP]:
+            rank, _, domain = line.partition(",")
+            if rank.isdigit() and domain:
+                rows.append((domain.strip().lower(), int(rank)))
+        if len(rows) < warninglist.KEEP // 2:
+            raise ValueError(f"only {len(rows)} ranked domains")
+    except Exception as exc:
+        return {"name": "tranco", "error": str(exc)[:200]}
+    warninglist.store_ranking(store, rows)
+    store.db.execute(
+        """INSERT INTO feed_runs(name,last_run,rows,kept,bytes,error)
+           VALUES('tranco',?,?,?,?,'')
+           ON CONFLICT(name) DO UPDATE SET last_run=excluded.last_run,
+               rows=excluded.rows, kept=excluded.kept, bytes=excluded.bytes, error=''""",
+        (now(), len(rows), len(rows), len(raw)))
+    store.commit()
+    return {"name": "tranco", "kept": len(rows), "bytes": len(raw)}

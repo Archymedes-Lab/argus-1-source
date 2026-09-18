@@ -3,6 +3,8 @@
 import os
 import re
 
+from jarvis.core import egress as egress_baseline
+from jarvis.core import vet, warninglist
 from jarvis.core.finding import finding as _finding
 
 from .harness import _payload
@@ -91,6 +93,17 @@ DEV_PARENTS = ("node", "npm", "npx", "pnpm", "yarn", "bun", "deno", "tsx",
 LOG_DELETE_TITLE = "a log or history file was deleted"
 
 
+EGRESS_TITLE = egress_baseline.TITLE
+
+
+EXPECTED_EGRESS = {
+    "firefox", "chrome", "chromium", "curl", "wget", "apt", "apt-get", "http",
+    "https", "snap", "snapd", "packagekitd", "systemd", "systemd-resolved",
+    "NetworkManager", "dockerd", "containerd", "git", "git-remote-http", "gh",
+    "ssh", "sshd", "code", "node", "python3", "bun", "npm", "pip", "pip3", "uv",
+}
+
+
 LOG_DELETE_SUFFIX = " — indicator removal"
 
 
@@ -106,7 +119,28 @@ RAW_UNRESOLVED_TITLE = "Sysmon raw-access event has an unresolved device"
 RAW_LEGACY_SUFFIX = " for raw access — disk imaging or filesystem-bypass read"
 
 
-def _expected_log_maintenance(actor, target):
+ROTATION_PARENT = re.compile(r"(^|[/\s])(savelog|logrotate)(\s|$)")
+
+
+# A heredoc whose delimiter is quoted (<<'EOF', <<"EOF", <<\EOF) is written
+# verbatim: no expansion, no substitution, nothing runs. Measured 2026-09-17:
+# `cat > approvals.test.ts <<'EOF'` with test source mentioning `curl | sh`
+# raised "download-and-run". Unquoted heredocs are left in place — `$(curl …)`
+# inside one does execute.
+def _without_quoted_heredocs(cmd):
+    out, pos = [], 0
+    for m in re.finditer(r"<<-?\s*(?:'([^']+)'|\"([^\"]+)\"|\\(\w+))[^\n]*\n", cmd or ""):
+        if m.start() < pos:
+            continue
+        tag = m.group(1) or m.group(2) or m.group(3)
+        end = re.compile(r"^\s*" + re.escape(tag) + r"\s*$", re.M).search(cmd, m.end())
+        out.append(cmd[pos:m.end()])
+        pos = end.end() if end else len(cmd)
+    out.append((cmd or "")[pos:])
+    return "".join(out)
+
+
+def _expected_log_maintenance(actor, target, parent_cmdline=""):
     """True only for a logging daemon or the rotation tooling acting on files
     it owns.
 
@@ -126,6 +160,13 @@ def _expected_log_maintenance(actor, target):
             and path.startswith("/var/log/journal/")
             and path.endswith((".journal", ".journal~"))):
         return True
+    if actor == "rm":
+        # savelog deletes the oldest generation with a plain `rm -f`; Ubuntu's
+        # dmesg.service runs `savelog -c 5 /var/log/dmesg` at every boot.
+        # Measured: `rm deleted /var/log/dmesg.4.gz` raised a high each WSL
+        # start. Only rm's own process record naming savelog or logrotate as
+        # its parent exempts it; an rm Sysmon cannot parent stays high.
+        return bool(ROTATED_LOG.match(path)) and bool(ROTATION_PARENT.search(parent_cmdline or ""))
     return actor in LOG_ROTATORS and bool(ROTATED_LOG.match(path))
 
 
@@ -170,7 +211,7 @@ def _is_jarvis(e):
 
 def _rules(events, store=None):
     out = []
-    recon = {}
+    recon, egress = {}, {}
     dns_names, dests = set(), set()
     # A PID can be reused. Only a matching Sysmon ProcessGuid can supply the
     # command line for an event that doesn't contain one of its own.
@@ -209,7 +250,7 @@ def _rules(events, store=None):
                     + ("  — dependency-tree binary run by its own package "
                        "manager, which is normal for a project under /tmp"
                        if dev else ""), CHANNEL))
-            if DOWNLOAD_RUN.search(pcmd):
+            if DOWNLOAD_RUN.search(_without_quoted_heredocs(pcmd)):
                 out.append(_finding(
                     "sysmon-linux", "high", "download-and-run in a command line",
                     f"{pbase or base}: {pcmd[:160]}", CHANNEL))
@@ -236,16 +277,13 @@ def _rules(events, store=None):
                 dns_names.add(host.lower())
             if dst:
                 dests.add(dst)
-            if _is_public_ip(dst) and not mine and pbase not in (
-                    "firefox", "chrome", "chromium", "curl", "wget", "apt",
-                    "apt-get", "snap", "snapd", "packagekitd", "systemd",
-                    "NetworkManager", "dockerd", "containerd", "git", "gh",
-                    "ssh", "sshd", "code", "node", "python3", "bun"):
-                out.append(_finding(
-                    "sysmon-linux", "medium",
-                    f"outbound connection to {dst}:{port}",
-                    f"from {base or '?'} ({host or 'no rDNS'}) — confirm this "
-                    f"egress is expected", CHANNEL))
+            # Event 3 names the connecting process in Image and carries no
+            # parent, so the list is checked against `base`. It was checked
+            # against the (always empty) parent, which turned every public
+            # connection from node, curl or gh into its own medium finding —
+            # 209 of them in three days.
+            if _is_public_ip(dst) and not mine and base not in EXPECTED_EGRESS:
+                egress.setdefault(base or "", {}).setdefault(f"{dst}:{port}", host)
 
         elif eid == 10:
             tgt = e.get("TargetImage") or ""
@@ -267,8 +305,10 @@ def _rules(events, store=None):
 
         elif eid in (23, 26):
             tgt = e.get("TargetFilename") or ""
+            creator = processes.get(e.get("ProcessGuid"), {})
             if ((tgt.startswith("/var/log/") or "/.bash_history" in tgt)
-                    and not _expected_log_maintenance(base, tgt)):
+                    and not _expected_log_maintenance(
+                        base, tgt, _clean(creator.get("ParentCommandLine")))):
                 out.append(_finding(
                     "sysmon-linux", "high", LOG_DELETE_TITLE,
                     f"{base or '?'} deleted {tgt}{LOG_DELETE_SUFFIX}", CHANNEL))
@@ -291,6 +331,31 @@ def _rules(events, store=None):
                    if resolved else "target is unresolved; raw disk access is not established")
                 + f"; PID {e.get('ProcessId') or '?'}; event time {e.get('UtcTime') or '?'}"
                 + (f"; command {context[:180]}" if context else ""),
+                CHANNEL))
+
+    # One finding per program, not per address: the question is whether this
+    # program should talk to the internet at all.
+    for base, peers in sorted(egress.items()):
+        sample = ", ".join(f"{d}" + (f" ({h})" if h and h != "-" else "")
+                           for d, h in list(peers.items())[:4])
+        verdict = egress_baseline.decision(store, "wsl", base) if (store is not None and base) else ""
+        if base and verdict == egress_baseline.EXPECTED:
+            continue            # you confirmed this program reaches the internet
+        if base and verdict == egress_baseline.UNEXPECTED:
+            out.append(_finding(
+                "sysmon-linux", "high", f"{EGRESS_TITLE} {base}",
+                f"{len(peers)} public destination(s): {sample} — you marked this "
+                f"program as not expected to reach the internet", CHANNEL))
+        elif base:
+            out.append(_finding(
+                "sysmon-linux", "medium", f"{EGRESS_TITLE} {base}",
+                f"{len(peers)} public destination(s): {sample} — confirm this "
+                f"program is expected to reach the internet", CHANNEL))
+        else:
+            out.append(_finding(
+                "sysmon-linux", "low", f"{EGRESS_TITLE} an unresolved process",
+                f"{len(peers)} public destination(s): {sample} — Sysmon could not "
+                f"name the process, so this is a visibility gap, not a detection",
                 CHANNEL))
 
     # Container and build tooling legitimately runs a lot of these.
@@ -322,15 +387,30 @@ def _correlate(store, dns_names, dests):
     qmarks = ",".join("?" * len(values))
     try:
         rows = store.db.execute(
-            f"SELECT value, kind, malware, source FROM indicators "
+            f"SELECT value, kind, malware, source, confidence FROM indicators "
             f"WHERE status='active' AND (norm IN ({qmarks}) OR value IN ({qmarks}))",
             values + values).fetchall()
     except Exception:
         return out
     for r in rows:
+        # The same gates the Windows matcher uses: vetting, popularity, and
+        # the indicator's own confidence. This matched exactly, unvetted, and
+        # made every hit critical — a writeup's brand name included.
+        value = r["value"]
+        severity = "critical" if r["confidence"] == "high" else "medium"
+        if r["kind"] == "domain":
+            if not vet.vet_domain(value)[0]:
+                continue
+            worth = warninglist.judge_domain(store, value.lower(), value.lower(), r["source"])
+            if worth == "none":
+                continue
+            if worth == "weak":
+                severity = "low"
+        elif r["kind"] == "ipv4" and not vet.vet_ipv4(value)[0]:
+            continue
         out.append(_finding(
-            "sysmon-linux", "critical",
-            f"a process contacted a known-bad indicator: {r['value']}",
+            "sysmon-linux", severity,
+            f"a process contacted a known-bad indicator: {value}",
             f"{r['kind']} — {r['malware'] or 'flagged'} (via {r['source']})",
             "threat-intel"))
     return out

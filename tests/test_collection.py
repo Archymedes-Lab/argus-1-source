@@ -29,7 +29,11 @@ class CollectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = Store(str(Path(directory)/'test.db'))
             store.set_meta('sysmon_last_run', 50)
-            with patch.object(sysmon, 'status', return_value={'installed': True, 'readable': True}), patch.object(sysmon, '_fetch', return_value={}):
+            # No native sensor for this case: force the PowerShell fallback path,
+            # whose failed query must not advance the cursor.
+            with patch.object(sysmon, '_native', return_value=None), \
+                 patch.object(sysmon, 'status', return_value={'installed': True, 'readable': True}), \
+                 patch.object(sysmon, '_fetch', return_value={}):
                 with collection.observe() as observation:
                     result = sysmon.audit(store, incremental=True)
             self.assertEqual(int(store.get_meta('sysmon_last_run')), 50)

@@ -6,7 +6,9 @@ import time
 def health(db_path, scheduler, stamp=None):
     stamp = time.time() if stamp is None else stamp
     age = max(0, stamp - scheduler.heartbeat)
-    alive = scheduler.is_alive() and age < 900
+    fast_age = max(0, stamp - getattr(scheduler, 'fast_heartbeat', stamp))
+    fast_ok = getattr(scheduler, 'fast_alive', lambda: True)() and fast_age < 300
+    alive = scheduler.is_alive() and age < 900 and fast_ok
     sources = {}
     required = {'scan': 180}
     if 'win' in scheduler.hosts:
@@ -38,4 +40,6 @@ def health(db_path, scheduler, stamp=None):
     protected = bool(sources) and all(s['status'] == 'complete' for s in sources.values())
     return {'service': 'JARVIS', 'time': stamp, 'healthy': alive and protected,
             'live': alive, 'ready': alive and protected, 'protection_healthy': protected,
-            'progress_age': age, 'current_job': scheduler.current, 'sources': sources}
+            'progress_age': age, 'fast_lane_age': fast_age,
+            'current_job': scheduler.current,
+            'current_fast_job': getattr(scheduler, 'fast_current', None), 'sources': sources}

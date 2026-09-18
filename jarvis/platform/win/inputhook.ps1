@@ -946,6 +946,26 @@ interface IMMDeviceEnumerator {
   int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d);
 }
 [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorComObject { }
+// Per-app audio sessions: each app's own volume slider in the Windows mixer.
+[Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionManager2 {
+  int GetAudioSessionControl(IntPtr g, int f, out IntPtr c);
+  int GetSimpleAudioVolume(IntPtr g, int f, out IntPtr v);
+  int GetSessionEnumerator(out IAudioSessionEnumerator e);
+}
+[Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionEnumerator { int GetCount(out int n); int GetSession(int i, out IAudioSessionControl2 s); }
+[Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionControl2 {
+  int GetState(out int s); int GetDisplayName(out IntPtr n); int SetDisplayName(IntPtr n, IntPtr g);
+  int GetIconPath(out IntPtr p); int SetIconPath(IntPtr p, IntPtr g); int GetGroupingParam(out Guid g);
+  int SetGroupingParam(IntPtr g, IntPtr c); int RegisterAudioSessionNotification(IntPtr n);
+  int UnregisterAudioSessionNotification(IntPtr n); int GetSessionIdentifier(out IntPtr s);
+  int GetSessionInstanceIdentifier(out IntPtr s); int GetProcessId(out uint pid);
+  [PreserveSig] int IsSystemSoundsSession();
+}
+[Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISimpleAudioVolume { int SetMasterVolume(float f, IntPtr g); int GetMasterVolume(out float f); int SetMute(bool m, IntPtr g); int GetMute(out bool m); }
 public class JarvisAudio {
   static IAudioEndpointVolume Endpoint() {
     IMMDevice dev;
@@ -956,6 +976,24 @@ public class JarvisAudio {
   }
   public static int Level() { float f; Endpoint().GetMasterVolumeLevelScalar(out f); return (int)Math.Round(f * 100); }
   public static bool Muted() { bool m; Endpoint().GetMute(out m); return m; }
+  // "pid|volume|muted" for every app session on the default output device.
+  public static string[] Sessions() {
+    IMMDevice dev;
+    ((IMMDeviceEnumerator)new MMDeviceEnumeratorComObject()).GetDefaultAudioEndpoint(0, 1, out dev);
+    Guid iid = typeof(IAudioSessionManager2).GUID; object o;
+    dev.Activate(ref iid, 23, IntPtr.Zero, out o);
+    IAudioSessionEnumerator en; ((IAudioSessionManager2)o).GetSessionEnumerator(out en);
+    int n; en.GetCount(out n);
+    var list = new System.Collections.Generic.List<string>();
+    for (int i = 0; i < n; i++) {
+      IAudioSessionControl2 s; en.GetSession(i, out s);
+      if (s.IsSystemSoundsSession() == 0) continue;
+      uint pid; s.GetProcessId(out pid);
+      var v = (ISimpleAudioVolume)s; float f; bool m; v.GetMasterVolume(out f); v.GetMute(out m);
+      list.Add(pid + "|" + (int)Math.Round(f * 100) + "|" + (m ? 1 : 0));
+    }
+    return list.ToArray();
+  }
 }
 '@
 $audioOk = $true
@@ -964,6 +1002,41 @@ try { Add-Type -TypeDefinition $audioSrc -ErrorAction Stop } catch { $audioOk = 
 if ($audioOk) {
     $script:lastVol = -1
     $script:lastMute = $null
+    $script:appVol = @{}
+    $script:appNames = @{}
+    # Per-app levels. The master sampler cannot see one app turned up in the
+    # mixer, or an app raising its own session: exactly the "the volume went up
+    # and no key did it" report that the master level alone could not explain.
+    $sampleApps = {
+        try { $rows = [JarvisAudio]::Sessions() } catch { return }
+        $seen = @{}
+        foreach ($row in $rows) {
+            $parts = $row -split '\|'
+            $appPid = $parts[0]; $state = $parts[1] + '|' + $parts[2]
+            $seen[$appPid] = $true
+            if (-not $script:appNames.ContainsKey($appPid)) {
+                $script:appNames[$appPid] = try { (Get-Process -Id ([int]$appPid) -ErrorAction Stop).ProcessName } catch { '?' }
+            }
+            if (-not $script:appVol.ContainsKey($appPid)) { $script:appVol[$appPid] = $state; continue }
+            $was = $script:appVol[$appPid]
+            if ($was -eq $state) { continue }
+            $old = $was -split '\|'
+            $gap = [JarvisInputHook]::MsSinceControlKey()
+            $keyed = if ($gap -le 1500) { 1 } else { 0 }
+            $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+            $json = '{"ts":' + $ts + ',"kind":"control-state","control":"app-volume"' +
+                    ',"app":"' + ($script:appNames[$appPid] -replace '"','') + '","pid":' + $appPid +
+                    ',"from":' + $old[0] + ',"to":' + $parts[1] +
+                    ',"muted":' + $parts[2] + ',"was_muted":' + $old[1] +
+                    ',"keyed":' + $keyed + ',"key_gap_ms":' + $gap +
+                    ',"fg":"' + ([JarvisInputHook]::Foreground() -replace '"','') + '"}'
+            [JarvisInputHook]::WriteState($json)
+            $script:appVol[$appPid] = $state
+        }
+        foreach ($gone in @($script:appVol.Keys | Where-Object { -not $seen.ContainsKey($_) })) {
+            $script:appVol.Remove($gone); $script:appNames.Remove($gone)
+        }
+    }
     $sampleAudio = {
         try {
             $v = [JarvisAudio]::Level(); $m = [JarvisAudio]::Muted()
@@ -985,6 +1058,13 @@ if ($audioOk) {
         $script:lastVol = $v; $script:lastMute = $m
     }
     & $sampleAudio
+    & $sampleApps
+    $appTimer = New-Object System.Windows.Forms.Timer
+    # Session enumeration costs more than two level reads; every two seconds
+    # still catches a slider drag.
+    $appTimer.Interval = 2000
+    $appTimer.Add_Tick($sampleApps)
+    $appTimer.Start()
     $audioTimer = New-Object System.Windows.Forms.Timer
     # Fast enough that a press-and-hold ramp is not collapsed into one jump,
     # cheap enough to be invisible: two COM reads per tick.

@@ -24,7 +24,7 @@ from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.response import acknowledge, alert, assistant, protocols, questions
 from jarvis.response.reporting import score, voice
-from jarvis.service import sdnotify
+from jarvis.service import attackmap, sdnotify
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler, watchdog_loop
@@ -100,7 +100,7 @@ def build_state(db_path, scheduler):
                 "stale": bool(s and s["ts"]
                               and (time.time() - s["ts"]) > max(interval * 2,
                                                                 interval + 300)),
-                "running": scheduler.current == name,
+                "running": name in (scheduler.current, getattr(scheduler, "fast_current", None)),
                 "next": int(scheduler.next_run.get(name, 0) - time.time()),
             })
 
@@ -158,6 +158,7 @@ def build_state(db_path, scheduler):
             "security": {**score.compute(snaps, JOBS, acks=acknowledge.load(store)),
                          "history": score.history_of(store)[-300:]},
             "questions": questions.build(store, snaps, alert.load_conf())[:12],
+            "attack": attackmap.latest(store),
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
         }

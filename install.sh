@@ -193,6 +193,19 @@ if $want_seal; then
     else
       echo "  WARNING: could not stage wake-jarvis.ps1 to the Windows side"
     fi
+    # The fast ring: a loop that checks every few seconds and re-runs a stale
+    # protection source or restarts a dead daemon, instead of waiting five
+    # minutes for the wake task or a human for the dead-man's email.
+    LOCAL_REVIVE="$(dirname "$LOCAL_WAKE")/Jarvis/Reviver"
+    mkdir -p "$LOCAL_REVIVE" 2>/dev/null || true
+    if cp "$HERE/revive-jarvis.ps1" "$LOCAL_REVIVE/" 2>/dev/null; then
+      powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+        -File "$(wslpath -w "$LOCAL_REVIVE/revive-jarvis.ps1")" -Install \
+        -RepoRoot "$HERE" 2>&1 \
+        | tr -d '\r' | sed 's/^/  /'
+    else
+      echo "  WARNING: could not stage revive-jarvis.ps1 to the Windows side"
+    fi
   else
     echo "  skipped wake watchdog: powershell.exe unreachable from here"
   fi

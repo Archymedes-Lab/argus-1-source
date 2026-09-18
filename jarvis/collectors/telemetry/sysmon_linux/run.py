@@ -1,10 +1,12 @@
 """The audit: rules over new events, remembered hits, and capture-health checks."""
 
+from jarvis.core import egress as egress_baseline
 from jarvis.core.finding import finding as _finding
 from jarvis.core.util import now
 
 from .journal import CHANNEL, _event_utc, _parse, _raw, state
 from .rules import (
+    DOWNLOAD_RUN,
     LOG_DELETE_SUFFIX,
     LOG_DELETE_TITLE,
     PERSIST_WRITE_TITLE,
@@ -14,6 +16,7 @@ from .rules import (
     _expected_log_maintenance,
     _expected_persistence,
     _rules,
+    _without_quoted_heredocs,
 )
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -97,6 +100,25 @@ def _remember(store, findings, hours):
         if stale:
             store.db.execute("DELETE FROM sysmon_hits WHERE id=?", (row["id"],))
 
+    for row in store.db.execute(
+            "SELECT id, detail FROM sysmon_hits WHERE category='sysmon-linux' "
+            "AND title='download-and-run in a command line'").fetchall():
+        command = (row["detail"] or "").split(": ", 1)[-1]
+        if not DOWNLOAD_RUN.search(_without_quoted_heredocs(command)):
+            store.db.execute("DELETE FROM sysmon_hits WHERE id=?", (row["id"],))
+
+    # A program you have since confirmed stops being reported at once.
+    for row in store.db.execute(
+            "SELECT id, title FROM sysmon_hits WHERE category='sysmon-linux' AND title LIKE ?",
+            (egress_baseline.TITLE + " %",)).fetchall():
+        program = egress_baseline.program_of(row["title"])
+        if program and egress_baseline.decision(store, "wsl", program) == egress_baseline.EXPECTED:
+            store.db.execute("DELETE FROM sysmon_hits WHERE id=?", (row["id"],))
+
+    # Per-address egress rows came from the parent-name bug in rules.py and
+    # are superseded by one finding per program.
+    store.db.execute("DELETE FROM sysmon_hits WHERE category='sysmon-linux' "
+                     "AND title LIKE 'outbound connection to %'")
     store.db.execute("DELETE FROM sysmon_hits WHERE ts < ? AND category='sysmon-linux'",
                      (ts - REMEMBER_DAYS * 86400,))
     store.commit()

@@ -141,3 +141,34 @@ class InspectCommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviverAuditTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "state.json")
+        self.now = 1_800_000_000
+
+    def _audit(self, **state):
+        if state:
+            with open(self.path, "w", encoding="utf-8") as fh:
+                json.dump(state, fh)
+        return {f["title"]: f["severity"] for f in deadman.audit_reviver(self.path, self.now)}
+
+    def test_missing_reviver_is_reported(self):
+        self.assertEqual(self._audit(), {"the instant reviver is not installed": "medium"})
+
+    def test_a_silent_loop_is_high(self):
+        out = self._audit(checkedAt=self.now - 120, healthy=True)
+        self.assertEqual(out, {"the instant reviver has stopped": "high"})
+
+    def test_spent_budget_and_pause_are_not_hidden_behind_ok(self):
+        self.assertEqual(self._audit(checkedAt=self.now - 3, gaveUp=True, lastAction="x"),
+                         {"the instant reviver has used its restart budget": "high"})
+        self.assertEqual(self._audit(checkedAt=self.now - 3, paused=True),
+                         {"the instant reviver is paused for maintenance": "medium"})
+
+    def test_a_fresh_loop_is_ok(self):
+        self.assertEqual(self._audit(checkedAt=self.now - 4, healthy=True),
+                         {"the instant reviver is watching JARVIS": "ok"})

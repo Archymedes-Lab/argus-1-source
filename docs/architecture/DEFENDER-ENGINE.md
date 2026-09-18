@@ -563,6 +563,160 @@ Compatibility and limits:
 - Native service installation, live policy rollout, model training, account
   access, and backup restoration are not performed by this source change.
 
+## Temporal event log (2026-09-18)
+
+Stage 1 now has a working data path, verified on this machine against 30,656
+real records. Sysmon and Defender were ingested, normalized, sealed, chained and
+queried. The native service is not installed yet; that needs an elevated
+`windows-sensor/install.ps1 -Install`.
+
+```
+Windows Event Log ─► JarvisSensor.exe (service) ─► spool batches (ProgramData)
+                                                        │  ack after commit
+   platform/native/ingest.py ◄──────────────────────────┘
+        │  normalize.py: every record -> canonical event (core/event.py)
+        ▼
+   core/eventlog.py: global sequence, active.jsonl -> sealed gzip segments,
+        │           SHA-256 header chain, rebuildable index.db
+        ├─► collectors/telemetry/sysmon.py   consumer offset `sysmon_eventlog_seq`
+        ├─► collectors/telemetry/native.py   delivery, gaps, health, daily verify
+        └─► jarvis timeline                   search, lineage, show, verify
+```
+
+Decisions:
+
+- **Snapshots establish state; events establish history.** The PowerShell and
+  /proc collectors stay as they are. `sysmon.py` prefers the event log whenever
+  the sensor delivered a batch in the last 10 minutes, and falls back to the
+  capped `Get-WinEvent` query otherwise. Its detections are unchanged and read
+  the same rows from either source.
+- **Nothing is discarded for being unmapped.** All Sysmon IDs 1–29 and 255,
+  common Defender IDs (including ASR, controlled folder access, and network
+  protection), and Task Scheduler IDs are mapped. Anything else is kept as
+  `unknown` with its fields and raw XML.
+- **Process identity is the Sysmon ProcessGuid.** A PID is never an identity.
+  Sysmon's all-zero GUID means "none". The Linux equivalent (boot ID, PID and
+  start ticks from `/proc/<pid>/stat`) is not built yet.
+- **Raw events are not SQLite rows.** They are compressed about 10× in gzip
+  segments (about 250 bytes per event including the raw XML). `index.db` holds
+  only projections: process instances, first and last sighting per
+  hash/DNS/IP/image, and counts. It can be rebuilt from the segments.
+- **Commit point.** Each source batch and its cursor are written in one fsync'd
+  append. A torn tail is truncated on open and re-read from the spool. A
+  segment renamed into place before its chain line is written is adopted on
+  open.
+- **Retention is by space, never by age or severity.** Something routine today
+  can become evidence when intelligence arrives later. Pruned segments are
+  recorded as known absence. `hold()` ranges are never pruned.
+
+Found by running it:
+
+- The previous `JarvisSensor.cs` did not compile: `EventBookmark(string)`,
+  `BookmarkXml` and `EventLogException.ErrorCode` are not public in .NET
+  Framework. The sensor now resumes by record ID.
+- Sysmon event 255 reported **186,649 records dropped from the driver queue**
+  in retained history, including 275 ProcessCreate and 2 CreateRemoteThread.
+  Nearly all were RegistryEvent, which points to one over-broad registry rule.
+  `sysmon.py` now reports this as `telemetry loss`.
+- No Sysmon event 7 (ImageLoad) or 10 (ProcessAccess) exists in 25,000 retained
+  records, so the LSASS-access detection cannot fire under the current Windows
+  configuration. Confirm with `Sysmon64.exe -c` (elevated).
+- The Task Scheduler operational channel is disabled.
+
+Not done, and not implied:
+
+- No encryption at rest. The standard library has no authenticated cipher. Use
+  the OS key store plus a vetted library when a dependency is acceptable.
+- The hash chain is local. It detects edits, deletions and reordering only
+  against a chain head kept off the machine (`jarvis timeline verify` prints
+  it; `--anchor` checks it). Remote anchoring and a witness are Stage 5.
+- No event-versus-snapshot reconciliation yet, for example a process present in
+  a snapshot with no recorded start. The process index makes that the next
+  detector.
+- Linux (`sysmon_linux`, auditd) still reads journald directly. Linux events do
+  not flow into the log yet.
+- No per-channel spool quota. One flooding channel can fill the shared 512 MiB.
+- Incident evidence does not yet call `hold()` automatically.
+
+## JARVIS Arena: continuous adversarial validation (2026-09-18)
+
+The Arena tests the whole chain, not just detection: observed → understood →
+correlated → classified → intervened → contained → removed → restored →
+verified. Each property is scored on its own (`jarvis/lab/scoring.py`), so a
+"100% Arena score" means a defined suite passes end to end — not a claim that
+no attack could succeed. It also records the **earliest point at which the
+recorded telemetry was sufficient to classify the attack**: how early JARVIS
+could have acted.
+
+```
+scenario (declarative, safety-classified)
+   │  jarvis/lab/scenario.py
+   ▼
+isolation.guard ── refuses live/detonation outside a marked sandbox
+   │
+provider ── synthetic (generate telemetry, run nothing) | replay | atomic (spec only)
+   │
+real event log  ─►  real detector (sysmon.audit)  ─►  findings
+   │
+scoring ── property-by-property scorecard + earliest decision point
+   │
+regression.py ── every scenario permanent; a score below its best is a regression
+```
+
+Safety is structural, not advisory (`jarvis/lab/isolation.py`):
+
+- **synthetic** and **replay** run anywhere: they feed generated or recorded
+  events through the real ingestion, normalization, event log and detectors and
+  execute nothing on the OS. This is how the Arena tests detection of dangerous
+  techniques — LSASS access, shadow-copy deletion, injection — on an ordinary
+  machine without performing them.
+- **live** (a real primitive the sensor observes) is refused unless the process
+  is in a marked sandbox (`JARVIS_ARENA_SANDBOX=1` or `/etc/jarvis-arena-sandbox`).
+- **high_risk_detonation** needs an explicit interactive flag on top of the
+  sandbox; **prohibited_in_automation** never runs.
+
+Threat intelligence never becomes executable directly. `jarvis/lab/intel.py`
+turns a structured behavior into a *candidate specification* mapped to ATT&CK,
+with a coverage verdict ("can JARVIS see this yet?"), classified
+`prohibited_in_automation` until a human rewrites it as concrete telemetry.
+Atomic Red Team tests import the same way (`providers/atomic.py`): command
+executors become `high_risk_detonation`/`live` specs, manual ones
+`prohibited_in_automation`; none are runnable until reviewed.
+
+**Attacks against JARVIS itself** are a first-class category. The `tamper`
+provider writes a baseline, lets the runner seal it into the hash chain, then
+rewrites, deletes or truncates a sealed segment; the `integrity` detector runs
+the event log's own `verify()`, and the scenario passes only if the tampering is
+caught. A `sysmon`-blinding scenario (driver-queue overflow, event 255) checks
+that flooding the sensor surfaces as telemetry loss. These run anywhere: they
+touch only the run's throwaway log, never the host.
+
+**The response half** (intervened → verified) is scored whenever a `response`
+callable is supplied to `runner.run`; it is invoked after detection and returns
+what it did. Synthetic scenarios supply none, so those properties correctly read
+"not exercised" rather than a false pass.
+
+Verified on this machine: five scenarios pass 100% — T1003.001 LSASS read and
+T1490 shadow-copy deletion drive the real Sysmon detector to critical findings
+across observed/understood/correlated/classified with the earliest decision
+point identified; two self-defense scenarios have their segment tampering caught
+by the chain; and the sensor-blinding one is caught as telemetry loss.
+`jarvis arena {list,run,suite,show,coverage,import,candidates}`.
+
+Threat libraries import as specifications: Atomic Red Team (`providers/atomic.py`)
+and CALDERA abilities/adversaries (`providers/caldera.py`, preserving chain
+order); research behaviors become coverage candidates (`jarvis arena candidates`,
+`intel.candidates_from`). None are runnable until reviewed.
+
+Genuinely still to build: **executing a real primitive** in a marked sandbox
+with a sensor watching (the `live` path and `run_live` provider hook exist and
+are gated, but no OS-executing provider ships); the **native response broker**
+that would let intervened→verified be exercised against a real machine rather
+than a supplied callback; **CALDERA chained-operation execution**; and wiring
+**live Exa retrieval** into `candidates_from` (today it takes already-structured
+behaviors). The layer contract gained a `lab` tier above `service`
+(`tests/test_layers.py`).
+
 ## Validation
 
 Validation results are recorded here after the final checks. All architecture

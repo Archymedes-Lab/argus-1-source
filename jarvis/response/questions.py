@@ -20,6 +20,7 @@ offline assistant is wired — by voice.
 import json
 import time
 
+from jarvis.core import egress
 from jarvis.response import acknowledge, alert, defense
 from jarvis.response.reporting import triage
 
@@ -40,6 +41,12 @@ def _phrase(finding, job):
     title = f.get("title") or ""
     where = f.get("where") or ""
 
+    program = egress.program_of(title)
+    if program:
+        return (f"{program} connected to the internet ({(f.get('detail') or '').split(' — ')[0]}). "
+                f"Should {program} reach the internet?",
+                "Yes, remember it as expected.",
+                "No, flag it every time it connects.")
     if cat == "accounts":
         name = title.split(":")[-1].strip() or "this account"
         return (f"An account is hidden from the sign-in screen: {name}. "
@@ -134,6 +141,14 @@ def answer(store, qid, choice, now=None):
                      "finding_key": alert.finding_key(finding)}
     _prune(answered, now)
     store.set_meta(META, json.dumps(answered))
+
+    program = egress.program_of(finding.get("title"))
+    if program:
+        host = finding.get("host") or "wsl"
+        egress.decide(store, host, program, egress.EXPECTED if choice == YES else egress.UNEXPECTED, now)
+        if choice == YES:
+            return True, f"remembered: {program} is expected to reach the internet"
+        return True, f"flagged: every connection from {program} will now be a high finding"
 
     if choice == YES:
         try:

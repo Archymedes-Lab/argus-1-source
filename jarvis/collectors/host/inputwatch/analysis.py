@@ -297,7 +297,8 @@ def _control_findings(store, hours=24):
 
     out = []
     keys = [r for r in rows if r["kind"] == "control-key"]
-    states = [r for r in rows if r["kind"] == "control-state"]
+    states = [r for r in rows if r["kind"] == "control-state" and r["control"] != "app-volume"]
+    apps = [r for r in rows if r["kind"] == "control-state" and r["control"] == "app-volume"]
     injected = [r for r in keys if r["injected"]]
     unkeyed = [r for r in states if r["keyed"] == 0]
 
@@ -322,6 +323,31 @@ def _control_findings(store, hours=24):
             % (len(unkeyed), hours, first["detail"], iso(first["ts"]),
                first["fg"] or "unknown"),
             "control_events"))
+
+    if apps:
+        # An app changing its own level while you use it is ordinary (a video
+        # player's slider). One whose level moved while another window had
+        # focus, with no key behind it, was changed from outside the app.
+        def _app(r):
+            return (r["detail"] or "").split(":", 1)[0].lower()
+        outside = [r for r in apps if r["keyed"] == 0 and _app(r)
+                   and not (r["fg"] or "").lower().startswith(_app(r))]
+        latest = apps[0]
+        if outside:
+            first = outside[0]
+            out.append(_finding(
+                "input", "medium", "an app's volume was changed from outside it",
+                "%d per-app change(s) in %dh happened while another window had focus "
+                "and no key was pressed; most recent %s at %s, foreground %s. The "
+                "Windows volume mixer, a headset app or an audio tool does this "
+                "legitimately — so does software acting on your machine."
+                % (len(outside), hours, first["detail"], iso(first["ts"]),
+                   first["fg"] or "unknown"), "control_events"))
+        out.append(_finding(
+            "input", "low", "per-app volume changes are recorded",
+            "%d per-app change(s) in %dh; most recent %s at %s, foreground %s"
+            % (len(apps), hours, latest["detail"], iso(latest["ts"]),
+               latest["fg"] or "unknown"), "control_events"))
 
     keyed = [r for r in states if r["keyed"] == 1]
     out.append(_finding(

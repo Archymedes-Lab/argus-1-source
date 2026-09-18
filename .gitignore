@@ -11,3 +11,6 @@ venv/
 *.sqlite3
 .DS_Store
 *.log
+
+# stray agent checkpoint store, not project source
+.archymedes/

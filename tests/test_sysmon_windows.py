@@ -50,3 +50,49 @@ class WindowsSysmonImpactTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThreadVerdictTests(unittest.TestCase):
+    """Real Sysmon event 8 shapes recorded on this machine, 2026-09-16/17."""
+
+    def v(self, *a):
+        from jarvis.collectors.telemetry import sysmon
+        return sysmon.thread_verdict(*a)
+
+    def test_kernel_start_address_is_routine(self):
+        self.assertIsNone(self.v(r"C:\Windows\System32\dwm.exe", "", "-", "-", "0xFFFFF80749AED220"))
+        self.assertIsNone(self.v("", "", "-", "-", "0xFFFFF8043EA61070"))
+
+    def test_console_ctrl_delivery_is_routine(self):
+        self.assertIsNone(self.v("", r"C:\x\ollama.exe", r"C:\WINDOWS\System32\KERNELBASE.dll",
+                                 "CtrlRoutine", "0x00007FFDB7876400"))
+
+    def test_electron_child_thread_in_its_own_image_is_low(self):
+        exe = r"C:\Users\c\AppData\Local\Programs\VSCodium\VSCodium.exe"
+        self.assertEqual(self.v(exe, exe, exe, "-", "0x00007FF6CFEBACC0")[0], "low")
+
+    def test_real_injection_shapes_stay_loud(self):
+        self.assertEqual(self.v(r"C:\t\evil.exe", r"C:\x\notepad.exe", "-", "-",
+                                "0x000001A2B3C40000")[0], "critical")
+        self.assertEqual(self.v(r"C:\t\evil.exe", r"C:\x\notepad.exe",
+                                r"C:\WINDOWS\System32\KERNEL32.DLL", "LoadLibraryW",
+                                "0x00007FFD00001000")[0], "critical")
+
+
+class RememberTests(unittest.TestCase):
+    def test_run_state_is_reported_once_not_remembered(self):
+        import os
+        import tempfile
+
+        from jarvis.core.store import Store
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "t.db"))
+            try:
+                partial = sysmon._finding("visibility", "high", "Sysmon event coverage is partial", "x", "c")
+                hit = sysmon._finding("injection", "critical", "evil.exe created a thread inside notepad.exe", "d", "w")
+                first = sysmon._remember(store, [partial, hit], 24)
+                later = sysmon._remember(store, [], 24)
+            finally:
+                store.close()
+        self.assertIn("Sysmon event coverage is partial", [f["title"] for f in first])
+        self.assertEqual([f["title"] for f in later], ["evil.exe created a thread inside notepad.exe"])

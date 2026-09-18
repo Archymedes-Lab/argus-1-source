@@ -50,6 +50,15 @@ function Get-MailFailure($err) {
     }
     return $e.GetType().Name
 }
+function Get-Reviver {
+    # What the instant reviver (revive-jarvis.ps1) is doing about it, if anything.
+    try {
+        $r=Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'Jarvis\Reviver\state.json') -Raw | ConvertFrom-Json
+        $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        return @{present=$true;active=($now-[long]$r.checkedAt -lt 30);gaveUp=($r.gaveUp -eq $true);
+                 paused=($r.paused -eq $true);action=[string]$r.lastAction;actionAt=[long]$r.lastActionAt}
+    } catch {return @{present=$false;active=$false;gaveUp=$false;paused=$false;action='';actionAt=0}}
+}
 function Get-JarvisHealth {
     # Raw HttpWebRequest, not Invoke-RestMethod. Under Task Scheduler the
     # cmdlet consults the system proxy and Internet Explorer first-run state,
@@ -158,11 +167,22 @@ if ($health.healthy) {
     if (-not $state.firstFailure) {$state.firstFailure=$now}
     $state.failures=[int]$state.failures+1
     $age=$now-[long]$state.firstFailure
-    if ($state.failures -ge 2 -and $age -ge 60) {
+    # A live reviver gets three minutes to fix it before anyone is told: most
+    # outages are a stale source or a restart it clears in seconds. One that
+    # has given up, is paused, or is not running gets no such grace.
+    $rev=Get-Reviver
+    $state.reviver=if (-not $rev.present) {'not installed'} elseif (-not $rev.active) {'not running'} elseif ($rev.paused) {'paused'} elseif ($rev.gaveUp) {'gave up'} else {'working'}
+    $holding=$rev.active -and -not $rev.gaveUp -and -not $rev.paused -and $age -lt 180
+    if ($state.failures -ge 2 -and $age -ge 60 -and -not $holding) {
         $level=0
         foreach ($threshold in @(3600,21600,86400)) {if ($age -ge $threshold) {$level++}}
         $title='[JARVIS] monitoring unavailable'
-        $body="The independent Windows monitor cannot verify JARVIS. Failure duration: $([int]($age/60)) minutes. $($health.reason). Open Ubuntu and run: jarvis selfcheck. Escalation level: $level."
+        $tried=if (-not $rev.present) {'The instant reviver is not installed.'}
+               elseif (-not $rev.active) {'The instant reviver is not running, so nothing has tried to fix this.'}
+               elseif ($rev.paused) {'The instant reviver is paused for maintenance.'}
+               elseif ($rev.action) {"The instant reviver tried: $($rev.action) ($([int](($now-$rev.actionAt)/60)) min ago)$(if ($rev.gaveUp) {', and has stopped after its restart budget'})."}
+               else {'The instant reviver has not found anything it can safely restart.'}
+        $body="The independent Windows monitor cannot verify JARVIS. Failure duration: $([int]($age/60)) minutes. $($health.reason). $tried If this persists, open Ubuntu and run: jarvis selfcheck. Escalation level: $level."
         if ($level -gt $state.toastLevel -and $now-$state.lastToastAttempt -ge 300) {
             $state.lastToastAttempt=$now
             try {Show-JarvisToast 'JARVIS monitoring unavailable' $body;$state.toastLevel=$level;$state.toastError=''}

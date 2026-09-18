@@ -58,6 +58,13 @@ class CheckProcessesTest(unittest.TestCase):
         out = self.run_check(self.rows(("OneDriveSetup.exe", exe, "win")))
         self.assertEqual([f["severity"] for f in out], ["high"])
 
+    def test_writeup_name_in_the_real_install_location_is_medium(self):
+        # Measured: Microsoft's self-deleting OneDrive updater, named on a Splunk
+        # detection page; gone before its signature could be read.
+        exe = r"C:\Users\me\AppData\Local\Microsoft\OneDrive\Update\OneDriveSetup.exe"
+        out = self.run_check(self.rows(("OneDriveSetup.exe", exe, "win")))
+        self.assertEqual([f["severity"] for f in out], ["medium"])
+
     def test_name_without_a_path_is_low(self):
         out = self.run_check(self.rows(("OneDriveSetup.exe", "", "win")))
         self.assertEqual([f["severity"] for f in out], ["low"])

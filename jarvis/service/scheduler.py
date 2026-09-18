@@ -6,6 +6,14 @@ spinning up powershell.exe dominates everything else. So jobs run on their own
 intervals, and never concurrently -- a single worker thread runs them one at a
 time, because two simultaneous powershell.exe launches are slower than running
 them back to back and would fight over the same interop pipe.
+
+One exception: the jobs that prove JARVIS is watching at all run in a lane of
+their own. They are cheap (a socket stat, a heartbeat read, a /proc walk plus
+one short process listing), and behind a single queue they starved: on
+2026-09-17 `intrusion` (48s) then `secrets` (192s) held the worker, `bridge`
+and `scan` aged past their health limits, and the Windows monitor mailed
+"monitoring unavailable" about a daemon that was perfectly alive. A long audit
+must never be able to make JARVIS look dead.
 """
 
 import threading
@@ -19,6 +27,10 @@ from jarvis.response.reporting import notifications
 from jarvis.service import sdnotify
 from jarvis.service.jobs import run_job
 from jarvis.service.schedule import JOBS
+
+# The priority lane: short jobs that health and the watchdogs judge freshness
+# by. Each must stay well under a few seconds, or it starves its own lane.
+FAST = ("bridge", "input_hook", "scan")
 
 
 class Scheduler(threading.Thread):
@@ -51,6 +63,9 @@ class Scheduler(threading.Thread):
         # unnoticed. It is deliberately not touched mid-job: the longest job
         # (~106s) must not look like a hang, but a multi-minute stall must.
         self.heartbeat = time.time()
+        self.fast_heartbeat = time.time()
+        self.fast_current = None
+        self.fast_thread = None
         self.started_at = time.time()
         self.lock = threading.Lock()
 
@@ -61,13 +76,19 @@ class Scheduler(threading.Thread):
             return True
         return False
 
-    def _due(self):
+    def _due(self, lane=None):
+        """The job to run next. `lane` is "fast", "main", or None for either."""
+        member = (lambda n: True) if lane is None else (
+            (lambda n: n in FAST) if lane == "fast" else (lambda n: n not in FAST))
         with self.lock:
-            if self.forced:
-                return self.forced.pop(0)
+            for i, name in enumerate(self.forced):
+                if member(name):
+                    return self.forced.pop(i)
         now = time.time()
         most_overdue, score = None, None
         for name, t in self.next_run.items():
+            if not member(name):
+                continue
             if name in ("coverage", "report") and self.cold_start_pending:
                 continue
             if t > now:
@@ -83,19 +104,30 @@ class Scheduler(threading.Thread):
         return most_overdue
 
     def run(self):
+        self.fast_thread = threading.Thread(target=self._lane, args=("fast",),
+                                            name="jarvis-fast-lane", daemon=True)
+        self.fast_thread.start()
+        self._lane("main")
+
+    def fast_alive(self):
+        return self.fast_thread is None or self.fast_thread.is_alive()
+
+    def _lane(self, lane):
         store = Store(self.db_path)
+        beat = "heartbeat" if lane == "main" else "fast_heartbeat"
+        running = "current" if lane == "main" else "fast_current"
         try:
             while True:
-                self.heartbeat = time.time()
-                name = self._due()
+                setattr(self, beat, time.time())
+                name = self._due(lane)
                 if name is None:
                     time.sleep(1)
                     continue
-                self.current = name
+                setattr(self, running, name)
                 try:
                     findings, err = self.run_once(store, name)
                 finally:
-                    self.current = None
+                    setattr(self, running, None)
                     self.next_run[name] = time.time() + JOBS[name][0]
                     self.cold_start_pending.discard(name)
                 # Page out anything that warrants it — especially a collector
@@ -169,8 +201,10 @@ def watchdog_loop(scheduler):
     stall_limit = max(600.0, usec / 1_000_000 * 0.8)
     while True:
         time.sleep(interval)
-        alive = scheduler.is_alive()
-        progressed = (time.time() - scheduler.heartbeat) < stall_limit
+        alive = scheduler.is_alive() and scheduler.fast_alive()
+        # The fast lane's jobs take seconds, so a minute without a loop is a hang.
+        progressed = ((time.time() - scheduler.heartbeat) < stall_limit and
+                      (time.time() - scheduler.fast_heartbeat) < 300)
         if alive and progressed:
             sdnotify.watchdog()
         # else: withhold the ping and let systemd restart us.

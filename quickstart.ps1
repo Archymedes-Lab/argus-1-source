@@ -23,6 +23,8 @@ $wake = Join-Path $here 'wake-jarvis.ps1'
 if (-not (Test-Path -LiteralPath $wake)) { throw "wake-jarvis.ps1 not found next to this script ($here)" }
 
 if ($Remove) {
+    $revive = Join-Path $here 'revive-jarvis.ps1'
+    if (Test-Path -LiteralPath $revive) { & $revive -Remove }
     & $wake -Remove -Distro $Distro
     return
 }
@@ -46,6 +48,9 @@ Write-Host "`n2/3  Wake watchdog (scheduled task)" -ForegroundColor Cyan
 $repoRoot = (& wsl.exe -d $Distro --exec wslpath -a $here 2>$null | Out-String).Trim()
 if (-not $repoRoot) { $repoRoot = $here }
 & $wake -Install -Distro $Distro -RepoRoot $repoRoot
+# The instant reviver: checks every few seconds and revives what has stopped.
+$revive = Join-Path $here 'revive-jarvis.ps1'
+if (Test-Path -LiteralPath $revive) { & $revive -Install -Distro $Distro -RepoRoot $repoRoot }
 
 Write-Host "`n3/3  Dashboard" -ForegroundColor Cyan
 $ok = $false

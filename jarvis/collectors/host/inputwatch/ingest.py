@@ -95,7 +95,9 @@ def ingest(store):
             # which control moved, when, and whether a key explains it.
             kind = str(rec.get("kind"))
             if kind == "control-state":
-                detail = "%s -> %s%s" % (
+                detail = "%s%s -> %s%s" % (
+                    ("%s:%s " % (str(rec.get("app") or "?")[:40], rec.get("pid"))
+                     if rec.get("control") == "app-volume" else ""),
                     rec.get("from"), rec.get("to"),
                     "  muted" if rec.get("muted") else "")
                 keyed = int(rec.get("keyed", -1))

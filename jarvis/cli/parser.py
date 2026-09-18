@@ -8,8 +8,11 @@ from jarvis.intel import research as intel
 from jarvis.service import selfcheck
 
 from .commands import ack as ack_cli
+from .commands import arena as arena_cli
 from .commands import ask as ask_cli
+from .commands import attack as attack_cli
 from .commands import brief as brief_cli
+from .commands import broker as broker_cli
 from .commands import (
     cmd_alert,
     cmd_approve,
@@ -54,12 +57,14 @@ from .commands import (
 )
 from .commands import defend as defend_cli
 from .commands import evidence as evidence_cli
-from .commands import incidents as incidents_cli
 from .commands import impersonation as impersonation_cli
+from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
 from .commands import pixel as pixel_cli
 from .commands import repair as repair_cli
 from .commands import retention as retention_cli
+from .commands import sensor as sensor_cli
+from .commands import timeline as timeline_cli
 
 
 def build_parser():
@@ -75,9 +80,14 @@ def build_parser():
     ack_cli.add_parser(sub)
     ask_cli.add_parser(sub)
     brief_cli.add_parser(sub)
+    broker_cli.add_parser(sub)
+    attack_cli.add_parser(sub)
+    arena_cli.add_parser(sub)
     defend_cli.add_parser(sub)
     incidents_cli.add_parser(sub)
     inspect_cli.add_parser(sub)
+    sensor_cli.add_parser(sub)
+    timeline_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
     b.add_argument("--reset", action="store_true",

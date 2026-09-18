@@ -310,7 +310,7 @@ def _visibility(d):
     ps = d.get("pslog") or {}
     if not _truthy(ps.get("scriptblock")):
         out.append(_finding(
-            "visibility", "medium", "PowerShell script block logging is off",
+            "logging", "medium", "PowerShell script block logging is off",
             "this is the single most useful log for reconstructing what an "
             "attacker ran — and this machine has already had a remote script "
             "piped into an elevated shell",
@@ -318,7 +318,7 @@ def _visibility(d):
             r"\ScriptBlockLogging /v EnableScriptBlockLogging /t REG_DWORD /d 1"))
     if not _truthy(ps.get("transcript")):
         out.append(_finding(
-            "visibility", "low", "PowerShell transcription is off",
+            "logging", "low", "PowerShell transcription is off",
             "transcripts record command output, not just the commands",
             "enable Transcription policy with an output directory"))
 

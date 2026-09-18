@@ -1,5 +1,6 @@
 """The posture audit: one sample, every section, sorted."""
 
+from jarvis.platform import broker
 from jarvis.platform.windows import ps_json
 
 from .collect import PS_POSTURE, elevated_data
@@ -14,6 +15,10 @@ def audit(hosts=("win",), elevate=False):
     d = None
     if elevate:
         d, elev_err = elevated_data()
+    if d is None:
+        # The elevated broker's run sees BitLocker, TPM, Defender exclusions
+        # and optional features; the unelevated one reports those unreadable.
+        d, _why = broker.result("posture")
     if d is None:
         d = ps_json(PS_POSTURE, timeout=400)
     if not d:

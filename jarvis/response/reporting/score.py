@@ -39,9 +39,10 @@ AREAS = (
     ("Data & privacy", ("secrets", "spy", "pixel", "sniffing")),
     ("Network", ("internet", "netwatch")),
     ("Developer toolchain", ("toolchain",)),
-    ("Monitoring", ("coverage", "bridge", "watchdogs")),
+    ("Monitoring", ("coverage", "bridge", "watchdogs", "native")),
 )
-UNSCORED = ("gaps", "intel", "feeds", "ledger", "report", "resources", "controls")
+UNSCORED = ("gaps", "intel", "feeds", "ledger", "report", "resources", "controls",
+            "attackmap")
 AREA_OF = {job: area for area, jobs in AREAS for job in jobs}
 
 WEIGHT = {"critical": 20, "high": 8, "medium": 2, "low": 0, "ok": 0}

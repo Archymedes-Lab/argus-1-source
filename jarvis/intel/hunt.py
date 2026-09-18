@@ -25,7 +25,7 @@ import json
 import os
 
 from jarvis.collectors.process.detect import TRUSTED_PATHS
-from jarvis.core import vet
+from jarvis.core import vet, warninglist
 from jarvis.core.finding import finding as _finding
 from jarvis.core.util import dpkg_owns, now
 from jarvis.platform.windows import ps_json
@@ -81,7 +81,7 @@ def _hash_cached(store, path):
 
 def _active(store, kind):
     return store.db.execute(
-        "SELECT norm, value, source_url, context, doc_count FROM indicators "
+        "SELECT norm, value, source_url, context, doc_count, confidence FROM indicators "
         "WHERE kind=? AND status='active'", (kind,)).fetchall()
 
 
@@ -132,21 +132,11 @@ def check_peers(store):
     matched = {}
     for row in rdns_rows:
         host = (row["rdns"] or "").lower().rstrip(".")
-        parts = host.split(".")
-        for i in range(len(parts) - 1):
-            parent = ".".join(parts[i:])
-            if not vet.vet_domain(parent)[0]:
-                continue
-            hit = store.db.execute(
-                "SELECT context, source_url, malware, source, confidence FROM indicators "
-                "WHERE kind='domain' AND norm=? AND status='active'",
-                (parent,)).fetchone()
-            if hit:
-                matched[host] = (parent, hit)
-                break
-    for host, (parent, hit) in matched.items():
-        severity = "critical" if hit["confidence"] == "high" else "medium"
-        qualifier = "known attacker" if severity == "critical" else "threat-intelligence"
+        m = warninglist.match_domain(store, host)
+        if m:
+            matched[host] = m
+    for host, m in matched.items():
+        parent, hit, severity, qualifier = m["indicator"], m["hit"], m["severity"], m["qualifier"]
         for p in store.db.execute(
                 """SELECT p.remote_ip ip, p.remote_port port, p.host host,
                           pr.name pname FROM peers p
@@ -337,7 +327,13 @@ def check_processes(store):
         # process such as Registry), so the name match is all there is — the
         # evidence this docstring says is not enough on its own. It stays
         # listed, at low.
-        sev = "high" if exe else "low"
+        # The indicator's own confidence caps it, as for domains: a name the
+        # writeup reader pulled from prose is medium evidence at most.
+        # Measured: OneDriveSetup.exe, Microsoft's self-deleting updater, from
+        # a Splunk detection-rule page — gone before its signature could be read.
+        # A copy in a temp or download folder is suspicious whatever the source.
+        dropped = any(d in exe for d in ("/temp/", "/tmp/", "/downloads/"))
+        sev = ("high" if dict(hit).get("confidence") == "high" or dropped else "medium") if exe else "low"
         out.append(_finding(
             "named process", sev,
             f"a process matching a known malware name ran: {row['name']}",

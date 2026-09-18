@@ -31,6 +31,7 @@ absence: a region can be allocated, executed and freed between two passes.
 
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.paths import win_script
+from jarvis.platform import broker
 from jarvis.platform.windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -83,6 +84,10 @@ KNOWN_HOOKERS = {
 
 
 def _run(timeout=420):
+    # Elevated, the scan opens every process instead of about half of them.
+    data, _why = broker.result("memscan")
+    if data:
+        return dict(data, _elevated=True), ""
     try:
         with open(SCAN_PS1, encoding="utf-8", errors="replace") as fh:
             script = fh.read()
@@ -116,7 +121,17 @@ def audit(hosts=("win",)):
     denied = int(mem.get("denied") or 0)
     procs = aslist(mem.get("procs"))
 
-    if denied:
+    if denied and data.get("_elevated"):
+        # Elevated, what remains is Protected Process Light (lsass, csrss,
+        # Defender): closed to administrator by design, openable only from the
+        # kernel. That is this collector's boundary, not a lapse in coverage.
+        out.append(_finding(
+            "limits", "low",
+            f"{denied} protected processes are outside the memory scan",
+            f"{opened} were scanned with an administrator token. The rest run as "
+            f"Protected Process Light, which Windows keeps closed to administrator "
+            f"— only a kernel driver could read them", "OpenProcess"))
+    elif denied:
         out.append(_finding(
             "visibility", "medium" if denied > opened else "low",
             f"{denied} processes could not be opened for inspection",

@@ -19,7 +19,7 @@ from pathlib import Path
 PKG = Path(__file__).resolve().parent.parent / "jarvis"
 
 RANK = {"core": 0, "platform": 1, "collectors": 2, "intel": 3, "response": 4,
-        "service": 5, "web": 6, "cli": 7}
+        "service": 5, "lab": 6, "web": 7, "cli": 8}
 
 
 def _modules():

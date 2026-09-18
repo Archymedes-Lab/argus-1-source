@@ -198,6 +198,24 @@ CREATE INDEX IF NOT EXISTS idx_ind_kind ON indicators(kind, status);
 
 -- The ATT&CK catalogue, so a technique id can be shown with its real name and
 -- gap analysis can talk about behaviour instead of numbers.
+-- Tranco-ranked popular registrable domains: the warninglist that keeps a
+-- brand named in a writeup, or one tenant's file on a shared CDN, from
+-- becoming an "attacker domain" for every machine that resolves it.
+-- Approve-once egress decisions: whether a program is expected to reach the
+-- internet. Asked once per program, never learned silently.
+CREATE TABLE IF NOT EXISTS egress_baseline (
+    host     TEXT NOT NULL,
+    program  TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    at       INTEGER NOT NULL,
+    PRIMARY KEY (host, program)
+);
+
+CREATE TABLE IF NOT EXISTS popular_domains (
+    domain TEXT PRIMARY KEY,
+    rank   INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS attack_techniques (
     tid       TEXT PRIMARY KEY,
     name      TEXT NOT NULL,

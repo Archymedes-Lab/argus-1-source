@@ -176,7 +176,12 @@ def compare(current, previous, seen=None):
         "monitor firmware, the default-audio-device selection (needs an extra "
         "module), audio/video content, clipboard, and per-event attribution. "
         "Injected keystrokes/clicks are the resident input hook's job; "
-        "remote-access and persistence are separate collectors.", "visibility"))
+        "remote-access and persistence are separate collectors.",
+        # "limits", not "visibility": this is the fixed scope statement, emitted
+        # every run. As "visibility" it marked every run partial and the
+        # coverage job paged "collector 'controls' is failing". Real read
+        # errors above stay "visibility" and still mark coverage incomplete.
+        "limits"))
     return out
 
 

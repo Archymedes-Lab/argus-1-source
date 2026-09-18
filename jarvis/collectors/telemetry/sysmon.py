@@ -33,15 +33,18 @@ wrong.
 
 import os
 import re
+from datetime import datetime, timezone
 
-from jarvis.core import collection, vet
+from jarvis.core import collection, warninglist
+from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
 from jarvis.platform.windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"impact": 0, "credential access": 1, "injection": 2,
-             "tampering": 3, "intel match": 4, "telemetry": 5, "visibility": 6}
+             "tampering": 3, "intel match": 4, "telemetry loss": 5, "telemetry": 6,
+             "visibility": 7}
 
 CHANNEL = "Microsoft-Windows-Sysmon/Operational"
 
@@ -112,7 +115,7 @@ $o.reader = [bool]((whoami /groups) -match 'Event Log Readers')
     return d or {}
 
 
-def _fetch(hours=24, max_events=1200, minutes=None):
+def _fetch(hours=24, max_events=1200, minutes=None, rare_hours=None):
     """Pull the event types worth reasoning about, already reduced to fields.
 
     Cost here is almost entirely `Get-WinEvent`, and it scales with how many
@@ -125,6 +128,7 @@ def _fetch(hours=24, max_events=1200, minutes=None):
 $ErrorActionPreference = 'SilentlyContinue'
 $o = [ordered]@{}
 $since = __SINCE__
+$rareSince = __RARE_SINCE__
 # Event 3 (network connect) was being fetched and never read — on a busy
 # desktop it is most of the log by volume, and dropping it is most of the cost.
 # The remaining types split by frequency: 8/10/25 are rare and each one
@@ -139,14 +143,15 @@ function Read-Events($filter, $limit) {
 $readFailed=$false
 $rare  = @(Read-Events @{
         LogName='Microsoft-Windows-Sysmon/Operational'
-        Id=8,10,25
-        StartTime=$since } 801)
+        Id=8,10,25,255
+        StartTime=$rareSince } 801)
 $bulk  = @(Read-Events @{
         LogName='Microsoft-Windows-Sysmon/Operational'
         Id=1,7,22
         StartTime=$since } (__MAX__ + 1))
 $o.complete = (-not $readFailed -and $rare.Count -le 800 -and $bulk.Count -le __MAX__)
 $o.readFailed = $readFailed
+$o.rareComplete = (-not $readFailed -and $rare.Count -le 800)
 $o.capped = ($rare.Count -gt 800 -or $bulk.Count -gt __MAX__)
 $ev = @($rare) + @($bulk)
 
@@ -177,6 +182,10 @@ $rows = foreach ($e in $ev) {
     dport   = [string]$d['DestinationPort']
     cmdline = [string]$d['CommandLine']
     type    = [string]$d['Type']
+    start_module = [string]$d['StartModule']
+    start_function = [string]$d['StartFunction']
+    start_address = [string]$d['StartAddress']
+    description = [string]$d['Description']
   }
 }
 $o.events = @($rows)
@@ -184,9 +193,151 @@ $o.count = @($rows).Count
 """
     since = (f"(Get-Date).AddMinutes(-{int(minutes)})" if minutes
              else f"(Get-Date).AddHours(-{int(hours)})")
-    script = (script.replace("__SINCE__", since)
+    # rare_hours: re-read the rare events (8, 10, 25) over a longer window
+    # than the bulk ones, for a one-time re-judge that must not trip the
+    # bulk cap and leave the whole collector partial.
+    rare_since = f"(Get-Date).AddHours(-{int(rare_hours)})" if rare_hours else since
+    script = (script.replace("__RARE_SINCE__", rare_since).replace("__SINCE__", since)
                     .replace("__MAX__", str(int(max_events))))
     return _ps(script, timeout=420) or {}
+
+
+# Sysmon reports its own losses as event 255. `ID=QUEUE` means the driver's
+# queue overflowed and events were discarded before reaching the log — the
+# counts name which kinds were lost.
+DROPPED = re.compile(r"(\w+):(\d+)")
+# A consumer that has not seen a sensor batch for this long is reading history,
+# not the present; the PowerShell query takes over until delivery resumes.
+NATIVE_FRESH = 600
+
+
+def rows_from_events(events):
+    """Canonical Sysmon events -> the reduced rows the detections below read.
+
+    The same shape `_fetch` produces from PowerShell, so every detection runs
+    unchanged on either source.
+    """
+    rows = []
+    for e in events:
+        p, par, t = e.get("process") or {}, e.get("parent") or {}, e.get("target") or {}
+        eid = int(e.get("source_event") or 0)
+        rows.append({
+            "id": eid, "record_id": e.get("record"), "seq": e.get("seq"),
+            "process_guid": p.get("guid") or "", "parent_guid": par.get("guid") or "",
+            "process_id": str(p.get("pid") or ""), "parent_cmdline": par.get("cmdline") or "",
+            "time": e.get("time"), "image": p.get("image") or "",
+            "target": t.get("image") or "", "granted": t.get("access") or "",
+            "parent": par.get("image") or "",
+            "hashes": (p.get("hashes") if eid == 1 else t.get("hashes")) or "",
+            "query": t.get("query") or "", "loaded": t.get("path") or "",
+            "signed": t.get("signed") or "", "sigstat": t.get("signature_status") or "",
+            "dest": t.get("ip") or "", "dport": str(t.get("port") or ""),
+            "cmdline": p.get("cmdline") or "", "type": t.get("tamper") or "",
+            "start_module": t.get("start_module") or "",
+            "start_function": t.get("start_function") or "",
+            "start_address": t.get("start_address") or "",
+            "description": (e.get("attrs") or {}).get("Description") or "",
+            "error_id": (e.get("attrs") or {}).get("ID") or "",
+        })
+    return rows
+
+
+def _native(store, root=None, since=None):
+    """Read Sysmon events from the event log, if the sensor is delivering.
+
+    New events since this consumer's offset, or with `since` (epoch seconds)
+    everything the source timestamped from then on. -> (data, through) shaped
+    like `_fetch`, or None to fall back. Only the consumer offset moves here;
+    the log itself is written by the ingest job.
+    """
+    try:
+        log = EventLog(root) if root else EventLog()
+    except (LogError, OSError):
+        return None
+    try:
+        fresh = [c for c in log.cursors.values()
+                 if c.get("channel") == CHANNEL and now() - float(c.get("at") or 0) < NATIVE_FRESH]
+        if not fresh:
+            return None
+        offset = int(store.get_meta("sysmon_eventlog_seq", 0) or 0)
+        if offset > log.last_seq:
+            offset = 0              # the log was rebuilt or replaced; re-read it
+        start = None
+        if since is not None:
+            offset = 0
+            start = datetime.fromtimestamp(since, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        events = [e for e in log.iter_events(after=offset, since=start)
+                  if e.get("channel") == CHANNEL and (start is None or (e.get("time") or "") >= start)]
+        through = log.last_seq
+        lost = [a for a, b in log.missing() if b > offset]
+    finally:
+        log.close()
+    return ({"events": rows_from_events(events), "complete": not lost,
+             "rareComplete": not lost, "source": "native sensor",
+             "pruned": bool(lost)}, through)
+
+
+def drop_verdict(description):
+    """-> (severity, events lost, "Kind n, ...") for a Sysmon 255 report, or None."""
+    counts = {k: int(v) for k, v in DROPPED.findall(description or "") if k != "DriverQueueSize"}
+    counts = {k: v for k, v in counts.items() if v}
+    if not counts:
+        return None
+    total = sum(counts.values())
+    worst = ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
+    # Losing process starts means an execution can have happened unrecorded.
+    severity = "high" if counts.get("ProcessCreate") or counts.get("ProcessAccess") \
+        or counts.get("CreateRemoteThread") else "medium"
+    return severity, total, worst
+
+
+# Categories that describe a run rather than something that happened.
+RUN_STATE = ("visibility", "telemetry")
+
+THREAD_RULES = "start-module-v1"
+KERNEL_SPACE = 0xFFFF800000000000
+LOADLIBRARY = {"loadlibrarya", "loadlibraryw", "loadlibraryexa", "loadlibraryexw",
+               "ldrloaddll"}
+
+
+def thread_verdict(image, target, module, function, address):
+    """-> None for routine, or (severity, why) for a remote thread (Sysmon 8).
+
+    Where the new thread starts decides it, as mature rules do. Measured here
+    (2026-09-17) before this existed, every injection finding was one of three
+    benign shapes: DWM or csrss starting a thread at a kernel address, csrss
+    delivering Ctrl+C through KERNELBASE!CtrlRoutine, and VSCodium's Chromium
+    sandbox starting a thread in its own executable in a child process.
+    """
+    src, dst = _base(image), _base(target)
+    module = "" if (module or "").strip() in ("", "-") else module.strip()
+    func = (function or "").strip().lower()
+    try:
+        start = int(str(address or "0"), 16)
+    except ValueError:
+        start = 0
+    if start >= KERNEL_SPACE:
+        return None                     # user-mode code cannot start a thread here
+    if func == "ctrlroutine" and _base(module) in ("kernelbase.dll", "kernel32.dll"):
+        return None                     # console control (Ctrl+C) delivery
+    if src in SYSTEM_INJECTORS and dst in SYSTEM_INJECTORS:
+        return None
+    if func in LOADLIBRARY:
+        return ("critical", f"the thread starts at {function} — the classic way to "
+                            f"force a DLL into another process")
+    if not module and start:
+        return ("critical", "the thread starts in memory that no file backs — code "
+                            "written into the target, the shape of shellcode injection")
+    if module and src and src == dst and _base(module) == src:
+        return ("low", f"the thread starts inside {src} itself, in a child process of "
+                       f"the same application — how Chromium and Electron sandboxes "
+                       f"and crash handlers work")
+    if module:
+        return ("medium", f"the thread starts in {module}"
+                          + (f"!{function}" if func and func != "-" else "")
+                          + ", a file-backed start in another process")
+    return ("high", "a thread starting in another process's address space; Sysmon "
+                    "recorded no start module to judge it by")
 
 
 def _sha256_of(hashes):
@@ -210,10 +361,8 @@ def _base(path):
     return p.replace("/", "\\").rsplit("\\", 1)[-1].lower()
 
 
-def audit(store=None, hours=24, hosts=("win",), incremental=False):
-    if "win" not in hosts:
-        return []
-
+def _query_blocked():
+    """Findings that stop the PowerShell fallback before it queries, or []."""
     st = status()
     if not st:
         collection.failed('sysmon', 'status unavailable')
@@ -238,17 +387,47 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             "net localgroup \"Event Log Readers\" %USERNAME% /add — then log "
             "out and back in. Running jarvis elevated also works.",
             CHANNEL)]
+    return []
 
-    minutes = None
-    if incremental and store is not None:
-        last = int(store.get_meta("sysmon_last_run", 0) or 0)
-        if last:
-            # A minute of overlap, so an event landing between the query and
-            # the timestamp write is seen twice rather than never.
-            minutes = max(2, min(int((now() - last) / 60) + 1, hours * 60))
 
+def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None):
+    if "win" not in hosts:
+        return []
+
+    # The native sensor, when it is delivering, replaces the PowerShell query:
+    # every record in order, no cap, no window arithmetic. The query below is
+    # the fallback for machines without the sensor, or while it is down.
+    rejudge = store is not None and store.get_meta("sysmon_thread_rules", "") != THREAD_RULES
+    native = None
+    if store is not None:
+        # Incremental runs start from the consumer offset — on first use, the
+        # whole retained history, not just the last day. A one-off CLI read
+        # asks for its window by source time instead.
+        native = _native(store, eventlog, since=None if incremental else now() - hours * 3600)
     query_started = now()
-    data = _fetch(hours=hours, minutes=minutes)
+    minutes = None
+    if native is not None:
+        data, through = native
+        if rejudge:
+            store.db.execute("DELETE FROM sysmon_hits WHERE category='injection'")
+            store.commit()
+    else:
+        through = None
+        failed = _query_blocked()
+        if failed:
+            return failed
+        if rejudge:
+            # Stored injection hits predate the start-module rules and carry no
+            # start module to re-judge by: drop them and re-read the whole window.
+            store.db.execute("DELETE FROM sysmon_hits WHERE category='injection'")
+            store.commit()
+        if incremental and store is not None:
+            last = int(store.get_meta("sysmon_last_run", 0) or 0)
+            if last:
+                # A minute of overlap, so an event landing between the query and
+                # the timestamp write is seen twice rather than never.
+                minutes = max(2, min(int((now() - last) / 60) + 1, hours * 60))
+        data = _fetch(hours=hours, minutes=minutes, rare_hours=hours if rejudge else None)
     if 'events' not in data or data.get('readFailed'):
         collection.failed('sysmon', 'event query incomplete; cursor retained')
         return [_finding('visibility', 'high', 'Sysmon event query failed',
@@ -256,15 +435,24 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
     events = aslist(data.get("events"))
     out = []
     if not data.get('complete', False):
-        collection.failed('sysmon', 'event query capped or completeness unverified; cursor retained')
-        out.append(_finding('visibility', 'high', 'Sysmon event coverage is partial',
-                            'The query cap was reached or completeness was not established. '
-                            'The cursor is retained; use native paged ingestion to drain the backlog.', CHANNEL))
-    window = (f"{minutes} minutes" if minutes else f"{hours}h")
+        if native is not None:
+            collection.failed('sysmon', 'event log retention removed unread events')
+            out.append(_finding('visibility', 'high', 'Sysmon events were removed before analysis',
+                                'Event log retention pruned segments this detector had not '
+                                'read yet; raise the event log budget.', CHANNEL))
+        else:
+            collection.failed('sysmon', 'event query capped or completeness unverified; cursor retained')
+            out.append(_finding('visibility', 'high', 'Sysmon event coverage is partial',
+                                'The query cap was reached or completeness was not established. '
+                                'The cursor is retained; install the native sensor '
+                                '(windows-sensor/install.ps1) to drain the backlog.', CHANNEL))
+    window = ("the native sensor since the last run" if native is not None and incremental
+              else f"the last {minutes} minutes" if minutes else f"the last {hours}h")
 
     lsass_hits, remote_threads, tampering = [], [], []
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
+    dropped, drop_times = {}, []
 
     for e in events:
         eid = int(e.get("id") or 0)
@@ -283,7 +471,9 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             lsass_hits.append((image, e.get("granted"), e.get("time"),
                                bool(mask & VM_READ)))
         elif eid == 8:
-            remote_threads.append((image, e.get("target"), e.get("time")))
+            remote_threads.append((image, e.get("target"), e.get("time"),
+                                   e.get("start_module") or "", e.get("start_function") or "",
+                                   e.get("start_address") or ""))
         elif eid == 25:
             tampering.append((image, e.get("type"), e.get("time")))
         elif eid == 7:
@@ -307,6 +497,13 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             cmdline = e.get("cmdline") or ""
             if RANSOM_RECOVERY.search(cmdline):
                 recovery_tamper.append((image, cmdline, e.get("time")))
+        elif eid == 255:
+            desc = e.get("description") or ""
+            if "dropped" in desc.lower():
+                for kind, n in DROPPED.findall(desc):
+                    if kind != "DriverQueueSize" and int(n):
+                        dropped[kind] = dropped.get(kind, 0) + int(n)
+                drop_times.append(e.get("time") or "")
 
     # -- credential access -------------------------------------------------
     for image, granted, when, read in lsass_hits:
@@ -322,18 +519,17 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
 
     # -- injection ---------------------------------------------------------
     routine = 0
-    for image, target, when in remote_threads[:40]:
+    for image, target, when, module, function, address in remote_threads[:40]:
         src, dst = _base(image), _base(target)
-        if src in SYSTEM_INJECTORS and dst in SYSTEM_INJECTORS:
+        verdict = thread_verdict(image, target, module, function, address)
+        if verdict is None:
             routine += 1
             continue
+        severity, why = verdict
         out.append(_finding(
-            "injection", "medium" if not src else "high",
-            f"{src or '<unknown process>'} created a thread inside {dst}",
-            f"{iso_of(when)} — a thread starting in another process's address "
-            f"space is code executing where it was not loaded"
-            + ("; Sysmon could not resolve the source image, which usually "
-               "means the kernel" if not src else ""), image))
+            "injection", severity,
+            f"{src or '<unknown process>'} created a thread inside {dst or '<exited process>'}",
+            f"{iso_of(when)} — {why}", image))
     if routine:
         out.append(_finding(
             "injection", "ok",
@@ -370,6 +566,18 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
             f"configuration commonly precedes ransomware encryption; confirm whether an "
             f"administrator or backup tool initiated it.", image))
 
+    # -- the sensor's own losses ---------------------------------------------
+    verdict = drop_verdict(" ".join(f"{k}:{v}" for k, v in dropped.items()))
+    if verdict:
+        severity, total, worst = verdict
+        out.append(_finding(
+            "telemetry loss", severity, "Sysmon dropped events before logging them",
+            f"{total} events lost from the driver queue ({worst}), most recently "
+            f"{iso_of(max(drop_times))}. Nothing that reads the log can detect what "
+            f"never reached it. The usual cause is one rule matching a flood of "
+            f"events — narrow the noisiest event type in the Sysmon configuration.",
+            CHANNEL))
+
     # -- correlation with the intelligence corpus --------------------------
     if store is not None:
         out += _correlate(store, dns_names, proc_hashes)
@@ -378,15 +586,22 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False):
     # new events, so anything worth reporting has to outlive its own snapshot.
     if store is not None:
         out = _remember(store, out, hours)
-        if incremental and data.get('complete'):
+        if native is not None and incremental and data.get('complete'):
+            store.set_meta('sysmon_eventlog_seq', through)
+            store.set_meta('sysmon_last_run', query_started)
+            store.commit()
+        elif native is None and incremental and data.get('complete'):
             # Findings are durable first. A crash here replays evidence instead
             # of skipping unseen records. The native store makes this atomic.
             store.set_meta('sysmon_last_run', query_started)
             store.commit()
+        if rejudge and data.get('rareComplete'):
+            store.set_meta('sysmon_thread_rules', THREAD_RULES)
+            store.commit()
 
     out.append(_finding(
         "telemetry", "ok" if data.get('complete') else "medium",
-        f"Sysmon delivered {len(events)} events in the last {window}",
+        f"Sysmon delivered {len(events)} events from {window}",
         f"{len(dns_names)} distinct DNS names and {len(proc_hashes)} process "
         f"hashes were checked against the indicator corpus; "
         f"{len(lsass_hits)} unexpected LSASS opens, "
@@ -407,7 +622,11 @@ def _remember(store, findings, hours):
     accumulating duplicates.
     """
     ts = now()
-    keep = [f for f in findings if f["severity"] != "ok"]
+    # Only detections are remembered. A visibility or telemetry finding
+    # describes one run: remembered, a single capped query kept Sysmon
+    # "partial" — and the whole Active threats area blind — for a day after
+    # the reads were complete again.
+    keep = [f for f in findings if f["severity"] != "ok" and f["category"] not in RUN_STATE]
     for f in keep:
         store.db.execute(
             """INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_)
@@ -425,12 +644,23 @@ def _remember(store, findings, hours):
         (ts - 30 * 86400,))
     store.commit()
 
+    store.db.execute("DELETE FROM sysmon_hits WHERE category IN (%s)"
+                     % ",".join("?" * len(RUN_STATE)), tuple(RUN_STATE))
     since = ts - hours * 3600
-    out = [f for f in findings if f["severity"] == "ok"]
+    out = [f for f in findings if f["severity"] == "ok" or f["category"] in RUN_STATE]
     for r in store.db.execute(
             "SELECT * FROM sysmon_hits WHERE ts >= ? AND category != 'sysmon-linux' "
-            "ORDER BY ts DESC", (since,)):
+            "ORDER BY ts DESC", (since,)).fetchall():
         detail = r["detail"]
+        # A stored domain match is re-judged every run, like the corpus is at
+        # match time: a vetting or popularity fix must clear yesterday's false
+        # "attacker domain" now, not when it ages out of the window.
+        if r["category"] == "intel match" and " domain: " in r["title"]:
+            m = warninglist.match_domain(store, r["title"].rsplit(" domain: ", 1)[1])
+            if not m:
+                continue
+            if m["severity"] != r["severity"]:
+                continue   # re-emitted at its new strength if it recurs
         if ts - r["ts"] > 900:
             detail += f"  [last seen {iso(r['ts'])}]"
         out.append(_finding(r["category"], r["severity"], r["title"],
@@ -447,26 +677,17 @@ def _correlate(store, dns_names, proc_hashes):
     """
     out = []
     for name, procs in dns_names.items():
-        parts = name.split(".")
-        for i in range(len(parts) - 1):
-            parent = ".".join(parts[i:])
-            if not vet.vet_domain(parent)[0]:
-                continue
-            hit = store.db.execute(
-                "SELECT context, source_url, malware, source, confidence FROM indicators "
-                "WHERE kind='domain' AND norm=? AND status='active'",
-                (parent,)).fetchone()
-            if hit:
-                label = hit["malware"] or hit["context"] or "listed in threat intelligence"
-                severity = "critical" if hit["confidence"] == "high" else "medium"
-                qualifier = ("known attacker" if severity == "critical"
-                             else "threat-intelligence")
-                out.append(_finding(
-                    "intel match", severity,
-                    f"a process resolved a {qualifier} domain: {name}",
-                    f"queried by {', '.join(sorted(procs))} — {label} "
-                    f"(via {hit['source']})", hit["source_url"]))
-                break
+        m = warninglist.match_domain(store, name)
+        if m:
+            hit = m["hit"]
+            label = hit["malware"] or hit["context"] or "listed in threat intelligence"
+            weak = (" — the host is shared by many sites, so resolving it is weak evidence"
+                    if m["severity"] == "low" else "")
+            out.append(_finding(
+                "intel match", m["severity"],
+                f"a process resolved a {m['qualifier']} domain: {name}",
+                f"queried by {', '.join(sorted(procs))} — {label} "
+                f"(via {hit['source']}){weak}", hit["source_url"]))
 
     for digest, (image, when) in proc_hashes.items():
         hit = store.db.execute(

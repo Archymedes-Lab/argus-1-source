@@ -7,7 +7,8 @@ from jarvis.collectors.host.posture import run as posture_run
 
 def titles(consolehost):
     data = {"consolehost": consolehost, "hotfix": [{"id": "KB1", "on": "2026-09-01"}]}
-    with patch.object(posture_run, "ps_json", return_value=data):
+    with patch.object(posture_run, "ps_json", return_value=data), \
+         patch.object(posture_run.broker, "result", return_value=(None, "not in tests")):
         return [f["title"] for f in posture.audit()]
 
 

@@ -10,6 +10,7 @@ import re
 import time
 
 from jarvis.core.paths import load_win_script
+from jarvis.platform import broker
 from jarvis.platform import linux as collect_linux
 from jarvis.platform.windows import ps_json
 
@@ -125,12 +126,30 @@ def analyze(host, data):
     return out, records
 
 
+def _with_elevated_logs(data):
+    """Live sockets from this run; firewall profiles and traffic log from the
+    elevated broker, which can read what the unelevated query cannot."""
+    elevated, _why = broker.result('internet')
+    if not elevated:
+        return data
+    merged = dict(data)
+    for key in ('profiles', 'logs'):
+        if key in elevated:
+            merged[key] = elevated[key]
+    unreadable = ('Firewall traffic log unreadable', 'Firewall logging configuration unavailable')
+    merged['errors'] = [e for e in data.get('errors', []) if e not in unreadable] + \
+        [e for e in elevated.get('errors', []) if e in unreadable]
+    return merged
+
+
 def audit(store, hosts=('wsl', 'win')):
     out = []
     for host in hosts:
         attempted = time.time()
         if host == 'win':
             data = ps_json(PS_SAMPLE, timeout=30)
+            if data:
+                data = _with_elevated_logs(data)
             if not data:
                 out.append(finding(host, 'high', 'Windows traffic collector is failing',
                     'Windows query unavailable; no fresh traffic or browser state collected', category='collectors'))

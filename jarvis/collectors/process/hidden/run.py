@@ -32,6 +32,31 @@ from .windows import audit_windows
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
 
+def confirmed_ghosts(ghosts, fresh_read, fresh_sig):
+    """Pids that answer signals, are not listed in /proc, and are not threads.
+
+    Measured 2026-09-17: a lone critical for a pid that, re-probed, was one of
+    ~260 ordinary threads. is_thread() answers False when the status read
+    fails, and a thread that exits between the probe and that read fails it.
+    So the pid must still answer a signal after the thread test: a vanished
+    thread does not, a hidden process does.
+    """
+    return [pid for pid in ghosts
+            if pid in fresh_sig and pid not in fresh_read and not is_thread(pid)
+            and _still_alive(pid) and not is_thread(pid)]
+
+
+def _still_alive(pid):
+    """Does `pid` still answer kill(pid, 0)? EPERM counts: it exists."""
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def audit_linux(deep=False):
     out = []
     sweep_limit = pid_max() if deep else min(DEFAULT_SWEEP, pid_max())
@@ -95,15 +120,19 @@ def audit_linux(deep=False):
     if ghosts:
         time.sleep(0.35)
         fresh_read, fresh_sig = view_readdir(), view_kill_probe(sweep_limit)
-        for pid in ghosts:
-            if pid in fresh_sig and pid not in fresh_read and not is_thread(pid):
-                info = _describe(pid)
-                out.append(_finding(
-                    "critical", "pid answers signals but has no /proc entry",
-                    f"pid {pid} accepts kill(pid, 0) while procfs denies it "
-                    f"exists — procfs is being filtered below the point every "
-                    f"other view reads from",
-                    f"name={info['name'] or '?'} exe={info['exe'] or '?'}"))
+        confirmed = confirmed_ghosts(ghosts, fresh_read, fresh_sig)
+        if not confirmed:
+            out.append(_finding("ok", "signal view agrees with /proc",
+                                f"{len(ghosts)} unlisted pids answered kill(pid, 0); every "
+                                f"one re-checked as a thread or had exited", f"1–{sweep_limit}"))
+        for pid in confirmed:
+            info = _describe(pid)
+            out.append(_finding(
+                "critical", "pid answers signals but has no /proc entry",
+                f"pid {pid} accepts kill(pid, 0) while procfs denies it "
+                f"exists — procfs is being filtered below the point every "
+                f"other view reads from",
+                f"name={info['name'] or '?'} exe={info['exe'] or '?'}"))
     else:
         out.append(_finding("ok", "signal view agrees with /proc",
                             f"{len(signalled)} pids answer kill(pid, 0), all of "

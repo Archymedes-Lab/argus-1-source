@@ -14,10 +14,11 @@ builds on the dependency boundaries recorded here.
 ```
 jarvis/
   core/          store, schema, retention, collection (observation accounting),
+                 event + eventlog (canonical events, the temporal log),
                  finding (the common finding factory), vet + vet_lists (indicator validation),
                  paths, util
   platform/      linux (/proc), windows (interop + the one PowerShell runner),
-                 win/*.ps1 payloads, native/ (Windows sensor spool ingest)
+                 win/*.ps1 payloads, native/ (sensor spool ingest + normalization)
   collectors/
     signatures.py  detection knowledge shared across domains (REMOTE_AGENTS)
     process/       monitor, detect, hidden/, memscan, evasion, resourcewatch
@@ -33,6 +34,8 @@ jarvis/
                  reporting/ (notifications, advisory, cadence, commands, diff)
   service/       schedule (job table), jobs (runner), scheduler, coverage,
                  selfcheck, deadman, connectivity, protection, sdnotify
+  lab/           JARVIS Arena: adversarial validation (scenario, isolation,
+                 scoring, regression, runner, providers/, intel candidate boundary)
   web/           server (dashboard state + HTTP), static/
   cli/           parser, output, commands/ (incl. evidence, pixel,
                  impersonation, repair, retention front ends)
@@ -54,7 +57,7 @@ Kept at the repository root on purpose:
 ## Dependency rules (enforced by `tests/test_layers.py`, no exceptions)
 
 `core` 0 < `platform` 1 < `collectors` 2 < `intel` 3 < `response` 4 < `service` 5
-< `web` 6 < `cli` 7
+< `lab` 6 < `web` 7 < `cli` 8
 
 1. A module imports only from its own layer or a lower one.
 2. Collector domains don't import each other. Knowledge they share lives in

@@ -20,6 +20,7 @@ an unhandled finding must never read as taken care of.
 
 import os
 
+from jarvis.core import egress
 from jarvis.response import acknowledge, alert, fixit, remediation
 
 from .commands import command_for
@@ -105,6 +106,10 @@ def _classify(finding, job):
                           "unless you want deeper visibility.", inspect)
 
     fix = fixit.suggest(f)
+    if egress.program_of(title):
+        return _r(YOU_CONFIRM, "Say whether this program should reach the internet. Yes "
+                               "remembers it; no makes every later connection from it high.",
+                  "jarvis answer <id> yes|no")
     if category == "present" or job == "secrets":
         path = where.split(":")[0]
         private = _owner_only(path)

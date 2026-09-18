@@ -22,6 +22,7 @@ import subprocess
 from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import short
+from jarvis.platform import broker
 from jarvis.platform.windows import aslist, ps_json
 
 from .trusted_tasks import verified_maintenance_task
@@ -221,7 +222,9 @@ def audit_windows():
         if OBFUSCATED.search(action):
             sev = "critical"
         if (t.get("name") or "").casefold() in (
-                "jarvis wake watchdog", "jarvis independent health monitor", "wsl ide keepalive",
+                "jarvis wake watchdog", "jarvis independent health monitor", "jarvis reviver",
+                "jarvis elevated broker",
+                "wsl ide keepalive",
                 "wsl ide keepalive watchdog"):
             sev = "critical"
             action = f"{action} [verification failed: {trust_detail}]"
@@ -301,6 +304,13 @@ def audit_windows():
             out.append(_finding("defense", "medium", "Defender signatures stale",
                                 f"{age} days old", "Get-MpComputerStatus"))
         denied = False
+        # The elevated broker's posture run reads the real exclusion lists; an
+        # unelevated Get-MpPreference only returns "N/A: must be an administrator".
+        elevated, _why = broker.result("posture")
+        pref = (elevated or {}).get("mppref") or {}
+        if elevated and pref:
+            d = dict(d, exclusionPaths=pref.get("ExclusionPath"),
+                     exclusionProcs=pref.get("ExclusionProcess"))
         for kind, key in (("path", "exclusionPaths"), ("process", "exclusionProcs")):
             for p in aslist(d.get(key)):
                 if not p:

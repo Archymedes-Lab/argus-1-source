@@ -39,6 +39,9 @@ JOBS = {
     # immediately regardless of alert_min_severity.
     "bridge":   (45,    "Windows bridge reachability"),
     "input_hook":(45,   "Input monitor watchdog"),
+    # Drains the native Windows sensor's spool into the event log. Local file
+    # reads only — no PowerShell — and ahead of sysmon, which reads its output.
+    "native":   (60,    "Native sensor ingestion"),
     # The other half of the mutual supervision loop. jarvis-selfcheck.timer
     # restarts this daemon when it dies; this re-arms that timer when it stops.
     # Without it the timer is a single point of failure that nothing watches,
@@ -109,4 +112,6 @@ JOBS = {
     # The interception layer. Frequent, because its value is catching things
     # that start and exit between the sampling passes.
     "sysmon":   (600,   "Sysmon telemetry"),
+    # ATT&CK coverage, validated by probing the real detectors (attackmap.py).
+    "attackmap": (21600, "ATT&CK coverage map"),
 }

@@ -18,7 +18,7 @@ from jarvis.collectors.persistence import asep as asep_mod
 from jarvis.collectors.persistence import backdoor, control, implant, startup
 from jarvis.collectors.process import evasion as evasion_mod
 from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
-from jarvis.collectors.telemetry import auditd, sysmon, sysmon_linux
+from jarvis.collectors.telemetry import auditd, native, sysmon, sysmon_linux
 from jarvis.core import collection, retention
 from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
@@ -26,7 +26,7 @@ from jarvis.intel import research as intel
 from jarvis.response import alert
 from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting.cadence import run as report_due
-from jarvis.service import connectivity, deadman, selfcheck
+from jarvis.service import attackmap, connectivity, deadman, selfcheck
 from jarvis.service import coverage as coverage_mod
 from jarvis.service.schedule import JOBS
 
@@ -78,7 +78,8 @@ def _watchdogs(hosts, db_path):
     # Both halves of the supervision loop: the systemd timer that restarts
     # this daemon, and the Windows task that reports it missing when WSL
     # itself is down.
-    out = deadman.audit() + connectivity.audit()
+    out = (deadman.audit() + deadman.audit_reviver() + deadman.audit_broker()
+           + connectivity.audit())
     active, enabled_state = selfcheck.timer_state()
     if not active:
         return out + [{
@@ -161,6 +162,7 @@ def _feeds(hosts, db_path):
     with _store(db_path) as store:
         results = feeds.refresh(store)
         results.append(feeds.refresh_attack(store))
+        results.append(feeds.refresh_tranco(store))
         out = []
         for r in results:
             if r.get("error"):
@@ -292,6 +294,8 @@ RUNNERS = {
     # instead of re-reading a day of log every ten minutes.
     "sysmon_linux": _with_store(sysmon_linux.audit, incremental=True),
     "sysmon": _with_store(sysmon.audit, incremental=True),
+    "native": _with_store(native.audit),
+    "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),
 }
 
 

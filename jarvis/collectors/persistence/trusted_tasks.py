@@ -50,7 +50,8 @@ def verified_maintenance_task(task, data):
     name = (task.get("name") or "").casefold()
     if name not in TRUSTED_IDE_TASKS and name not in (
             "jarvis wake watchdog", "jarvis independent health monitor",
-            "jarvis connectivity guard", "jarvis input hook"):
+            "jarvis connectivity guard", "jarvis input hook", "jarvis reviver",
+            "jarvis elevated broker"):
         return False, "not a known maintenance task"
 
     actions = aslist(task.get("actions"))
@@ -70,8 +71,11 @@ def verified_maintenance_task(task, data):
         arguments = wrapped.group(1)
     elif execute.rsplit("\\", 1)[-1] not in ("powershell.exe", "powershell"):
         return False, "action is not Windows PowerShell"
-    if (task.get("runLevel") or "").casefold() != "limited":
-        return False, "principal is not limited"
+    # The broker is the one task that runs elevated, by design. It is accepted
+    # only from the administrator-only ProgramData folder, never LocalAppData.
+    wanted_level = "highest" if name == "jarvis elevated broker" else "limited"
+    if (task.get("runLevel") or "").casefold() != wanted_level:
+        return False, f"principal run level is not {wanted_level}"
 
     actual_user = (task.get("user") or "").casefold().rsplit("\\", 1)[-1]
     current_user = (data.get("currentUser") or "").casefold().rsplit("\\", 1)[-1]
@@ -103,6 +107,21 @@ def verified_maintenance_task(task, data):
             rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
             rf'-File "{re.escape(local)}\\Jarvis\\inputhook\.ps1" '
             rf'-OutFile "{re.escape(local)}\\Jarvis\\input\.jsonl"$')
+    elif name == "jarvis elevated broker":
+        spec = {"script": "broker-jarvis.ps1", "logon": "interactive",
+                "hash": normalized_text_hash(os.path.join(repo_root, "broker-jarvis.ps1"))}
+        expected_args = (
+            r'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
+            r'-File "C:\\ProgramData\\Jarvis\\Broker\\broker-jarvis\.ps1" -Run$')
+    elif name == "jarvis reviver":
+        # revive-jarvis.ps1: the few-second revival loop, staged by its own
+        # -Install into LocalAppData and fingerprinted against this checkout.
+        spec = {"script": "revive-jarvis.ps1", "logon": "interactive",
+                "hash": normalized_text_hash(os.path.join(repo_root, "revive-jarvis.ps1"))}
+        expected_args = (
+            rf'^-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass '
+            rf'-File "{re.escape(local)}\\Jarvis\\Reviver\\revive-jarvis\.ps1" '
+            rf'-Distro "Ubuntu" -RepoRoot "{re.escape(repo_root)}"$')
     elif name == "jarvis wake watchdog":
         spec = {
             "script": "wake-jarvis.ps1",
