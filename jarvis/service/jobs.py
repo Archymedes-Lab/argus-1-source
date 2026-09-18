@@ -10,7 +10,7 @@ scheduler's worker thread, and a sqlite handle must not cross threads.
 
 from contextlib import contextmanager
 
-from jarvis.collectors.host import controlwatch, inputwatch, pixel, posture, spyware, toolchain
+from jarvis.collectors.host import controlwatch, geo, inputwatch, pixel, posture, spyware, toolchain
 from jarvis.collectors.host import intrusion as intrusion_mod
 from jarvis.collectors.identity import bruteforce, impersonation, secrets
 from jarvis.collectors.network import firewall, internetwatch, netwatch, sniffing, webshell
@@ -297,6 +297,7 @@ RUNNERS = {
     "sysmon": _with_store(sysmon.audit, incremental=True),
     "native": _with_store(native.audit),
     "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
+    "geo": _with_store(geo.audit),
     "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),
 }
 

@@ -62,7 +62,7 @@ class ScoreTests(unittest.TestCase):
         self.assertEqual(noisy["score"], five["score"])
 
     def test_blindness_is_not_safety(self):
-        blind = score.compute(snaps(error_jobs=("secrets", "spy", "pixel", "sniffing")), JOBS, NOW)
+        blind = score.compute(snaps(error_jobs=("secrets", "spy", "pixel", "sniffing", "geo")), JOBS, NOW)
         self.assertIsNone(self.area(blind, "Data & privacy")["score"])
         self.assertLess(blind["coverage"], 100)
         self.assertLess(blind["score"], 100)

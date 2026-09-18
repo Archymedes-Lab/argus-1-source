@@ -717,6 +717,53 @@ than a supplied callback; **CALDERA chained-operation execution**; and wiring
 behaviors). The layer contract gained a `lab` tier above `collectors`
 (`tests/test_layers.py`), so the daemon can run it.
 
+## GeoSecurity (2026-09-18)
+
+Location as a security signal, wired into the daemon and a browser globe at
+`/geo`, with two non-negotiable rules: JARVIS never fabricates a position, and
+it keeps no coordinate track.
+
+```
+collectors/host/geo.py   native Windows locator (consent-gated); IP is never a
+      │                  position. Emits findings; writes geo_current (overwrite
+      │                  only — the current fix, not a history) + reduced zone.
+      ▼
+service/geosecurity.py   confidence fusion over the signals actually held; user-
+      │                  asserted trusted zones; truthfully-raisable anomalies;
+      │                  NASA GIBS imagery config
+      ├─► GET /api/geo    the state the globe renders
+      ├─► /geo (CesiumJS)  globe + GIBS daily true-color + zones + status panel
+      └─► jarvis geo {status,locate,zone …}
+```
+
+Honesty is structural, not cosmetic:
+- **No fabricated position.** The primary source is
+  `Windows.Devices.Geolocation.Geolocator`, used only with standing consent. On
+  this machine consent is *denied*, so GeoSecurity reports geo-blindness and a
+  low finding rather than a coordinate. IP geolocation is never used as a
+  position.
+- **No coordinate history.** `geo_current` is one overwritten row; what persists
+  is the reduced zone ("HOME"/"outside"), never a track. Trusted zones are
+  user-asserted ground truth (`jarvis geo zone add`), which is legitimate to
+  store.
+- **Confidence fusion** combines only signals JARVIS actually has (a native fix
+  and its accuracy, whether it lands in a declared zone, freshness) as a
+  noisy-OR, so spoofing one source cannot manufacture certainty — and the absent
+  paired-phone/BLE inputs contribute nothing rather than a fake 0.98.
+- **Anomalies** are raised only when true: geo-blindness, or sitting outside
+  every trusted zone while high-severity findings are active. Device-separation
+  needs a second trusted device JARVIS does not have, so it is not raised.
+- **Imagery** is NASA GIBS daily true-color, labelled as such, never "live"; the
+  globe centers on a real fix, else a user's home zone (marked as such), else
+  nowhere. It scores under Data & privacy; the geo-blind finding is low
+  (weight 0), so it does not distort the score.
+
+Not built yet: Sentinel-2 "latest image" detail mode and Meteosat near-live
+Africa layer (V1 ships GIBS only); paired-device proximity (phone/watch) and the
+device-separation → auto-hardening response the design describes; and any mobile
+location source. The globe is best-effort visual (needs internet for tiles); the
+status panel and `/api/geo` are the functional core and always render.
+
 ## Validation
 
 Validation results are recorded here after the final checks. All architecture

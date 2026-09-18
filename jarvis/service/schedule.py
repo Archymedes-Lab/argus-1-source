@@ -117,4 +117,7 @@ JOBS = {
     # JARVIS Arena: run the synthetic validation suite against the real
     # detectors and flag any regression. Local-only and cheap (no PowerShell).
     "arena":    (3600,  "Adversarial self-validation"),
+    # Device location & geofencing. One registry read when location is off;
+    # one native-locator call when the user has consented.
+    "geo":      (900,   "Device location & geofencing"),
 }

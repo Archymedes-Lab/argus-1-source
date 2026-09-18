@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS · GeoSecurity</title>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.121/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<style>
+  :root { --bg:#05070d; --panel:rgba(8,14,26,.82); --line:#1c2c46; --fg:#cde3ff;
+          --dim:#6f89b3; --ok:#39d98a; --low:#7db4ff; --high:#ffb347; --crit:#ff5c72; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  #globe { position:fixed; inset:0; }
+  #globe .cesium-widget-credits, .cesium-viewer-bottom { display:none !important; }
+  #fallback { position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    color:var(--dim); text-align:center; padding:24px; }
+  #panel { position:fixed; top:0; right:0; width:min(380px,92vw); height:100%; overflow:auto;
+    background:var(--panel); border-left:1px solid var(--line); backdrop-filter:blur(6px);
+    padding:18px 18px 40px; }
+  h1 { font-size:15px; letter-spacing:.14em; margin:0 0 2px; }
+  .sub { color:var(--dim); font-size:11px; letter-spacing:.08em; margin-bottom:16px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px;
+    background:rgba(4,8,16,.5); }
+  .card h2 { font-size:10px; letter-spacing:.16em; color:var(--dim); margin:0 0 8px;
+    text-transform:uppercase; }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:3px 0; }
+  .row .k { color:var(--dim); } .row .v { text-align:right; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px;
+    border:1px solid currentColor; }
+  .ok{color:var(--ok)} .low{color:var(--low)} .high{color:var(--high)} .crit{color:var(--crit)}
+  .dim{color:var(--dim)}
+  .meter { height:6px; border-radius:3px; background:#12203a; overflow:hidden; margin-top:6px; }
+  .meter>i { display:block; height:100%; background:linear-gradient(90deg,var(--low),var(--ok)); }
+  .sig { font-size:11px; color:var(--dim); padding:2px 0; }
+  a.back { color:var(--dim); text-decoration:none; font-size:11px; }
+  .anom { border-left:3px solid var(--high); padding:6px 8px; margin:6px 0; background:rgba(255,179,71,.07); }
+  .anom.crit,.anom.high{border-color:var(--crit)}
+</style>
+</head>
+<body>
+<div id="globe"></div>
+<div id="fallback">The globe needs internet for map imagery.<br>The GeoSecurity status is on the right.</div>
+<div id="panel">
+  <h1>JARVIS // GEOSECURITY</h1>
+  <div class="sub"><a class="back" href="/">‹ dashboard</a> · <span id="ts">…</span></div>
+  <div class="card"><h2>Location</h2><div id="loc"></div>
+    <div class="meter"><i id="confbar" style="width:0"></i></div>
+    <div id="signals" style="margin-top:6px"></div></div>
+  <div class="card"><h2>Devices</h2><div id="devices"></div></div>
+  <div class="card"><h2>Trusted zones</h2><div id="zones"></div></div>
+  <div class="card"><h2>Geo anomalies</h2><div id="anoms"></div></div>
+  <div class="card"><h2>Imagery</h2><div id="imagery"></div></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.121/Build/Cesium/Cesium.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const cls = sev => ({ok:"ok",low:"low",medium:"high",high:"high",critical:"crit"}[sev]||"dim");
+
+function yesterday(){ const d=new Date(Date.now()-864e5); return d.toISOString().slice(0,10); }
+
+let viewer=null, marker=null;
+function initGlobe(img){
+  if(typeof Cesium==="undefined"){ $("#fallback").style.display="flex"; return; }
+  try{
+    try{ Cesium.Ion.defaultAccessToken = undefined; }catch(e){}
+    viewer = new Cesium.Viewer("globe", {
+      baseLayerPicker:false, geocoder:false, timeline:false, animation:false,
+      homeButton:false, sceneModePicker:false, navigationHelpButton:false,
+      fullscreenButton:false, infoBox:false, selectionIndicator:false,
+      baseLayer:false, requestRenderMode:true
+    });
+    const provider = new Cesium.WebMapTileServiceImageryProvider({
+      url: img.endpoint + "?TIME=" + yesterday(),
+      layer: img.layer, style:"default", format: img.format,
+      tileMatrixSetID: img.tile_matrix_set, maximumLevel: img.max_level,
+      tilingScheme: new Cesium.WebMercatorTilingScheme(),
+      tileWidth:256, tileHeight:256, credit: img.attribution
+    });
+    viewer.imageryLayers.addImageryProvider(provider);
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#05070d");
+  }catch(e){ console.error(e); $("#globe").style.display="none"; $("#fallback").style.display="flex"; }
+}
+
+function place(payload){
+  if(!viewer) return;
+  const img = payload.imagery, c = img.center;
+  // Trusted zones as circles.
+  (payload.zones||[]).forEach(z=>{
+    viewer.entities.add({ name:z.name,
+      position: Cesium.Cartesian3.fromDegrees(z.lon, z.lat),
+      ellipse:{ semiMajorAxis:z.radius_m, semiMinorAxis:z.radius_m,
+        material: Cesium.Color.fromCssColorString("#39d98a").withAlpha(.18),
+        outline:true, outlineColor: Cesium.Color.fromCssColorString("#39d98a") },
+      label:{ text:z.name, font:"12px monospace", fillColor:Cesium.Color.WHITE,
+        pixelOffset:new Cesium.Cartesian2(0,-18), showBackground:true,
+        backgroundColor: Cesium.Color.fromCssColorString("#0a1424").withAlpha(.8) } });
+  });
+  if(c){
+    const isFix = c.source === "device fix";
+    viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(c.lon, c.lat),
+      point:{ pixelSize:12, color: Cesium.Color.fromCssColorString(isFix?"#7db4ff":"#6f89b3"),
+        outlineColor: Cesium.Color.WHITE, outlineWidth:2 },
+      label:{ text: isFix?"this device":"home zone", font:"12px monospace",
+        fillColor: Cesium.Color.fromCssColorString(isFix?"#7db4ff":"#6f89b3"),
+        pixelOffset:new Cesium.Cartesian2(0,18) } });
+    viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, 2.2e6), duration:2 });
+  }
+}
+
+function render(p){
+  $("#ts").textContent = "updated " + new Date().toLocaleTimeString();
+  const loc=p.location||{}, conf=p.confidence||{score:0,signals:[]};
+  let locHtml;
+  if(loc.status==="ok") locHtml = `<div class="row"><span class="k">status</span><span class="v ok">located</span></div>`+
+      `<div class="row"><span class="k">zone</span><span class="v">${esc(loc.zone||"—")}</span></div>`+
+      `<div class="row"><span class="k">accuracy</span><span class="v">~${Math.round(loc.accuracy_m||0)} m</span></div>`+
+      `<div class="row"><span class="k">source</span><span class="v">${esc(loc.source||"")}</span></div>`;
+  else locHtml = `<div class="row"><span class="k">status</span><span class="v ${loc.status==="denied"?"low":"dim"}">${esc(loc.status||"unknown")}</span></div>`+
+      `<div class="sig">${esc(loc.reason||"JARVIS never guesses a position from your IP.")}</div>`;
+  $("#loc").innerHTML = locHtml +
+    `<div class="row" style="margin-top:6px"><span class="k">confidence</span><span class="v">${Math.round(conf.score*100)}%</span></div>`;
+  $("#confbar").style.width = Math.round(conf.score*100)+"%";
+  $("#signals").innerHTML = (conf.signals||[]).map(s=>`<div class="sig">• ${esc(s.name)} <span class="dim">(${s.weight})</span></div>`).join("")||`<div class="sig dim">no signals</div>`;
+
+  $("#devices").innerHTML = (p.devices||[]).map(d=>
+    `<div class="row"><span class="k">${esc(d.name)} <span class="dim">${esc(d.kind)}</span></span>`+
+    `<span class="v ${d.trust==="trusted"?"ok":"high"}">${esc(d.trust)}</span></div>`).join("");
+
+  $("#zones").innerHTML = (p.zones||[]).length ? (p.zones||[]).map(z=>
+    `<div class="row"><span class="k">${esc(z.name)}</span><span class="v dim">${z.lat.toFixed(3)}, ${z.lon.toFixed(3)} · ${z.radius_m}m</span></div>`).join("")
+    : `<div class="sig dim">none — set one with <br>jarvis geo zone add HOME LAT LON</div>`;
+
+  $("#anoms").innerHTML = (p.anomalies||[]).length ? (p.anomalies||[]).map(a=>
+    `<div class="anom ${cls(a.severity)}"><b class="${cls(a.severity)}">${esc(a.kind)}</b><br>${esc(a.detail)}</div>`).join("")
+    : `<div class="sig ok">none</div>`;
+
+  const img=p.imagery||{};
+  $("#imagery").innerHTML = `<div class="row"><span class="k">provider</span><span class="v">${esc(img.provider)}</span></div>`+
+    `<div class="row"><span class="k">layer</span><span class="v dim">${esc(img.layer)}</span></div>`+
+    `<div class="sig">${esc(img.cadence)}</div><div class="sig dim">${esc(img.attribution)}</div>`;
+}
+
+fetch("/api/geo").then(r=>r.json()).then(p=>{ initGlobe(p.imagery||{}); render(p); place(p); })
+  .catch(e=>{ $("#fallback").style.display="flex"; $("#loc").innerHTML=`<div class="sig crit">/api/geo unavailable: ${esc(e)}</div>`; });
+setInterval(()=>fetch("/api/geo").then(r=>r.json()).then(render).catch(()=>{}), 30000);
+</script>
+</body>
+</html>

@@ -51,6 +51,7 @@ JOB_COMMANDS = {
     "sysmon": "sysmon",
     "native": "timeline status",
     "arena": "arena suite",
+    "geo": "geo status",
     "watchdogs": "selfcheck",
     "resources": "status",
     "report": "alert",

@@ -30,6 +30,7 @@ from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler, watchdog_loop
 
 PAGE = str(STATIC_DIR / "dashboard.html")
+GEO_PAGE = str(STATIC_DIR / "geo.html")
 
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -336,6 +337,26 @@ class Handler(BaseHTTPRequestHandler):
             if result is None:
                 return self._send(404, json.dumps({"error": "unknown incident"}))
             return self._send(200, json.dumps(result))
+
+        if url.path == "/geo":
+            try:
+                with open(GEO_PAGE, "r", encoding="utf-8", errors="replace") as fh:
+                    return self._send(200, fh.read(), "text/html; charset=utf-8")
+            except OSError:
+                return self._send(500, "geo.html missing", "text/plain")
+
+        if url.path == "/api/geo":
+            from jarvis.service import geosecurity
+            state = build_state(self.db_path, self.scheduler)
+            hstate = health(self.db_path, self.scheduler)
+            recent = [f for f in state.get("findings", [])
+                      if f.get("severity") in ("critical", "high")]
+            store = Store(self.db_path)
+            try:
+                payload = geosecurity.state(store, health_state=hstate, recent_findings=recent)
+            finally:
+                store.close()
+            return self._send(200, json.dumps(payload, default=str))
 
         if url.path == "/api/arena":
             from jarvis.lab import regression

@@ -36,7 +36,7 @@ AREAS = (
     ("OS hardening", ("posture", "firewall", "implant", "auditd")),
     ("Persistence & access", ("control", "asep", "boot", "backdoor",
                               "identity", "bruteforce")),
-    ("Data & privacy", ("secrets", "spy", "pixel", "sniffing")),
+    ("Data & privacy", ("secrets", "spy", "pixel", "sniffing", "geo")),
     ("Network", ("internet", "netwatch")),
     ("Developer toolchain", ("toolchain",)),
     ("Monitoring", ("coverage", "bridge", "watchdogs", "native", "arena")),
