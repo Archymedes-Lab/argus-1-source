@@ -84,3 +84,27 @@ suite. Live containment/recovery and native Windows evidence remain separate gat
 
 Test success verifies these tested invariants; it does not verify complete browser,
 kernel, firmware, hardware attestation, containment or recovery coverage.
+
+## Subsequent implementation: interrupted-action recovery and browser ingress
+
+- Interrupted containment entries are reconciled once at scheduler startup and
+  on demand with `jarvis defend reconcile`.  Probes are read-only: they never
+  repeat containment, undo it, create a quarantine directory, or infer an
+  undo record from incomplete evidence.  A proven active quarantine, paused
+  process, or named firewall block can become undoable; absent or unavailable
+  state remains review-required.
+- Triage treats `attempting`, `uncertain`, and `not_applied` containment as a
+  user action, never as JARVIS-handled.  Failed/reconciled actions remain
+  inhibited from automatic reapplication.
+- The opt-in Veil extension ingress is token-paired, constant-time compared,
+  bounded to metadata-only reports, and now writes sanitized findings to the
+  local dashboard snapshot and incident record.  It cannot mail, block, or
+  trigger containment.  Its shared token identifier lives below both the web
+  and CLI layers, preserving the package dependency boundary.
+- Focused validation passed: defense recovery (31), server pipeline/ingress
+  (24), Veil privacy contract (8), and dependency-layer checks (6).  The
+  complete suite was started but the restricted runner ended it before a final
+  result; it must be rerun in a normal execution environment before release.
+- Deployment remains pending administrator restart of the system-managed
+  `/etc/systemd/system/jarvis.service`.  The user-scoped duplicate has been
+  stopped because it could not bind the already occupied loopback port.

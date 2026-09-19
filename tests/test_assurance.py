@@ -33,6 +33,21 @@ class AssuranceTests(unittest.TestCase):
         self.assertTrue(result['healthy'])
         self.assertFalse(result['assurance']['complete'])
 
+    def test_current_sensor_receipts_are_not_mistaken_for_validation(self):
+        observations = {name: {'status': 'complete'} for name in
+                        ('scan', 'bridge', 'sysmon', 'native')}
+        report = assurance.report(observations)
+        sensor = report['capabilities']['sensor_integrity']
+        self.assertEqual(sensor['live_telemetry'], 'current')
+        self.assertIsNone(sensor['last_validation'])
+        self.assertFalse(sensor['validated_containment'])
+
+    def test_missing_or_stale_optional_sensor_is_explicit(self):
+        self.assertEqual(assurance.report()['capabilities']['browser_privacy_veil']['live_telemetry'],
+                         'not_reporting')
+        report = assurance.report({'veil': {'status': 'stale'}})
+        self.assertEqual(report['capabilities']['browser_privacy_veil']['live_telemetry'], 'degraded')
+
     def test_remote_model_rejected_before_any_transport(self):
         for url in ('https://example.com', 'http://127.0.0.1:11434@evil.test',
                     'http://localhost:11434/path', 'http://127.0.0.2:11434'):

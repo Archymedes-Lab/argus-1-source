@@ -23,7 +23,33 @@ CAPABILITIES = {
 }
 
 
-def report():
+OBSERVATION_REQUIREMENTS = {
+    # These are liveness/visibility signals only.  They never upgrade a
+    # capability's implementation or containment validation claim.
+    'sensor_integrity': ('scan', 'bridge', 'sysmon', 'native'),
+    'system_state_graph': ('scan', 'sysmon'),
+    'temporal_correlation': ('sysmon', 'native'),
+    'online_guardian': ('internet',),
+    'browser_privacy_veil': ('veil',),
+    'credential_guardian': ('secrets',),
+    'behavioral_physics': ('resources',),
+}
+
+
+def _telemetry(name, observations):
+    required = OBSERVATION_REQUIREMENTS.get(name)
+    if not required:
+        return 'unverified'
+    states = [observations.get(source, {}).get('status', 'not_reporting') for source in required]
+    if all(state == 'complete' for state in states):
+        return 'current'
+    if any(state in ('partial', 'stale', 'unavailable') for state in states):
+        return 'degraded'
+    return 'not_reporting'
+
+
+def report(observations=None):
+    observations = observations or {}
     return {
         'policy_version': POLICY_VERSION,
         'scope': 'engineering register; not a live security or compromise verdict',
@@ -31,7 +57,7 @@ def report():
         'absence_of_alerts_proves_safety': False,
         'capabilities': {
             name: {'implementation': status, 'basis': basis, 'blind_spot': gap,
-                   'live_telemetry': 'unverified', 'last_validation': None,
+                   'live_telemetry': _telemetry(name, observations), 'last_validation': None,
                    'detection_latency_ms': None, 'intervention_latency_ms': None,
                    'validated_containment': False}
             for name, (status, basis, gap) in CAPABILITIES.items()
