@@ -108,3 +108,35 @@ class QuarantineFile(Action):
             return True, f"restored {path}"
         except OSError as exc:
             return False, f"could not restore: {exc.strerror or exc}"
+
+    def recover(self, target, record):
+        """Recover only from a durable marker and matching quarantined copy.
+
+        A missing marker is deliberately not treated as proof that no move
+        happened: an interruption can occur after the move and before marker
+        creation.  In that state a person must inspect the evidence store.
+        """
+        path = target.get("path") if isinstance(target, dict) else ""
+        marker = (record or {}).get("marker") or (path + ".jarvis-quarantined")
+        if not path or not os.path.isabs(path):
+            return "unknown", {}, "invalid quarantine target"
+        try:
+            if os.path.exists(path):
+                return "not_applied", {}, "the original file is present"
+            if not os.path.isfile(marker):
+                return "unknown", {}, "file is absent but no trustworthy quarantine marker exists"
+            with open(marker, encoding="utf-8") as fh:
+                saved = json.load(fh)
+            stored = saved.get("stored") if isinstance(saved, dict) else ""
+            if not isinstance(stored, str) or not os.path.isfile(stored):
+                return "unknown", {}, "quarantine marker does not identify a retained file"
+            # Do not call _store_dir(): recovery probes must not create or
+            # chmod anything merely by inspecting an interrupted action.
+            root = os.path.realpath(QUARANTINE_DIR) + os.sep
+            if not os.path.realpath(stored).startswith(root):
+                return "unknown", {}, "quarantine marker points outside the quarantine store"
+            return "applied", {"path": path, "stored": stored, "marker": marker,
+                                "at": int(saved.get("quarantined") or 0)}, \
+                "verified quarantined file and marker"
+        except (OSError, ValueError, TypeError):
+            return "unknown", {}, "could not safely read quarantine recovery state"

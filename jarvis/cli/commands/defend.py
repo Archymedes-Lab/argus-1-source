@@ -4,6 +4,7 @@
     jarvis defend approve <id>    run a proposed containment action now
     jarvis defend undo <id>       reverse an action JARVIS took
     jarvis defend actions         the actions available and whether they are on
+    jarvis defend reconcile       read-only recovery check for interrupted actions
     jarvis answer <id> yes|no     answer a proactive question
 
 Turning automatic response on is a config change (autonomous_defense plus the
@@ -42,10 +43,19 @@ def cmd_defend(store, args):
             print(f"  {a.id:18} [{a.host}] {a.title} — {mark}"
                   + (f"  (enable: {a.enable_flag}=true)" if a.enable_flag else ""))
         return 0
+    if sub == "reconcile":
+        rows = defense.reconcile(store)
+        if not rows:
+            print("no interrupted containment actions need recovery checking.")
+            return 0
+        for eid, state, detail in rows:
+            print(f"{eid}: {state} — {detail}")
+        return 0 if all(state in ("applied", "not_applied") for _, state, _ in rows) else 1
 
     ledger = defense.load(store)
     applied = {k: v for k, v in ledger.items() if v.get("status") == "applied"}
     proposed = {k: v for k, v in ledger.items() if v.get("status") == "proposed"}
+    uncertain = {k: v for k, v in ledger.items() if v.get("status") in ("attempting", "uncertain", "not_applied")}
 
     if proposed:
         print(color("\nWAITING FOR YOU — proposed containment", "bold", t))
@@ -58,7 +68,12 @@ def cmd_defend(store, args):
         for eid, e in sorted(applied.items(), key=lambda kv: kv[1].get("at", 0), reverse=True):
             print(f"  {eid}  {e['title']} — {e.get('detail', '')}  ({iso(e.get('at', 0))})")
             print(f"        undo: jarvis defend undo {eid}")
-    if not proposed and not applied:
+    if uncertain:
+        print(color("\nRECOVERY REVIEW REQUIRED — no repeat action was taken", "bold", t))
+        for eid, e in sorted(uncertain.items(), key=lambda kv: kv[1].get("at", 0), reverse=True):
+            print(f"  {eid}  {e['title']} — {e.get('detail', '')}")
+        print("        inspect evidence, then run: jarvis defend reconcile")
+    if not proposed and not applied and not uncertain:
         print("no automatic actions taken and nothing waiting.")
         print("see what is available with: jarvis defend actions")
     return 0
@@ -86,7 +101,7 @@ def cmd_answer(store, args):
 
 def add_parser(sub):
     p = sub.add_parser("defend", help="autonomous response: what JARVIS did and what awaits you")
-    p.add_argument("action_arg", nargs="?", choices=["approve", "undo", "actions"],
+    p.add_argument("action_arg", nargs="?", choices=["approve", "undo", "actions", "reconcile"],
                    help="approve or undo an action, or list available actions")
     p.add_argument("id", nargs="?", help="the action id (for approve/undo)")
     p.set_defaults(fn=lambda args, store: cmd_defend(store, args))
@@ -96,5 +111,4 @@ def add_parser(sub):
     a.add_argument("choice", nargs="?", default="", help="yes or no")
     a.set_defaults(fn=lambda args, store: cmd_answer(store, args))
     return p
-
 

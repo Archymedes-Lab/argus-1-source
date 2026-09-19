@@ -580,13 +580,16 @@ Windows Event Log ─► JarvisSensor.exe (service) ─► spool batches (Progra
         │           SHA-256 header chain, rebuildable index.db
         ├─► collectors/telemetry/sysmon.py   consumer offset `sysmon_eventlog_seq`
         ├─► collectors/telemetry/native.py   delivery, gaps, health, daily verify
+        ├─► telemetry/reconcile.py           snapshot/event state disagreement
         └─► jarvis timeline                   search, lineage, show, verify
 ```
 
 Decisions:
 
 - **Snapshots establish state; events establish history.** The PowerShell and
-  /proc collectors stay as they are. `sysmon.py` prefers the event log whenever
+  /proc collectors stay as they are. Windows process snapshots now carry exact
+  creation times and are conservatively matched to ProcessGuid start/exit
+  history. `sysmon.py` prefers the event log whenever
   the sensor delivered a batch in the last 10 minutes, and falls back to the
   capped `Get-WinEvent` query otherwise. Its detections are unchanged and read
   the same rows from either source.
@@ -605,6 +608,11 @@ Decisions:
   append. A torn tail is truncated on open and re-read from the spool. A
   segment renamed into place before its chain line is written is adopted on
   open.
+- **Coverage boundaries survive recovery.** A gap resets the cursor's
+  `continuous_since` time, and later complete batches preserve it. Reconciliation
+  only judges process instances born after that boundary, with a fresh complete
+  cursor and an ingestion delay. PID reuse is resolved by creation time rather
+  than treated as the same execution.
 - **Retention is by space, never by age or severity.** Something routine today
   can become evidence when intelligence arrives later. Pruned segments are
   recorded as known absence. `hold()` ranges are never pruned.
@@ -630,9 +638,10 @@ Not done, and not implied:
 - The hash chain is local. It detects edits, deletions and reordering only
   against a chain head kept off the machine (`jarvis timeline verify` prints
   it; `--anchor` checks it). Remote anchoring and a witness are Stage 5.
-- No event-versus-snapshot reconciliation yet, for example a process present in
-  a snapshot with no recorded start. The process index makes that the next
-  detector.
+- Snapshot reconciliation currently covers recent Windows process instances
+  only. Files, sockets, services, tasks, registry state and Linux processes do
+  not yet have equivalent reducers or discrepancy detectors. A complete stream
+  is still a local engineering claim rather than independently attested proof.
 - Linux (`sysmon_linux`, auditd) still reads journald directly. Linux events do
   not flow into the log yet.
 - No per-channel spool quota. One flooding channel can fill the shared 512 MiB.

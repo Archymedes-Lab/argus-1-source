@@ -46,7 +46,21 @@
   <div class="sub"><a class="back" href="/">‹ dashboard</a> · <span id="ts">…</span></div>
   <div class="card"><h2>Location</h2><div id="loc"></div>
     <div class="meter"><i id="confbar" style="width:0"></i></div>
-    <div id="signals" style="margin-top:6px"></div></div>
+    <div id="signals" style="margin-top:6px"></div>
+    <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--dim);margin-bottom:6px">SET MY LOCATION</div>
+      <div style="display:flex;gap:6px">
+        <input id="place" placeholder="place, e.g. Norrsken Kigali"
+          style="flex:1;min-width:0;background:#0a1424;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;font:inherit">
+        <button id="findbtn" style="background:#12203a;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer">find</button>
+      </div>
+      <div id="geohint" class="sig dim" style="margin-top:6px">or click the globe to drop a pin, then confirm.</div>
+      <div id="confirm" style="display:none;margin-top:8px">
+        <button id="setbtn" style="background:#123a2a;color:var(--ok);border:1px solid #1f6b4a;border-radius:6px;padding:6px 10px;cursor:pointer">set as my location</button>
+        <button id="clearbtn" style="background:transparent;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer">clear</button>
+      </div>
+    </div>
+  </div>
   <div class="card"><h2>Devices</h2><div id="devices"></div></div>
   <div class="card"><h2>Trusted zones</h2><div id="zones"></div></div>
   <div class="card"><h2>Geo anomalies</h2><div id="anoms"></div></div>
@@ -85,6 +99,7 @@ function initGlobe(img){
 
 function place(payload){
   if(!viewer) return;
+  viewer.entities.removeAll(); pin=null;
   const img = payload.imagery, c = img.center;
   // Trusted zones as circles.
   (payload.zones||[]).forEach(z=>{
@@ -98,15 +113,64 @@ function place(payload){
         backgroundColor: Cesium.Color.fromCssColorString("#0a1424").withAlpha(.8) } });
   });
   if(c){
-    const isFix = c.source === "device fix";
+    const label = c.source==="device fix" ? "this device"
+                : c.source==="user-set" ? "you (set manually)" : "home zone";
+    const col = c.source==="home zone" ? "#6f89b3" : "#7db4ff";
     viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(c.lon, c.lat),
-      point:{ pixelSize:12, color: Cesium.Color.fromCssColorString(isFix?"#7db4ff":"#6f89b3"),
+      point:{ pixelSize:12, color: Cesium.Color.fromCssColorString(col),
         outlineColor: Cesium.Color.WHITE, outlineWidth:2 },
-      label:{ text: isFix?"this device":"home zone", font:"12px monospace",
-        fillColor: Cesium.Color.fromCssColorString(isFix?"#7db4ff":"#6f89b3"),
+      label:{ text: label, font:"12px monospace",
+        fillColor: Cesium.Color.fromCssColorString(col),
         pixelOffset:new Cesium.Cartesian2(0,18) } });
     viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, 2.2e6), duration:2 });
+  }
+}
+
+// -- letting the user set their own location --------------------------------
+let pending=null, pin=null;
+function stage(lat, lon, label){
+  pending={lat, lon, label};
+  $("#geohint").innerHTML = `<span class="low">${esc(label||"")}</span> ${lat.toFixed(4)}, ${lon.toFixed(4)} — confirm below.`;
+  $("#confirm").style.display="block";
+  if(viewer){
+    if(pin) viewer.entities.remove(pin);
+    pin = viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat),
+      point:{ pixelSize:12, color: Cesium.Color.fromCssColorString("#ffb347"),
+        outlineColor: Cesium.Color.WHITE, outlineWidth:2 } });
+    viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(lon, lat, 1.2e6), duration:1.4 });
+    viewer.scene.requestRender();
+  }
+}
+function wireControls(){
+  $("#findbtn").onclick = ()=>{
+    const q = $("#place").value.trim(); if(!q) return;
+    $("#geohint").textContent = "searching OpenStreetMap…";
+    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),
+      { headers:{ "Accept":"application/json" } })
+      .then(r=>r.json()).then(a=>{
+        if(!a.length){ $("#geohint").textContent = "no match — try a fuller name, or click the globe."; return; }
+        stage(parseFloat(a[0].lat), parseFloat(a[0].lon), a[0].display_name.split(",").slice(0,2).join(",")||q);
+      }).catch(()=>{ $("#geohint").textContent = "lookup failed (offline?) — click the globe to drop a pin instead."; });
+  };
+  $("#place").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#findbtn").click(); }});
+  $("#setbtn").onclick = ()=>{
+    if(!pending) return;
+    fetch("/api/geo/here", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(pending) }).then(r=>r.json()).then(()=>refresh()).catch(()=>{});
+  };
+  $("#clearbtn").onclick = ()=>{
+    fetch("/api/geo/here", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({clear:true}) }).then(()=>refresh()).catch(()=>{});
+  };
+  if(viewer){
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction(evt=>{
+      const cart = viewer.camera.pickEllipsoid(evt.position, viewer.scene.globe.ellipsoid);
+      if(!cart) return;
+      const carto = Cesium.Cartographic.fromCartesian(cart);
+      stage(Cesium.Math.toDegrees(carto.latitude), Cesium.Math.toDegrees(carto.longitude), "pin");
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   }
 }
 
@@ -143,8 +207,17 @@ function render(p){
     `<div class="sig">${esc(img.cadence)}</div><div class="sig dim">${esc(img.attribution)}</div>`;
 }
 
-fetch("/api/geo").then(r=>r.json()).then(p=>{ initGlobe(p.imagery||{}); render(p); place(p); })
-  .catch(e=>{ $("#fallback").style.display="flex"; $("#loc").innerHTML=`<div class="sig crit">/api/geo unavailable: ${esc(e)}</div>`; });
+let started=false;
+function refresh(){
+  return fetch("/api/geo").then(r=>r.json()).then(p=>{
+    if(!started){ initGlobe(p.imagery||{}); wireControls(); started=true; }
+    render(p); place(p);
+    $("#confirm").style.display="none"; pending=null;
+    $("#geohint").innerHTML="or click the globe to drop a pin, then confirm.";
+  });
+}
+refresh().catch(e=>{ $("#fallback").style.display="flex";
+  $("#loc").innerHTML=`<div class="sig crit">/api/geo unavailable: ${esc(e)}</div>`; });
 setInterval(()=>fetch("/api/geo").then(r=>r.json()).then(render).catch(()=>{}), 30000);
 </script>
 </body>

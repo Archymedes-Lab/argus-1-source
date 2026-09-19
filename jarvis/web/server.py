@@ -12,6 +12,7 @@ Design constraints that shaped this:
 """
 
 import json
+import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -219,26 +220,67 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return payload if isinstance(payload, dict) else None
 
-    def _send(self, code, body, ctype="application/json"):
+    # The dashboard is self-contained and forbids anything external, except that
+    # it may frame its own GeoSecurity page.
+    CSP_STRICT = ("default-src 'none'; style-src 'unsafe-inline'; "
+                  "script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'")
+    # The GeoSecurity globe is inherently external: the Cesium engine and the
+    # satellite tiles come from named third parties, and place-name lookup from
+    # OpenStreetMap. This relaxation is scoped to the /geo page alone and names
+    # the exact origins; every other route keeps the strict policy above.
+    CSP_GEO = (
+        "default-src 'none'; "
+        "script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data: blob: https://gibs.earthdata.nasa.gov; "
+        "connect-src 'self' blob: https://gibs.earthdata.nasa.gov "
+        "https://cdn.jsdelivr.net https://nominatim.openstreetmap.org; "
+        "worker-src blob:; child-src blob:; font-src data:")
+
+    def _send(self, code, body, ctype="application/json", csp=None):
         if isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        # The page is entirely self-contained; forbid anything external.
-        self.send_header("Content-Security-Policy",
-                         "default-src 'none'; style-src 'unsafe-inline'; "
-                         "script-src 'unsafe-inline'; connect-src 'self'")
+        self.send_header("Content-Security-Policy", csp or self.CSP_STRICT)
         self.end_headers()
         self.wfile.write(body)
 
     def do_POST(self):
         if not self._host_ok():
             return self._send(403, json.dumps({"error": "bad host"}))
+        url = urlparse(self.path)
+        # Browser extensions are deliberately not same-origin with the dashboard.
+        # This one write-only route is instead paired with a high-entropy token,
+        # has a tiny schema, returns no observations, and stores only aggregate
+        # metadata.  Keep it before the dashboard's same-origin gate.
+        if url.path == "/api/veil/events":
+            from jarvis.core.veil import TOKEN_KEY
+            from jarvis.collectors.host.veil import classify, validate_report
+            payload = self._json_body(8192)
+            token = self.headers.get("X-JARVIS-Veil-Token", "")
+            store = Store(self.db_path)
+            try:
+                expected = store.get_meta(TOKEN_KEY) or ""
+                if not expected or not secrets.compare_digest(token, expected):
+                    return self._send(403, json.dumps({"error": "not paired"}))
+                report = validate_report(payload)
+                if report is None:
+                    return self._send(400, json.dumps({"error": "invalid metadata-only report"}))
+                findings = classify(report)
+                # A benign aggregate report is still a durable coverage receipt.
+                store.record_observation("veil", findings, coverage="complete")
+                # The dashboard and local incident history need the same
+                # bounded metadata-only result.  This route intentionally does
+                # not send email or trigger containment from browser content.
+                store.save_snapshot("veil", findings)
+                return self._send(202, json.dumps({"accepted": True, "findings": len(findings)}))
+            finally:
+                store.close()
         if not self._same_origin():
             return self._send(403, json.dumps({"error": "cross-site request"}))
-        url = urlparse(self.path)
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]
             ok = self.scheduler.force(job)
@@ -282,6 +324,28 @@ class Handler(BaseHTTPRequestHandler):
                 store.close()
             return self._send(200 if ok else 400, json.dumps(
                 {"ok": ok, "message": message, "pending": follow["pending"]}))
+        if url.path == "/api/geo/here":
+            from jarvis.service import geosecurity
+            payload = self._json_body(2048)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                if payload.get("clear"):
+                    geosecurity.clear_here(store)
+                    return self._send(200, json.dumps({"ok": True, "cleared": True}))
+                try:
+                    lat, lon = float(payload["lat"]), float(payload["lon"])
+                except (KeyError, TypeError, ValueError):
+                    return self._send(400, json.dumps({"error": "lat and lon required"}))
+                try:
+                    geosecurity.set_here(store, lat, lon, str(payload.get("label") or "")[:80])
+                except ValueError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}))
+                return self._send(200, json.dumps({"ok": True}))
+            finally:
+                store.close()
+
         if url.path == "/api/answer":
             payload = self._json_body(4096)
             if payload is None:
@@ -341,7 +405,8 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/geo":
             try:
                 with open(GEO_PAGE, "r", encoding="utf-8", errors="replace") as fh:
-                    return self._send(200, fh.read(), "text/html; charset=utf-8")
+                    return self._send(200, fh.read(), "text/html; charset=utf-8",
+                                      csp=self.CSP_GEO)
             except OSError:
                 return self._send(500, "geo.html missing", "text/plain")
 

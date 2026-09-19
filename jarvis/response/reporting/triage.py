@@ -81,6 +81,12 @@ def _classify(finding, job):
     # The response ladder had its say first. An action JARVIS already took is
     # its to explain (with the undo); one it proposed is yours to approve.
     guard = f.get("defense") or {}
+    if guard.get("status") in ("attempting", "uncertain", "not_applied"):
+        return _r(YOU_DO,
+                  "JARVIS cannot safely assume the outcome of a containment action. "
+                  "It did not repeat or undo it. Inspect the preserved evidence, then run "
+                  "the read-only recovery check.",
+                  "jarvis defend reconcile")
     if guard.get("rung") == "auto" and guard.get("status") == "applied":
         return _r(JARVIS, f"JARVIS contained this automatically ({guard.get('detail', 'done')}). "
                           f"Undo if it was a false alarm.", guard.get("undo", ""))

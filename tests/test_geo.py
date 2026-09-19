@@ -90,6 +90,46 @@ class StateAndAuditTests(unittest.TestCase):
         self.assertEqual(state["devices"][0]["trust"], "trusted")
         self.assertEqual(state["imagery"]["provider"], "NASA GIBS")
 
+    def test_user_set_location_takes_over_when_native_denied(self):
+        geosecurity.add_zone(self.store, "HOME", -1.9441, 30.0619, 500)
+        with mock.patch.object(geo, "locate", return_value={"status": "denied"}):
+            geo.audit(self.store, hosts=("win",))
+        geosecurity.set_here(self.store, -1.9441, 30.0619, "Norrsken Kigali")
+        state = geosecurity.state(self.store, health_state={"healthy": True})
+        loc = state["location"]
+        self.assertEqual(loc["status"], "ok")
+        self.assertEqual(loc["source"], "user-set")
+        self.assertEqual(loc["label"], "Norrsken Kigali")
+        self.assertEqual(loc["zone"], "HOME")
+        self.assertNotIn("geo_blind", [a["kind"] for a in state["anomalies"]])
+        self.assertGreater(state["confidence"]["score"], 0)
+        self.assertEqual(state["imagery"]["center"]["source"], "user-set")
+
+    def test_native_fix_overrides_a_user_set_location(self):
+        geosecurity.set_here(self.store, 0.0, 0.0, "somewhere")
+        fix = {"status": "ok", "lat": -1.95, "lon": 30.06, "accuracy_m": 25,
+               "source": "windows-gnss"}
+        with mock.patch.object(geo, "locate", return_value=fix):
+            geo.audit(self.store, hosts=("win",))
+        loc = geosecurity.state(self.store)["location"]
+        self.assertEqual(loc["source"], "windows-gnss")
+
+    def test_clearing_a_set_location_restores_geo_blind(self):
+        with mock.patch.object(geo, "locate", return_value={"status": "denied"}):
+            geo.audit(self.store, hosts=("win",))
+        geosecurity.set_here(self.store, 10, 10, "x")
+        geosecurity.clear_here(self.store)
+        state = geosecurity.state(self.store)
+        self.assertEqual(state["location"]["status"], "denied")
+        self.assertIn("geo_blind", [a["kind"] for a in state["anomalies"]])
+
+    def test_user_set_audit_is_ok_not_a_blind_finding(self):
+        geosecurity.set_here(self.store, -1.94, 30.06, "Norrsken Kigali")
+        with mock.patch.object(geo, "locate", return_value={"status": "denied"}):
+            findings = geo.audit(self.store, hosts=("win",))
+        self.assertEqual(findings[0]["severity"], "ok")
+        self.assertIn("Norrsken Kigali", findings[0]["title"])
+
     def test_outside_zone_with_active_threat_is_flagged(self):
         geosecurity.add_zone(self.store, "HOME", -1.95, 30.06, 100)
         fix = {"status": "ok", "lat": 10.0, "lon": 10.0, "accuracy_m": 20,

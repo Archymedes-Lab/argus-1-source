@@ -98,3 +98,22 @@ class BlockAddress(Action):
         if isinstance(result, dict) and result.get("ok"):
             return True, f"unblocked {record.get('ip')}"
         return False, "could not remove the firewall rule"
+
+    def recover(self, target, record):
+        ip = _ip((record or {}).get("ip") or (target or {}).get("ip"))
+        if not ip:
+            return "unknown", {}, "invalid firewall recovery target"
+        name = (record or {}).get("name") or (RULE_PREFIX + ip)
+        script = (
+            "$ErrorActionPreference='Stop';"
+            f"$n='{name}';"
+            "try{$r=Get-NetFirewallRule -DisplayName $n -ErrorAction SilentlyContinue;"
+            "$ok=[bool]$r;$j=@{available=$true;blocked=$ok}|ConvertTo-Json -Compress}"
+            "catch{$j=@{available=$false;blocked=$false}|ConvertTo-Json -Compress};"
+            "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($j))")
+        result = self._run(script)
+        if not isinstance(result, dict) or not result.get("available"):
+            return "unavailable", {}, "Windows firewall state could not be read"
+        if result.get("blocked"):
+            return "applied", {"ip": ip, "name": name}, f"verified outbound block for {ip}"
+        return "not_applied", {}, f"no JARVIS outbound block exists for {ip}"

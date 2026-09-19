@@ -633,6 +633,17 @@ class EventLog:
         row = self.db.execute("SELECT * FROM processes WHERE guid=?", (guid,)).fetchone()
         return dict(row) if row else None
 
+    def process_instances(self, host, pid, limit=32):
+        """Exact executions recorded for one host/PID, newest first.
+
+        PID is only a lookup key. Callers must compare `started` before
+        treating a row as the same process instance.
+        """
+        self._need_index()
+        return [dict(r) for r in self.db.execute(
+            "SELECT * FROM processes WHERE host=? AND pid=? "
+            "ORDER BY start_seq DESC LIMIT ?", (host, int(pid), int(limit)))]
+
     def ancestry(self, guid, limit=32):
         """The process and its recorded ancestors, nearest first."""
         chain, seen = [], set()

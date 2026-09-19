@@ -147,6 +147,19 @@ class IngestTests(Fixture):
         ch = self.run_ingest()["channels"][0]
         self.assertIn("never received", ch["gaps"][0])
 
+    def test_continuous_coverage_boundary_survives_later_complete_batches(self):
+        broken = batch(1, gap="records were overwritten")
+        broken["status"] = "partial"
+        broken["created_at"] = "2026-09-18T12:01:00Z"
+        healthy = batch(2)
+        healthy["created_at"] = "2026-09-18T12:02:00Z"
+        self.publish(broken)
+        self.publish(healthy)
+        self.run_ingest()
+        cursor = self.log.cursor("sensor", SYSMON)
+        self.assertEqual(cursor["continuous_since"], "2026-09-18T12:01:00Z")
+        self.assertEqual(cursor["status"], "complete")
+
     def test_no_spool_means_not_installed(self):
         report = ingest.run(log=self.log, spool=self.root / "absent")
         self.assertFalse(report["installed"])

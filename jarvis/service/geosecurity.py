@@ -60,10 +60,19 @@ def remove_zone(store, name):
 
 
 def fusion(store, geo_current):
-    """Position confidence from the signals actually available. -> {score, signals}."""
+    """Position confidence from the signals actually available. -> {score, signals}.
+
+    A user-declared location is trusted for what it is — where the user says they
+    are — but not treated as an independently verified fix, so it never reaches
+    the certainty a tight GNSS reading would.
+    """
     signals = []
     status = (geo_current or {}).get("status")
-    if status == "ok":
+    if status == "ok" and (geo_current or {}).get("source") == "user-set":
+        signals.append(("location you set manually", 0.7))
+        if geo_current.get("zone") and geo_current["zone"] != "outside":
+            signals.append(("inside a user-declared trusted zone", 0.6))
+    elif status == "ok":
         acc = geo_current.get("accuracy_m") or 9999
         # A tight native fix is strong evidence; a loose one much less.
         w = 0.9 if acc <= 50 else 0.75 if acc <= 500 else 0.5 if acc <= 5000 else 0.3
@@ -113,31 +122,40 @@ def anomalies(store, geo_current, recent_findings):
     return out
 
 
-def imagery(geo_current):
+def imagery(loc):
     """Imagery config for the globe, and where to center it (honestly)."""
     center = None
-    if (geo_current or {}).get("status") == "ok":
-        center = {"lat": geo_current["lat"], "lon": geo_current["lon"],
-                  "source": "device fix"}
+    if (loc or {}).get("status") == "ok":
+        center = {"lat": loc["lat"], "lon": loc["lon"],
+                  "source": "user-set" if loc.get("source") == "user-set" else "device fix"}
     return {**IMAGERY, "center": center}
+
+
+def set_here(store, lat, lon, label=None):
+    """Record a user-declared current location (labelled, never a GNSS fix)."""
+    return geo.set_manual(store, lat, lon, label)
+
+
+def clear_here(store):
+    geo.clear_manual(store)
 
 
 def state(store, health_state=None, recent_findings=None):
     """The full payload the /geo view renders."""
-    geo_current = geo.current(store)
+    loc = geo.effective(store, geo.current(store))
     zones = get_zones(store)
-    # If there is no fix but a home zone exists, center there — user-asserted,
-    # not a guessed position, and marked as such.
-    img = imagery(geo_current)
+    # If there is no location at all but a home zone exists, center there —
+    # user-asserted, not a guessed position, and marked as such.
+    img = imagery(loc)
     if img["center"] is None and zones:
         home = next((z for z in zones if z["name"].upper() == "HOME"), zones[0])
         img["center"] = {"lat": home["lat"], "lon": home["lon"], "source": "home zone"}
     return {
-        "location": geo_current or {"status": "unknown"},
-        "confidence": fusion(store, geo_current),
+        "location": loc or {"status": "unknown"},
+        "confidence": fusion(store, loc),
         "zones": zones,
-        "devices": _devices(store, geo_current, health_state),
-        "anomalies": anomalies(store, geo_current, recent_findings),
+        "devices": _devices(store, loc, health_state),
+        "anomalies": anomalies(store, loc, recent_findings),
         "imagery": img,
         "generated_at": now(),
     }

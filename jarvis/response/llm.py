@@ -16,12 +16,24 @@ import urllib.error
 import urllib.request
 
 from jarvis.platform.windows import ps_json
+from jarvis.response.privacy import redact
 
 DEFAULT_MODEL = "llama3.2:1b"
 DEFAULT_URL = "http://127.0.0.1:11434"
 BUSY = "busy"
 
 LOCK = threading.Lock()
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.URLError("model redirects are forbidden")
+
+
+def _open(req, timeout):
+    # Ignore environment proxies; evidence must stay on loopback.
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _NoRedirect()).open(req, timeout=timeout)
 
 
 def model_name(conf):
@@ -40,7 +52,7 @@ def _bridge(body, timeout):
         "$ErrorActionPreference='Stop';"
         f"$b=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'));"
         "try{$r=Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/chat' "
-        f"-Method Post -ContentType 'application/json' -Body $b -TimeoutSec {int(timeout)};"
+        f"-MaximumRedirection 0 -Method Post -ContentType 'application/json' -Body $b -TimeoutSec {int(timeout)};"
         "$j=$r|ConvertTo-Json -Depth 10 -Compress}"
         "catch{$j=@{_jarvis_error=[string]$_.Exception.Message}|ConvertTo-Json -Compress};"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($j))")
@@ -49,10 +61,12 @@ def _bridge(body, timeout):
 
 def _request(conf, body, timeout):
     base = (conf.get("ollama_url") or DEFAULT_URL).rstrip("/")
+    if base not in ("http://127.0.0.1:11434", "http://localhost:11434"):
+        return None, "Security policy requires the local loopback model endpoint."
     req = urllib.request.Request(base + "/api/chat", data=body, method="POST",
                                  headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        with _open(req, timeout) as response:
             return json.loads(response.read().decode("utf-8", "replace")), None
     except (urllib.error.URLError, OSError, ValueError) as exc:
         if base not in ("http://127.0.0.1:11434", "http://localhost:11434"):
@@ -77,6 +91,7 @@ def chat(conf, system, user, *, examples=(), model="", num_predict=110, temperat
         messages += [{"role": "user", "content": asked},
                      {"role": "assistant", "content": answered}]
     messages.append({"role": "user", "content": user})
+    messages = [{**m, "content": redact(m["content"])} for m in messages]
     acquired = LOCK.acquire(timeout=wait) if wait > 0 else LOCK.acquire(blocking=False)
     if not acquired:
         return "", BUSY

@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "JARVIS Veil Sensor",
+  "version": "0.1.0",
+  "description": "Opt-in, metadata-only local browser privacy sensor for JARVIS.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1:8787/*", "http://localhost:8787/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "content_scripts": [{"matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_start"}],
+  "web_accessible_resources": [{"resources": ["probe.js"], "matches": ["http://*/*", "https://*/*"]}],
+  "action": {"default_title": "JARVIS Veil Sensor"},
+  "options_page": "options.html"
+}

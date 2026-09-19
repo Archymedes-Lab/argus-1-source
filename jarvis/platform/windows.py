@@ -239,6 +239,8 @@ def collect(timeout: int = 45):
             "exe": exe,
             "script": script,
             "cmdline": cmd,
+            "started": p.get("started") or "",
+            "observed_at": data.get("process_observed_at") or "",
             "user": "",  # per-process owner lookup is too slow to do on every scan
             "rss_bytes": int(p.get("rss") or 0),
             "cpu_seconds": float(p.get("cpu") or 0),

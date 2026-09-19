@@ -18,7 +18,7 @@ from jarvis.collectors.persistence import asep as asep_mod
 from jarvis.collectors.persistence import backdoor, control, implant, startup
 from jarvis.collectors.process import evasion as evasion_mod
 from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
-from jarvis.collectors.telemetry import auditd, native, sysmon, sysmon_linux
+from jarvis.collectors.telemetry import auditd, native, reconcile, sysmon, sysmon_linux
 from jarvis.core import collection, retention
 from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
@@ -72,6 +72,7 @@ def _scan(hosts, db_path):
             "detail": f"{p['ip']}:{p['port']} ← {p['proc']['name']}",
             "where": p["proc"].get("exe") or "",
         })
+    out.extend(reconcile.processes(res.get("processes", []), observed_at=res["ts"]))
     return out
 
 

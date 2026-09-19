@@ -9,6 +9,11 @@ have put a Resend key in the config.
 
 ## Start here
 
+The [Maximum Assurance governing directive](docs/security/MAXIMUM-ASSURANCE.md)
+applies to the complete system. `/api/health` exposes a conservative `assurance`
+register of implemented foundations and remaining blind spots; healthy collectors
+do not prove absence of compromise or completion of the directive.
+
 The [Defender Engine architecture and feature roadmap](docs/architecture/DEFENDER-ENGINE.md)
 describes JARVIS's evolution toward native protection, durable incident memory,
 data and identity defense, constrained response, and verified recovery. It

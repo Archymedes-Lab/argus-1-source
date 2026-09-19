@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -5,7 +6,7 @@ from unittest import mock
 
 from jarvis.core.store import Store
 from jarvis.response import defense, questions
-from jarvis.response.actions import base, quarantine, suspend
+from jarvis.response.actions import base, block_network, disable_autostart, quarantine, suspend
 from jarvis.response.evidence import paths as evidence_paths
 
 
@@ -136,6 +137,82 @@ class LadderTests(unittest.TestCase):
         self.store.close()
         self.tmp.cleanup()
         self.qroot.cleanup()
+
+    def test_interrupted_action_is_durable_and_never_retried(self):
+        finding = dropped(self.file, "critical", "sample match")
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        def interrupted(target, case):
+            other = Store(self.store.path)
+            try:
+                entries = defense.load(other)
+                self.assertEqual(next(iter(entries.values()))["status"], "attempting")
+            finally:
+                other.close()
+            raise RuntimeError("interrupted")
+        with mock.patch.object(quarantine.QuarantineFile, "apply", side_effect=interrupted) as apply:
+            first = defense.process(self.store, conf, "hunt", [finding])[0]
+            eid = first["defense"]["id"]
+            self.assertEqual(first["defense"]["status"], "uncertain")
+            defense.process(self.store, conf, "hunt", [dropped(self.file, "critical", "sample match")])
+            self.assertFalse(defense.approve(self.store, eid)[0])
+            apply.assert_called_once()
+
+    def test_reconcile_recovers_quarantine_only_with_marker_and_undo_record(self):
+        finding = dropped(self.file, "critical", "sample match")
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        with mock.patch.object(quarantine.QuarantineFile, "apply", side_effect=RuntimeError("crash")):
+            eid = defense.process(self.store, conf, "hunt", [finding])[0]["defense"]["id"]
+        marker = self.file + ".jarvis-quarantined"
+        stored = os.path.join(self.qroot.name, "q", "recovered")
+        os.makedirs(os.path.dirname(stored), exist_ok=True)
+        os.rename(self.file, stored)
+        with open(marker, "w") as fh:
+            json.dump({"stored": stored, "quarantined": 1}, fh)
+        rows = defense.reconcile(self.store)
+        self.assertEqual(rows[0][1], "applied")
+        entry = defense.load(self.store)[eid]
+        self.assertEqual(entry["status"], "applied")
+        self.assertTrue(defense.undo(self.store, eid)[0])
+
+    def test_reconcile_never_guesses_after_markerless_move(self):
+        finding = dropped(self.file, "critical", "sample match")
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        with mock.patch.object(quarantine.QuarantineFile, "apply", side_effect=RuntimeError("crash")):
+            eid = defense.process(self.store, conf, "hunt", [finding])[0]["defense"]["id"]
+        os.remove(self.file)
+        rows = defense.reconcile(self.store)
+        self.assertEqual(rows[0][1], "unknown")
+        self.assertEqual(defense.load(self.store)[eid]["status"], "uncertain")
+
+    def test_reconcile_not_applied_still_requires_human_decision(self):
+        finding = dropped(self.file, "critical", "sample match")
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        with mock.patch.object(quarantine.QuarantineFile, "apply", side_effect=RuntimeError("crash")):
+            eid = defense.process(self.store, conf, "hunt", [finding])[0]["defense"]["id"]
+        rows = defense.reconcile(self.store)
+        self.assertEqual(rows[0][1], "not_applied")
+        self.assertEqual(defense.load(self.store)[eid]["status"], "not_applied")
+        with mock.patch.object(quarantine.QuarantineFile, "apply") as apply:
+            defense.process(self.store, conf, "hunt", [finding])
+        apply.assert_not_called()
+
+    def test_failed_intent_write_prevents_mutation(self):
+        finding = dropped(self.file, "critical", "sample match")
+        with mock.patch.object(self.store, "set_meta", side_effect=OSError("disk full")), \
+                mock.patch.object(quarantine.QuarantineFile, "apply") as apply:
+            with self.assertRaises(OSError):
+                defense.process(self.store, {"autonomous_defense": True, "auto_quarantine": True},
+                                "hunt", [finding])
+            apply.assert_not_called()
+
+    def test_corrupt_history_never_reauthorizes_action(self):
+        for corrupt in ('', 'null', '{', '[]', '{"entry": null}'):
+            self.store.set_meta(defense.LEDGER_META, corrupt)
+            with mock.patch.object(quarantine.QuarantineFile, "apply") as apply:
+                with self.assertRaises(ValueError):
+                    defense.process(self.store, {"autonomous_defense": True, "auto_quarantine": True},
+                                    "hunt", [dropped(self.file, "critical", "sample match")])
+                apply.assert_not_called()
 
     def test_off_by_default_proposes_never_acts(self):
         rung, action, _ = defense.decide(dropped(self.file), "hunt", {}, {})
@@ -296,12 +373,35 @@ class TriageIntegrationTests(unittest.TestCase):
         self.assertEqual(r["owner"], triage.YOU_DO)
         self.assertEqual(r["command"], "jarvis defend approve ab12")
 
+    def test_uncertain_containment_never_reads_as_handled(self):
+        from jarvis.response.reporting import triage
+        f = {**dropped("/tmp/x"), "defense": {"rung": "auto", "status": "uncertain",
+             "detail": "interrupted"}}
+        r = triage.classify(f, "hunt")
+        self.assertEqual(r["owner"], triage.YOU_DO)
+        self.assertEqual(r["command"], "jarvis defend reconcile")
+
 
 class RegistryTests(unittest.TestCase):
     def test_every_auto_action_is_reversible(self):
         for a in base.registry().values():
             if a.autonomy == base.AUTO:
                 self.assertTrue(a.reversible, a.id)
+
+    def test_windows_recovery_probes_only_report_state(self):
+        block = block_network.BlockAddress()
+        with mock.patch.object(block, "_run", return_value={"available": True, "blocked": True}) as run:
+            state, record, _ = block.recover({"ip": "8.8.8.8"}, {})
+        self.assertEqual(state, "applied")
+        self.assertEqual(record["ip"], "8.8.8.8")
+        self.assertEqual(run.call_count, 1)
+
+        autostart = disable_autostart.DisableAutostart()
+        target = {"kind": "task", "path": "\\\\", "name": "Example"}
+        with mock.patch.object(autostart, "_run", return_value={"available": True, "disabled": True}):
+            state, record, _ = autostart.recover(target, {})
+        self.assertEqual(state, "unknown")
+        self.assertEqual(record, {})
 
 
 if __name__ == "__main__":

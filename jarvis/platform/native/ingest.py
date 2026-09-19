@@ -168,12 +168,26 @@ def ingest_channel(log, spool, directory, budget):
         fresh = [r for r in batch["events"] if r["record_id"] > seen]
         result["duplicates"] += len(batch["events"]) - len(fresh)
         events = [_event(r, batch) for r in fresh]
+        event_times = [e.get("time") for e in events if e.get("time")]
+        if gap:
+            # A gap breaks the claim that the state reducer has seen every
+            # transition. Later complete batches must not erase that boundary:
+            # snapshot reconciliation is safe only for instances born after it.
+            continuous_since = batch["created_at"]
+        elif cursor and cursor.get("continuous_since"):
+            continuous_since = cursor["continuous_since"]
+        else:
+            # The first native pass drains the retained Event Log from its
+            # oldest record, so its oldest source time is the beginning of the
+            # interval this stream can honestly claim to reconstruct.
+            continuous_since = min(event_times) if event_times else batch["created_at"]
         log.append(events, {
             "sensor": batch["sensor_id"], "channel": batch["channel"], "sequence": seq,
             "generation": batch["generation"], "status": batch["status"], "gap": gap,
             "digest": digest, "created_at": batch["created_at"], "events": len(events),
             "host": batch["host_id"], "device": batch.get("device_id"),
             "boot": batch.get("boot_id"),
+            "continuous_since": continuous_since,
             "record_through": max([seen] + [r["record_id"] for r in fresh]),
         })
         if gap:

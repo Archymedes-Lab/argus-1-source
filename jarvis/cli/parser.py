@@ -66,6 +66,7 @@ from .commands import repair as repair_cli
 from .commands import retention as retention_cli
 from .commands import sensor as sensor_cli
 from .commands import timeline as timeline_cli
+from .commands import veil as veil_cli
 
 
 def build_parser():
@@ -90,6 +91,7 @@ def build_parser():
     sensor_cli.add_parser(sub)
     geo_cli.add_parser(sub)
     timeline_cli.add_parser(sub)
+    veil_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
     b.add_argument("--reset", action="store_true",

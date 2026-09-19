@@ -48,7 +48,7 @@ class AssistantTests(unittest.TestCase):
 
     def test_windows_loopback_bridge_is_used_when_wsl_loopback_is_separate(self):
         reply = {"message": {"content": "Local evidence explanation"}}
-        with mock.patch.object(llm.urllib.request, "urlopen",
+        with mock.patch.object(llm, "_open",
                                side_effect=llm.urllib.error.URLError("offline")), \
              mock.patch.object(llm, "ps_json", return_value=reply) as bridge:
             text, source = assistant._ollama(self.store, "what links these?", {
@@ -57,7 +57,7 @@ class AssistantTests(unittest.TestCase):
         bridge.assert_called_once()
 
     def test_bridge_error_is_reported_not_treated_as_an_answer(self):
-        with mock.patch.object(llm.urllib.request, "urlopen",
+        with mock.patch.object(llm, "_open",
                                side_effect=llm.urllib.error.URLError("offline")), \
              mock.patch.object(llm, "ps_json", return_value={"_jarvis_error": "refused"}):
             text, error = llm.chat({}, "system", "user")

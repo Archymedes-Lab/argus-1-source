@@ -193,6 +193,41 @@ class DefenderHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(detail)["transitions"][0]["reason"], "first observation")
 
+    def test_veil_requires_pairing_and_keeps_only_dashboard_findings(self):
+        from jarvis.core.veil import TOKEN_KEY
+        store = Store(self.path)
+        store.set_meta(TOKEN_KEY, "paired-secret")
+        store.close()
+        self.handler.path = "/api/veil/events"
+        self.handler.headers = {"Host": "localhost:8787", "X-JARVIS-Veil-Token": "paired-secret"}
+        self.handler._json_body = Mock(return_value={
+            "top_origin": "https://shop.example/private-path",
+            "egress_origins": ["https://tracker.example/private"],
+            "listeners": {"input": 1, "keydown": 1},
+            "surfaces": {}, "transports": {"fetch": 1},
+        })
+        self.handler.do_POST()
+        self.assertEqual(self.handler._send.call_args.args[0], 202)
+        store = Store(self.path)
+        try:
+            finding = store.get_snapshots()["veil"]["findings"][0]
+        finally:
+            store.close()
+        self.assertEqual(finding["where"], "https://shop.example")
+        self.assertNotIn("private", json.dumps(finding))
+
+    def test_veil_rejects_unpaired_call_before_storing_metadata(self):
+        self.handler.path = "/api/veil/events"
+        self.handler.headers = {"Host": "localhost:8787", "X-JARVIS-Veil-Token": "wrong"}
+        self.handler._json_body = Mock(return_value={})
+        self.handler.do_POST()
+        self.assertEqual(self.handler._send.call_args.args[0], 403)
+        store = Store(self.path)
+        try:
+            self.assertNotIn("veil", store.get_snapshots())
+        finally:
+            store.close()
+
 
 if __name__ == "__main__":
     unittest.main()

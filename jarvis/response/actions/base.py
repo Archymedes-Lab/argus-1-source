@@ -76,6 +76,16 @@ class Action(ABC):
         """Reverse a prior apply(). Return (ok: bool, detail: str)."""
         return False, "this action cannot be undone"
 
+    def recover(self, target, record):
+        """Read-only crash recovery probe.
+
+        Return ``(state, record, detail)`` where state is ``applied``,
+        ``not_applied``, ``unknown`` or ``unavailable``.  This must never
+        mutate the protected host.  A positive result must also return enough
+        record data for ``undo()``; otherwise recovery remains unknown.
+        """
+        return "unknown", {}, "this action has no read-only recovery probe"
+
 
 _REGISTRY = {}
 

@@ -2,6 +2,8 @@
 import sqlite3
 import time
 
+from jarvis.core.assurance import report as assurance_report
+
 
 def health(db_path, scheduler, stamp=None):
     stamp = time.time() if stamp is None else stamp
@@ -38,7 +40,7 @@ def health(db_path, scheduler, stamp=None):
     except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
         sources['storage'] = {'status': 'unavailable', 'reason': type(exc).__name__}
     protected = bool(sources) and all(s['status'] == 'complete' for s in sources.values())
-    return {'service': 'JARVIS', 'time': stamp, 'healthy': alive and protected,
+    return {'assurance': assurance_report(), 'service': 'JARVIS', 'time': stamp, 'healthy': alive and protected,
             'live': alive, 'ready': alive and protected, 'protection_healthy': protected,
             'progress_age': age, 'fast_lane_age': fast_age,
             'current_job': scheduler.current,

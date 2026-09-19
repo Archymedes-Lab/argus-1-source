@@ -11,13 +11,17 @@ class BridgeTests(unittest.TestCase):
     def test_host_cpu_capacity_survives_process_collection(self):
         payload = {'logical_cpus': 16, 'procs': [
             {'pid': 0, 'name': 'System Idle Process', 'cpu': 5000},
-            {'pid': 42, 'name': 'worker.exe', 'cpu': 100}], 'conns': []}
+            {'pid': 42, 'name': 'worker.exe', 'cpu': 100,
+             'started': '2026-09-19T10:00:00.0000000Z'}],
+                   'process_observed_at': '2026-09-19T10:01:00.0000000Z', 'conns': []}
         result = SimpleNamespace(stdout=base64.b64encode(json.dumps(payload).encode()))
         with patch.object(collect_windows, 'available', return_value=True), \
              patch.object(collect_windows.subprocess, 'run', return_value=result):
             processes = collect_windows.collect()
         self.assertEqual([p['logical_cpus'] for p in processes], [16, 16])
         self.assertEqual(processes[1]['cpu_seconds'], 100)
+        self.assertEqual(processes[1]['started'], '2026-09-19T10:00:00.0000000Z')
+        self.assertEqual(processes[1]['observed_at'], '2026-09-19T10:01:00.0000000Z')
         # PID 0 is still available for unattributed socket monitoring; only
         # the resource consumer excludes its idle-time counter.
         self.assertEqual(processes[0]['pid'], 0)

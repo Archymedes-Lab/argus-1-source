@@ -117,6 +117,14 @@ class Scheduler(threading.Thread):
         beat = "heartbeat" if lane == "main" else "fast_heartbeat"
         running = "current" if lane == "main" else "fast_current"
         try:
+            # Reconciliation is read-only at the protected-host boundary.  It
+            # happens once per scheduler process, before new collections can
+            # ever consider automatic containment; it cannot retry an action.
+            if lane == "main":
+                try:
+                    defense.reconcile(store)
+                except Exception:
+                    pass
             while True:
                 setattr(self, beat, time.time())
                 name = self._due(lane)

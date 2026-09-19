@@ -100,3 +100,26 @@ class DisableAutostart(Action):
         if isinstance(result, dict) and result.get("ok"):
             return True, str(result.get("detail") or "restored")
         return False, str((result or {}).get("detail") or "autostart could not be restored")
+
+    def recover(self, target, record):
+        if not isinstance(target, dict) or target.get("kind") not in ("task", "runkey"):
+            return "unknown", {}, "invalid autostart recovery target"
+        blob = _blob(target)
+        script = (
+            "$ErrorActionPreference='Stop';"
+            f"$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'))|ConvertFrom-Json;"
+            "try{if($t.kind -eq 'task'){"
+            "$x=Get-ScheduledTask -TaskPath $t.path -TaskName $t.name -ErrorAction Stop;"
+            "$j=@{available=$true;disabled=($x.State -eq 'Disabled')}|ConvertTo-Json -Compress"
+            "}else{$item=Get-Item -LiteralPath $t.key -ErrorAction Stop;"
+            "$j=@{available=$true;disabled=($null -eq $item.GetValue($t.name,$null))}|ConvertTo-Json -Compress}}"
+            "catch{$j=@{available=$false;disabled=$false}|ConvertTo-Json -Compress};"
+            "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($j))")
+        result = self._run(script)
+        if not isinstance(result, dict) or not result.get("available"):
+            return "unavailable", {}, "Windows autostart state could not be read"
+        if result.get("disabled"):
+            # The original value/enablement was never durably captured, so
+            # there is no safe undo token.  Leave this uncertain for a human.
+            return "unknown", {}, "autostart appears disabled but its undo record was lost"
+        return "not_applied", {}, "autostart entry is still enabled"

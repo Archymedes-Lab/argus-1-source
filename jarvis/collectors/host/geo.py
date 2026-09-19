@@ -107,45 +107,98 @@ def current(store):
         return None
 
 
+def get_manual(store):
+    """The location the user asserted, or None. User-declared, never a GNSS fix."""
+    try:
+        return json.loads(store.get_meta("geo_manual", "") or "null")
+    except (ValueError, AttributeError):
+        return None
+
+
+def set_manual(store, lat, lon, label=None):
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise ValueError("latitude/longitude out of range")
+    m = {"lat": float(lat), "lon": float(lon), "label": (label or "user-set")[:80],
+         "ts": now(), "source": "user-set"}
+    store.set_meta("geo_manual", json.dumps(m))
+    store.commit()
+    return m
+
+
+def clear_manual(store):
+    store.set_meta("geo_manual", "")
+    store.commit()
+
+
+def effective(store, native):
+    """The location to reason about: a native fix wins; else what the user set.
+
+    Never invents a position — it only ever returns a real GNSS fix or a
+    location the user declared, each tagged with its source so the UI and the
+    confidence fusion can tell them apart.
+    """
+    zones = get_zones(store)
+    if native and native.get("status") == "ok" and "lat" in native:
+        return {**native, "zone": classify(native["lat"], native["lon"], zones)}
+    manual = get_manual(store)
+    if manual:
+        return {"status": "ok", "lat": manual["lat"], "lon": manual["lon"],
+                "accuracy_m": None, "source": "user-set", "label": manual.get("label"),
+                "ts": manual.get("ts"), "zone": classify(manual["lat"], manual["lon"], zones)}
+    return native or {"status": "unknown"}
+
+
 def audit(store=None, hosts=("win",)):
     if "win" not in hosts or store is None:
         return []
     fix = locate()
     zones = get_zones(store)
     ts = now()
+    # geo_current records the native truth, without coordinates when there is no
+    # fix — overwrite-only, never a track.
     record = {"ts": ts, "status": fix.get("status")}
-    out = []
-    if fix.get("status") == "ok":
-        zone = classify(fix["lat"], fix["lon"], zones)
-        # Overwrite-only: keep the current fix, not a track.
+    if fix.get("status") == "ok" and "lat" in fix:
         record.update({"lat": fix["lat"], "lon": fix["lon"],
                        "accuracy_m": fix.get("accuracy_m"), "source": fix.get("source"),
-                       "zone": zone})
-        collection.succeeded("geo")
-        if zones and zone == "outside":
-            out.append(_finding(
-                "geo", "low", "This device is outside every trusted zone",
-                f"located to ~{int(fix.get('accuracy_m') or 0)} m accuracy, in none of "
-                f"the {len(zones)} zones you marked trusted.", "geo"))
-        else:
-            out.append(_finding("geo", "ok", f"This device is in {zone}"
-                                if zones else "Device location is available",
-                                f"~{int(fix.get('accuracy_m') or 0)} m accuracy "
-                                f"via {fix.get('source')}", "geo"))
-    elif fix.get("status") == "denied":
-        collection.failed("geo", "location permission off")
-        record["zone"] = None
-        out.append(_finding(
-            "geo", "low", "JARVIS cannot verify this device's location",
-            "Windows location permission is off, so GeoSecurity has no device "
-            "position to reason about. Turn it on in Settings > Privacy & "
-            "security > Location if you want geofencing and device-separation "
-            "detection. JARVIS never guesses a position from your IP address.", "geo"))
+                       "zone": classify(fix["lat"], fix["lon"], zones)})
     else:
-        collection.failed("geo", fix.get("reason", "unavailable"))
         record["zone"] = None
-        out.append(_finding("geo", "low", "Device location is unavailable",
-                            str(fix.get("reason", ""))[:200], "geo"))
     store.set_meta("geo_current", json.dumps(record))
     store.commit()
+
+    # Findings describe the effective location: a native fix, else what the user
+    # set. Only genuine geo-blindness (no fix and nothing set) is a finding.
+    eff = effective(store, fix)
+    out = []
+    if eff.get("status") == "ok" and eff.get("source") == "user-set":
+        collection.succeeded("geo")
+        where = eff.get("label") or "a set location"
+        out.append(_finding("geo", "ok", f"Location set to {where}"
+                            + (f" ({eff['zone']})" if zones else ""),
+                            "user-declared location; native GPS is off, so this is not "
+                            "independently verified.", "geo"))
+    elif eff.get("status") == "ok":
+        collection.succeeded("geo")
+        if zones and eff.get("zone") == "outside":
+            out.append(_finding(
+                "geo", "low", "This device is outside every trusted zone",
+                f"located to ~{int(eff.get('accuracy_m') or 0)} m accuracy, in none of "
+                f"the {len(zones)} zones you marked trusted.", "geo"))
+        else:
+            out.append(_finding("geo", "ok", f"This device is in {eff.get('zone')}"
+                                if zones else "Device location is available",
+                                f"~{int(eff.get('accuracy_m') or 0)} m accuracy "
+                                f"via {eff.get('source')}", "geo"))
+    elif fix.get("status") == "denied":
+        collection.failed("geo", "location permission off")
+        out.append(_finding(
+            "geo", "low", "JARVIS cannot verify this device's location",
+            "Windows location permission is off and no location is set, so "
+            "GeoSecurity has no position to reason about. Set one yourself on the "
+            "GeoSecurity view, or turn on Settings > Privacy & security > Location. "
+            "JARVIS never guesses a position from your IP address.", "geo"))
+    else:
+        collection.failed("geo", fix.get("reason", "unavailable"))
+        out.append(_finding("geo", "low", "Device location is unavailable",
+                            str(fix.get("reason", ""))[:200], "geo"))
     return out

@@ -28,6 +28,7 @@ from jarvis.response.evidence.case import Case
 LEDGER_META = "defense_ledger_v1"
 KEEP = 500
 FAILED_RETRY_SECONDS = 3600
+RECOVERABLE = ("attempting", "uncertain")
 
 AUTO, PROPOSE, ASK, WATCH = "auto", "propose", "ask", "watch"
 
@@ -45,11 +46,15 @@ def _entry_id(action_id, finding, job):
     return hashlib.sha1(key.encode("utf-8", "replace")).hexdigest()[:8]
 
 
-def load(store):
+def load(store, *, strict=False):
     try:
-        value = json.loads(store.get_meta(LEDGER_META, "{}") or "{}")
-        return value if isinstance(value, dict) else {}
+        value = json.loads(store.get_meta(LEDGER_META, "{}"))
+        if not isinstance(value, dict) or any(not isinstance(e, dict) for e in value.values()):
+            raise ValueError("invalid defense ledger")
+        return value
     except (TypeError, ValueError):
+        if strict:
+            raise ValueError("Defense history is unreadable; response is inhibited.") from None
         return {}
 
 
@@ -137,7 +142,20 @@ def _apply(store, conf, finding, job, action, target):
             case = Case(case_name, create=False)
     except Exception:
         case = None
-    ok, record, detail = action.apply(target, case)
+    eid, entry, _ = _propose(store, conf, finding, job, action, target)
+    if entry["status"] in ("attempting", "uncertain"):
+        return eid, entry, False
+    entry.update(status="attempting", evidence=case_name,
+                 detail="Action started; outcome requires verification if interrupted.")
+    ledger = load(store)
+    ledger[eid] = entry
+    _save(store, ledger)  # durable intent BEFORE any side effect
+    try:
+        ok, record, detail = action.apply(target, case)
+    except Exception:
+        entry.update(status="uncertain", detail="Action interrupted; inspect evidence and target before recovery.")
+        _save(store, ledger)
+        return eid, entry, False
     eid = _entry_id(action.id, finding, job)
     ledger = load(store)
     prior = ledger.get(eid) or {}
@@ -158,7 +176,7 @@ def _propose(store, conf, finding, job, action, target):
     eid = _entry_id(action.id, finding, job)
     ledger = load(store)
     existing = ledger.get(eid)
-    if existing and existing.get("status") in ("applied", "undone", "proposed"):
+    if existing and existing.get("status") in ("applied", "undone", "proposed", "attempting", "uncertain", "not_applied"):
         return eid, existing, False
     entry = {"action": action.id, "title": action.title, "target": target,
              "finding": {"title": finding.get("title"), "severity": finding.get("severity"),
@@ -179,6 +197,7 @@ def process(store, conf, job, findings, *, coverage="complete"):
     approve/undo command. Nothing is annotated when the layer is off except
     genuine automatic actions, which run only when enabled.
     """
+    load(store, strict=True)  # lost history must never re-authorize an action
     findings = list(findings or [])
     acks = acknowledge.load(store)
     for finding in findings:
@@ -192,7 +211,7 @@ def process(store, conf, job, findings, *, coverage="complete"):
         if rung == AUTO:
             eid = _entry_id(action.id, finding, job)
             existing = load(store).get(eid)
-            if existing and existing.get("status") == "applied":
+            if existing and existing.get("status") in ("applied", "attempting", "uncertain", "not_applied"):
                 entry = existing
             elif existing and existing.get("status") == "undone":
                 # Undo is a human override. Do not immediately fight it on the
@@ -217,6 +236,11 @@ def process(store, conf, job, findings, *, coverage="complete"):
                                   "undo": f"jarvis defend undo {eid}"}
         elif rung == PROPOSE:
             eid, entry, _new = _propose(store, conf, finding, job, action, target)
+            if entry.get("status") in ("attempting", "uncertain"):
+                finding["defense"] = {
+                    "rung": PROPOSE, "id": eid, "action": action.id,
+                    "status": entry["status"], "detail": entry["detail"],
+                    "reason": "Prior action outcome is uncertain; inspect evidence and target before recovery."}
             if entry.get("status") == "proposed":
                 finding["defense"] = {"rung": PROPOSE, "id": eid, "action": action.id,
                                       "preview": entry["preview"],
@@ -230,7 +254,7 @@ def process(store, conf, job, findings, *, coverage="complete"):
 
 def approve(store, eid, now=None):
     """Apply a proposed action now. Returns (ok, detail)."""
-    ledger = load(store)
+    ledger = load(store, strict=True)
     entry = ledger.get(eid)
     if not entry:
         return False, f"no proposal with id {eid}"
@@ -239,6 +263,8 @@ def approve(store, eid, now=None):
     action = base.get(entry["action"])
     if not action:
         return False, "that action no longer exists"
+    if entry["status"] in ("attempting", "uncertain"):
+        return False, "Prior action outcome is uncertain; inspect evidence and target before recovery."
     finding = {**entry["finding"]}
     case_name, _, captured = _capture(finding, entry["job"], action, entry["target"])
     if not captured:
@@ -251,7 +277,15 @@ def approve(store, eid, now=None):
         case = Case(case_name, create=False) if case_name else None
     except Exception:
         case = None
-    ok, record, detail = action.apply(entry["target"], case)
+    entry.update(status="attempting", evidence=case_name,
+                 detail="Action started; outcome requires verification if interrupted.")
+    _save(store, ledger)
+    try:
+        ok, record, detail = action.apply(entry["target"], case)
+    except Exception:
+        entry.update(status="uncertain", detail="Action interrupted; inspect evidence and target before recovery.")
+        _save(store, ledger)
+        return False, entry["detail"]
     entry.update(status="applied" if ok else "failed", record=record, detail=detail,
                  evidence=case_name or entry.get("evidence", ""),
                  applied_at=int(time.time() if now is None else now))
@@ -260,7 +294,7 @@ def approve(store, eid, now=None):
 
 
 def undo(store, eid):
-    ledger = load(store)
+    ledger = load(store, strict=True)
     entry = ledger.get(eid)
     if not entry:
         return False, f"no action with id {eid}"
@@ -274,6 +308,44 @@ def undo(store, eid):
         entry.update(status="undone", undo_detail=detail, undone_at=int(time.time()))
         _save(store, ledger)
     return ok, detail
+
+
+def reconcile(store):
+    """Resolve interrupted actions using read-only, action-specific probes.
+
+    This never repeats or rolls back an action.  It promotes an interrupted
+    entry only when the probe can establish both the applied state and a safe
+    undo record.  All other outcomes remain visibly unresolved.
+    """
+    ledger = load(store, strict=True)
+    changed, results = False, []
+    for eid, entry in ledger.items():
+        if entry.get("status") not in RECOVERABLE:
+            continue
+        action = base.get(entry.get("action"))
+        if action is None:
+            entry.update(status="uncertain", detail="action implementation is unavailable; inspect evidence")
+            results.append((eid, "unknown", entry["detail"]))
+            changed = True
+            continue
+        try:
+            state, record, detail = action.recover(entry.get("target") or {}, entry.get("record") or {})
+        except Exception as exc:
+            state, record, detail = "unknown", {}, f"recovery probe failed ({type(exc).__name__})"
+        if state == "applied" and isinstance(record, dict) and record:
+            entry.update(status="applied", record=record, detail=detail,
+                         recovered_at=int(time.time()), recovery="verified")
+        elif state == "not_applied":
+            entry.update(status="not_applied", detail=detail,
+                         recovered_at=int(time.time()), recovery="verified")
+        else:
+            entry.update(status="uncertain", detail=detail,
+                         recovered_at=int(time.time()), recovery=state)
+        results.append((eid, state, detail))
+        changed = True
+    if changed:
+        _save(store, ledger)
+    return results
 
 
 def pending(store):

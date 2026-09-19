@@ -107,3 +107,20 @@ class SuspendProcess(Action):
             return True, f"resumed pid {pid}"
         except OSError as exc:
             return False, f"could not resume: {exc.strerror or exc}"
+
+    def recover(self, target, record):
+        """Determine whether the exact process identity is still paused."""
+        identity = record or target
+        pid = identity.get("pid") if isinstance(identity, dict) else None
+        if not isinstance(pid, int) or not identity.get("started"):
+            return "unknown", {}, "missing process identity"
+        if not self._same(identity):
+            return "not_applied", {}, "the original process no longer exists"
+        try:
+            with open(f"/proc/{pid}/stat", errors="replace") as fh:
+                state = fh.read().rsplit(")", 1)[1].split()[0]
+        except (OSError, IndexError):
+            return "unknown", {}, "could not read process state"
+        if state in ("T", "t"):
+            return "applied", {**identity}, f"verified paused pid {pid}"
+        return "not_applied", {}, f"pid {pid} is not paused"

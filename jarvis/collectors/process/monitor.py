@@ -93,6 +93,10 @@ def scan(store, hosts=("wsl", "win"), enrich=False, learn=False, record=True):
     return {
         "ts": ts,
         "scanned": len(procs),
+        # The daemon uses the same point-in-time observations to reconcile the
+        # temporal state projection. They are not written to the presentation
+        # snapshot; _scan converts only discrepancies into findings.
+        "processes": procs,
         "findings": findings,
         "new_public_peers": new_peers,
         "hosts": list(hosts),
