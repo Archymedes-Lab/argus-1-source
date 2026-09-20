@@ -157,6 +157,8 @@ jarvis procs --approved 0     # fingerprints not yet approved
 jarvis approve <fp> --note "my build script"
 jarvis status
 jarvis ask "what needs me?"
+jarvis ask "how do I raise my score?"   # the score coach: areas, projected gains, acks, blind spots
+jarvis ask "model status"     # is the local Ollama endpoint actually there?
 jarvis brief                  # the protocol JARVIS raises now; `brief list`, `brief yes|no`, `brief check`
 jarvis defend
 jarvis inspect 'C:\Users\me\Downloads\suspicious.exe'
@@ -779,6 +781,21 @@ questions, no number the facts do not contain, no restated severity, no score
 direction that contradicts the trend, and no claim that JARVIS acted. Any line
 that fails, times out or finds the model busy is replaced by the built-in one,
 so mail is never held up by the model.
+
+With `"plan_voice": true` the daily health email also gets one model-written
+paragraph on where the score gains most (which area, which named task, how
+many points the projection says it is worth). It obeys the same checks as the
+opener, plus a no-claims-of-action rule: the model proposes, the human
+disposes. The protocol's hand-written steps follow it unchanged, and the
+paragraph falls back to a deterministic line whenever the model is off, busy
+or wrong.
+
+The daemon also checks on the model itself: a `model` job pings Ollama every
+half hour — one loopback GET (through the Windows bridge on NAT installs),
+never a generation — and records a low-severity visibility finding when the
+endpoint is down or misconfigured, so a dead model is a known state rather
+than something noticed the next time an answer fails. `jarvis ask "model
+status"` runs the same check on demand.
 
 The dashboard's spoken briefing (🔊 voice, or `v`) works the same way. The
 local model writes only the opening line (`dashboard_voice_model`, falling back

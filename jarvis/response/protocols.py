@@ -66,6 +66,105 @@ class Protocol:
 SUSPEND_BITLOCKER = "manage-bde -protectors -disable C: -RebootCount 1"
 
 PROTOCOLS = (
+    # Ordered by expected score gain on a real machine, so pick_next raises
+    # the most valuable one first. The original three (below) gate each
+    # other; the rest are independent and can be done in any order.
+    Protocol(
+        id="plaintext-secrets",
+        title="Move the plaintext API keys out of files",
+        brief=("Live API keys and a private key are sitting in plaintext files on this disk. "
+               "Any process, sync client or backup that can read your user profile can read "
+               "them, and the posture audit found the system drive unencrypted — so today a "
+               "stolen laptop is a stolen account. Moving each key into a real secret store "
+               "removes the entire class."),
+        jobs=("secrets",),
+        resolves=(("secrets", "OpenAI API key in plaintext"),
+                  ("secrets", "Anthropic API key in plaintext"),
+                  ("secrets", "GitHub token in plaintext…"),
+                  ("secrets", "JSON web token in plaintext…"),
+                  ("secrets", "private key block (…"),
+                  ("secrets", "generic secret assignment in plaintext"),
+                  ("secrets", "generic secret assignment in plaintext (+…"),),
+        questions=(
+            Question("secret-store",
+                     "Do you have a password manager or secrets vault ready to hold these keys "
+                     "— something that encrypts at rest and is not a plaintext file?",
+                     "Choose one first (a password manager's secure notes are enough). Moving "
+                     "keys from one plaintext file to another changes nothing."),
+        ),
+        steps=(
+            "Run: jarvis scan secrets --json   (or read the where: line of each finding) to "
+            "list the exact files holding keys. Never paste a key into chat or email.",
+            "For each key: create a new entry in your password manager, paste the value, and "
+            "save. Note the file and line it came from.",
+            "Where the app supports it, rotate the key in its vendor console (OpenAI, "
+            "Anthropic, GitHub) and store the replacement — rotation retires any copy that "
+            "was already read by something else.",
+            "Only then delete the plaintext copy: remove the line, or move the file into the "
+            "tool that needs it via environment variables or its own credential store.",
+            "Empty the recycle bin / trash for those files, and check `git log` — a key once "
+            "committed stays in history and must be rotated, not just deleted.",
+            "Verify with a fresh scan: jarvis brief check plaintext-secrets",
+        ),
+        caution=("Rotate rather than trust deletion: a key that sat in a cloud-synced or "
+                 "committed file must be treated as read by others. Never send a key value "
+                 "to JARVIS, a model, or a pastebin to 'check' it."),
+    ),
+    Protocol(
+        id="boot-tasks",
+        title="Review the tasks that run at boot",
+        brief=("Several scheduled tasks start before you log in — exactly the persistence spot "
+               "an intruder wants, and also where updaters and vendor tools legitimately live. "
+               "This is a review, not an amnesty: each task gets named, identified and either "
+               "kept deliberately or disabled."),
+        jobs=("boot",),
+        resolves=(("boot", "task ran at boot"),),
+        steps=(
+            "List them with their actions: jarvis boot -v   (each finding shows the task name "
+            "and what it launches).",
+            "For each task you do not recognise by name, open Task Scheduler (Start → Task "
+            "Scheduler → Task Scheduler Library) and read its Actions tab: the executable and "
+            "arguments tell you what it really does.",
+            "Vendor updaters (GPU, printer, cloud sync) and anything you installed yourself: "
+            "leave enabled — that is the informed decision this protocol records.",
+            "Anything unrecognised, unsigned, or launching from a temp or user-writable path: "
+            "right-click → Disable (do not delete — keep it for evidence), then run "
+            "jarvis inspect '<path to the executable>' on it.",
+            "Verify with a fresh boot audit: jarvis brief check boot-tasks. A disabled task "
+            "stops appearing; an unknown one that re-enables itself is an incident.",
+        ),
+    ),
+    Protocol(
+        id="hidden-accounts",
+        title="Decide about the accounts hidden from the sign-in screen",
+        brief=("Local accounts exist on this machine that are deliberately hidden from the "
+               "Windows sign-in screen via a SpecialAccounts registry key. That is a "
+               "documented administrative technique — and equally the first thing an intruder "
+               "sets up so nobody sees the account exists. Each one needs a decision: yours, "
+               "documented, or removed."),
+        jobs=("backdoor",),
+        resolves=(("backdoor", "account hidden from the sign-in screen: …"),),
+        questions=(
+            Question("account-owner",
+                     "Can you account for every hidden account by name — ones you or a tool "
+                     "you trust created on purpose (build sandboxes, service accounts)?",
+                     "Treat them as hostile until identified: note the names, check their last "
+                     "logon and group membership with `net user <name>`, and do not answer yes "
+                     "until every one is explained."),
+        ),
+        steps=(
+            "List them: jarvis backdoor -v   (each finding names the account).",
+            "For each account: net user <name>   shows when it was created/last used and its "
+            "groups; lusrmgr.msc shows membership. Decide: yours, a tool's, or unknown.",
+            "If it is legitimate and must stay hidden, document why here: "
+            "jarvis ack <finding id> --reason \"...\"   — acknowledgements expire and are "
+            "re-asked, which is the point.",
+            "If it is unknown or no longer needed: Settings → Accounts → Other users (or "
+            "lusrmgr.msc) → remove the account, then delete the SpecialAccounts registry "
+            "value that hid it (search 'SpecialAccounts' in regedit).",
+            "Verify with a fresh backdoor audit: jarvis brief check hidden-accounts",
+        ),
+    ),
     Protocol(
         id="secure-boot",
         title="Switch on Secure Boot",
@@ -174,9 +273,98 @@ PROTOCOLS = (
                  f"{SUSPEND_BITLOCKER} in an elevated terminal so the next boot does not ask for "
                  "the recovery key."),
     ),
+    Protocol(
+        id="sysmon-drops",
+        title="Give Sysmon room to keep its own log",
+        brief=("Sysmon is dropping events because its log fills faster than it is read — the "
+               "interception layer goes blind exactly when there is too much happening to "
+               "watch. Raising the log's size and arming auto-backup keeps the whole window "
+               "on disk instead of the most recent slice of it."),
+        jobs=("sysmon",),
+        resolves=(("sysmon", "Sysmon dropped events before logging them"),),
+        steps=(
+            "Open an elevated terminal (the log is a security log; changing it needs "
+            "administrator rights).",
+            "Raise the log to 2 GiB and arm wrap protection: "
+            "wevtutil sl Microsoft-Windows-Sysmon/Operational /ms:2147483648 /ab:true",
+            "Check retention: wevtutil gl Microsoft-Windows-Sysmon/Operational   — MaxSize "
+            "should read 2147483648 and AutoBackup true.",
+            "If drops continue after a day, the machine is genuinely busy: check which "
+            "processes dominate jarvis sysmon -v and consider narrowing the Sysmon "
+            "configuration rather than the log size.",
+            "Verify with a fresh telemetry run: jarvis brief check sysmon-drops",
+        ),
+    ),
+    Protocol(
+        id="listening-services",
+        title="Review the services listening beyond loopback",
+        brief=("A set of applications is listening for network connections on all interfaces, "
+               "not just localhost. Each is a door that the firewall and any network you join "
+               "must now defend; some are developer tools you meant to expose, some are "
+               "defaults nobody chose."),
+        jobs=("internet",),
+        resolves=(("internet", "application listening beyond loopback"),),
+        steps=(
+            "List them with the owning process: jarvis peers --scope public   and "
+            "jarvis internet -v   (each finding names the process and port).",
+            "For each: does it need to be reachable from other devices? Dev servers usually "
+            "do not — restart them bound to 127.0.0.1 (most frameworks: --bind 127.0.0.1 or "
+            "HOST=127.0.0.1).",
+            "Tools that must listen (file shares, remote desktop, media servers): leave them "
+            "but make sure the Windows firewall rule that covers them is scoped to Private "
+            "networks only, not Public.",
+            "Anything listening that you cannot account for: jarvis inspect on its "
+            "executable, and treat it as the active-threat review it is.",
+            "Verify with a fresh internet audit: jarvis brief check listening-services",
+        ),
+    ),
+    Protocol(
+        id="inbound-rules",
+        title="Tighten the permissive inbound firewall rules",
+        brief=("Windows firewall has inbound rules that allow connections from any address on "
+               "any network — the shape of a rule created by clicking Allow on a prompt years "
+               "ago. Scoping them to the programs and network profiles that actually need them "
+               "shrinks the reachable surface without breaking anything you use."),
+        jobs=("firewall",),
+        resolves=(("firewall", "permissive inbound rule"),),
+        steps=(
+            "List them: jarvis firewall -v   (each finding names the rule and what it "
+            "allows).",
+            "Open Windows Defender Firewall → Advanced settings → Inbound Rules, and find "
+            "each named rule.",
+            "For rules you recognise and need: Properties → General → limit the program path; "
+            "Advanced tab → tick only the profiles you use (usually Private).",
+            "For rules you do not recognise: Disable first, use the machine for a day, and "
+            "delete only if nothing missed it. Never delete a rule for a Windows core "
+            "service without checking what depends on it.",
+            "Verify with a fresh firewall audit: jarvis brief check inbound-rules",
+        ),
+    ),
+    Protocol(
+        id="autostart-surface",
+        title="Reduce the autostart surface",
+        brief=("A number of registry Run entries and custom systemd units start code without "
+               "you asking. Most are installers' leftovers; each is a place where persistence "
+               "hides in plain sight. The goal is a short list you can name and defend."),
+        jobs=("control",),
+        resolves=(("control", "autostart registry entry"),
+                  ("control", "custom systemd service"),),
+        steps=(
+            "List them: jarvis control -v   (registry entries show the command; systemd units "
+            "show the path).",
+            "For each Run entry you recognise and want: leave it. For vendor updaters you "
+            "never asked for: disable the entry in Task Manager → Startup apps (reversible).",
+            "For each custom systemd unit: systemctl --user cat <name> to read it. Units you "
+            "no longer use: systemctl --user disable --now <name>, then remove the file.",
+            "Anything whose command you cannot explain: jarvis inspect on the executable "
+            "before deleting anything — an unexplained autostart is evidence first.",
+            "Verify with a fresh control audit: jarvis brief check autostart-surface",
+        ),
+    ),
 )
 
 BY_ID = {p.id: p for p in PROTOCOLS}
+assert len(BY_ID) == len(PROTOCOLS), "protocol ids must be unique"
 
 
 # ── state ─────────────────────────────────────────────────────────────────

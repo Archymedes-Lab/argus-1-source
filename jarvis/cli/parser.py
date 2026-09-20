@@ -57,6 +57,7 @@ from .commands import (
 )
 from .commands import defend as defend_cli
 from .commands import evidence as evidence_cli
+from .commands import fix as fix_cli
 from .commands import geo as geo_cli
 from .commands import impersonation as impersonation_cli
 from .commands import incidents as incidents_cli
@@ -86,6 +87,7 @@ def build_parser():
     attack_cli.add_parser(sub)
     arena_cli.add_parser(sub)
     defend_cli.add_parser(sub)
+    fix_cli.add_parser(sub)
     incidents_cli.add_parser(sub)
     inspect_cli.add_parser(sub)
     sensor_cli.add_parser(sub)

@@ -38,7 +38,8 @@ class TriageTests(unittest.TestCase):
         self._tmp = getattr(self, "_tmp", None) or tempfile.TemporaryDirectory()
         path = os.path.join(self._tmp.name, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        open(path, "w").write("x")
+        with open(path, "w") as handle:
+            handle.write("x")
         os.chmod(path, mode)
         return path
 

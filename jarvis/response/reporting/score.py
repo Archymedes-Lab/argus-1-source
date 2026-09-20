@@ -42,7 +42,7 @@ AREAS = (
     ("Monitoring", ("coverage", "bridge", "watchdogs", "native", "arena")),
 )
 UNSCORED = ("gaps", "intel", "feeds", "ledger", "report", "resources", "controls",
-            "attackmap")
+            "attackmap", "model")
 AREA_OF = {job: area for area, jobs in AREAS for job in jobs}
 
 WEIGHT = {"critical": 20, "high": 8, "medium": 2, "low": 0, "ok": 0}

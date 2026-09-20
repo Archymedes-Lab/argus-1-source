@@ -167,8 +167,12 @@ def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=
         text += _text_group(owner, grouped[owner], limit=10)
     briefing = protocols.pick_next(protocol_state)
     brief_lines = protocols.email_lines(briefing, protocol_state) if briefing else []
+    # One plan paragraph, computed once and used in both the text and HTML
+    # bodies — a second call would be a second model invocation.
+    plan, plan_by_model = voice.plan_note(conf, briefing, result) if briefing else ("", False)
     if brief_lines:
-        text += ["", RULE, "TODAY'S PROTOCOL", RULE, *brief_lines]
+        text += ["", RULE, "TODAY'S PROTOCOL", RULE]
+        text += [(f"[local model] {plan}" if plan_by_model else plan), "", *brief_lines]
     text += ["", f"Plus {lower} medium-severity findings on the dashboard.",
              "Every finding and its history: the local JARVIS dashboard."]
 
@@ -181,7 +185,9 @@ def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=
     for owner in triage.ORDER:
         inner += ui.owner_section(owner, grouped[owner], limit=8, show_detail=False)
     if brief_lines:
-        inner += ui.briefing(brief_lines)
+        inner += ui.briefing(
+            [f"Where to work first — {result['score']}% today", plan, *brief_lines],
+            model_note=plan_by_model)
     if lower:
         inner += ui.section(f'<div {ui.tw("text-sm text-slate-500")}>Plus {lower} medium-severity '
                             f'findings, listed on the dashboard rather than here.</div>', "px-6 pb-5")

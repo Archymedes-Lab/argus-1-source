@@ -55,6 +55,9 @@ JOB_COMMANDS = {
     "watchdogs": "selfcheck",
     "resources": "status",
     "report": "alert",
+    # The model job answers "is Ollama there?"; `ask model status` runs the
+    # same ping on demand through the assistant's deterministic intent.
+    "model": "ask model status",
 }
 
 # Commands worth running whatever the findings say, in the order a person

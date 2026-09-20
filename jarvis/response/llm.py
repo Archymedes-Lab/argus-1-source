@@ -12,6 +12,7 @@ and callers decide what that text is allowed to become.
 import base64
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -21,6 +22,7 @@ from jarvis.response.privacy import redact
 DEFAULT_MODEL = "llama3.2:1b"
 DEFAULT_URL = "http://127.0.0.1:11434"
 BUSY = "busy"
+PING_TIMEOUT = 3
 
 LOCK = threading.Lock()
 
@@ -38,6 +40,97 @@ def _open(req, timeout):
 
 def model_name(conf):
     return (conf.get("ollama_model") or DEFAULT_MODEL).strip()
+
+
+def _origins(conf):
+    base = (conf.get("ollama_url") or DEFAULT_URL).rstrip("/")
+    return base, base not in ("http://127.0.0.1:11434", "http://localhost:11434")
+
+
+def ping(conf, timeout=PING_TIMEOUT):
+    """-> (model_loaded | model_ready | offline | refused | misconfigured, seconds).
+
+    A cheap GET of Ollama's model list — no generation, no lock, so it is safe
+    from the scheduler thread and from HTTP handlers. The bridge fallback keeps
+    the same guarantee as chat: on NAT-based WSL installs the only door to
+    Windows loopback is the existing PowerShell bridge, never the LAN.
+    """
+    base, forbidden = _origins(conf)
+    if forbidden:
+        return "misconfigured", 0.0
+    started = time.monotonic()
+    req = urllib.request.Request(base + "/api/tags", method="GET")
+    try:
+        with _open(req, timeout) as response:
+            data = json.loads(response.read().decode("utf-8", "replace"))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        if not isinstance(exc, urllib.error.HTTPError):
+            try:
+                data = _bridge_get(timeout)
+            except (urllib.error.URLError, OSError, ValueError):
+                return "offline", time.monotonic() - started
+            if data is None:
+                return "offline", time.monotonic() - started
+            if isinstance(data, dict) and data.get("_jarvis_error"):
+                return "refused", time.monotonic() - started
+    else:
+        loaded = [m.get("name") or m.get("model") or "" for m in data.get("models") or ()]
+        if any(name.split(":")[0] == model_name(conf).split(":")[0] for name in loaded):
+            return "model_loaded", time.monotonic() - started
+        return "model_ready", time.monotonic() - started
+    return "offline", time.monotonic() - started
+
+
+def _bridge_get(timeout):
+    """GET through the Windows bridge; returns None when the bridge is down.
+
+    ps_json already decodes the base64 JSON payload it asked PowerShell for,
+    so what comes back here is a dict — not a blob to decode again.
+    """
+    script = (
+        "try{$r=Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' "
+        f"-MaximumRedirection 0 -Method Get -TimeoutSec {int(timeout)};"
+        "$j=$r|ConvertTo-Json -Depth 10 -Compress}"
+        "catch{$j=@{_jarvis_error=[string]$_.Exception.Message}|ConvertTo-Json -Compress};"
+        "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($j))")
+    try:
+        data = ps_json(script, timeout=timeout + 10)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def status_findings(conf, timeout=PING_TIMEOUT):
+    """One visibility finding: is the local model actually there?
+
+    The model's only job is colour on mail and answers on ask, so its absence
+    is never an outage and never pages — but a dead model must be a known
+    state, not something noticed the one time someone asks it a question.
+    "ok" when healthy; severity never rises above "low".
+    """
+    state, seconds = ping(conf, timeout)
+    where = f"{model_name(conf)} at {(conf.get('ollama_url') or DEFAULT_URL).rstrip('/')}"
+    if state in ("model_loaded", "model_ready"):
+        detail = ("responding" if state == "model_loaded" else "service up; "
+                  f"model {model_name(conf)} not resident — it loads on first use, "
+                  "which makes the first question slow")
+        return {"category": "model", "severity": "ok", "host": "wsl",
+                "title": "the local model is available", "detail":
+                f"{detail} ({seconds:.2f}s).", "where": where}
+    if state == "misconfigured":
+        return {"category": "model", "severity": "low", "host": "wsl",
+                "title": "the model endpoint is misconfigured",
+                "detail": "ollama_url must be the local loopback endpoint "
+                          "http://127.0.0.1:11434 — other origins are refused by policy, "
+                          "so every model feature is silently off.", "where": where}
+    label = "refused" if state == "refused" else "not responding"
+    return {"category": "model", "severity": "low", "host": "wsl",
+            "title": f"the local model is {label}",
+            "detail": f"No answer from {where} after {seconds:.1f}s. The deterministic "
+                      "assistant still answers operational questions; only the local-model "
+                      "features (voice, open questions, plan notes) are affected. "
+                      "Start Ollama on the Windows host to restore them.",
+            "where": where}
 
 
 def _bridge(body, timeout):
