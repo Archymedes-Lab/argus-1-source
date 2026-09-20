@@ -107,7 +107,8 @@ class WalkSkipTests(unittest.TestCase):
                         ".nvm/share/man/man7/config.7"):
                 path = os.path.join(root, rel)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
-                open(path, "w").write("x")
+                with open(path, "w") as handle:
+                    handle.write("x")
             walked = sorted(os.path.relpath(p, root) for p in run.walk([root]))
         self.assertEqual(walked, ["app/.env"])
 

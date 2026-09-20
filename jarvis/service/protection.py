@@ -3,6 +3,8 @@ import sqlite3
 import time
 
 from jarvis.core.assurance import report as assurance_report
+from jarvis.core.telemetry import META as TELEMETRY_META
+from jarvis.core.telemetry import parse as telemetry_parse
 
 
 def _state(row, limit, stamp):
@@ -50,10 +52,26 @@ def health(db_path, scheduler, stamp=None):
                 sources[name] = _state(rows.get(name), limit, stamp)
     except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
         sources['storage'] = {'status': 'unavailable', 'reason': type(exc).__name__}
+    telemetry_chain = None
+    try:
+        row = db.execute('SELECT v FROM meta WHERE k=?',
+                         (TELEMETRY_META,)).fetchone()
+        telemetry_chain = telemetry_parse(row[0] if row else None, stamp)
+    except (sqlite3.Error, ValueError, TypeError, IndexError):
+        pass
     protected = bool(sources) and all(
         sources.get(name, {}).get('status') == 'complete' for name in required)
+    reliability_state = None
+    try:
+        status_fn = getattr(scheduler, 'reliability_status', None)
+        if callable(status_fn):
+            reliability_state = status_fn()['summary']
+    except Exception:
+        reliability_state = None
     return {'assurance': assurance_report(sources), 'service': 'JARVIS', 'time': stamp, 'healthy': alive and protected,
             'live': alive, 'ready': alive and protected, 'protection_healthy': protected,
             'progress_age': age, 'fast_lane_age': fast_age,
             'current_job': scheduler.current,
-            'current_fast_job': getattr(scheduler, 'fast_current', None), 'sources': sources}
+            'current_fast_job': getattr(scheduler, 'fast_current', None), 'sources': sources,
+            'telemetry_chain': telemetry_chain,
+            'reliability': reliability_state}

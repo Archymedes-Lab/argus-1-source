@@ -9,6 +9,41 @@ import time
 from . import monitor
 
 _META = "resourcewatch_sample_v1"
+PROFILE_META = "resource_profile_v1"
+
+
+def _owner(proc):
+    """Stable resource bucket; classification only, never a threat verdict."""
+    name = str(proc.get("name") or "").lower()
+    text = " ".join(str(proc.get(k) or "") for k in ("name", "exe", "cmdline")).lower()
+    if "ollama" in text:
+        return "ollama"
+    if name in ("chrome.exe", "msedge.exe", "brave.exe", "chromium", "chrome"):
+        return "browser"
+    if "jarvis.service.collector_worker" in text:
+        return "collector workers"
+    if "-m jarvis" in text or "/home/chris/jarvis" in text:
+        return "jarvis engine"
+    if "powershell" in name and "jarvis" in text:
+        return "collector interop"
+    return "other"
+
+
+def _database_profile(store):
+    result = {"bytes": 0, "tables": []}
+    try:
+        result["bytes"] = os.path.getsize(store.path)
+    except OSError:
+        pass
+    try:
+        rows = store.db.execute(
+            "SELECT name, SUM(pgsize) AS bytes FROM dbstat "
+            "GROUP BY name ORDER BY bytes DESC LIMIT 8").fetchall()
+        result["tables"] = [{"name": row[0], "bytes": int(row[1] or 0)}
+                            for row in rows]
+    except Exception:
+        pass
+    return result
 
 
 def _finding(severity, title, detail, where="", host="wsl"):
@@ -44,6 +79,7 @@ def audit(store, hosts=("wsl", "win")):
     current = {}
     findings = []
     cpu_gaps = set()
+    owners = {}
 
     for proc in processes:
         # Windows PID 0 is the idle-time counter. Its socket attribution label
@@ -74,6 +110,13 @@ def audit(store, hosts=("wsl", "win")):
                 cpu_gaps.add(host)
         elif prior is not None:
             cpu_gaps.add(host)
+        owner = _owner(proc)
+        bucket = owners.setdefault(owner, {"rss_bytes": 0, "cpu_pct": 0.0,
+                                           "processes": 0})
+        bucket["rss_bytes"] += rss
+        bucket["processes"] += 1
+        if cpu_pct is not None:
+            bucket["cpu_pct"] += cpu_pct
         severe = rss >= 4 * 1024**3 or (cpu_pct is not None and cpu_pct >= 50)
         notable = rss >= 1536 * 1024**2 or (cpu_pct is not None and cpu_pct >= 20)
         if severe or notable:
@@ -115,6 +158,12 @@ def audit(store, hosts=("wsl", "win")):
                 "updates, quarantine, and collector snapshots", path))
 
     store.set_meta(_META, json.dumps({"ts": sampled_at, "processes": current}))
+    store.set_meta(PROFILE_META, json.dumps({
+        "at": sampled_at,
+        "owners": dict(sorted(owners.items(),
+                              key=lambda item: item[1]["rss_bytes"], reverse=True)),
+        "database": _database_profile(store),
+    }))
     findings.sort(key=lambda f: ({"high": 0, "medium": 1}.get(f["severity"], 9),
                                  f["title"], f["detail"]))
     if not findings:

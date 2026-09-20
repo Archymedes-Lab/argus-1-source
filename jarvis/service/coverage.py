@@ -32,9 +32,15 @@ from jarvis.service.schedule import JOBS
 
 
 def _cmd(args, timeout=10):
+    # Notification authority belongs to the daemon's main PID.  systemctl is
+    # linked to libsystemd and may use an inherited NOTIFY_SOCKET, which makes
+    # the manager reject its message as an unauthorized child notification.
+    env = os.environ.copy()
+    for key in ("NOTIFY_SOCKET", "WATCHDOG_USEC", "WATCHDOG_PID"):
+        env.pop(key, None)
     try:
         r = subprocess.run(args, capture_output=True, timeout=timeout,
-                           text=True, errors="replace")
+                           text=True, errors="replace", env=env)
         return r.stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return ""
@@ -109,20 +115,34 @@ def daemon_health():
 
     # `--priority` moves the unit to the system manager (still running as this
     # user) so it can hold a negative nice and OOM score. Accept either scope.
-    flag = "--user"
-    active = _cmd(["systemctl", "--user", "is-active", "jarvis.service"])
-    if active != "active" and _cmd(["systemctl", "is-active", "jarvis.service"]) \
-            == "active":
-        flag, active = "--system", "active"
+    user_active = _cmd(["systemctl", "--user", "is-active", "jarvis.service"])
+    system_active = _cmd(["systemctl", "is-active", "jarvis.service"])
+    user_enabled = _cmd(["systemctl", "--user", "is-enabled", "jarvis.service"])
+    system_enabled = _cmd(["systemctl", "is-enabled", "jarvis.service"])
+    enabled_states = ("enabled", "enabled-runtime", "static")
+    duplicate = ((user_active == "active" and system_active == "active") or
+                 (user_enabled in enabled_states and system_enabled in enabled_states))
+    if duplicate:
+        out.append(_finding(
+            "daemon", "high", "two JARVIS service managers are enabled",
+            "Both the user and system managers can launch the same daemon on the "
+            "same port. One instance crash-loops while duplicate collection consumes "
+            "CPU. Keep the priority system unit and disable the user unit.",
+            "systemctl --user disable --now jarvis.service"))
+
+    # Prefer the privileged system unit whenever it is active; otherwise use
+    # whichever scope is actually running so health remains truthful.
+    flag = "--system" if system_active == "active" else "--user"
+    active = system_active if flag == "--system" else user_active
     scope = [] if flag == "--system" else ["--user"]
-    enabled = _cmd(["systemctl", *scope, "is-enabled", "jarvis.service"])
+    enabled = system_enabled if flag == "--system" else user_enabled
     hint = "" if flag == "--system" else "--user "
     if active != "active":
         out.append(_finding("daemon", "critical", "the monitor is not running",
                             f"jarvis.service is '{active or 'unknown'}' — nothing "
                             f"is being collected right now",
                             f"systemctl {hint}status jarvis.service"))
-    if enabled not in ("enabled", "enabled-runtime", "static"):
+    if enabled not in enabled_states:
         out.append(_finding("daemon", "high", "the monitor will not start on boot",
                             f"jarvis.service is '{enabled or 'unknown'}'",
                             f"systemctl {hint}enable jarvis.service"))
@@ -202,6 +222,22 @@ def visibility():
 
     # -- the Windows bridge (also run standalone on a fast interval) ------
     out.extend(bridge_status())
+
+    # -- the Windows drive mount -------------------------------------------
+    # A stale DrvFS mount fails every path with EIO — including files JARVIS
+    # never wrote, like another program's own policy reads. Name it once here
+    # so the per-collector "unreadable" noise below is read as one outage with
+    # one fix, not many mysteries.
+    try:
+        from jarvis.platform import mounts as _mounts
+        if _mounts.windows_drive() == _mounts.STALE:
+            out.append(_finding(
+                "visibility", "medium", "Windows drive mount is stale",
+                _mounts.stale_detail() + " Windows-drive reads (sensor spool, "
+                "profiles, guard state files) wait until it answers again.",
+                "/mnt/c"))
+    except Exception:
+        pass
 
     # -- elevation ---------------------------------------------------------
     if os.geteuid() != 0:

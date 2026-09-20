@@ -164,6 +164,39 @@ assessments, not live sensor measurements. Existing health booleans indicate the
 existing required collectors and scheduler; they do not mean this entire directive
 is satisfied. Null validation and latency fields are intentional, not zeroes.
 
+### Two scores, never one number
+
+Protection health and assurance are different questions and must stay separate:
+
+- **Protection health** (the scored machine areas) asks whether *this machine* is
+  currently protected and observed. It becomes high only when every area's evidence
+  is fresh and complete — a running dashboard, UI or globe never adds a point.
+- **Assurance** (`assurance.score` in `/api/health`) asks how much evidence supports
+  trusting *JARVIS itself*. It is weighted by the implementation claims in the
+  register and by how much of each capability's telemetry is observable right now.
+  Its rules are deliberately harsh: only `complete` observations earn credit, a
+  capability with no observation mapping scores like blindness, a fully blind
+  system scores 0 regardless of its claims, and 100 is unreachable while the
+  register holds `partial` or `unverified` entries. Neither score is a compromise
+  verdict or a safety guarantee, and neither may be presented as one.
+
+### The telemetry chain is observable stage by stage
+
+Native delivery has eight independently observable stages — installed, running,
+producing, arriving, ingested, gaps, integrity, fresh — persisted by the native
+job (`native_delivery`) and surfaced as `telemetry_chain` in `/api/health`. When
+delivery degrades, the status must name the broken stage, not collapse everything
+into "sensor works". A silent native job marks the chain not-current rather than
+letting a stale answer look healthy.
+
+Evidence handling follows the same principle of honest loss: a sensor batch that
+straddles a log clear contains two sound monotonic record blocks whose ID ranges
+overlap (Windows reuses record IDs after a clear). Such a batch is split and both
+blocks ingested, with the reuse recorded as a gap in the event history. A batch
+too malformed to split is preserved under `quarantine/` with its digest, recorded
+as a loss, and the cursor advances past it. The channel may never be wedged
+forever by a single batch, and no loss may ever be silent.
+
 Response intent is committed before action execution; interrupted outcomes inhibit
 repeat application and require evidence/target inspection. This does not yet supply
 transactional filesystem/firewall rollback, concurrency exclusion across processes,

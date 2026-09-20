@@ -123,6 +123,13 @@ def _mcp_sources(hosts):
 
 def _windows_profiles():
     """Real user profiles under /mnt/c/Users, skipping the template accounts."""
+    from jarvis.platform import mounts as _mounts
+    # One gate for the whole Windows-profile traversal: on a stale drive every
+    # glob and stat below fails with EIO, so skip the walk instead of
+    # hammering a sick mount hourly. The coverage self-audit reports the
+    # single stale-mount diagnosis; this side simply covers less until then.
+    if _mounts.windows_drive() == _mounts.STALE:
+        return []
     out = []
     for path in sorted(glob.glob("/mnt/c/Users/*")):
         name = os.path.basename(path)

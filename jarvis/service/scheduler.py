@@ -16,6 +16,9 @@ and `scan` aged past their health limits, and the Windows monitor mailed
 must never be able to make JARVIS look dead.
 """
 
+import json
+import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -24,13 +27,47 @@ from jarvis.core import collection, incidents
 from jarvis.core.store import Store
 from jarvis.response import alert, defense, remediation
 from jarvis.response.reporting import notifications
-from jarvis.service import sdnotify
+from jarvis.service import reliability, sdnotify
 from jarvis.service.jobs import run_job
 from jarvis.service.schedule import JOBS
 
 # The priority lane: short jobs that health and the watchdogs judge freshness
 # by. Each must stay well under a few seconds, or it starves its own lane.
 FAST = ("bridge", "input_hook", "scan")
+ISOLATED = {"native"}
+
+
+def _isolated_job(name, hosts, db_path, timeout):
+    """Run a fixed collector beyond the scheduler's process boundary.
+
+    DrvFS calls can block a Python thread inside the kernel, where a future or
+    thread timeout cannot recover it. A child process gives the scheduler a
+    real deadline and releases the event-log writer lock when terminated.
+    """
+    command = [sys.executable, "-m", "jarvis.service.collector_worker",
+               name, db_path, *hosts]
+    try:
+        done = subprocess.run(command, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True,
+                              errors="replace",
+                              timeout=max(1.0, timeout), check=False)
+    except subprocess.TimeoutExpired:
+        return [], (f"collector exceeded its {timeout:.0f}s process deadline; "
+                    "worker terminated to protect scheduler availability"), "unavailable"
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout or f"worker exited {done.returncode}")[-800:]
+        return [], f"isolated collector failed: {detail}", "unavailable"
+    try:
+        result = json.loads(done.stdout)
+        findings = result["findings"]
+        error = str(result.get("error") or "")[:800]
+        status = result.get("status")
+        if not isinstance(findings, list) or status not in (
+                "complete", "partial", "unavailable"):
+            raise ValueError("invalid result shape")
+        return findings, error, status
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return [], f"isolated collector returned invalid evidence: {exc}", "unavailable"
 
 
 class Scheduler(threading.Thread):
@@ -68,6 +105,15 @@ class Scheduler(threading.Thread):
         self.fast_thread = None
         self.started_at = time.time()
         self.lock = threading.Lock()
+        # Collector Reliability Plane: explicit contracts, freshness budgets,
+        # leases and supervised recovery. See reliability.py. The scheduler
+        # owns execution; the watchdog loop at the bottom of this module owns
+        # recovery attempts. Leases stay in memory: a dead process loses them
+        # and the next process judges by persisted snapshots, while a hung
+        # worker keeps its expired lease visible until it is escalated.
+        self.specs = reliability.build_specs(JOBS)
+        self.reliability = reliability.ReliabilityState(self.specs)
+        self._worker_seq = 0
 
     def force(self, name):
         if name in JOBS:
@@ -98,10 +144,105 @@ class Scheduler(threading.Thread):
             # behind every not-yet-run hourly collector after a restart or a
             # long suspend. Relative lateness keeps all cadences represented;
             # stable dict order remains the tie-breaker on the first pass.
+            # The reliability plane weights that share by collector
+            # criticality and failure pressure, so something approaching stale
+            # naturally rises to the top without starving fast watchdogs.
             overdue = (now - t) / max(1, JOBS[name][0])
-            if score is None or overdue > score:
-                most_overdue, score = name, overdue
+            spec = self.specs.get(name)
+            weight = reliability.CRITICALITY_WEIGHT.get(
+                spec.criticality if spec else "medium", 1.0)
+            failures = self.reliability.health[name].consecutive_failures \
+                if name in self.reliability.health else 0
+            pressured = overdue * weight * (
+                1.0 + min(3, max(0, failures)) * 0.25)
+            if score is None or pressured > score:
+                most_overdue, score = name, pressured
         return most_overdue
+
+    def _next_worker(self, lane):
+        with self.lock:
+            self._worker_seq += 1
+            return f"{lane}-{self._worker_seq}"
+
+    def reliability_status(self, snapshots=None):
+        """Freshness/recovery plane state for health endpoints and dashboard.
+
+        Never raises: a status page must not take down the daemon it reports
+        on. Falls back to an empty snapshot map when the database is briefly
+        locked.
+        """
+        try:
+            if snapshots is None:
+                store = Store(self.db_path)
+                try:
+                    snapshots = store.get_snapshots()
+                finally:
+                    store.close()
+            return {
+                "statuses": self.reliability.all_statuses(snapshots),
+                "summary": self.reliability.summary(snapshots),
+            }
+        except Exception:
+            return {"statuses": {}, "summary": {"levels": {}, "stale_collectors": [],
+                                                "recovering": [], "violations": [],
+                                                "expired_leases": []}}
+
+    def supervise_once(self, snapshots=None):
+        """One watchdog pass, independent of the scheduling lanes.
+
+        Scheduler = runs collectors. This = makes sure the scheduler
+        succeeded. LATE collectors are queued immediately, expired leases are
+        marked as failures, and repeatedly failing collectors enter bounded
+        retry (2s/5s/15s) rather than hammering the machine forever.
+        Returns the list of collector names queued for recovery.
+        """
+        now = time.time()
+        if snapshots is None:
+            try:
+                store = Store(self.db_path)
+                try:
+                    snapshots = store.get_snapshots()
+                finally:
+                    store.close()
+            except Exception:
+                return []
+        queued = []
+        # A worker that died without releasing its lease: record the failure
+        # now instead of waiting minutes to infer it.
+        for name in reliability.expired_leases(self.reliability.health, now=now):
+            health = self.reliability.health[name]
+            if health.recovery_state in ("idle",):
+                health.recovery_state = "retrying"
+            health.last_failure = now
+            health.consecutive_failures += 1
+            health.last_error = "collector lease expired without completion"
+            health.active_lease = None
+        for name, spec in self.specs.items():
+            if name in ("coverage", "report"):
+                continue
+            snap = (snapshots or {}).get(name) or {}
+            ts = snap.get("ts")
+            age = (now - ts) if ts else None
+            level = reliability.classify(
+                age if age is not None else -1, spec.expected_interval)
+            health = self.reliability.health[name]
+            if level in ("LATE", "DEGRADED", "STALE") and not snap.get("error"):
+                # Queue immediately on LATE so recovery starts before the
+                # score loses coverage. The lane's forced queue is the
+                # recovery-state signal the freshness invariant checks.
+                with self.lock:
+                    if name not in self.forced:
+                        self.forced.append(name)
+                        queued.append(name)
+                if health.recovery_state == "idle":
+                    health.recovery_state = "queued"
+            if health.consecutive_failures >= 3 and \
+                    health.recovery_state in ("queued", "retrying"):
+                delay = reliability.retry_delay(
+                    min(health.consecutive_failures - 3,
+                        len(reliability.RETRY_DELAYS) - 1))
+                health.next_retry_at = now + (delay or 0.0)
+        return queued
 
     def run(self):
         self.fast_thread = threading.Thread(target=self._lane, args=("fast",),
@@ -155,13 +296,29 @@ class Scheduler(threading.Thread):
         journal failure inhibits response and is visible in the job snapshot.
         Collectors with their own internal maintenance are not sandboxed by
         this pipeline; the privileged broker remains a separate migration.
+
+        Reliability receipts: every run holds a lease that expires after the
+        collector's execution timeout, so a dead worker is detectable without
+        waiting minutes. Success clears the failure streak and the recovery
+        state; failure increments the streak and enters bounded retry. The
+        last successful snapshot is never rewritten by a failed rerun --
+        last-known-good evidence survives collector failures.
         """
         started = time.time()
+        spec = self.specs.get(name)
+        timeout = spec.execution_timeout if spec else 45.0
+        health = self.reliability.health.get(name)
+        lease = None
+        if health is not None:
+            try:
+                lease = reliability.acquire_lease(
+                    health, threading.current_thread().name,
+                    timeout, now=started)
+            except Exception:
+                lease = None
         findings, err, status = [], "", "unavailable"
         try:
-            with collection.observe() as observation:
-                findings = list(run_job(name, self.hosts, self.db_path) or [])
-            err, status = observation.error, observation.status
+            findings, err, status = self._collect(name, timeout)
         except Exception:
             err = traceback.format_exc()[-800:]
 
@@ -179,14 +336,51 @@ class Scheduler(threading.Thread):
                     err = "collector coverage incomplete"
                 findings, err = remediation.process(
                     store, conf, name, findings, err,
-                    lambda: run_job(name, self.hosts, self.db_path))
+                    lambda: self._verify(name, timeout))
                 findings = defense.process(store, conf, name, findings,
                                            coverage=incidents.coverage_status(
                                                findings, err, receipt["coverage"]))
             except Exception:
                 err = (err + "; response failed: " + traceback.format_exc()[-500:]).strip("; ")
+        duration_ms = max(0.0, time.time() - started) * 1000.0
         store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
+        if health is not None and lease is not None:
+            try:
+                # An execution that outruns its timeout succeeded late: keep
+                # the evidence, but flag the overrun so supervision can split
+                # fast and expensive work instead of trusting the cadence.
+                if duration_ms > timeout * 1000.0 and not err:
+                    err = (err + "; collector overran execution timeout "
+                           f"({duration_ms/1000.0:.0f}s > {timeout:.0f}s)").strip("; ")
+                reliability.release_lease(
+                    health, lease, success=not err, error=err,
+                    duration_ms=duration_ms)
+                if err:
+                    if health.recovery_state == "idle":
+                        health.recovery_state = "retrying"
+                else:
+                    # Success is the recovery: clear any queued-retry state so
+                    # the invariant sees a fresh collector, not a stale one
+                    # still marked for repair.
+                    health.recovery_state = "idle"
+                    health.next_retry_at = 0.0
+            except Exception:
+                pass
         return findings, err
+
+    def _collect(self, name, timeout):
+        if name in ISOLATED:
+            return _isolated_job(name, self.hosts, self.db_path, timeout)
+        with collection.observe() as observation:
+            findings = list(run_job(name, self.hosts, self.db_path) or [])
+        return findings, observation.error, observation.status
+
+    def _verify(self, name, timeout):
+        """Fresh remediation evidence through the same bounded collector path."""
+        findings, error, _status = self._collect(name, timeout)
+        if error:
+            raise RuntimeError(error)
+        return findings
 
 
 def watchdog_loop(scheduler):
@@ -216,3 +410,20 @@ def watchdog_loop(scheduler):
         if alive and progressed:
             sdnotify.watchdog()
         # else: withhold the ping and let systemd restart us.
+
+
+def reliability_watchdog_loop(scheduler, interval=20.0):
+    """Health loop independent of the scheduling lanes.
+
+    Scheduler = runs collectors. This = makes sure the scheduler succeeded.
+    Every ``interval`` seconds it asks the reliability plane which collectors
+    are going LATE and queues them immediately, expires dead leases, and
+    records bounded-retry state -- so a collector becomes stale only after
+    JARVIS has already noticed it going late and attempted recovery.
+    """
+    while True:
+        time.sleep(max(5.0, interval))
+        try:
+            scheduler.supervise_once()
+        except Exception:
+            pass

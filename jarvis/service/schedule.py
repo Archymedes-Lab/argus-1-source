@@ -120,4 +120,8 @@ JOBS = {
     # Device location & geofencing. One registry read when location is off;
     # one native-locator call when the user has consented.
     "geo":      (900,   "Device location & geofencing"),
+    # Is the local Ollama endpoint actually there? One loopback GET (or one
+    # bridge round trip), never a generation, never the model lock — so it is
+    # cheap enough for its own cadence and a dead model becomes a known state.
+    "model":    (1800,  "Local model availability"),
 }

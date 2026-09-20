@@ -45,6 +45,13 @@ class Policy:
 # sighting is worth a fortnight, a high-severity one worth half a year, and a
 # critical one is never removed on age alone.
 POLICIES = [
+    Policy("incident-coverage-flaps", "defender_transitions", 0,
+           "observed_at < ? AND previous_state IN ('not_observed','unobserved') "
+           "AND state IN ('not_observed','unobserved') AND run_id IN "
+           "(SELECT run_id FROM defender_runs)",
+           "derived dormant-incident coverage flips; the durable run receipt "
+           "retains the same coverage/error evidence, while active, first-seen, "
+           "recurrence and severity transitions are never matched"),
     Policy("defender-runs", "defender_runs", 30,
            "observed_at < ? AND sequence NOT IN "
            "(SELECT MAX(sequence) FROM defender_runs GROUP BY job) "

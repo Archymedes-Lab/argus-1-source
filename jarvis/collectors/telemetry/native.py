@@ -10,9 +10,10 @@ limits, so they are findings, not log lines.
 import json
 import time
 
-from jarvis.core import collection
+from jarvis.core import collection, telemetry
 from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
 from jarvis.core.finding import win_finding as _finding
+from jarvis.platform import mounts
 from jarvis.platform.native import ingest
 
 SENSOR = "native sensor"
@@ -44,20 +45,94 @@ def _gaps(store, fresh):
     return kept
 
 
+# The event log allows one writer at a time. The CLI's `jarvis timeline --rebuild`,
+# a manual `python3 -m jarvis.native`, or the previous run still closing can hold
+# the lock for a moment. That is contention, not blindness — so a short retry
+# comes before reporting a gap. Past it, report: a genuinely wedged writer is
+# exactly what this finding exists to surface.
+LOCK_RETRIES = 3
+LOCK_RETRY_SECONDS = 4
+
+
+def _open_writer(root):
+    """-> (log, None) or (None, finding) after the retries are spent."""
+    for attempt in range(LOCK_RETRIES + 1):
+        try:
+            return EventLog(root or DEFAULT_ROOT, writer=True), None
+        except LogError as exc:
+            if attempt >= LOCK_RETRIES:
+                collection.failed(SENSOR, str(exc))
+                return None, _finding(
+                    "visibility", "medium", "Event log is busy or unavailable",
+                    f"{exc}. The writer lock stayed held after "
+                    f"{LOCK_RETRIES * LOCK_RETRY_SECONDS}s of retries — a manual "
+                    "`jarvis timeline` or ingest run may still be open, or the "
+                    "writer is wedged.", str(root or DEFAULT_ROOT))
+            time.sleep(LOCK_RETRY_SECONDS)
+
+
 def audit(store, hosts=("win",), spool=None, root=None):
     if "win" not in hosts:
         return []
     spool = spool or ingest.SPOOL
-    try:
-        log = EventLog(root or DEFAULT_ROOT, writer=True)
-    except LogError as exc:
-        collection.failed(SENSOR, str(exc))
-        return [_finding("visibility", "medium", "Event log is busy or unavailable", str(exc),
-                         str(root or DEFAULT_ROOT))]
+    # Fast gate first: on a stale Windows drive the spool cannot answer, and
+    # neither the writer-lock retries below nor the ingest listing add
+    # anything but load and noise. One finding names the mount and its fix.
+    if mounts.under_windows_drive(spool) and mounts.windows_drive() == mounts.STALE:
+        collection.failed(SENSOR, "windows drive mount stale")
+        return [_finding(
+            "visibility", "medium", "The Windows drive mount is stale",
+            mounts.stale_detail() + " Native spool delivery waits until the "
+            "mount answers again; nothing was deleted and no evidence was "
+            "lost, but no fresh Windows telemetry arrived.", str(spool))]
+    before = ingest.preflight(spool)
+    if before.get("mount_stale"):
+        collection.failed(SENSOR, "windows drive mount stale")
+        return [_finding(
+            "visibility", "medium", "The Windows drive mount is stale",
+            f"{before.get('access_error') or mounts.stale_detail()} "
+            "Native spool delivery waits until the mount answers again; "
+            "nothing was deleted and no evidence was lost.", str(spool))]
+    if before.get("access_error"):
+        collection.failed(SENSOR, "spool unavailable")
+        return [_finding(
+            "visibility", "high", "The native sensor spool is unreachable",
+            f"The configured spool could not be read: {before['access_error']}. "
+            "This is an installed sensor with unavailable delivery, not an absent "
+            "sensor. Check the Windows mount and JarvisNativeSensor service.",
+            str(spool))]
+    if before.get("installed") is not True:
+        collection.failed(SENSOR, "not installed")
+        return [_finding(
+            "visibility", "medium", "The native Windows sensor is not installed",
+            "Windows telemetry reaches JARVIS only through PowerShell queries over "
+            "the WSL bridge: capped, sampled by time window, and blind whenever WSL "
+            "is down. The sensor is a Windows service that records every Sysmon and "
+            "Defender record in order, with losses reported rather than hidden. "
+            f"Install it with {INSTALL}.", str(spool))]
+    log, busy = _open_writer(root)
+    if busy is not None:
+        return [busy]
     try:
         report = ingest.run(log=log, spool=spool)
         out = []
-        if not report["installed"]:
+        if report.get("mount_stale"):
+            collection.failed(SENSOR, "windows drive mount stale")
+            return [_finding(
+                "visibility", "medium", "The Windows drive mount is stale",
+                f"{report.get('access_error') or mounts.stale_detail()} "
+                "Native spool delivery waits until the mount answers again; "
+                "nothing was deleted and no evidence was lost.",
+                str(spool))]
+        if report.get("access_error"):
+            collection.failed(SENSOR, "spool unavailable")
+            return [_finding(
+                "visibility", "high", "The native sensor spool is unreachable",
+                f"The configured spool could not be read: {report['access_error']}. "
+                "This is an installed sensor with unavailable delivery, not an absent "
+                "sensor. Check the Windows mount and JarvisNativeSensor service.",
+                str(spool))]
+        if report["installed"] is not True:
             collection.failed(SENSOR, "not installed")
             return [_finding(
                 "visibility", "medium", "The native Windows sensor is not installed",
@@ -76,6 +151,19 @@ def audit(store, hosts=("win",), spool=None, root=None):
                     "visibility", "high", f"Sensor delivery stopped for {_short(name)}",
                     f"{ch['error']}. Nothing after this batch is ingested until it is "
                     f"resolved — the cursor holds rather than skipping evidence.", name))
+            if ch.get("quarantined"):
+                # Delivery recovered from a stuck channel by preserving the
+                # poisoned batch. That is not a clean observation, but the
+                # channel is moving again and the loss is durable evidence —
+                # so it pages once and the freshness gate treats it as
+                # degraded-complete rather than permanent blindness.
+                out.append(_finding(
+                    "visibility", "high", "A sensor batch failed validation and was quarantined",
+                    f"{ch['gaps'][-1] if ch['gaps'] else 'unknown reason'}. The batch bytes "
+                    "are preserved under quarantine/ in the sensor spool; the loss is "
+                    "recorded in the event history. Later batches were ingested.",
+                    str(spool)))
+                collection.succeeded(SENSOR)
             for gap in ch["gaps"]:
                 fresh_gaps.append((name, gap))
             if ch["ack_error"]:
@@ -92,6 +180,17 @@ def audit(store, hosts=("win",), spool=None, root=None):
                 f"Events that were never read cannot be analysed; a log that wraps "
                 f"faster than it is read needs a larger maximum size.", g["channel"]))
         out += _verify(store, log)
+        # Persist the eight-stage chain status from this run's evidence; the
+        # health endpoint reads it from the store rather than touching the
+        # spool, so HTTP can never contend with the sensor.
+        stats0 = report.get("log") or log.stats()
+        verify_last = float(store.get_meta(VERIFY_META, 0) or 0)
+        chain = telemetry.collect(
+            {**report, "log": stats0},
+            verify_at=verify_last if verify_last else None,
+            freshness_limit=180)
+        store.set_meta(telemetry.META, json.dumps(chain))
+        store.commit()
         if not any(f["severity"] in ("high", "critical") for f in out if f["category"] == "visibility"):
             collection.succeeded(SENSOR)
         stats = report.get("log") or log.stats()

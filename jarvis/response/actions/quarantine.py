@@ -125,7 +125,7 @@ class QuarantineFile(Action):
                 return "not_applied", {}, "the original file is present"
             if not os.path.isfile(marker):
                 return "unknown", {}, "file is absent but no trustworthy quarantine marker exists"
-            with open(marker, encoding="utf-8") as fh:
+            with open(marker, encoding="utf-8", errors="replace") as fh:
                 saved = json.load(fh)
             stored = saved.get("stored") if isinstance(saved, dict) else ""
             if not isinstance(stored, str) or not os.path.isfile(stored):

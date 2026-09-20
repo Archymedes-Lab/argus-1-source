@@ -8,7 +8,7 @@ from unittest import mock
 
 from jarvis.collectors.telemetry import native as native_job
 from jarvis.collectors.telemetry import sysmon
-from jarvis.core import event as event_mod
+from jarvis.core import collection, event as event_mod
 from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core.store import Store
 from jarvis.platform.native import ingest, normalize
@@ -86,6 +86,33 @@ class BatchValidationTests(unittest.TestCase):
 
 
 class IngestTests(Fixture):
+    def test_schema_two_health_avoids_spool_directory_enumeration(self):
+        self.publish(batch())
+        (self.spool / "health.json").write_text(json.dumps({
+            "schema": 2, "sensor_id": "sensor", "time": "2026-09-18T12:00:00Z",
+            "channels": {SYSMON: {"status": "complete", "last_sequence": 1}},
+        }))
+        with mock.patch.object(Path, "iterdir",
+                               side_effect=AssertionError("must not enumerate DrvFS")):
+            report = self.run_ingest()
+        self.assertEqual(report["events"], 1)
+        self.assertEqual(report["channels"][0]["channel"], SYSMON)
+
+    def test_manifest_missing_batch_is_a_delivery_error_not_empty_success(self):
+        (self.spool / "health.json").write_text(json.dumps({
+            "schema": 2, "sensor_id": "sensor", "time": "2026-09-18T12:00:00Z",
+            "channels": {SYSMON: {"status": "complete", "last_sequence": 1}},
+        }))
+        report = self.run_ingest()
+        self.assertIn("could not preserve", report["channels"][0]["error"])
+        self.assertGreater(report["channels"][0]["backlog"], 0)
+
+    def test_spool_io_error_is_distinct_from_not_installed(self):
+        with mock.patch.object(Path, "stat", side_effect=OSError(5, "I/O error")):
+            report = self.run_ingest()
+        self.assertIsNone(report["installed"])
+        self.assertTrue(report["access_error"])
+
     def test_replay_after_restart_is_idempotent(self):
         self.publish(batch())
         self.assertEqual(self.run_ingest()["events"], 1)
@@ -125,14 +152,22 @@ class IngestTests(Fixture):
         self.assertEqual(result["duplicates"], 1)
         self.assertEqual([e["record"] for e in self.events()], [1, 2, 3])
 
-    def test_corrupt_batch_stops_the_channel_before_later_ones(self):
+    def test_corrupt_batch_is_quarantined_and_the_channel_resumes(self):
+        # Policy change (2026-09-19): a batch that fails validation is
+        # preserved under quarantine/ and recorded as a gap in the event
+        # history, so the channel resumes. Blocking delivery forever on one
+        # poisoned file starved every later batch of the same evidence stream
+        # — and the file's bytes are kept either way.
         self.publish(batch(1))
         self.publish("{", name=2)
         self.publish(batch(3))
         ch = self.run_ingest()["channels"][0]
-        self.assertEqual(ch["batches"], 1)
-        self.assertIsNotNone(ch["error"])
-        self.assertEqual(self.log.cursor("sensor", SYSMON)["sequence"], 1)
+        self.assertIsNone(ch["error"])
+        self.assertEqual(ch["quarantined"], 1)
+        self.assertEqual(ch["batches"], 2)          # batches 1 and 3 ingested
+        self.assertTrue(any("quarantined" in g for g in ch["gaps"]))
+        self.assertEqual(self.log.cursor("sensor", SYSMON)["sequence"], 3)
+        self.assertEqual(len(list((self.spool / "quarantine").iterdir())), 1)
 
     def test_acknowledgement_names_the_exact_batch(self):
         path = self.publish(batch(1))
@@ -359,6 +394,18 @@ class NativeJobTests(Fixture):
     def test_missing_sensor_is_a_visibility_finding(self):
         titles = [f["title"] for f in self.audit(self.root / "absent")]
         self.assertEqual(titles, ["The native Windows sensor is not installed"])
+
+    def test_unreachable_spool_is_unavailable_not_not_installed(self):
+        report = {"spool": str(self.spool), "installed": None,
+                  "access_error": "[Errno 5] Input/output error", "health": None,
+                  "channels": [], "batches": 0, "events": 0, "sealed": None,
+                  "pruned": []}
+        with collection.observe() as observation, \
+             mock.patch.object(ingest, "run", return_value=report):
+            found = self.audit()
+        self.assertEqual(observation.status, "unavailable")
+        self.assertEqual(found[0]["title"], "The native sensor spool is unreachable")
+        self.assertNotIn("not installed", found[0]["title"].lower())
 
     def test_stale_health_and_disabled_channel(self):
         self.health(age=900, channels={normalize.TASKS: {

@@ -8,10 +8,47 @@ from jarvis.collectors.telemetry import sysmon
 from jarvis.core import collection
 from jarvis.core.store import Store
 from jarvis.platform import windows as collect_windows
+from jarvis.service import coverage
 from jarvis.service.protection import health
 
 
 class CollectionTests(unittest.TestCase):
+    def test_daemon_health_commands_do_not_inherit_notify_authority(self):
+        completed = SimpleNamespace(stdout="active\n")
+        notify = {"NOTIFY_SOCKET": "/run/systemd/notify",
+                  "WATCHDOG_USEC": "600000000", "WATCHDOG_PID": "123"}
+        with patch.dict(coverage.os.environ, notify), \
+             patch.object(coverage.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(coverage._cmd(["systemctl", "is-active", "x"]),
+                             "active")
+            child_env = run.call_args.kwargs["env"]
+            for key in notify:
+                self.assertNotIn(key, child_env)
+                self.assertEqual(coverage.os.environ.get(key), notify[key])
+
+    def test_two_enabled_service_managers_are_a_visibility_finding(self):
+        def command(args, timeout=10):
+            if args[:2] == ["systemctl", "--user"] and "is-active" in args:
+                return "active"
+            if args[:2] == ["systemctl", "--user"] and "is-enabled" in args:
+                return "enabled"
+            if args[:2] == ["systemctl", "is-active"]:
+                return "active"
+            if args[:2] == ["systemctl", "is-enabled"]:
+                return "enabled"
+            if "MainPID" in args:
+                return "0"
+            if args and args[0] == "loginctl":
+                return "Linger=yes"
+            return ""
+
+        with patch.object(coverage.shutil, "which", return_value="/bin/systemctl"), \
+             patch.object(coverage, "_cmd", side_effect=command):
+            found = coverage.daemon_health()
+        duplicate = [f for f in found if "two JARVIS" in f["title"]]
+        self.assertEqual(len(duplicate), 1)
+        self.assertEqual(duplicate[0]["severity"], "high")
+
     def test_nested_contexts_do_not_leak(self):
         with collection.observe() as outer:
             collection.succeeded('linux')
@@ -67,6 +104,6 @@ class ProtectionHealthTests(unittest.TestCase):
 
     def test_stale_and_missing_observations_are_not_healthy(self):
         self.assertFalse(health(self.path, self.scheduler, 1010)['healthy'])
-        for kind in ('scan','bridge','sysmon'): self.record(kind)
+        for kind in ('scan','bridge','sysmon','native'): self.record(kind)
         self.assertTrue(health(self.path, self.scheduler, 1010)['healthy'])
         self.assertFalse(health(self.path, self.scheduler, 1500)['healthy'])

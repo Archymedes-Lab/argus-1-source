@@ -10,7 +10,7 @@ scheduler's worker thread, and a sqlite handle must not cross threads.
 
 from contextlib import contextmanager
 
-from jarvis.collectors.host import controlwatch, geo, inputwatch, pixel, posture, spyware, toolchain
+from jarvis.collectors.host import accelerator, controlwatch, geo, inputwatch, pixel, posture, spyware, toolchain
 from jarvis.collectors.host import intrusion as intrusion_mod
 from jarvis.collectors.identity import bruteforce, impersonation, secrets
 from jarvis.collectors.network import firewall, internetwatch, netwatch, sniffing, webshell
@@ -24,7 +24,7 @@ from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
 from jarvis.intel import research as intel
 from jarvis.lab import audit as arena_audit
-from jarvis.response import alert
+from jarvis.response import alert, llm
 from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting.cadence import run as report_due
 from jarvis.service import attackmap, connectivity, deadman, selfcheck
@@ -253,12 +253,34 @@ def _sorted(module):
     return lambda hosts, db_path: module.sort_findings(module.audit())
 
 
+def _coverage(hosts, db_path):
+    findings = coverage_mod.sort_findings(
+        coverage_mod.audit(db_path=db_path, hosts=hosts))
+    # Human-in-the-loop self-fix: the self-audit that just ran is the right
+    # moment to notice JARVIS itself needs help. maintain() only proposes and
+    # mails (rate-limited); it never runs commands or models, and never raises
+    # into the scheduler.
+    try:
+        from jarvis.response import selffix
+        selffix.maintain(db_path, schedule=JOBS)
+    except Exception:
+        pass
+    return findings
+
+
+def _resources(hosts, db_path):
+    with _store(db_path) as store:
+        findings = list(resourcewatch.audit(store, hosts=hosts))
+        findings.extend(accelerator.audit(store, hosts=hosts))
+        return findings
+
+
 RUNNERS = {
     "scan": _scan,
     "bridge": lambda hosts, db_path: coverage_mod.bridge_status(),
     "input_hook": _input(deep=False),
     "watchdogs": _watchdogs,
-    "resources": _with_store(resourcewatch.audit),
+    "resources": _resources,
     "internet": _with_store(internetwatch.audit),
     "controls": _with_store(controlwatch.audit),
     "deep_hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, deep=True)[0],
@@ -271,8 +293,7 @@ RUNNERS = {
     "identity": _with_store(impersonation.audit),
     "intrusion": _sorted(intrusion_mod),
     "evasion": _sorted(evasion_mod),
-    "coverage": lambda hosts, db_path: coverage_mod.sort_findings(
-        coverage_mod.audit(db_path=db_path, hosts=hosts)),
+    "coverage": _coverage,
     "boot": _sorted(startup),
     "hunt": _hunt,
     "gaps": _gaps,
@@ -300,6 +321,7 @@ RUNNERS = {
     "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
     "geo": _with_store(geo.audit),
     "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),
+    "model": lambda hosts, db_path: [llm.status_findings(alert.load_conf())],
 }
 
 

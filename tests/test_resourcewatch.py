@@ -9,6 +9,13 @@ from jarvis.core.store import Store
 
 
 class ResourceWatchTests(unittest.TestCase):
+    def test_resource_owners_separate_jarvis_ollama_and_browser(self):
+        self.assertEqual(resourcewatch._owner({
+            "name": "python3", "cmdline": "python3 -m jarvis serve"}),
+            "jarvis engine")
+        self.assertEqual(resourcewatch._owner({"name": "ollama.exe"}), "ollama")
+        self.assertEqual(resourcewatch._owner({"name": "msedge.exe"}), "browser")
+
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         self.store = Store(os.path.join(self.tempdir.name, "jarvis.db"))

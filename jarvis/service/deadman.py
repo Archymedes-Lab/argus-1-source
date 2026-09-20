@@ -54,10 +54,20 @@ def audit(path=STATE, now=None):
 
     state = read_state(path)
     if state is None:
+        detail = ("%s exists but could not be parsed; its liveness cannot be "
+                  "confirmed" % path)
+        try:
+            from jarvis.platform import mounts as _mounts
+            if _mounts.under_windows_drive(path) \
+                    and _mounts.windows_drive() == _mounts.STALE:
+                detail = ("%s cannot be read because %s; the monitor itself "
+                          "may be fine — the drive is the patient"
+                          % (path, _mounts.stale_detail()))
+        except Exception:
+            pass
         return [_finding(
             "medium", "the independent Windows monitor's state is unreadable",
-            "%s exists but could not be parsed; its liveness cannot be "
-            "confirmed" % path, path)]
+            detail, path)]
 
     checked = int(state.get("checkedAt") or 0)
     age = now - checked
@@ -120,8 +130,17 @@ def audit_reviver(path=REVIVER_STATE, now=None):
             "revive-jarvis.ps1 -Install`.", path)]
     state = read_state(path)
     if state is None:
+        detail = "%s could not be parsed" % path
+        try:
+            from jarvis.platform import mounts as _mounts
+            if _mounts.under_windows_drive(path) \
+                    and _mounts.windows_drive() == _mounts.STALE:
+                detail = ("%s cannot be read because %s"
+                          % (path, _mounts.stale_detail()))
+        except Exception:
+            pass
         return [_finding("medium", "the instant reviver's state is unreadable",
-                         "%s could not be parsed" % path, path)]
+                         detail, path)]
     # max(0, …): the Windows and WSL clocks drift a few seconds apart.
     age = max(0, now - int(state.get("checkedAt") or 0))
     if age > REVIVER_STALE_AFTER:

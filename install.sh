@@ -45,7 +45,20 @@ for arg in "$@"; do
   esac
 done
 
-if $want_service; then
+if $want_service && ! $want_priority; then
+  # A priority/sealed installation lives under the system manager. A later
+  # plain `--service` must not also enable the user unit: both commands bind
+  # the same loopback port, so the loser crash-loops while the winner doubles
+  # collection load. Reuse the authoritative system unit when it exists.
+  if systemctl cat jarvis.service >/dev/null 2>&1; then
+    systemctl --user disable --now jarvis.service 2>/dev/null || true
+    echo "service:   existing system unit retained (user duplicate disabled)"
+    echo "status:    sudo systemctl status jarvis"
+    want_service=false
+  fi
+fi
+
+if $want_service && ! $want_priority; then
   UNIT="$HOME/.config/systemd/user"
   mkdir -p "$UNIT"
   cat > "$UNIT/jarvis.service" <<EOF
