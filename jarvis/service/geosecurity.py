@@ -19,17 +19,22 @@ real fix or a user-asserted home zone to center on.
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 
 from jarvis.collectors.host import geo
 from jarvis.core.util import now
 
 # NASA GIBS: public, no token, global. Daily true-color; honest about cadence.
+# VIIRS (wide swath, overlapping orbits) is the primary layer: the narrower
+# MODIS swath leaves hard black no-data wedges over this region (verified
+# 2026-09-20: same z5 Kigali tile 31% pure-black on MODIS, 0% on VIIRS).
+# Capped at z7: sharper static mosaics own the closer bands below.
 IMAGERY = {
     "provider": "NASA GIBS",
-    "layer": "MODIS_Terra_CorrectedReflectance_TrueColor",
+    "layer": "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
     "tile_matrix_set": "GoogleMapsCompatible_Level9",
     "format": "image/jpeg",
-    "max_level": 9,
+    "max_level": 7,
     "endpoint": "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi",
     "attribution": "Imagery courtesy NASA EOSDIS GIBS",
     "cadence": "daily true-color, not live",
@@ -115,11 +120,73 @@ def anomalies(store, geo_current, recent_findings):
                     "detail": "Location is off; JARVIS cannot detect device movement or theft."})
     hot = [f for f in (recent_findings or []) if f.get("severity") in ("critical", "high")]
     if status == "ok" and zones and geo_current.get("zone") == "outside" and hot:
+        # Name the nearest zone with measured distance so the panel states
+        # a checkable fact, and frame location as context — being outside a
+        # zone does not prove the findings are a physical compromise.
+        nearest, best = None, None
+        for z in zones:
+            d = geo.haversine_m(geo_current["lat"], geo_current["lon"],
+                                z["lat"], z["lon"])
+            if best is None or d < best:
+                nearest, best = z, d
+        where = (f"~{int(round(best))} m from {nearest['name']} "
+                 f"(trusted radius {nearest.get('radius_m', 200)} m)") \
+            if nearest else "outside every trusted zone"
         out.append({"kind": "outside_zone_with_activity", "severity": "high",
-                    "detail": f"This device is outside every trusted zone while "
-                              f"{len(hot)} high-severity finding(s) are active — review "
-                              f"whether it is where you expect."})
+                    "detail": f"This device is {where} while "
+                              f"{len(hot)} high-severity finding(s) are active — "
+                              f"treat location as context, not proof of compromise."})
     return out
+
+
+def observation_date():
+    """The imagery date the globe requests: UTC yesterday, matching the
+    TIME= parameter geo.html appends to daily GIBS requests."""
+    return (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
+
+# Static seamless Earth beneath the daily layer: no TIME dimension, so it
+# also covers daily-tile errors and poles. (GIBS true-color layers are
+# JPEG-only — no alpha — so this is a fallback, not gap transparency.)
+IMAGERY_BASE = {
+    "provider": "NASA GIBS",
+    "layer": "BlueMarble_NextGeneration",
+    "tile_matrix_set": "GoogleMapsCompatible_Level8",
+    "format": "image/jpeg",
+    "max_level": 8,
+    "endpoint": "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi",
+    "attribution": "NASA Blue Marble Next Generation",
+    "cadence": "static seamless basemap (fallback)",
+}
+
+# Street-level detail for high zoom: GIBS daily layers stop at z9, so zooming
+# further only magnifies blur. Esri World Imagery (XYZ to z19, verified over
+# Kigali 2026-09-20) renders only at z14+, leaving sharper static mosaics
+# below it. Free use with attribution; single allowlisted tile origin.
+IMAGERY_DETAIL = {
+    "provider": "Esri",
+    "layer": "World_Imagery",
+    "url_template": "https://server.arcgisonline.com/ArcGIS/rest/services/"
+                    "World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "min_level": 14,
+    "max_level": 19,
+    "attribution": "Imagery © Esri, Maxar, Earthstar Geographics",
+    "cadence": "sub-metre basemap for close zoom",
+}
+
+# Mid bands: 10 m Sentinel-2 cloudless mosaic (EOX, free, no key, verified
+# z11/z14/z16 over Kigali 2026-09-20). Static 2020 data — sharpness, not
+# freshness; the daily VIIRS layer above z0–7 remains the current picture.
+IMAGERY_MID = {
+    "provider": "EOX",
+    "layer": "s2cloudless-2020",
+    "url_template": "https://tiles.maps.eox.at/wmts/1.0.0/"
+                    "s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg",
+    "min_level": 8,
+    "max_level": 13,
+    "attribution": "Sentinel-2 cloudless by EOX IT Services GmbH "
+                   "(contains modified Copernicus Sentinel data 2020)",
+    "cadence": "10 m mosaic, 2020 (static)",
+}
 
 
 def imagery(loc):
@@ -128,7 +195,8 @@ def imagery(loc):
     if (loc or {}).get("status") == "ok":
         center = {"lat": loc["lat"], "lon": loc["lon"],
                   "source": "user-set" if loc.get("source") == "user-set" else "device fix"}
-    return {**IMAGERY, "center": center}
+    return {**IMAGERY, "date": observation_date(), "base": IMAGERY_BASE,
+            "mid": IMAGERY_MID, "detail": IMAGERY_DETAIL, "center": center}
 
 
 def set_here(store, lat, lon, label=None):

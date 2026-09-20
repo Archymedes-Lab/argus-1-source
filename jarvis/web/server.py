@@ -12,6 +12,8 @@ Design constraints that shaped this:
 """
 
 import json
+import os
+import re
 import secrets
 import threading
 import time
@@ -27,14 +29,77 @@ from jarvis.response import acknowledge, alert, assistant, protocols, questions
 from jarvis.response.reporting import score, voice
 from jarvis.service import attackmap, sdnotify
 from jarvis.service.protection import health
+from jarvis.service import reliability as reliability_mod
 from jarvis.service.schedule import JOBS
-from jarvis.service.scheduler import Scheduler, watchdog_loop
+from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
 
 PAGE = str(STATIC_DIR / "dashboard.html")
 GEO_PAGE = str(STATIC_DIR / "geo.html")
 
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
+_PERF_LOCK = threading.Lock()
+_PERF_SAMPLE = {"at": 0.0, "ticks": 0, "write_bytes": 0}
+
+
+def _performance_state(jobs, scheduler):
+    """Cheap live daemon cost plus the schedule's measured duty cycle."""
+    contributors = []
+    for job in jobs:
+        interval = max(1.0, float(job.get("interval") or 0))
+        duration = max(0.0, float(job.get("duration") or 0))
+        share = duration / interval * 100.0
+        if duration:
+            contributors.append({"name": job.get("name", ""),
+                                 "label": job.get("label", ""),
+                                 "duration": round(duration, 1),
+                                 "duty_pct": round(share, 1)})
+    contributors.sort(key=lambda row: row["duty_pct"], reverse=True)
+
+    cpu_pct = None
+    write_mib_s = None
+    rss_bytes = 0
+    service_bytes = 0
+    stamp = time.monotonic()
+    try:
+        with open("/proc/self/stat", errors="replace") as fh:
+            fields = fh.read().split(") ", 1)[1].split()
+        ticks = int(fields[11]) + int(fields[12])
+        hz = os.sysconf("SC_CLK_TCK")
+        with open("/proc/self/statm", errors="replace") as fh:
+            pages = int(fh.read().split()[1])
+        rss_bytes = pages * os.sysconf("SC_PAGE_SIZE")
+        with open("/proc/self/cgroup", errors="replace") as fh:
+            cgroup = next((line.split(":", 2)[2].strip() for line in fh
+                           if line.startswith("0::")), "")
+        if cgroup and ".." not in cgroup.split("/"):
+            with open("/sys/fs/cgroup" + cgroup + "/memory.current",
+                      errors="replace") as fh:
+                service_bytes = max(0, int(fh.read().strip()))
+        with open("/proc/self/io", errors="replace") as fh:
+            io_values = {k.rstrip(":"): int(v) for k, v in
+                         (line.split(None, 1) for line in fh) if v.strip().isdigit()}
+        writes = io_values.get("write_bytes", 0)
+        with _PERF_LOCK:
+            before_at = _PERF_SAMPLE["at"]
+            before_ticks = _PERF_SAMPLE["ticks"]
+            before_writes = _PERF_SAMPLE["write_bytes"]
+            _PERF_SAMPLE.update(at=stamp, ticks=ticks, write_bytes=writes)
+        elapsed = stamp - before_at
+        if before_at and elapsed > 0 and ticks >= before_ticks:
+            cpu_pct = (ticks - before_ticks) / hz / elapsed / max(1, os.cpu_count() or 1) * 100
+            if writes >= before_writes:
+                write_mib_s = (writes - before_writes) / elapsed / 1024 / 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return {"cpu_pct": None if cpu_pct is None else round(cpu_pct, 1),
+            "write_mib_s": None if write_mib_s is None else round(write_mib_s, 3),
+            "rss_mib": round(rss_bytes / 1024 / 1024, 1),
+            "service_memory_mib": round((service_bytes or rss_bytes) / 1024 / 1024, 1),
+            "scheduled_duty_pct": round(sum(x["duty_pct"] for x in contributors), 1),
+            "top": contributors[:6],
+            "running": [n for n in (getattr(scheduler, "current", None),
+                                      getattr(scheduler, "fast_current", None)) if n]}
 
 
 def _intel_state(store):
@@ -73,6 +138,14 @@ def _intel_state(store):
                 "spend_today": 0.0, "spend_total": 0.0}
 
 
+def _meta_object(store, key):
+    try:
+        value = json.loads(store.get_meta(key, "{}") or "{}")
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
 def build_state(db_path, scheduler):
     store = Store(db_path)
     try:
@@ -102,6 +175,11 @@ def build_state(db_path, scheduler):
                 "stale": bool(s and s["ts"]
                               and (time.time() - s["ts"]) > max(interval * 2,
                                                                 interval + 300)),
+                # Freshness budget (FRESH/LATE/DEGRADED/STALE) recovers before
+                # the hard stale threshold above loses coverage. Unknown age
+                # is STALE: no result is no result, never clean.
+                "freshness": reliability_mod.classify(
+                    (time.time() - s["ts"]) if s and s["ts"] else -1, interval),
                 "running": name in (scheduler.current, getattr(scheduler, "fast_current", None)),
                 "next": int(scheduler.next_run.get(name, 0) - time.time()),
             })
@@ -163,9 +241,42 @@ def build_state(db_path, scheduler):
             "attack": attackmap.latest(store),
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
+            "reliability": _reliability_state(scheduler, snaps),
+            "performance": {**_performance_state(jobs, scheduler),
+                            "subsystems": _meta_object(store, "resource_profile_v1"),
+                            "accelerator": _meta_object(store, "accelerator_probe_v1")},
+            "fix": _fix_state(db_path),
         }
     finally:
         store.close()
+
+
+def _reliability_state(scheduler, snaps):
+    """Collector reliability plane for the dashboard. Never raises."""
+    try:
+        status_fn = getattr(scheduler, "reliability_status", None)
+        if callable(status_fn):
+            return status_fn(snapshots=snaps)["summary"]
+    except Exception:
+        pass
+    return {"levels": {}, "stale_collectors": [], "recovering": [],
+            "violations": [], "expired_leases": []}
+
+
+def _fix_state(db_path):
+    """Open self-fix proposals waiting on the operator. Never raises."""
+    try:
+        from jarvis.response import selffix
+        store = Store(db_path)
+        try:
+            return [{"id": e["id"], "title": e.get("title", ""),
+                     "status": e.get("status", ""), "problem": e.get("problem", ""),
+                     "created_at": e.get("created_at", 0)}
+                    for e in selffix.list_open(store)]
+        finally:
+            store.close()
+    except Exception:
+        return []
 
 
 # Binding to 127.0.0.1 is NOT sufficient on its own. A malicious page you visit
@@ -230,12 +341,14 @@ class Handler(BaseHTTPRequestHandler):
     # the exact origins; every other route keeps the strict policy above.
     CSP_GEO = (
         "default-src 'none'; "
-        "script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
         "style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "img-src 'self' data: blob: https://gibs.earthdata.nasa.gov; "
+        "img-src 'self' data: blob: https://gibs.earthdata.nasa.gov https://cdn.jsdelivr.net "
+        "https://server.arcgisonline.com https://tiles.maps.eox.at; "
         "connect-src 'self' blob: https://gibs.earthdata.nasa.gov "
-        "https://cdn.jsdelivr.net https://nominatim.openstreetmap.org; "
-        "worker-src blob:; child-src blob:; font-src data:")
+        "https://cdn.jsdelivr.net https://nominatim.openstreetmap.org "
+        "https://server.arcgisonline.com https://tiles.maps.eox.at; "
+        "worker-src blob: https://cdn.jsdelivr.net; child-src blob:; font-src data:")
 
     def _send(self, code, body, ctype="application/json", csp=None):
         if isinstance(body, str):
@@ -296,6 +409,21 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
+        if url.path == "/api/score-coach":
+            # Deterministic: the score's real projection, no model, no waiting.
+            store = Store(self.db_path)
+            try:
+                answer = assistant.score_coach(store, JOBS)
+                now_score = None
+                try:
+                    state = protocols.evaluate(store, JOBS)
+                    now_score = state[0]["score_now"] if state else None
+                except Exception:
+                    pass
+            finally:
+                store.close()
+            return self._send(200, json.dumps({"answer": answer, "source": "coach",
+                                               "score": now_score}))
         if url.path == "/api/voice":
             # POST, not GET: a model call costs seconds of CPU, so a cross-site
             # page must not be able to trigger one with an <img> tag.
@@ -359,6 +487,30 @@ class Handler(BaseHTTPRequestHandler):
                 store.close()
             return self._send(200 if ok else 400,
                               json.dumps({"ok": ok, "message": message}))
+        if url.path in ("/api/fix/approve", "/api/fix/reject"):
+            # Same trust model as /api/answer above: localhost + same-origin
+            # POST from you clicking a button. This records intent only —
+            # applying stays a terminal command (`jarvis fix apply <id>`),
+            # and email replies can never reach this path.
+            from jarvis.response import selffix
+            payload = self._json_body(4096)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            pid = str(payload.get("id") or "")[:16]
+            if not re.match(r"^fx-[0-9a-f]{8}$", pid):
+                return self._send(400, json.dumps({"error": "unknown proposal"}))
+            store = Store(self.db_path)
+            try:
+                if url.path.endswith("approve"):
+                    ok, message = selffix.approve(store, pid, by="dashboard")
+                else:
+                    ok, message = selffix.reject(
+                        store, pid, str(payload.get("reason") or "")[:300],
+                        by="dashboard")
+            finally:
+                store.close()
+            return self._send(200 if ok else 400,
+                              json.dumps({"ok": ok, "message": message}))
         return self._send(404, json.dumps({"error": "not found"}))
 
     def do_GET(self):
@@ -412,12 +564,21 @@ class Handler(BaseHTTPRequestHandler):
 
         if url.path == "/api/geo":
             from jarvis.service import geosecurity
-            state = build_state(self.db_path, self.scheduler)
+            # The geo payload needs only hot findings and liveness, not the
+            # full dashboard state: build_state() serializes every finding,
+            # score and intel feed (measured 0.6–3 s for a 2 KB response).
+            # Snapshots + geo fusion answer the same question in ~5 ms.
             hstate = health(self.db_path, self.scheduler)
-            recent = [f for f in state.get("findings", [])
-                      if f.get("severity") in ("critical", "high")]
             store = Store(self.db_path)
             try:
+                try:
+                    snaps = store.get_snapshots()
+                except Exception:
+                    snaps = {}
+                recent = [f for s in snaps.values()
+                          for f in (s.get("findings") or [])
+                          if isinstance(f, dict)
+                          and f.get("severity") in ("critical", "high")]
                 payload = geosecurity.state(store, health_state=hstate, recent_findings=recent)
             finally:
                 store.close()
@@ -463,6 +624,12 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
     wd = threading.Thread(target=watchdog_loop, args=(scheduler,),
                           name="jarvis-watchdog", daemon=True)
     wd.start()
+    # Collector reliability plane: independent health loop that queues LATE
+    # collectors and expires dead leases, so staleness is recovered before
+    # the score loses coverage.
+    rel = threading.Thread(target=reliability_watchdog_loop, args=(scheduler,),
+                           name="jarvis-reliability", daemon=True)
+    rel.start()
 
     Handler.db_path = db_path
     Handler.scheduler = scheduler

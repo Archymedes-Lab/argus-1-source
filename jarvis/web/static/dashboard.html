@@ -349,7 +349,10 @@
                placeholder="What needs me? What's my score? Explain a finding…">
         <button id="askbtn" type="submit">ask</button>
       </form>
+      <div style="padding:0 13px 10px"><button class="showmore" onclick="scoreCoach()"
+        title="The deterministic plan: weakest area, each task's projected points, all from live data">how do I raise my score?</button></div>
       <div id="jarvisquestions"></div>
+      <div id="fix"></div>
     </div>
 
     <div class="card" id="winscard">
@@ -360,6 +363,11 @@
   </section>
 
   <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Live performance <span class="cnt" id="perfcnt">daemon and collector duty cycle</span></h2>
+    <div class="body" id="performance"><div class="empty">sampling…</div></div>
+  </div>
 
   <div class="card">
     <h2>
@@ -526,6 +534,7 @@ function render(s) {
 
   renderHealth(s);
   renderTiles(s);
+  renderPerformance(s);
   renderJobs(s);
   renderChart(s);
   renderCats(s);
@@ -552,6 +561,7 @@ function render(s) {
 function renderQuestions(s) {
   const el = document.getElementById("jarvisquestions");
   const qs = s.questions || [];
+  renderFix(s);
   if (!qs.length) { el.innerHTML = ""; return; }
   const shown = showAllQuestions ? qs : qs.slice(0, 2);
   el.innerHTML = shown.map(q => `<div class="question">
@@ -562,6 +572,37 @@ function renderQuestions(s) {
     </div></div>`).join("") + (qs.length > 2 ? `<div style="padding:0 13px 12px">
       <button class="showmore" onclick="showAllQuestions=!showAllQuestions;renderQuestions(state)">${
       showAllQuestions ? "show fewer questions" : `${qs.length - 2} more question${qs.length > 3 ? "s" : ""} JARVIS would like answered`}</button></div>` : "");
+}
+
+function renderFix(s) {
+  const el = document.getElementById("fix");
+  const items = s.fix || [];
+  if (!items.length) { el.innerHTML = ""; return; }
+  el.innerHTML = items.map(f => `<div class="question" id="fix-${esc(f.id)}">
+    <div>🔧 fix proposal <b>${esc(f.id)}</b> [${esc(f.status)}]: ${esc(f.title)}</div>
+    <div style="opacity:.8">${esc(f.problem || "")}</div>
+    <div class="question-actions">
+      <button onclick="decideFix('${esc(f.id)}','approve')">approve</button>
+      <button onclick="decideFix('${esc(f.id)}','reject')">reject</button>
+    </div>
+    <div style="opacity:.7;font-size:.85em">approval only authorizes a later
+    <kbd>jarvis fix apply ${esc(f.id)}</kbd> at your terminal — nothing is applied from here.</div>
+  </div>`).join("");
+}
+
+async function decideFix(id, choice) {
+  try {
+    const response = await fetch("/api/fix/" + choice, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({id})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || data.error || response.status);
+    toast(data.message, "good", "fix proposal " + choice + "d");
+    await tick();
+  } catch (error) {
+    toast("Could not record decision: " + error.message, "bad", "fix proposal");
+  }
 }
 
 function scoreColor(v) {
@@ -755,6 +796,33 @@ function renderJobs(s) {
       ? `<div class="errbox">${esc(j.error.trim().split("\n").pop())}</div>` : "");
   }).join("") + (healthy ? `<button class="showmore" onclick="showHealthy=!showHealthy;renderJobs(state)">${
     showHealthy ? "hide healthy collectors" : `show ${healthy} healthy collector${healthy > 1 ? "s" : ""} ✓`}</button>` : "");
+}
+
+function renderPerformance(s) {
+  const p = s.performance || {}, cpu = p.cpu_pct;
+  const io = p.write_mib_s == null ? "I/O warming up" : Number(p.write_mib_s).toFixed(3) + " MiB/s writes";
+  const running = (p.running || []).length ? ` · running ${p.running.map(esc).join(", ")}` : "";
+  document.getElementById("perfcnt").textContent =
+    `${cpu == null ? "warming up" : cpu.toFixed(1) + "% CPU"} · ${Number(p.service_memory_mib || p.rss_mib || 0).toFixed(0)} MiB service · ${io}${running}`;
+  const duty = Number(p.scheduled_duty_pct || 0);
+  const cls = duty >= 100 ? "c-critical" : duty >= 70 ? "c-high" : duty >= 45 ? "c-medium" : "c-ok";
+  const rows = (p.top || []).map(j => `<div class="job">
+    <span class="dot ${j.duty_pct >= 70 ? "err" : j.duty_pct >= 30 ? "stale" : ""}"></span>
+    <span class="name"><b>${esc(j.label || j.name)}</b><div class="bar"><i style="width:${Math.min(100, j.duty_pct)}%"></i></div></span>
+    <span class="age">${Number(j.duration).toFixed(1)}s/run<br><span style="color:var(--faint)">${Number(j.duty_pct).toFixed(1)}% duty</span></span>
+  </div>`).join("");
+  const profile = p.subsystems || {}, owners = profile.owners || {};
+  const ownerRows = Object.entries(owners).filter(([name]) => name !== "other").map(([name, v]) =>
+    `<div class="job"><span class="name"><b>${esc(name)}</b></span><span class="age">${(Number(v.rss_bytes || 0)/1048576).toFixed(0)} MiB<br>${Number(v.cpu_pct || 0).toFixed(1)}% CPU · ${Number(v.processes || 0)} proc</span></div>`).join("");
+  const db = profile.database || {}, dbRows = (db.tables || []).slice(0, 5).map(t =>
+    `${esc(t.name)} ${(Number(t.bytes || 0)/1048576).toFixed(0)} MiB`).join(" · ");
+  const acc = p.accelerator || {}, gpuNames = (acc.gpus || []).map(g => g.name).filter(Boolean);
+  const ov = acc.openvino || {}, ovDevices = (ov.devices || []).join(", ") || "none";
+  const accel = gpuNames.length ? `<div style="padding:10px 0;border-top:1px solid var(--line)"><b>accelerator</b> · ${esc(gpuNames.join(", "))} · OpenVINO ${ov.installed ? esc(ovDevices) : "not installed"} · Ollama ${((acc.ollama || {}).reachable) ? "reachable" : "not loaded/reachable"}</div>` : "";
+  document.getElementById("performance").innerHTML = `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
+    <b class="${cls}">${duty.toFixed(1)}%</b> scheduled duty · sum of each collector's last duration ÷ cadence
+  </div>${rows || '<div class="empty">waiting for collector timings…</div>'}${ownerRows}
+  ${db.bytes ? `<div style="padding:10px 0;border-top:1px solid var(--line)"><b>database ${(Number(db.bytes)/1048576).toFixed(0)} MiB</b> · ${dbRows}</div>` : ""}${accel}`;
 }
 
 function renderChart(s) {
@@ -1118,6 +1186,23 @@ async function askJarvis(event) {
   } finally {
     button.disabled = false;
     button.textContent = "ask";
+  }
+}
+
+/* The score coach: the same projection the protocols engine uses, rendered
+   into the chat box. Deterministic — no model call, so it is instant. */
+async function scoreCoach() {
+  const output = document.getElementById("askanswer");
+  output.textContent = "Computing the plan from live data…";
+  try {
+    const response = await fetch("/api/score-coach", { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || response.status);
+    output.dataset.kind = "answer";
+    output.innerHTML = esc(data.answer) +
+      `<div class="chat-source">score coach · computed from the real scoring code · no model</div>`;
+  } catch (error) {
+    output.textContent = "Could not compute the plan: " + error.message;
   }
 }
 

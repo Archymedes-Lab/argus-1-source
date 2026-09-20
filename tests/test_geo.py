@@ -1,11 +1,31 @@
+import json
+import re
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
+from unittest.mock import Mock
 
 from jarvis.collectors.host import geo
 from jarvis.core.store import Store
 from jarvis.service import geosecurity
+from jarvis.web.server import Handler
+
+
+class _FakeScheduler:
+    """Minimal scheduler surface health() needs; no jobs ever run."""
+    hosts = ("wsl",)
+    current = None
+    fast_current = None
+    heartbeat = time.time()
+    fast_heartbeat = time.time()
+
+    def is_alive(self):
+        return True
+
+    def fast_alive(self):
+        return True
 
 
 class ZoneTests(unittest.TestCase):
@@ -18,6 +38,22 @@ class ZoneTests(unittest.TestCase):
     def test_haversine_is_metres(self):
         # ~111 km per degree of latitude.
         self.assertAlmostEqual(geo.haversine_m(0, 0, 1, 0) / 1000, 111.19, delta=1)
+
+    def test_exact_zone_center_is_inside(self):
+        zones = [{"name": "HOME", "lat": -1.9441, "lon": 30.0619, "radius_m": 300}]
+        self.assertEqual(geo.classify(-1.9441, 30.0619, zones), "HOME")
+
+    def test_zone_boundary_is_metre_exact(self):
+        zones = [{"name": "HOME", "lat": -1.9441, "lon": 30.0619, "radius_m": 300}]
+        m_per_deg = 111195.0  # consistent with haversine_is_metres above
+        self.assertEqual(geo.classify(-1.9441 + 299 / m_per_deg, 30.0619, zones), "HOME")
+        self.assertEqual(geo.classify(-1.9441 + 301 / m_per_deg, 30.0619, zones), "outside")
+
+    def test_reported_pin_is_outside_home(self):
+        # 2026-09-20 live case: user-set pin ~728 m from HOME center,
+        # radius 300 m — "outside" is correct, not a stale cache.
+        zones = [{"name": "HOME", "lat": -1.9441, "lon": 30.0619, "radius_m": 300}]
+        self.assertEqual(geo.classify(-1.9506, 30.0611, zones), "outside")
 
 
 class StoreZoneTests(unittest.TestCase):
@@ -89,6 +125,10 @@ class StateAndAuditTests(unittest.TestCase):
         self.assertIn("geo_blind", kinds)
         self.assertEqual(state["devices"][0]["trust"], "trusted")
         self.assertEqual(state["imagery"]["provider"], "NASA GIBS")
+        # VIIRS, not MODIS: MODIS's narrower swath leaves black no-data
+        # wedges over this region (verified against live GIBS tiles).
+        self.assertEqual(state["imagery"]["layer"],
+                         "VIIRS_NOAA20_CorrectedReflectance_TrueColor")
 
     def test_user_set_location_takes_over_when_native_denied(self):
         geosecurity.add_zone(self.store, "HOME", -1.9441, 30.0619, 500)
@@ -138,6 +178,138 @@ class StateAndAuditTests(unittest.TestCase):
             geo.audit(self.store, hosts=("win",))
         state = geosecurity.state(self.store, recent_findings=[{"severity": "critical"}])
         self.assertIn("outside_zone_with_activity", [a["kind"] for a in state["anomalies"]])
+
+    def test_outside_anomaly_states_measured_distance_not_proof(self):
+        geosecurity.add_zone(self.store, "HOME", -1.9441, 30.0619, 300)
+        fix = {"status": "ok", "lat": -1.9506, "lon": 30.0611, "accuracy_m": 25,
+               "source": "windows-gnss"}
+        with mock.patch.object(geo, "locate", return_value=fix):
+            geo.audit(self.store, hosts=("win",))
+        state = geosecurity.state(self.store, recent_findings=[{"severity": "high"}])
+        det = [a["detail"] for a in state["anomalies"]
+               if a["kind"] == "outside_zone_with_activity"][0]
+        self.assertIn("728 m from HOME", det)
+        self.assertIn("300 m", det)
+        self.assertIn("not proof of compromise", det)
+
+    def test_imagery_carries_date_and_fallback(self):
+        state = geosecurity.state(self.store)
+        img = state["imagery"]
+        self.assertRegex(img["date"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertEqual(img["base"]["layer"], "BlueMarble_NextGeneration")
+        self.assertEqual(img["detail"]["layer"], "World_Imagery")
+        self.assertLessEqual(img["detail"]["min_level"], 14)
+        self.assertGreaterEqual(img["detail"]["max_level"], 19)
+        self.assertEqual(img["mid"]["layer"], "s2cloudless-2020")
+        self.assertEqual((img["mid"]["min_level"], img["mid"]["max_level"]), (8, 13))
+        self.assertLessEqual(img["max_level"], 7)
+
+
+class GeoCSPTests(unittest.TestCase):
+    """The /geo globe needs WASM + workers + CDN assets; nothing else does.
+
+    Regression cover for the starfield-only failure: Cesium rendered its
+    canvas, marker and sky but the CSP blocked the globe pipeline
+    (WebAssembly, Workers/createGeometry.js, CDN images). The exception
+    stays scoped to the /geo page; the strict policy is unchanged.
+    """
+
+    def _served_csp(self, path):
+        handler = Handler.__new__(Handler)
+        handler.headers = {"Host": "localhost:8787"}
+        handler._send = Mock()
+        handler.path = path
+        old, Handler.scheduler = Handler.scheduler, _FakeScheduler()
+        try:
+            handler.do_GET()
+        finally:
+            Handler.scheduler = old
+        self.assertEqual(handler._send.call_args.args[0], 200)
+        _, kwargs = handler._send.call_args
+        return kwargs.get("csp") or Handler.CSP_STRICT
+
+    def test_geo_page_permits_the_cesium_pipeline(self):
+        csp = self._served_csp("/geo")
+        self.assertIn("'wasm-unsafe-eval'", csp)
+        self.assertTrue(re.search(r"worker-src[^;]*blob:", csp),
+                        f"worker-src must keep blob: in {csp}")
+        self.assertTrue(re.search(r"worker-src[^;]*https://cdn\.jsdelivr\.net", csp),
+                        f"worker-src must allow the Cesium CDN in {csp}")
+        self.assertTrue(re.search(r"img-src[^;]*https://cdn\.jsdelivr\.net", csp),
+                        f"img-src must allow Cesium assets in {csp}")
+        self.assertTrue(re.search(r"img-src[^;]*server\.arcgisonline\.com", csp),
+                        f"img-src must allow detail tiles in {csp}")
+        self.assertTrue(re.search(r"img-src[^;]*tiles\.maps\.eox\.at", csp),
+                        f"img-src must allow mid-band tiles in {csp}")
+
+    def test_geo_page_never_gets_full_unsafe_eval(self):
+        csp = self._served_csp("/geo")
+        # "'wasm-unsafe-eval'" contains "unsafe-eval" as a substring, so
+        # match the standalone token only.
+        self.assertNotRegex(csp, r"['\s]unsafe-eval['\s;]")
+
+    def test_dashboard_keeps_the_strict_policy(self):
+        csp = self._served_csp("/")
+        self.assertNotIn("'wasm-unsafe-eval'", csp)
+        self.assertNotIn("cdn.jsdelivr.net", csp)
+        self.assertNotIn("arcgisonline", csp)
+        self.assertNotIn("maps.eox.at", csp)
+
+    def test_global_detail_providers_use_layer_not_provider_minimums(self):
+        """Global z8/z14 provider minimums make Cesium enumerate huge roots."""
+        html = (Path(__file__).parents[1] / "jarvis/web/static/geo.html").read_text()
+        self.assertNotIn("minimumLevel: img.mid.min_level", html)
+        self.assertNotIn("minimumLevel: img.detail.min_level", html)
+        self.assertIn("minimumTerrainLevel: img.mid.min_level", html)
+        self.assertIn("minimumTerrainLevel: img.detail.min_level", html)
+        self.assertIn("viewer.imageryLayers.add(midLayer)", html)
+        self.assertIn("viewer.imageryLayers.add(detailLayer)", html)
+
+
+class GeoRouteTests(unittest.TestCase):
+    """`/api/geo` must stay cheap: snapshots + fusion, never build_state().
+
+    Regression cover for the 0.6–3 s geo poll: the route built the entire
+    dashboard state (every finding, score, intel feed) to extract hot
+    findings for a 2 KB response.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = str(Path(self.tmp.name) / "route.db")
+        self.store = Store(self.path)
+        self.addCleanup(self.store.close)
+        self._old_sched, Handler.scheduler = Handler.scheduler, _FakeScheduler()
+        self.addCleanup(setattr, Handler, "scheduler", self._old_sched)
+
+    def _get_geo(self):
+        handler = Handler.__new__(Handler)
+        handler.db_path = self.path
+        handler.headers = {"Host": "localhost:8787"}
+        handler._send = Mock()
+        handler.path = "/api/geo"
+        handler.do_GET()
+        args, _ = handler._send.call_args
+        self.assertEqual(args[0], 200)
+        return json.loads(args[1])
+
+    def test_skips_full_dashboard_state(self):
+        import jarvis.web.server as server_mod
+        with mock.patch.object(server_mod, "build_state") as full:
+            payload = self._get_geo()
+        full.assert_not_called()
+        self.assertIn("location", payload)
+        self.assertIn("imagery", payload)
+
+    def test_hot_findings_reach_anomalies_without_build_state(self):
+        geosecurity.add_zone(self.store, "HOME", -1.9441, 30.0619, 300)
+        geosecurity.set_here(self.store, -1.9506, 30.0611, "probe")
+        self.store.save_snapshot("intrusion", [{
+            "severity": "critical", "title": "probe", "category": "test"}])
+        payload = self._get_geo()
+        kinds = [a["kind"] for a in payload["anomalies"]]
+        self.assertIn("outside_zone_with_activity", kinds)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,24 @@ from jarvis.core import collection, incidents
 from jarvis.core.store import Store
 from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler
-from jarvis.web.server import Handler
+from jarvis.web.server import Handler, _performance_state
+
+
+class PerformanceStateTests(unittest.TestCase):
+    def test_duty_cycle_uses_measured_duration_over_cadence(self):
+        from types import SimpleNamespace
+
+        jobs = [
+            {"name": "native", "label": "Native", "duration": 3, "interval": 60},
+            {"name": "slow", "label": "Slow", "duration": 30, "interval": 60},
+        ]
+        scheduler = SimpleNamespace(current="slow", fast_current=None)
+        with patch("builtins.open", side_effect=OSError("no proc")):
+            result = _performance_state(jobs, scheduler)
+        self.assertEqual(result["scheduled_duty_pct"], 55.0)
+        self.assertEqual(result["top"][0]["name"], "slow")
+        self.assertEqual(result["running"], ["slow"])
+        self.assertIsNone(result["cpu_pct"])
 
 
 class SchedulerColdStartTests(unittest.TestCase):

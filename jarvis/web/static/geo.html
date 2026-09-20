@@ -92,7 +92,53 @@ function initGlobe(img){
       tilingScheme: new Cesium.WebMercatorTilingScheme(),
       tileWidth:256, tileHeight:256, credit: img.attribution
     });
+    // Static seamless Earth underneath: covers daily-tile errors and poles.
+    // (Daily true-color tiles are JPEG — no alpha — so this is a fallback
+    // for missing tiles, not transparency through no-data pixels.)
+    if(img.base){
+      const base = new Cesium.WebMapTileServiceImageryProvider({
+        url: img.base.endpoint,
+        layer: img.base.layer, style:"default", format: img.base.format,
+        tileMatrixSetID: img.base.tile_matrix_set, maximumLevel: img.base.max_level,
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        tileWidth:256, tileHeight:256, credit: img.base.attribution
+      });
+      viewer.imageryLayers.addImageryProvider(base);
+    }
     viewer.imageryLayers.addImageryProvider(provider);
+    // Mid bands: 10 m Sentinel-2 mosaic (z8–z13) sharpens the regional
+    // view where the daily layer runs out of pixels.
+    if(img.mid){
+      const mid = new Cesium.UrlTemplateImageryProvider({
+        url: img.mid.url_template,
+        // A global imagery provider must start at level zero.  Giving it a
+        // global minimumLevel of 8 asks Cesium to enumerate 65k root tiles
+        // and can halt rendering with "Too many properties to enumerate".
+        maximumLevel: img.mid.max_level,
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        tileWidth:256, tileHeight:256, credit: img.mid.attribution
+      });
+      const midLayer = new Cesium.ImageryLayer(mid, {
+        minimumTerrainLevel: img.mid.min_level,
+        maximumTerrainLevel: img.mid.max_level
+      });
+      viewer.imageryLayers.add(midLayer);
+    }
+    // Street detail at close zoom (z14–z19): sub-metre imagery takes over
+    // when the camera dives in.
+    if(img.detail){
+      const detail = new Cesium.UrlTemplateImageryProvider({
+        url: img.detail.url_template,
+        maximumLevel: img.detail.max_level,
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        tileWidth:256, tileHeight:256, credit: img.detail.attribution
+      });
+      const detailLayer = new Cesium.ImageryLayer(detail, {
+        minimumTerrainLevel: img.detail.min_level,
+        maximumTerrainLevel: img.detail.max_level
+      });
+      viewer.imageryLayers.add(detailLayer);
+    }
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#05070d");
   }catch(e){ console.error(e); $("#globe").style.display="none"; $("#fallback").style.display="flex"; }
 }
@@ -180,7 +226,7 @@ function render(p){
   let locHtml;
   if(loc.status==="ok") locHtml = `<div class="row"><span class="k">status</span><span class="v ok">located</span></div>`+
       `<div class="row"><span class="k">zone</span><span class="v">${esc(loc.zone||"—")}</span></div>`+
-      `<div class="row"><span class="k">accuracy</span><span class="v">~${Math.round(loc.accuracy_m||0)} m</span></div>`+
+      `<div class="row"><span class="k">accuracy</span><span class="v">${loc.accuracy_m==null?"n/a — set manually":"~"+Math.round(loc.accuracy_m)+" m"}</span></div>`+
       `<div class="row"><span class="k">source</span><span class="v">${esc(loc.source||"")}</span></div>`;
   else locHtml = `<div class="row"><span class="k">status</span><span class="v ${loc.status==="denied"?"low":"dim"}">${esc(loc.status||"unknown")}</span></div>`+
       `<div class="sig">${esc(loc.reason||"JARVIS never guesses a position from your IP.")}</div>`;
@@ -204,6 +250,10 @@ function render(p){
   const img=p.imagery||{};
   $("#imagery").innerHTML = `<div class="row"><span class="k">provider</span><span class="v">${esc(img.provider)}</span></div>`+
     `<div class="row"><span class="k">layer</span><span class="v dim">${esc(img.layer)}</span></div>`+
+    `<div class="row"><span class="k">observed</span><span class="v dim">${esc(img.date||"—")}</span></div>`+
+    `<div class="row"><span class="k">mid</span><span class="v dim">${esc((img.mid||{}).layer||"none")} · z${(img.mid||{}).min_level}–${(img.mid||{}).max_level}</span></div>`+
+    `<div class="row"><span class="k">detail</span><span class="v dim">${esc((img.detail||{}).layer||"none")} · z${(img.detail||{}).min_level}–${(img.detail||{}).max_level}</span></div>`+
+    `<div class="row"><span class="k">fallback</span><span class="v dim">${esc((img.base||{}).layer||"none")}</span></div>`+
     `<div class="sig">${esc(img.cadence)}</div><div class="sig dim">${esc(img.attribution)}</div>`;
 }
 
