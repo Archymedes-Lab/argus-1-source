@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlparse
 
 from jarvis.collectors.network import internetwatch
 from jarvis.core import incidents
-from jarvis.core.paths import STATIC_DIR
+from jarvis.core.paths import REPO_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.response import acknowledge, alert, assistant, protocols, questions
@@ -271,12 +271,46 @@ def _fix_state(db_path):
         try:
             return [{"id": e["id"], "title": e.get("title", ""),
                      "status": e.get("status", ""), "problem": e.get("problem", ""),
-                     "created_at": e.get("created_at", 0)}
+                     "created_at": e.get("created_at", 0),
+                     "generation_state": e.get("generation_state", ""),
+                     "generation_error": e.get("generation_error", ""),
+                     "patch_chars": len(e.get("patch_draft", "")),
+                     "directive_objective": (e.get("directive") or {}).get("objective", ""),
+                     "last_event": (e.get("decision_history") or [{}])[-1]}
                     for e in selffix.list_open(store)]
         finally:
             store.close()
     except Exception:
         return []
+
+
+_FIX_DRAFT_LOCK = threading.Lock()
+_FIX_DRAFTS = set()
+
+
+def _start_fix_draft(db_path, pid):
+    """Start one bounded drafting worker without blocking dashboard health."""
+    with _FIX_DRAFT_LOCK:
+        if pid in _FIX_DRAFTS:
+            return False
+        _FIX_DRAFTS.add(pid)
+
+    def run():
+        from jarvis.response import fixdraft
+        store = Store(db_path)
+        try:
+            try:
+                fixdraft.generate(store, pid, repo=str(REPO_ROOT))
+            except Exception as exc:
+                fixdraft.record_failure(
+                    store, pid, f"unexpected drafting failure: {type(exc).__name__}: {exc}")
+        finally:
+            store.close()
+            with _FIX_DRAFT_LOCK:
+                _FIX_DRAFTS.discard(pid)
+
+    threading.Thread(target=run, name=f"jarvis-fix-{pid}", daemon=True).start()
+    return True
 
 
 # Binding to 127.0.0.1 is NOT sufficient on its own. A malicious page you visit
@@ -487,7 +521,8 @@ class Handler(BaseHTTPRequestHandler):
                 store.close()
             return self._send(200 if ok else 400,
                               json.dumps({"ok": ok, "message": message}))
-        if url.path in ("/api/fix/approve", "/api/fix/reject"):
+        if url.path in ("/api/fix/approve", "/api/fix/authorize",
+                        "/api/fix/retry", "/api/fix/reject"):
             # Same trust model as /api/answer above: localhost + same-origin
             # POST from you clicking a button. This records intent only —
             # applying stays a terminal command (`jarvis fix apply <id>`),
@@ -503,12 +538,21 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if url.path.endswith("approve"):
                     ok, message = selffix.approve(store, pid, by="dashboard")
+                elif url.path.endswith("authorize"):
+                    ok, message = selffix.authorize_apply(store, pid, by="dashboard")
+                elif url.path.endswith("retry"):
+                    entry = selffix.get(store, pid)
+                    ok = bool(entry and entry.get("status") == "draft_failed")
+                    message = (f"draft retry queued for {pid}" if ok else
+                               f"{pid} is not awaiting a draft retry")
                 else:
                     ok, message = selffix.reject(
                         store, pid, str(payload.get("reason") or "")[:300],
                         by="dashboard")
             finally:
                 store.close()
+            if ok and (url.path.endswith("approve") or url.path.endswith("retry")):
+                _start_fix_draft(self.db_path, pid)
             return self._send(200 if ok else 400,
                               json.dumps({"ok": ok, "message": message}))
         return self._send(404, json.dumps({"error": "not found"}))

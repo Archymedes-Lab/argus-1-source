@@ -73,12 +73,13 @@ def ping(conf, timeout=PING_TIMEOUT):
                 return "offline", time.monotonic() - started
             if isinstance(data, dict) and data.get("_jarvis_error"):
                 return "refused", time.monotonic() - started
-    else:
-        loaded = [m.get("name") or m.get("model") or "" for m in data.get("models") or ()]
-        if any(name.split(":")[0] == model_name(conf).split(":")[0] for name in loaded):
-            return "model_loaded", time.monotonic() - started
-        return "model_ready", time.monotonic() - started
-    return "offline", time.monotonic() - started
+    if not isinstance(data, dict):
+        return "offline", time.monotonic() - started
+    loaded = [m.get("name") or m.get("model") or ""
+              for m in data.get("models") or () if isinstance(m, dict)]
+    if any(name.split(":")[0] == model_name(conf).split(":")[0] for name in loaded):
+        return "model_loaded", time.monotonic() - started
+    return "model_ready", time.monotonic() - started
 
 
 def _bridge_get(timeout):

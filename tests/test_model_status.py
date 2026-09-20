@@ -45,6 +45,15 @@ class PingTests(unittest.TestCase):
             state, _ = llm.ping({})
         self.assertEqual(state, "refused")
 
+    def test_successful_bridge_result_is_evaluated(self):
+        import urllib.error
+        with mock.patch.object(llm, "_open",
+                               side_effect=urllib.error.URLError("separate loopback")), \
+             mock.patch.object(llm, "_bridge_get",
+                               return_value={"models": [{"name": "llama3.2:1b"}]}):
+            state, _ = llm.ping({})
+        self.assertEqual(state, "model_loaded")
+
 
 class StatusFindingsTests(unittest.TestCase):
     def setUp(self):

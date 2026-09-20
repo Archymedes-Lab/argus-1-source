@@ -20,7 +20,7 @@ CAPABILITIES = {
     'performance': ('unverified', 'per-subsystem scheduler duty cycle, process/RAM/database profiling and read-only accelerator inventory', 'No complete measured CPU/RAM/IO/battery/latency budget or validated CPU-vs-GPU model benchmark'),
     'supply_chain': ('partial', 'standard-library Python runtime', 'Signed reproducible releases and complete SBOM validation unverified'),
     'recovery': ('partial', 'action undo, fresh repair observations and read-only interrupted-action reconciliation', 'No full restart/power-loss recovery validation'),
-    'self_improvement': ('partial', 'human-gated fix proposals: deterministic daemon scan, rate-limited proposal email, explicit terminal or localhost-dashboard approval, test-gated apply with revert', 'No autonomous code execution; opencode drafts and Ollama notes are advisory only and email replies cannot approve'),
+    'self_improvement': ('partial', 'human-gated fix proposals: deterministic daemon scan, bounded validated Ollama directives, OpenCode patch drafting, separate investigation and exact-patch authorization, test-gated apply with revert', 'No autonomous code execution; model directives remain untrusted, application stays human-authorized, and email replies cannot approve'),
 }
 
 

@@ -578,16 +578,31 @@ function renderFix(s) {
   const el = document.getElementById("fix");
   const items = s.fix || [];
   if (!items.length) { el.innerHTML = ""; return; }
-  el.innerHTML = items.map(f => `<div class="question" id="fix-${esc(f.id)}">
+  el.innerHTML = items.map(f => {
+    const action = f.status === "proposed"
+      ? `<button onclick="decideFix('${esc(f.id)}','approve')">approve investigation + draft</button>`
+      : f.status === "review"
+      ? `<button onclick="decideFix('${esc(f.id)}','authorize')">authorize this patch</button>`
+      : f.status === "draft_failed"
+      ? `<button onclick="decideFix('${esc(f.id)}','retry')">retry drafting</button>` : "";
+    const progress = f.generation_error
+      ? `<div class="crit">draft failed: ${esc(f.generation_error)}</div>`
+      : `<div style="opacity:.75">generation: ${esc(f.generation_state || "awaiting decision")}${
+          f.patch_chars ? ` · ${esc(f.patch_chars)} patch characters` : ""}</div>`;
+    const directive = f.directive_objective
+      ? `<div style="opacity:.8">Ollama directive: ${esc(f.directive_objective)}</div>` : "";
+    return `<div class="question" id="fix-${esc(f.id)}">
     <div>🔧 fix proposal <b>${esc(f.id)}</b> [${esc(f.status)}]: ${esc(f.title)}</div>
     <div style="opacity:.8">${esc(f.problem || "")}</div>
+    ${progress}${directive}
     <div class="question-actions">
-      <button onclick="decideFix('${esc(f.id)}','approve')">approve</button>
+      ${action}
       <button onclick="decideFix('${esc(f.id)}','reject')">reject</button>
     </div>
-    <div style="opacity:.7;font-size:.85em">approval only authorizes a later
-    <kbd>jarvis fix apply ${esc(f.id)}</kbd> at your terminal — nothing is applied from here.</div>
-  </div>`).join("");
+    <div style="opacity:.7;font-size:.85em">investigation approval generates a draft only.
+    Patch application requires a separate authorization and
+    <kbd>jarvis fix apply ${esc(f.id)}</kbd>; nothing is applied from this page.</div>
+  </div>`}).join("");
 }
 
 async function decideFix(id, choice) {

@@ -5,12 +5,13 @@
     jarvis fix show <id>          full proposal: problem, evidence, patch draft
     jarvis fix propose --title T --problem P
                                   file a proposal yourself
-    jarvis fix draft <id>         ask Ollama for advisory notes and opencode
-                                  for a patch draft (stored, never applied)
-    jarvis fix approve <id>       approve (records intent; changes nothing)
+    jarvis fix approve <id>       approve Ollama directive + OpenCode drafting
+    jarvis fix draft <id>         retry a failed approved drafting run
+    jarvis fix authorize <id>     separately authorize the reviewed patch
     jarvis fix reject <id>        reject with an optional reason
     jarvis fix apply <id>         apply the approved patch, test-gated, reverting
                                   on failure
+    jarvis fix rollback <id>      reverse an applied patch and retest
     jarvis fix email <id>         re-send the proposal email (rate-limited)
     jarvis fix check              run the daemon-side scan now and mail anything new
 
@@ -21,13 +22,15 @@ only an explicit proposal id from your shell (or the equivalent click on the
 local dashboard, which is the same explicit act through the same-origin gate).
 """
 
+import hashlib
+import json
 import re
 import shutil
 import subprocess
 import time
 
 from jarvis.core.util import iso
-from jarvis.response import alert, selffix
+from jarvis.response import alert, fixdraft, selffix
 
 from ..output import color, is_tty
 
@@ -37,7 +40,6 @@ PID_RE = re.compile(r"^fx-[0-9a-f]{8}$")
 # requires for any change; callers (and tests) may pass a smaller command.
 DEFAULT_TEST_CMD = ["python3", "-m", "unittest", "discover", "-s", "tests"]
 
-OPCODE_TIMEOUT = 300
 APPLY_TIMEOUT = 900
 
 
@@ -58,15 +60,24 @@ def _print_proposal(entry, full=False):
         print(f"  risk: {entry.get('risk', '')}")
         print(f"  rollback: {entry.get('rollback', '')}")
         print(f"  verify: {', '.join(entry.get('verify', []))}")
-        if entry.get("model_notes"):
-            print("  --- unverified local-model notes (advisory only) ---")
-            print("  " + entry["model_notes"].replace("\n", "\n  ")[:2000])
+        print(f"  generation: {entry.get('generation_state', 'not started')}")
+        if entry.get("generation_error"):
+            print(f"  generation error: {entry['generation_error']}")
+        if entry.get("directive"):
+            print("  --- validated Ollama directive (untrusted context) ---")
+            print("  " + json.dumps(
+                entry["directive"], indent=2, sort_keys=True).replace("\n", "\n  ")[:8000])
         if entry.get("patch_draft"):
             print("  --- patch draft (not applied) ---")
             print("  " + entry["patch_draft"].replace("\n", "\n  ")[:4000])
         if entry.get("apply_log"):
             print("  --- apply log ---")
             print("  " + entry["apply_log"].replace("\n", "\n  ")[-2000:])
+        if entry.get("decision_history"):
+            print("  --- decision history ---")
+            for event in entry["decision_history"][-12:]:
+                print(f"  {iso(event.get('at', 0))} {event.get('event')} "
+                      f"by {event.get('by')}: {event.get('detail', '')}")
     print(f"  created {iso(entry.get('created_at', 0))}"
           + (f" · emailed {iso(entry['emailed_at'])}" if entry.get("emailed_at") else ""))
 
@@ -114,6 +125,18 @@ def cmd_fix(args, store):
             return 1
         ok, message = selffix.approve(store, args.id)
         print(message)
+        if not ok:
+            return 1
+        ok, message = fixdraft.generate(store, args.id)
+        print(message)
+        return 0 if ok else 1
+
+    if action == "authorize":
+        if not _valid_pid(args.id):
+            print(f"no proposal {args.id}")
+            return 1
+        ok, message = selffix.authorize_apply(store, args.id)
+        print(message)
         return 0 if ok else 1
 
     if action == "reject":
@@ -129,6 +152,9 @@ def cmd_fix(args, store):
 
     if action == "apply":
         return _apply(args, store)
+
+    if action == "rollback":
+        return _rollback(args, store)
 
     if action == "email":
         if not _valid_pid(args.id):
@@ -150,14 +176,7 @@ def cmd_fix(args, store):
 
 
 def _draft(args, store):
-    """Human-invoked drafting help. Stores text, changes nothing.
-
-    May consult the local Ollama model for advisory notes (redacted, labelled
-    unverified) and may run `opencode run` WITHOUT --auto so its permission
-    rules stay deny-by-default. The prompt instructs diff-only output; any
-    working-tree change opencode makes anyway is reported, not hidden, and
-    `apply` refuses a dirty tree until you deal with it.
-    """
+    """Retry the approved, bounded Ollama-to-OpenCode drafting pipeline."""
     if not _valid_pid(args.id):
         print(f"no proposal {args.id}")
         return 1
@@ -165,78 +184,12 @@ def _draft(args, store):
     if entry is None:
         print(f"no proposal {args.id}")
         return 1
-    if entry.get("status") not in ("proposed", "approved"):
-        print(f"{args.id} is {entry.get('status')}; draft only open proposals")
+    if entry.get("status") not in ("approved", "draft_failed"):
+        print(f"{args.id} is {entry.get('status')}; approve investigation first")
         return 1
-
-    if args.with_model:
-        notes = _model_notes(entry)
-        if notes:
-            proposals = selffix._load(store)
-            proposals[args.id]["model_notes"] = notes[:2000]
-            proposals[args.id]["updated_at"] = int(time.time())
-            selffix._save(store, proposals)
-            print("saved unverified local-model notes (advisory only).")
-        else:
-            print("local model unavailable — continuing without notes.")
-
-    if not shutil.which("opencode"):
-        print("opencode not found on PATH — patch draft skipped.")
-        return 0
-    before = _git_status()
-    if before is None:
-        print("not in a git checkout — patch draft skipped.")
-        return 0
-    prompt = (
-        "You are helping maintain the JARVIS monitor (this repository). "
-        "Do NOT modify any files. Study the problem below and output ONLY a "
-        "unified diff (git-compatible, `diff --git` format) that fixes it, "
-        "followed by nothing else. If you cannot fix it with a diff, output "
-        "the single line: NO-DIFF-POSSIBLE.\n\n"
-        f"Problem: {entry.get('problem', '')}\n"
-        f"Evidence: {'; '.join(entry.get('evidence', []))}\n"
-        f"Suggested: {entry.get('suggested', '')}\n")
-    try:
-        proc = subprocess.run(
-            ["opencode", "run", prompt], capture_output=True, text=True,
-            errors="replace", timeout=OPCODE_TIMEOUT)
-    except (OSError, subprocess.SubprocessError) as exc:
-        print(f"opencode failed to run: {exc}")
-        return 1
-    out = (proc.stdout or "").strip()[:selffix.MAX_PATCH_CHARS]
-    if not out or "NO-DIFF-POSSIBLE" in out:
-        print("opencode produced no usable diff.")
-        return 1
-    proposals = selffix._load(store)
-    proposals[args.id]["patch_draft"] = out
-    proposals[args.id]["updated_at"] = int(time.time())
-    selffix._save(store, proposals)
-    after = _git_status()
-    print(f"saved patch draft ({len(out)} chars) — NOT applied.")
-    if after != before:
-        print("warning: opencode modified the working tree during drafting:")
-        for line in (after or "").splitlines()[:20]:
-            print(f"  {line}")
-        print("`jarvis fix apply` will refuse until the tree is clean again "
-              "(`git status`, review, `git checkout -- <file>`).")
-    print(f"review with: jarvis fix show {args.id}")
-    return 0
-
-
-def _model_notes(entry):
-    """Advisory text from the loopback model. Never a command, never trusted."""
-    from jarvis.response import llm
-    conf = alert.load_conf()
-    text, err = llm.chat(
-        conf,
-        "You are a terse maintenance assistant. Suggest investigation steps only. "
-        "Never output secrets, never output shell commands that delete or modify data.",
-        f"JARVIS proposal: {entry.get('title', '')}. Problem: {entry.get('problem', '')}. "
-        f"Evidence: {'; '.join(entry.get('evidence', []))}",
-        num_predict=110, temperature=0.2, timeout=120, wait=10.0)
-    if err or not text:
-        return ""
-    return "UNVERIFIED MODEL NOTES (do not act without review): " + text[:1500]
+    ok, message = fixdraft.generate(store, args.id)
+    print(message)
+    return 0 if ok else 1
 
 
 def _git_status():
@@ -267,13 +220,19 @@ def _apply(args, store, test_cmd=None):
     if entry is None:
         print(f"no proposal {pid}")
         return 1
-    if entry.get("status") != "approved":
-        print(f"{pid} is {entry.get('status')}: approve it first "
-              f"(`jarvis fix approve {pid}`)")
+    if entry.get("status") != "apply_approved":
+        print(f"{pid} is {entry.get('status')}: review and separately authorize it "
+              f"(`jarvis fix authorize {pid}`)")
         return 1
     patch = entry.get("patch_draft", "")
     if not patch.strip():
         print(f"{pid} has no patch draft yet (`jarvis fix draft {pid}`)")
+        return 1
+    expected_hash = entry.get("apply_patch_sha256", "")
+    actual_hash = hashlib.sha256(patch.encode("utf-8", "replace")).hexdigest()
+    if not expected_hash or expected_hash != actual_hash:
+        print("stored patch changed after authorization — refusing; review and "
+              f"authorize it again (`jarvis fix authorize {pid}`)")
         return 1
     if not shutil.which("git"):
         print("git not found — cannot apply safely.")
@@ -322,9 +281,14 @@ def _apply(args, store, test_cmd=None):
         print(log_tail[-1500:])
         return 1
     _record(store, pid, "applied",
-            f"applied at {base_commit}; tests passed.\n{log_tail}")
+            f"applied at {base_commit}; tests passed.\n{log_tail}",
+            base_commit=base_commit, touched=touched)
     print(f"applied {pid} at {base_commit or '?'} — tests passed.")
     print(f"touched: {', '.join(touched) or 'none tracked'}")
+    print("verify fresh evidence next:")
+    print(f"  jarvis coverage -v            # collectors whose errors this was meant to fix")
+    print("  curl -s http://127.0.0.1:8787/api/health | head -c 600")
+    print(f"  rollback retained: jarvis fix rollback {pid}  (reverse-applies the stored patch)")
     return 0
 
 
@@ -332,6 +296,73 @@ def _touched_files(before):
     after = _git_status() or ""
     return [line for line in after.splitlines()
             if line.strip() and line not in (before or "").splitlines()][:50]
+
+
+def _rollback(args, store, test_cmd=None):
+    """Reverse the exact recorded applied patch, restoring it if tests fail."""
+    pid = args.id
+    entry = selffix.get(store, pid) if _valid_pid(pid) else None
+    if entry is None:
+        print(f"no proposal {pid}")
+        return 1
+    if entry.get("status") != "applied":
+        print(f"{pid} is {entry.get('status')}; only an applied patch can be rolled back")
+        return 1
+    patch = entry.get("patch_draft", "")
+    expected = entry.get("apply_patch_sha256", "")
+    if not patch or hashlib.sha256(patch.encode("utf-8", "replace")).hexdigest() != expected:
+        print("stored rollback patch is missing or no longer matches its authorization hash")
+        return 1
+    before = _git_status()
+    expected_paths = set(entry.get("applied_paths") or _patch_paths(patch))
+    dirty_paths = {line[3:].strip().split(" -> ")[-1]
+                   for line in (before or "").splitlines() if len(line) > 3}
+    if before is None or not dirty_paths or not dirty_paths.issubset(expected_paths):
+        print("working tree does not contain only this applied patch — refusing rollback")
+        return 1
+    check = subprocess.run(["git", "apply", "--reverse", "--check", "-"], input=patch,
+                           capture_output=True, text=True, errors="replace", timeout=60)
+    if check.returncode != 0:
+        print(f"patch cannot be reversed cleanly:\n{check.stderr.strip()[:1000]}")
+        return 1
+    reversed_patch = subprocess.run(["git", "apply", "--reverse", "-"], input=patch,
+                                    capture_output=True, text=True, errors="replace", timeout=60)
+    if reversed_patch.returncode != 0:
+        print(f"rollback failed:\n{reversed_patch.stderr.strip()[:1000]}")
+        return 1
+    cmd = test_cmd or (args.test_cmd.split() if getattr(args, "test_cmd", "") else None) \
+        or DEFAULT_TEST_CMD
+    try:
+        test = subprocess.run(cmd, capture_output=True, text=True,
+                              errors="replace", timeout=APPLY_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as exc:
+        test = None
+        failure = f"rollback test runner failed: {exc}"
+    else:
+        failure = "" if test.returncode == 0 else (
+            "rollback tests failed:\n" + ((test.stdout or "") + "\n" +
+                                           (test.stderr or ""))[-3000:])
+    if failure:
+        restored = subprocess.run(["git", "apply", "-"], input=patch,
+                                  capture_output=True, text=True, errors="replace", timeout=60)
+        log = failure + ("\noriginal applied state restored" if restored.returncode == 0
+                         else "\nCRITICAL: could not restore original applied state")
+        proposals = selffix._load(store)
+        item = proposals[pid]
+        item["apply_log"] = log[:4000]
+        selffix._history(item, "rollback_failed", "operator", log[:1000])
+        selffix._save(store, proposals)
+        print(log)
+        return 1
+    proposals = selffix._load(store)
+    item = proposals[pid]
+    item["status"] = "rolled_back"
+    item["updated_at"] = int(time.time())
+    item["apply_log"] = "rollback applied; verification tests passed"
+    selffix._history(item, "rolled_back", "operator", "reverse patch and tests succeeded")
+    selffix._save(store, proposals)
+    print(f"rolled back {pid}; verification tests passed")
+    return 0
 
 
 def _revert(before):
@@ -359,7 +390,12 @@ def _revert(before):
             pass
 
 
-def _record(store, pid, status, log):
+def _patch_paths(patch):
+    return [match.group(2) for match in re.finditer(
+        r"^diff --git a/(.+?) b/(.+?)$", patch, flags=re.MULTILINE)]
+
+
+def _record(store, pid, status, log, base_commit="", touched=()):
     proposals = selffix._load(store)
     entry = proposals.get(pid)
     if entry is None:
@@ -367,14 +403,24 @@ def _record(store, pid, status, log):
     entry["status"] = status
     entry["updated_at"] = int(time.time())
     entry["apply_log"] = log[:4000]
+    if base_commit:
+        entry["base_commit"] = base_commit
+    if touched:
+        entry["applied_paths"] = _patch_paths(entry.get("patch_draft", ""))
+    entry.setdefault("test_results", []).append({
+        "at": int(time.time()), "status": "passed" if status == "applied" else "failed",
+        "detail": log[:4000]})
+    del entry["test_results"][:-10]
+    selffix._history(entry, "patch_applied" if status == "applied" else "apply_failed",
+                     "operator", log[:1000])
     selffix._save(store, proposals)
 
 
 def add_parser(sub):
     p = sub.add_parser("fix", help="self-fix proposals: JARVIS asks, you decide")
     p.add_argument("action", nargs="?", default=None,
-                   choices=["list", "show", "propose", "draft", "approve",
-                            "reject", "apply", "email", "check"],
+                   choices=["list", "show", "propose", "draft", "approve", "authorize",
+                            "reject", "apply", "rollback", "email", "check"],
                    help="what to do (default: list open proposals)")
     p.add_argument("id", nargs="?", help="proposal id (fx-…)")
     p.add_argument("--all", action="store_true", help="with list: include decided")
@@ -384,7 +430,7 @@ def add_parser(sub):
     p.add_argument("--suggested", default="", help="with propose: suggested next step")
     p.add_argument("--reason", default="", help="with reject: why not")
     p.add_argument("--with-model", action="store_true",
-                   help="with draft: also ask the local Ollama model for advisory notes")
+                   help="deprecated: approved drafting always requires the local model")
     p.add_argument("--test-cmd", default="",
                    help="with apply: override test command (space-separated)")
     p.set_defaults(fn=cmd_fix)

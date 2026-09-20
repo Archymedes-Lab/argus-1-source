@@ -159,6 +159,7 @@ jarvis status
 jarvis ask "what needs me?"
 jarvis ask "how do I raise my score?"   # the score coach: areas, projected gains, acks, blind spots
 jarvis ask "model status"     # is the local Ollama endpoint actually there?
+jarvis fix                    # review human-gated maintenance proposals
 jarvis brief                  # the protocol JARVIS raises now; `brief list`, `brief yes|no`, `brief check`
 jarvis defend
 jarvis inspect 'C:\Users\me\Downloads\suspicious.exe'
@@ -174,6 +175,18 @@ jarvis gaps -v                    # techniques in current intel that nothing che
 
 Add `--host wsl` or `--host win` to either side alone; the default is both.
 Every audit command takes `--severity`, `-v` and `--json`.
+
+### Human-gated repair drafting
+
+`jarvis fix approve ID` authorizes investigation, not a system change. JARVIS
+asks the loopback Ollama model for a bounded JSON directive, validates its file
+scope, invariants and test commands, then gives that directive to OpenCode as
+untrusted context for a patch draft. The complete directive, prompt, tool output,
+failure reason and decision history stay with the proposal. Review the result
+with `jarvis fix show ID`, then separately run `jarvis fix authorize ID` before
+`jarvis fix apply ID`. Apply still refuses a dirty tree, runs the required test
+suite and rolls the patch back on failure. Email replies cannot authorize either
+gate, and neither model can apply or deploy changes.
 
 ## Finding hidden processes
 

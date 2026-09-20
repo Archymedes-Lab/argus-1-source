@@ -130,6 +130,7 @@ class EmailTests(unittest.TestCase):
         entry, _ = selffix.propose(self.store, "k", "Fix the bridge", "bridge is down")
         text = selffix.email_text(entry)
         self.assertIn(f"jarvis fix approve {entry['id']}", text)
+        self.assertIn(f"jarvis fix authorize {entry['id']}", text)
         self.assertIn(f"jarvis fix apply {entry['id']}", text)
         self.assertIn("Replying to this email does nothing", text)
         self.assertIn("Nothing has been changed", text)
@@ -183,8 +184,9 @@ class ApplyGateTests(unittest.TestCase):
                                    "t", "p")
         proposals = selffix._load(store)
         proposals[entry["id"]]["patch_draft"] = patch
+        proposals[entry["id"]]["status"] = "review"
         selffix._save(store, proposals)
-        selffix.approve(store, entry["id"])
+        selffix.authorize_apply(store, entry["id"])
         return entry["id"]
 
     def _run_apply(self, store, pid, repo, test_cmd):
@@ -195,6 +197,17 @@ class ApplyGateTests(unittest.TestCase):
             args = SimpleNamespace(id=pid, test_cmd="")
             with mock.patch.object(fix_cli, "DEFAULT_TEST_CMD", test_cmd):
                 return fix_cli._apply(args, store)
+        finally:
+            os.chdir(cwd)
+
+    def _run_rollback(self, store, pid, repo, test_cmd):
+        from jarvis.cli.commands import fix as fix_cli
+        cwd = os.getcwd()
+        os.chdir(repo.name)
+        try:
+            args = SimpleNamespace(id=pid, test_cmd="")
+            with mock.patch.object(fix_cli, "DEFAULT_TEST_CMD", test_cmd):
+                return fix_cli._rollback(args, store)
         finally:
             os.chdir(cwd)
 
@@ -219,7 +232,7 @@ class ApplyGateTests(unittest.TestCase):
             fh.write("uncommitted\n")
         self.assertEqual(
             self._run_apply(store, pid, repo, ["python3", "-c", "pass"]), 1)
-        self.assertEqual(selffix.get(store, pid)["status"], "approved")
+        self.assertEqual(selffix.get(store, pid)["status"], "apply_approved")
 
     def test_passing_tests_apply_and_failing_tests_revert(self):
         tmp, store = _store()
@@ -249,6 +262,37 @@ class ApplyGateTests(unittest.TestCase):
                                 cwd=repo2.name, capture_output=True,
                                 text=True).stdout
         self.assertEqual(status.strip(), "")
+
+    def test_patch_changed_after_authorization_is_refused(self):
+        tmp, store = _store()
+        self.addCleanup(store.close)
+        self.addCleanup(tmp.cleanup)
+        repo = self._repo()
+        patch = ("diff --git a/note.txt b/note.txt\n"
+                 "--- a/note.txt\n+++ b/note.txt\n@@ -1 +1 @@\n-hello\n+goodbye\n")
+        pid = self._proposal(store, patch)
+        proposals = selffix._load(store)
+        proposals[pid]["patch_draft"] = patch.replace("goodbye", "tampered")
+        selffix._save(store, proposals)
+        self.assertEqual(
+            self._run_apply(store, pid, repo, ["python3", "-c", "pass"]), 1)
+        self.assertEqual(selffix.get(store, pid)["status"], "apply_approved")
+
+    def test_successful_rollback_reverses_exact_applied_patch(self):
+        tmp, store = _store()
+        self.addCleanup(store.close)
+        self.addCleanup(tmp.cleanup)
+        repo = self._repo()
+        patch = ("diff --git a/note.txt b/note.txt\n"
+                 "--- a/note.txt\n+++ b/note.txt\n@@ -1 +1 @@\n-hello\n+goodbye\n")
+        pid = self._proposal(store, patch)
+        self.assertEqual(self._run_apply(
+            store, pid, repo, ["python3", "-c", "pass"]), 0)
+        self.assertEqual(self._run_rollback(
+            store, pid, repo, ["python3", "-c", "pass"]), 0)
+        with open(os.path.join(repo.name, "note.txt")) as fh:
+            self.assertEqual(fh.read(), "hello\n")
+        self.assertEqual(selffix.get(store, pid)["status"], "rolled_back")
 
 
 class AssuranceTests(unittest.TestCase):

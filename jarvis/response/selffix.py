@@ -11,9 +11,9 @@ module is daemon-safe by construction:
 
 Lifecycle of one proposal:
 
-    proposed -> approved -> applied -> (verified by the next collector runs)
-       |          |
-       |          +-> rejected
+    proposed -> approved -> drafting -> review -> apply_approved -> applied
+       |                        |                         |
+       +-> rejected             +-> draft_failed         +-> failed/rollback
        +-> expired (no decision within 14 days)
 
 Email is notify-only. There is deliberately no code path from an email reply
@@ -27,6 +27,7 @@ proposal, and at most 3 proposal emails per 24h.
 """
 
 import json
+import hashlib
 import time
 import uuid
 
@@ -44,7 +45,8 @@ STALE_SLACK = 300
 DAEMON_KEYS = ("stale-collectors", "failing-collectors")
 
 OPEN = "proposed"
-DECIDED = ("approved", "rejected", "applied", "failed", "expired")
+WORKING = ("approved", "drafting", "review", "draft_failed", "apply_approved")
+DECIDED = ("rejected", "applied", "rolled_back", "failed", "expired")
 
 COOLDOWN_S = 6 * 3600
 EXPIRY_S = 14 * 86400
@@ -97,6 +99,14 @@ def _prune(store, proposals, now):
     return expired
 
 
+def _history(entry, event, by="system", detail="", now=None):
+    """Append a bounded, human-readable decision/generation audit event."""
+    events = entry.setdefault("decision_history", [])
+    events.append({"at": _now(now), "event": str(event)[:60],
+                   "by": str(by)[:80], "detail": str(detail)[:1000]})
+    del events[:-50]
+
+
 def propose(store, key, title, problem, evidence=(), suggested="",
             risk="", rollback="", verify=(), now=None):
     """Record a proposal. Returns (proposal, created).
@@ -108,7 +118,7 @@ def propose(store, key, title, problem, evidence=(), suggested="",
     proposals = _load(store)
     _prune(store, proposals, now)
     for pid, entry in proposals.items():
-        if entry.get("key") == key and entry.get("status") in (OPEN, "approved"):
+        if entry.get("key") == key and entry.get("status") in (OPEN, *WORKING):
             return entry, False
     for pid, entry in proposals.items():
         if entry.get("key") == key and entry.get("status") in DECIDED \
@@ -136,7 +146,19 @@ def propose(store, key, title, problem, evidence=(), suggested="",
         "model_notes": "",
         "apply_log": "",
         "base_commit": "",
+        "generation_state": "awaiting_approval",
+        "generation_error": "",
+        "directive": {},
+        "directive_raw": "",
+        "opencode_prompt": "",
+        "opencode_stdout": "",
+        "opencode_stderr": "",
+        "opencode_exit_code": None,
+        "test_results": [],
+        "decision_history": [],
     }
+    _history(entry, "proposed", "daemon" if key in DAEMON_KEYS else "operator",
+             "proposal recorded", now)
     proposals[pid] = entry
     _save(store, proposals)
     return entry, True
@@ -148,12 +170,13 @@ def get(store, pid):
 
 def list_open(store):
     return sorted(
-        (e for e in _load(store).values() if e.get("status") in (OPEN, "approved")),
+        (e for e in _load(store).values()
+         if e.get("status") in (OPEN, *WORKING)),
         key=lambda e: e.get("created_at", 0))
 
 
 def approve(store, pid, by="operator", now=None):
-    """Human approval. Records intent only — it never touches the tree."""
+    """Approve bounded investigation/drafting, never patch application."""
     now = _now(now)
     proposals = _load(store)
     entry = proposals.get(pid or "")
@@ -164,11 +187,35 @@ def approve(store, pid, by="operator", now=None):
     entry["status"] = "approved"
     entry["updated_at"] = now
     entry["approved_by"] = str(by)[:80]
+    entry["generation_state"] = "queued"
+    entry["generation_error"] = ""
+    _history(entry, "investigation_approved", by,
+             "authorized Ollama directive and OpenCode patch drafting", now)
     _save(store, proposals)
-    has_patch = bool(entry.get("patch_draft"))
-    nxt = (f"review it with: jarvis fix show {pid}" if not has_patch
-           else f"apply it with: jarvis fix apply {pid}  (runs the test suite first)")
-    return True, f"approved {pid}: {entry.get('title')} — {nxt}"
+    return True, (f"approved investigation for {pid}: directive generation queued; "
+                  "patch application still requires separate authorization")
+
+
+def authorize_apply(store, pid, by="operator", now=None):
+    """Second human gate: authorize applying the exact stored patch."""
+    now = _now(now)
+    proposals = _load(store)
+    entry = proposals.get(pid or "")
+    if entry is None:
+        return False, f"no proposal {pid}"
+    if entry.get("status") != "review" or not entry.get("patch_draft", "").strip():
+        return False, f"{pid} is {entry.get('status')}; review a completed patch first"
+    entry["status"] = "apply_approved"
+    entry["updated_at"] = now
+    entry["apply_approved_by"] = str(by)[:80]
+    entry["apply_approved_at"] = now
+    entry["apply_patch_sha256"] = hashlib.sha256(
+        entry["patch_draft"].encode("utf-8", "replace")).hexdigest()
+    _history(entry, "application_authorized", by,
+             f"authorized exact patch sha256={entry['apply_patch_sha256']}; "
+             "tests and rollback remain mandatory", now)
+    _save(store, proposals)
+    return True, f"application authorized for {pid}; run: jarvis fix apply {pid}"
 
 
 def reject(store, pid, reason="", by="operator", now=None):
@@ -177,11 +224,12 @@ def reject(store, pid, reason="", by="operator", now=None):
     entry = proposals.get(pid or "")
     if entry is None:
         return False, f"no proposal {pid}"
-    if entry.get("status") not in (OPEN, "approved"):
+    if entry.get("status") not in (OPEN, *WORKING):
         return False, f"{pid} is already {entry.get('status')}"
     entry["status"] = "rejected"
     entry["updated_at"] = now
     entry["decision"] = f"{by}: {(reason or 'no reason given')[:300]}"
+    _history(entry, "rejected", by, reason or "no reason given", now)
     _save(store, proposals)
     return True, f"rejected {pid} — it will not be raised again for 6h"
 
@@ -227,9 +275,9 @@ def scan(store, snapshots, schedule, now=None):
             "reliability watchdog kept re-queueing them. The score already "
             "treats these areas as unverified.",
             evidence=[f"stale: {names}"],
-            suggested="Investigate why these collectors cannot complete "
-                      "(bridge, sensor, or schedule overload), then draft a "
-                      f"targeted fix with: jarvis fix draft <id>",
+            suggested="Approve a bounded investigation of why these collectors "
+                      "cannot complete (bridge, sensor, or schedule overload); "
+                      "Ollama and OpenCode will draft, never apply, a repair.",
             risk="No change is made by this proposal itself. Any future patch "
                  "is reviewed and test-gated before it lands.",
             rollback="No change to roll back until a patch is applied.",
@@ -244,8 +292,8 @@ def scan(store, snapshots, schedule, now=None):
             "Collectors whose latest run recorded an error instead of "
             "evidence. Their subject areas are uncovered until they succeed.",
             evidence=[f"failing: {names}"],
-            suggested="Read the recorded errors with `jarvis coverage -v`, "
-                      f"then draft a targeted fix with: jarvis fix draft <id>",
+            suggested="Read the recorded errors with `jarvis coverage -v`, then "
+                      "approve bounded Ollama/OpenCode repair drafting.",
             risk="No change is made by this proposal itself.",
             rollback="No change to roll back until a patch is applied.",
             now=now)
@@ -273,19 +321,19 @@ def email_text(proposal):
         f"Rollback: {proposal.get('rollback', '')}",
         f"Verification: {', '.join(proposal.get('verify', []))}",
         "",
-        "Nothing has been changed. Nothing will change until you approve AND "
-        "apply it at a terminal:",
+        "Nothing has been changed. Investigation approval only generates a draft; "
+        "application needs a second decision:",
         f"  jarvis fix show {proposal['id']}",
         f"  jarvis fix approve {proposal['id']}",
+        f"  jarvis fix authorize {proposal['id']}",
         f"  jarvis fix apply {proposal['id']}",
         "",
         "You can also review and approve from the local dashboard "
         "(http://localhost:8787/#fix — same machine only); the approve "
         "button there is equivalent to the terminal command.",
         "",
-        "Replying to this email does nothing — approval only counts from the "
-        "terminal command above. Model-generated notes, if any, are labelled "
-        "as unverified and never authorize action.",
+        "Replying to this email does nothing. Ollama directives and OpenCode "
+        "patches are untrusted drafts and never authorize application.",
     ]
     return "\n".join(lines) + "\n"
 
