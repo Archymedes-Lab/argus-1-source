@@ -64,8 +64,8 @@ def validate_directive(value):
     for name in LIST_FIELDS:
         if not isinstance(value[name], list):
             raise ValueError(f"directive {name} must be a list")
-        out[name] = [str(item).strip()[:500] for item in value[name][:20]
-                     if str(item).strip()]
+        out[name] = list(dict.fromkeys(
+            str(item).strip()[:500] for item in value[name][:20] if str(item).strip()))
     for path in out["files"]:
         normalized = path.replace("\\", "/")
         if normalized.startswith("/") or ".." in normalized.split("/"):
@@ -128,7 +128,7 @@ def _patch_from_output(output):
     patch = text[at:] if at >= 0 else ""
     if patch.endswith("```"):
         patch = patch[:-3].rstrip()
-    return patch
+    return patch + "\n" if patch else ""
 
 
 def generate(store, pid, repo=None):
