@@ -128,6 +128,13 @@ def record(db, job, findings, *, run_id, observed_at, coverage="complete", error
     for key, old in existing.items():
         if key in seen:
             continue
+        # A later blind pass does not invalidate an earlier complete pass that
+        # established this incident was absent. Current source coverage lives
+        # on defender_runs/overview.sources. Rewriting every dormant incident
+        # to unobserved and back on a bridge wobble is both semantically noisy
+        # and O(total historical incidents) write amplification.
+        if coverage != "complete" and old["state"] == "not_observed":
+            continue
         db.execute(
             "UPDATE defender_incidents SET state=?,updated_at=?,last_run_id=? WHERE id=?",
             (state, observed_at, run_id, key))

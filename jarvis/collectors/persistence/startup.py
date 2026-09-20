@@ -175,9 +175,15 @@ def audit():
         sev = "low" if ms else "medium"
         if CONSOLE_HOST.search(blob) and not ms:
             sev = "high"
+        # Stable identity: the task name is the location, the run time goes in
+        # the detail where alert identity strips clock times. Putting the time
+        # in `where` minted a new finding id on every scan, so confirmations
+        # expired after one interval and the score oscillated on unchanged facts.
+        run_at = (r.get("time") or "").replace("T", " ")[:19]
         out.append(_finding("ran", sev, "task ran at boot",
-                            f"{task}" + (f" → {r.get('path')}" if r.get("path") else ""),
-                            (r.get("time") or "").replace("T", " ")[:19]))
+                            f"{task}" + (f" → {r.get('path')}" if r.get("path") else "")
+                            + (f" (ran {run_at})" if run_at else ""),
+                            task))
 
     if not runs:
         out.append(_finding("ran", "medium", "task history unavailable",

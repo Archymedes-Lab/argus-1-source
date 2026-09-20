@@ -1,6 +1,9 @@
+import tempfile
 import unittest
 
-from jarvis.collectors.identity.impersonation import rules
+from jarvis.collectors.identity.impersonation import rules, run
+from jarvis.core.store import Store
+from jarvis.core.util import now
 
 
 def sev(findings, part):
@@ -61,6 +64,49 @@ class LockedInputTests(unittest.TestCase):
 
     def test_unknown_lock_state_makes_no_claim_either_way(self):
         self.assertEqual(rules.input_while_locked({"locked": -1}, 500), [])
+
+
+class BeatCounterTests(unittest.TestCase):
+    """Beats carry lifetime counters, not deltas.
+
+    A regression test for the 2026-09-20 false critical: five frozen rows of
+    3174 keys / 779 clicks summed to a phantom 15870-keystroke burst while the
+    workstation was locked and the typing windows recorded zero keys.
+    """
+
+    def _store_with_beats(self, pairs):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = Store(tmp.name + "/state.db")
+        self.addCleanup(store.close)
+        ts = now()
+        for i, (k, c) in enumerate(pairs):
+            store.db.execute(
+                "INSERT INTO input_beats (ts, real_keys, real_clicks)"
+                " VALUES (?, ?, ?)", (ts + i, k, c))
+        store.db.commit()
+        return store
+
+    def test_frozen_cumulative_counters_count_as_zero(self):
+        store = self._store_with_beats([(3174, 779)] * 5)
+        keys, clicks, _ = run._real_input_since(store)
+        self.assertEqual((keys, clicks), (0, 0))
+
+    def test_increases_are_differenced_not_summed(self):
+        store = self._store_with_beats([(100, 10), (112, 13), (112, 13)])
+        keys, clicks, _ = run._real_input_since(store)
+        self.assertEqual((keys, clicks), (12, 3))
+
+    def test_a_counter_reset_counts_the_post_reset_value(self):
+        store = self._store_with_beats([(5000, 900), (7, 2)])
+        keys, clicks, _ = run._real_input_since(store)
+        self.assertEqual((keys, clicks), (7, 2))
+
+    def test_locked_and_quiet_beats_stay_ok_end_to_end(self):
+        store = self._store_with_beats([(3174, 779)] * 5)
+        keys, clicks, _ = run._real_input_since(store)
+        out = rules.input_while_locked({"locked": 1}, keys, clicks)
+        self.assertEqual([f["severity"] for f in out], ["ok"])
 
 
 class AssistiveTechnologyTests(unittest.TestCase):

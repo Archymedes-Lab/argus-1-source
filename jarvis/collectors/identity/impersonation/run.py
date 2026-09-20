@@ -12,18 +12,36 @@ LOCK_WINDOW = 300
 
 
 def _real_input_since(store, seconds=LOCK_WINDOW):
-    """(keys, clicks) of un-flagged input in the recent beats."""
+    """(keys, clicks) of un-flagged input in the recent beats.
+
+    Beats carry the helper's lifetime counters, not per-interval deltas, so
+    rows are differenced in time order: each step contributes its increase,
+    and a counter reset (helper restart) contributes the post-reset value.
+    Summing raw rows would multiply one idle total into a phantom burst —
+    e.g. five frozen rows of 3174 keys read as 15870 keystrokes.
+    """
     if store is None:
         return 0, 0, "the last sample"
     try:
         rows = store.db.execute(
-            "SELECT real_keys, real_clicks FROM input_beats WHERE ts >= ?",
+            "SELECT real_keys, real_clicks FROM input_beats WHERE ts >= ? ORDER BY ts",
             (now() - seconds,)).fetchall()
     except Exception:
         return 0, 0, "the last sample"
-    keys = sum(int(r["real_keys"] or 0) for r in rows)
-    clicks = sum(int(r["real_clicks"] or 0) for r in rows)
-    return keys, clicks, "the last %d minutes" % (seconds // 60)
+    keys = clicks = 0
+    prev_k = prev_c = None
+    for r in rows:
+        try:
+            k, c = int(r["real_keys"] or 0), int(r["real_clicks"] or 0)
+        except (TypeError, ValueError):
+            continue
+        if prev_k is None:
+            prev_k, prev_c = k, c
+            continue
+        keys += k - prev_k if k >= prev_k else k
+        clicks += c - prev_c if c >= prev_c else c
+        prev_k, prev_c = k, c
+    return max(0, keys), max(0, clicks), "the last %d minutes" % (seconds // 60)
 
 
 def audit(store=None, hosts=("wsl", "win")):

@@ -72,6 +72,18 @@ class IncidentTests(unittest.TestCase):
         self.record([finding()])
         self.assertEqual(self.one()["recurrences"], 0)
 
+    def test_blind_pass_does_not_flip_every_already_absent_incident(self):
+        self.record([finding()])
+        self.record([])
+        before = self.one()["transitions_total"]
+        receipt = self.record([], coverage="unavailable", error="bridge down")
+        item = self.one()
+        self.assertEqual(item["state"], "not_observed")
+        self.assertEqual(item["transitions_total"], before)
+        self.assertEqual(receipt["coverage"], "unavailable")
+        self.assertEqual(incidents.overview(self.store.db)["sources"][0]["coverage"],
+                         "unavailable")
+
     def test_partial_scan_can_add_positive_evidence_but_cannot_clear_others(self):
         other = finding(where="another store")
         self.record([finding(), other])
@@ -169,6 +181,20 @@ class IncidentTests(unittest.TestCase):
         kept = [r[0] for r in self.store.db.execute("SELECT run_id FROM defender_runs ORDER BY sequence")]
         self.assertEqual(kept, ["run-1", "run-3", "run-4"])
         self.assertEqual(self.one()["transitions_total"], 2)
+
+    def test_retention_removes_only_old_derived_dormant_coverage_flips(self):
+        self.record([finding()], observed_at=100)
+        self.record([], observed_at=200)
+        key = incidents.identity("intrusion", finding())
+        incidents._transition(self.store.db, key, "run-2", 300,
+                              "not_observed", "unobserved", "coverage incomplete",
+                              incidents.encode(finding()))
+        with patch("jarvis.core.retention.now", return_value=10 * 86400):
+            removed = {r["name"]: r["rows"] for r in retention.apply(self.store)}
+        self.assertEqual(removed["incident-coverage-flaps"], 1)
+        edges = [(r[0], r[1]) for r in self.store.db.execute(
+            "SELECT previous_state,state FROM defender_transitions ORDER BY sequence")]
+        self.assertEqual(edges, [("", "active"), ("active", "not_observed")])
 
     def test_queries_are_bounded_and_unknown_ids_do_not_match(self):
         self.record([finding(where=str(i)) for i in range(4)])
