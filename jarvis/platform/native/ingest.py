@@ -305,11 +305,19 @@ def ingest_channel(log, spool, directory, budget, files=None, published_through=
         result["duplicates"] += len(batch["events"]) - len(fresh)
         events = [_event(r, batch) for r in fresh]
         event_times = [e.get("time") for e in events if e.get("time")]
+        boot_changed = (cursor and cursor.get("boot")
+                        and batch.get("boot_id")
+                        and cursor.get("boot") != batch.get("boot_id"))
         if gap:
             # A gap breaks the claim that the state reducer has seen every
             # transition. Later complete batches must not erase that boundary:
             # snapshot reconciliation is safe only for instances born after it.
             continuous_since = batch["created_at"]
+        elif boot_changed:
+            # Sysmon may start after core boot processes, so continuity from
+            # the prior boot cannot prove those ProcessCreate events existed
+            # in the current stream.
+            continuous_since = min(event_times) if event_times else batch["created_at"]
         elif cursor and cursor.get("continuous_since"):
             continuous_since = cursor["continuous_since"]
         else:

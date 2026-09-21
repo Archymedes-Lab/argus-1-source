@@ -132,7 +132,8 @@ class EmailTests(unittest.TestCase):
         self.assertIn("Forgive the hour.", voiced[2])
         self.assertIn("written by the local model", voiced[2])
         self.assertIn("$ chmod 600 /h/.env", voiced[1])
-        self.assertEqual(plain[1].split("\n")[4:], voiced[1].split("\n")[4:])
+        self.assertIn("These need you now.", plain[1].split("\n")[2])
+        self.assertEqual(plain[1].split("\n")[5:], voiced[1].split("\n")[5:])
 
     def test_model_text_is_escaped_in_html(self):
         with mock.patch.object(voice, "acceptable", return_value=True), \

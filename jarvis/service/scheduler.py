@@ -130,6 +130,18 @@ class Scheduler(threading.Thread):
             for i, name in enumerate(self.forced):
                 if member(name):
                     return self.forced.pop(i)
+        # Resource governor: under host pressure, deferrable Tier 1/2 jobs
+        # yield to Tier 0 protection/ingestion. A governed job still runs
+        # once it is 3x overdue, so deferral is a delay, never a drop, and
+        # staleness accounting keeps working. Forced recovery bypasses this.
+        try:
+            from jarvis.core import governor as governor_mod
+            with self.lock:
+                queue_depth = len(self.forced)
+            pressured, _reason = governor_mod.live_pressure(
+                queue_depth=queue_depth)
+        except Exception:
+            pressured = False
         now = time.time()
         most_overdue, score = None, None
         for name, t in self.next_run.items():
@@ -148,6 +160,8 @@ class Scheduler(threading.Thread):
             # criticality and failure pressure, so something approaching stale
             # naturally rises to the top without starving fast watchdogs.
             overdue = (now - t) / max(1, JOBS[name][0])
+            if pressured and governor_mod.should_defer(name, True) and overdue < 3.0:
+                continue
             spec = self.specs.get(name)
             weight = reliability.CRITICALITY_WEIGHT.get(
                 spec.criticality if spec else "medium", 1.0)

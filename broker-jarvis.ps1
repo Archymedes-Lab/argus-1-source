@@ -1,8 +1,9 @@
 # Elevated collector broker: the read-only checks that need administrator.
 #
-# Three collectors are half-blind without elevation: posture (BitLocker, TPM,
+# Five collectors are half-blind without elevation: posture (BitLocker, TPM,
 # Defender exclusions, optional features), memscan (157 of 280 processes could
-# not be opened) and internet (the firewall traffic log is admin-only). A UAC
+# not be opened), internet (the firewall traffic log is admin-only), and the
+# active Sysmon policy, and bounded Sysmon boot-pressure evidence. A UAC
 # prompt per run is not a schedule, so this registers one task that runs with
 # the user's elevated token and writes each collector's normal output where
 # JARVIS can read it.
@@ -42,6 +43,8 @@ $Jobs = [ordered]@{
     posture  = @{ script = 'posture.ps1';       timeout = 400 }
     memscan  = @{ script = 'memscan.ps1';       timeout = 600 }
     internet = @{ script = 'internetwatch.ps1'; timeout = 120 }
+    sysmon_policy = @{ script = 'sysmon_policy.ps1'; timeout = 30 }
+    sysmon_pressure = @{ script = 'sysmon_pressure.ps1'; timeout = 120 }
 }
 
 function Test-Admin {

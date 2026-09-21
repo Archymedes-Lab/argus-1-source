@@ -195,6 +195,22 @@ class IngestTests(Fixture):
         self.assertEqual(cursor["continuous_since"], "2026-09-18T12:01:00Z")
         self.assertEqual(cursor["status"], "complete")
 
+    def test_reboot_resets_continuous_coverage_to_first_new_boot_event(self):
+        first = batch(1)
+        first["boot_id"] = "boot-1"
+        second = batch(2, [record(
+            2, xml=sysmon_xml(1, UtcTime="2026-09-18 13:00:00.000",
+                              ProcessGuid="{g-2}", ProcessId="2",
+                              Image=r"C:\x\a.exe"))])
+        second["boot_id"] = "boot-2"
+        second["events"][0]["time"] = "2026-09-18T13:00:00Z"
+        self.publish(first)
+        self.publish(second)
+        self.run_ingest()
+        cursor = self.log.cursor("sensor", SYSMON)
+        self.assertEqual(cursor["boot"], "boot-2")
+        self.assertEqual(cursor["continuous_since"], "2026-09-18T13:00:00.000Z")
+
     def test_no_spool_means_not_installed(self):
         report = ingest.run(log=self.log, spool=self.root / "absent")
         self.assertFalse(report["installed"])

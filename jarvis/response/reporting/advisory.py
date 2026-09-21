@@ -152,9 +152,13 @@ def _report_html(health, findings, actionable, blind_spots, checks,
 
     inner = ui.header("JARVIS · DAILY SECURITY ADVISORY",
                       f"{need} thing{'s' if need != 1 else ''} need you today" if need
-                      else "Nothing needs you today",
+                      else "Nothing needs you today · splendid",
                       f"Generated {time.strftime('%A %d %B %Y, %H:%M', time.localtime(generated))} · "
-                      f"worst recorded severity {worst.upper()}")
+                      f"worst recorded severity {worst.upper()}",
+                      tone="digest" if need else "calm")
+    inner += ui.section(ui.hero([(need, "need you today"),
+                                 (counts.get(triage.JARVIS, 0), "handled by JARVIS")]),
+                        "px-6 pt-5 pb-1")
     if security:
         inner += ui.section(ui.health_panel(security, security_delta))
     inner += ui.section(ui.owner_summary(counts), "px-5 pt-1 pb-1")

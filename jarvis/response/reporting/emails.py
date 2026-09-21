@@ -69,6 +69,21 @@ def _needs_you(counts):
 
 # ── change digest / priority changes ──────────────────────────────────────
 
+def _related_chains(active):
+    """Multi-observation stories among digest findings. Pure wrapper.
+
+    Only chains with more than one member qualify: a single observation
+    is already listed in its triage group, and restating it as a "story"
+    would be the alert inflation this exists to reduce.
+    """
+    try:
+        from jarvis.core import activity as activity_mod
+        items = [{**f, "job": job} for f, job, _tag in active]
+        return [c for c in activity_mod.correlate(items) if c["count"] > 1]
+    except Exception:
+        return []
+
+
 def digest(ordered, urgent, health, delta, now, conf=None):
     """ordered: [(key, queue item)] -> (subject, text, html)."""
     active = [(item["finding"], item["job"], item["tag"]) for _key, item in ordered
@@ -87,11 +102,23 @@ def digest(ordered, urgent, health, delta, now, conf=None):
         [f.get("title") for f, _job, _tag in active]),
         time.strftime("%Y-%m-%d", time.localtime(now)))
 
+    tone = "urgent" if urgent else ("digest" if need else "calm")
+    mood = ("These need you now." if urgent else
+            f"{need} need you — the rest is handled or listed below." if need else
+            "All quiet — nothing needs you. Splendid.")
     text = ["JARVIS PRIORITY CHANGES" if urgent else "JARVIS CHANGE DIGEST",
             f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS"
-            + (f" · {len(resolved)} no longer observed" if resolved else ""), "", line, ""]
+            + (f" · {len(resolved)} no longer observed" if resolved else ""),
+            mood, "", line, ""]
     if health:
         text += _text_health(health, delta)
+    chains = _related_chains(active)
+    if chains:
+        text += ["", RULE, f"RELATED ACTIVITY ({len(chains)} "
+                           f"{'story' if len(chains) == 1 else 'stories'})",
+                 "  Correlated across collectors; each story is one narrative, "
+                 "not separate alerts."]
+        text += [f"- {c['headline']}" for c in chains]
     for owner in triage.ORDER:
         text += _text_group(owner, grouped[owner])
     if resolved:
@@ -112,9 +139,17 @@ def digest(ordered, urgent, health, delta, now, conf=None):
 
     inner = ui.header("JARVIS · " + ("priority changes" if urgent else "change digest"),
                       headline[0].upper() + headline[1:],
-                      time.strftime("%A %d %B, %H:%M", time.localtime(now)))
+                      time.strftime("%A %d %B, %H:%M", time.localtime(now)), tone=tone)
+    inner += ui.section(ui.hero([(need, "need you"),
+                                 (counts[triage.JARVIS], "handled by JARVIS"),
+                                 (len(resolved), "no longer observed")]), "px-6 pt-5 pb-1")
     inner += ui.voice(line, by_model)
     inner += ui.section(ui.owner_summary(counts), "px-5 pt-5 pb-1")
+    if chains:
+        inner += ui.section(
+            ui.heading(f"Related activity ({len(chains)})",
+                       "Correlated across collectors; one narrative, not separate alerts.")
+            + "".join(ui.story_card(c) for c in chains))
     for owner in triage.ORDER:
         inner += ui.owner_section(owner, grouped[owner])
     if resolved:
@@ -161,7 +196,9 @@ def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=
         time.strftime("%Y-%m-%d", time.localtime(now)))
 
     text = ["JARVIS SECURITY HEALTH",
-            f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS", "", line, ""]
+            f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS",
+            ("All quiet — nothing needs you. Splendid." if not need else
+             f"{need} need you — start at the top."), "", line, ""]
     text += _text_health(result, delta)
     for owner in triage.ORDER:
         text += _text_group(owner, grouped[owner], limit=10)
@@ -178,7 +215,10 @@ def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=
 
     inner = ui.header("JARVIS · daily security health",
                       f"Your system is {result['score']}% of the way to secure",
-                      time.strftime("%A %d %B", time.localtime(now)))
+                      time.strftime("%A %d %B", time.localtime(now)), tone="health")
+    inner += ui.section(ui.hero([(f"{result['score']}%", "security score"),
+                                 (f"{result.get('coverage', '?')}%", "coverage"),
+                                 (need, "need you")]), "px-6 pt-5 pb-1")
     inner += ui.voice(line, by_model)
     inner += ui.section(ui.health_panel(result, delta))
     inner += ui.section(ui.owner_summary(counts, result.get("acknowledged", 0)), "px-5 pt-1 pb-1")
@@ -242,7 +282,8 @@ def action_plan(result, protocol_state, snapshots, now, store=None, conf=None, d
     text = ["JARVIS ACTION PLAN", f"{len(tasks)} protocol(s) in order, then "
             f"{len(others)} other matter(s) for your hands", "", line, ""]
     inner = ui.header("JARVIS · action plan", "What needs your hands, in order",
-                      time.strftime("%A %d %B", time.localtime(now)))
+                      time.strftime("%A %d %B", time.localtime(now)), tone="plan")
+    inner += ui.section(ui.hero([(total, "things need your hands")]), "px-6 pt-5 pb-1")
     inner += ui.voice(line, by_model)
 
     for n, item in enumerate(tasks, 1):

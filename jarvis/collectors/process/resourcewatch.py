@@ -163,6 +163,8 @@ def audit(store, hosts=("wsl", "win")):
         "owners": dict(sorted(owners.items(),
                               key=lambda item: item[1]["rss_bytes"], reverse=True)),
         "database": _database_profile(store),
+        "attribution": _attribution(owners),
+        "governor": _governor_advice(owners, processes),
     }))
     findings.sort(key=lambda f: ({"high": 0, "medium": 1}.get(f["severity"], 9),
                                  f["title"], f["detail"]))
@@ -176,3 +178,40 @@ def audit(store, hosts=("wsl", "win")):
 
 def _duration(seconds):
     return f"{int(seconds)}s" if seconds < 120 else f"{int(seconds // 60)}m"
+
+
+def _attribution(owners):
+    """JARVIS self-cost shares; always sums to ~1 so the UI can render it.
+
+    RAM-first and cheap: shares of already-measured owner buckets, never a
+    new scan. Tells which part of JARVIS costs what instead of one number.
+    """
+    try:
+        from jarvis.core import governor as governor_mod
+        cpu = {k: float(v.get("cpu_pct") or 0.0) for k, v in owners.items()}
+        rss = {k: int(v.get("rss_bytes") or 0) for k, v in owners.items()}
+        return governor_mod.attribution(cpu, rss)
+    except Exception:
+        return {}
+
+
+def _governor_advice(owners, processes):
+    """Advisory-only governor input snapshot; enforcement lives elsewhere."""
+    try:
+        from jarvis.core import governor as governor_mod
+        jarvis_rss = sum(int(v.get("rss_bytes") or 0)
+                         for k, v in owners.items() if "jarvis" in k or "collector" in k)
+        total_rss = sum(int(v.get("rss_bytes") or 0) for v in owners.values()) or 1
+        jarvis_cpu = sum(float(v.get("cpu_pct") or 0.0)
+                         for k, v in owners.items() if "jarvis" in k or "collector" in k)
+        decision = governor_mod.decide(cpu_pct=jarvis_cpu,
+                                       memory_pressure=False,
+                                       disk_pressure=False,
+                                       queue_depth=0, telemetry_backlog=0)
+        return {"jarvis_cpu_pct": round(jarvis_cpu, 2),
+                "jarvis_rss_share": round(jarvis_rss / total_rss, 4),
+                "processes": len(processes),
+                "decision": decision["reason"],
+                "pause": decision["pause"]}
+    except Exception:
+        return {}

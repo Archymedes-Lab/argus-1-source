@@ -2,6 +2,7 @@
 
 import json
 
+from jarvis.core import state as state_mod
 from jarvis.core.util import classify_ip, iso, now, reverse_dns
 from jarvis.platform import linux as collect_linux
 from jarvis.platform import windows as collect_windows
@@ -12,9 +13,33 @@ SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
 def collect_all(hosts=("wsl", "win"), with_sockets=True):
+    def _read():
+        procs = []
+        if "wsl" in hosts:
+            procs += collect_linux.collect(with_sockets=with_sockets)
+        if "win" in hosts:
+            procs += collect_windows.collect()
+        return procs
+
+    # One authoritative process snapshot per interval, shared by the scan
+    # and the resource profiler (Phase 3: one expensive read, many cheap
+    # consumers). A socket-less consumer reuses the socket-full snapshot by
+    # stripping connections rather than triggering a second /proc + WMI walk.
+    if not with_sockets:
+        try:
+            full = state_mod.get_processes(
+                hosts, lambda: _read_full(hosts), with_sockets=True)
+        except Exception:
+            full = None
+        if full is not None:
+            return [{**p, "conns": []} for p in full]
+    return state_mod.get_processes(hosts, _read, with_sockets=with_sockets)
+
+
+def _read_full(hosts):
     procs = []
     if "wsl" in hosts:
-        procs += collect_linux.collect(with_sockets=with_sockets)
+        procs += collect_linux.collect(with_sockets=True)
     if "win" in hosts:
         procs += collect_windows.collect()
     return procs

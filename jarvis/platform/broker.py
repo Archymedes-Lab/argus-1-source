@@ -20,7 +20,13 @@ from jarvis.core.paths import win_script
 
 ROOT = "/mnt/c/ProgramData/Jarvis/Broker"
 OUT = os.path.join(ROOT, "out")
-SCRIPTS = {"posture": "posture.ps1", "memscan": "memscan.ps1", "internet": "internetwatch.ps1"}
+SCRIPTS = {
+    "posture": "posture.ps1",
+    "memscan": "memscan.ps1",
+    "internet": "internetwatch.ps1",
+    "sysmon_policy": "sysmon_policy.ps1",
+    "sysmon_pressure": "sysmon_pressure.ps1",
+}
 MAX_AGE = 45 * 60          # three missed 15-minute runs
 
 

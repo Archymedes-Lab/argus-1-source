@@ -20,7 +20,8 @@ voice with:
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Dict, List, Set
 
 from jarvis.response import acknowledge
 from jarvis.response.reporting import score
@@ -29,6 +30,25 @@ META = "protocol_answers_v1"
 
 READY, BLOCKED, WAITING, DONE, UNVERIFIED = "ready", "blocked", "waiting", "done", "unverified"
 YES, NO = "yes", "no"
+
+# Remediation graph edges: what must happen before what
+REMEDIATION_GRAPH_EDGES = {
+    # Secrets campaign edges
+    "rotate_secret": [],
+    "remove_plaintext": ["rotate_secret"],
+    "rescan": ["remove_plaintext"],
+    # Persistence campaign edges
+    "disable_autostart": [],
+    "verify_boot": ["disable_autostart"],
+    "rescan_boot": ["verify_boot"],
+    # Network campaign edges
+    "bind_loopback": [],
+    "update_firewall": ["bind_loopback"],
+    "rescan_network": ["update_firewall"],
+    # Sysmon coverage
+    "inspect_driver_loss": [],
+    "observe_zero_drops": ["inspect_driver_loss"],
+}
 
 
 @dataclass(frozen=True)
@@ -50,6 +70,9 @@ class Protocol:
     questions: tuple = ()
     alternative: tuple = ()         # the same result by command, for the terminal-inclined
     caution: str = ""
+    # Remediation graph: steps and their dependencies
+    # Each entry: step_name -> [prerequisite_step_names]
+    remediation_edges: Dict[str, List[str]] = field(default_factory=dict)
 
     def fixes(self, job, finding):
         title = (finding or {}).get("title") or ""
@@ -109,9 +132,19 @@ PROTOCOLS = (
         caution=("Rotate rather than trust deletion: a key that sat in a cloud-synced or "
                  "committed file must be treated as read by others. Never send a key value "
                  "to JARVIS, a model, or a pastebin to 'check' it."),
+        remediation_edges={
+            "rotate_secret": [],
+            "remove_plaintext": ["rotate_secret"],
+            "rescan": ["remove_plaintext"],
+        },
     ),
     Protocol(
         id="boot-tasks",
+        remediation_edges={
+            "disable_autostart": [],
+            "verify_boot": ["disable_autostart"],
+            "rescan_boot": ["verify_boot"],
+        },
         title="Review the tasks that run at boot",
         brief=("Several scheduled tasks start before you log in — exactly the persistence spot "
                "an intruder wants, and also where updaters and vendor tools legitimately live. "
@@ -164,6 +197,11 @@ PROTOCOLS = (
             "value that hid it (search 'SpecialAccounts' in regedit).",
             "Verify with a fresh backdoor audit: jarvis brief check hidden-accounts",
         ),
+        remediation_edges={
+            "identify_account": [],
+            "document_or_remove": ["identify_account"],
+            "rescan_accounts": ["document_or_remove"],
+        },
     ),
     Protocol(
         id="secure-boot",
@@ -195,8 +233,12 @@ PROTOCOLS = (
             "confirm — type it and press Enter.",
             "Windows starts as usual. Then run: jarvis brief check secure-boot",
         ),
-        caution=("If BitLocker is already on, first run this in an elevated terminal, or the next "
-                 f"boot will ask for the recovery key: {SUSPEND_BITLOCKER}"),
+        remediation_edges={
+            "enable_secure_boot": [],
+            "enable_memory_integrity": ["enable_secure_boot"],
+        },
+        caution=("If BitLocker is already on, preserve the recovery key and suspend "
+                 f"protectors for this reboot: {SUSPEND_BITLOCKER}"),
     ),
     Protocol(
         id="memory-integrity",
@@ -269,34 +311,42 @@ PROTOCOLS = (
             "manage-bde -on C: -UsedSpaceOnly -EncryptionMethod xts_aes256   (then restart for "
             "the hardware test)",
         ),
-        caution=("Before any future BIOS update or Secure Boot change, run "
-                 f"{SUSPEND_BITLOCKER} in an elevated terminal so the next boot does not ask for "
-                 "the recovery key."),
+        remediation_edges={
+            "enable_bitlocker": ["backup_recovery_key"],
+            "backup_recovery_key": [],
+            "verify_encryption": ["enable_bitlocker"],
+            "rescan_disk": ["verify_encryption"],
+        },
+        caution="Preserve the recovery key before firmware or Secure Boot changes.",
     ),
     Protocol(
         id="sysmon-drops",
-        title="Give Sysmon room to keep its own log",
-        brief=("Sysmon is dropping events because its log fills faster than it is read — the "
-               "interception layer goes blind exactly when there is too much happening to "
-               "watch. Raising the log's size and arming auto-backup keeps the whole window "
-               "on disk instead of the most recent slice of it."),
+        remediation_edges={
+            "inspect_driver_loss": [],
+            "observe_zero_drops": ["inspect_driver_loss"],
+        },
+        title="Investigate Sysmon driver queue loss",
+        brief=("Sysmon discarded events before they reached the Windows event log. "
+               "Increasing event-log capacity does not repair driver queue loss. "
+               "Inspect boot-pressure evidence and active policy before proposing a change."),
         jobs=("sysmon",),
         resolves=(("sysmon", "Sysmon dropped events before logging them"),),
         steps=(
             "Open an elevated terminal (the log is a security log; changing it needs "
             "administrator rights).",
-            "Raise the log to 2 GiB and arm wrap protection: "
-            "wevtutil sl Microsoft-Windows-Sysmon/Operational /ms:2147483648 /ab:true",
-            "Check retention: wevtutil gl Microsoft-Windows-Sysmon/Operational   — MaxSize "
-            "should read 2147483648 and AutoBackup true.",
-            "If drops continue after a day, the machine is genuinely busy: check which "
-            "processes dominate jarvis sysmon -v and consider narrowing the Sysmon "
-            "configuration rather than the log size.",
+            "Read event 255 loss counts and the protected broker boot-pressure report.",
+            "Preserve the active Sysmon policy and obtain a restorable configuration before changes.",
+            "Review a measured, reversible tuning proposal; retained events do not identify discarded events.",
             "Verify with a fresh telemetry run: jarvis brief check sysmon-drops",
         ),
     ),
     Protocol(
         id="listening-services",
+        remediation_edges={
+            "bind_loopback": [],
+            "update_firewall": ["bind_loopback"],
+            "rescan_network": ["update_firewall"],
+        },
         title="Review the services listening beyond loopback",
         brief=("A set of applications is listening for network connections on all interfaces, "
                "not just localhost. Each is a door that the firewall and any network you join "
@@ -320,6 +370,11 @@ PROTOCOLS = (
     ),
     Protocol(
         id="inbound-rules",
+        remediation_edges={
+            "limit_profiles": [],
+            "reduce_scope": ["limit_profiles"],
+            "rescan_firewall": ["reduce_scope"],
+        },
         title="Tighten the permissive inbound firewall rules",
         brief=("Windows firewall has inbound rules that allow connections from any address on "
                "any network — the shape of a rule created by clicking Allow on a prompt years "
@@ -342,6 +397,11 @@ PROTOCOLS = (
     ),
     Protocol(
         id="autostart-surface",
+        remediation_edges={
+            "disable_autostart": [],
+            "verify_boot": ["disable_autostart"],
+            "rescan_boot": ["verify_boot"],
+        },
         title="Reduce the autostart surface",
         brief=("A number of registry Run entries and custom systemd units start code without "
                "you asking. Most are installers' leftovers; each is a place where persistence "
@@ -365,6 +425,73 @@ PROTOCOLS = (
 
 BY_ID = {p.id: p for p in PROTOCOLS}
 assert len(BY_ID) == len(PROTOCOLS), "protocol ids must be unique"
+
+
+class RemediationGraph:
+    """Directed graph of remediation steps showing dependencies.
+
+    Each key is a step name, and its value is a list of step names
+    that must complete before this step can begin.
+    """
+
+    def __init__(self, edges: Dict[str, List[str]] = None):
+        self.edges = edges or {}
+        # Build reverse adjacency: what depends on this step
+        self._dependents: Dict[str, List[str]] = {}
+        for step, prerequisites in self.edges.items():
+            for prereq in prerequisites:
+                self._dependents.setdefault(prereq, []).append(step)
+            self._dependents.setdefault(step, [])
+
+    def get_prerequisites(self, step: str) -> List[str]:
+        """Return all prerequisites (transitive) for a given step."""
+        visited = set()
+        stack = [step]
+        while stack:
+            current = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            for prereq in self.edges.get(current, []):
+                if prereq not in visited:
+                    stack.append(prereq)
+        return list(visited - {step})
+
+    def can_proceed(self, step: str, completed: Set[str]) -> bool:
+        """Check if a step can proceed given completed steps."""
+        if step not in self.edges:
+            return False
+        try:
+            self.topological_order(list(self.edges))
+        except ValueError:
+            return False
+        prerequisites = self.get_prerequisites(step)
+        return all(p in completed for p in prerequisites)
+
+    def topological_order(self, steps: List[str]) -> List[str]:
+        """Return steps in topological order respecting dependencies."""
+        completed = set()
+        order = []
+        remaining = set(steps)
+
+        while remaining:
+            # Find steps whose prerequisites are all completed
+            ready = []
+            for step in remaining:
+                prereqs = self.get_prerequisites(step)
+                if all(p in completed for p in prereqs):
+                    ready.append(step)
+
+            if not ready:
+                raise ValueError("cycle or missing prerequisite in remediation graph")
+
+            # Pick the first ready step (could add prioritization here)
+            step = sorted(ready)[0]
+            order.append(step)
+            completed.add(step)
+            remaining.remove(step)
+
+        return order
 
 
 # ── state ─────────────────────────────────────────────────────────────────

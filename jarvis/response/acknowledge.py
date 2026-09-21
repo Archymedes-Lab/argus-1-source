@@ -2,8 +2,8 @@
 
 A detection JARVIS cannot judge (a sandbox account a tool created, an updater
 that injects a thread) stays in "Needs you — confirm" until someone decides.
-Acknowledging records that decision, so the finding stops lowering the
-security score and stops asking for attention in email.
+Acknowledging records that decision and suppresses repeated email attention.
+Accepted findings retain their Protection Health debt.
 
 What an acknowledgement is not:
 

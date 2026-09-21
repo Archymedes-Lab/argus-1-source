@@ -222,6 +222,15 @@ def generate(store, pid, repo=None):
         item["draft_finished_at"] = int(time.time())
         selffix._history(item, "draft_failed" if error else "patch_ready", "opencode",
                          error or f"stored {len(item['patch_draft'])} patch characters")
+        if not error:
+            # Advisory Jev validation rides along, never gates: a missing
+            # key or failed call leaves review exactly where it was.
+            try:
+                from jarvis.response import jev as jev_mod
+                if jev_mod.available():
+                    item["jev_validation"] = jev_mod.validate_patch(item)
+            except Exception:
+                pass
     _save(store, pid, finished)
     return (False, error) if error else (True, f"patch ready for review: jarvis fix show {pid}")
 

@@ -10,7 +10,16 @@ scheduler's worker thread, and a sqlite handle must not cross threads.
 
 from contextlib import contextmanager
 
-from jarvis.collectors.host import accelerator, controlwatch, geo, inputwatch, pixel, posture, spyware, toolchain
+from jarvis.collectors.host import (
+    accelerator,
+    controlwatch,
+    geo,
+    inputwatch,
+    pixel,
+    posture,
+    spyware,
+    toolchain,
+)
 from jarvis.collectors.host import intrusion as intrusion_mod
 from jarvis.collectors.identity import bruteforce, impersonation, secrets
 from jarvis.collectors.network import firewall, internetwatch, netwatch, sniffing, webshell
@@ -18,18 +27,32 @@ from jarvis.collectors.persistence import asep as asep_mod
 from jarvis.collectors.persistence import backdoor, control, implant, startup
 from jarvis.collectors.process import evasion as evasion_mod
 from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
-from jarvis.collectors.telemetry import auditd, native, reconcile, sysmon, sysmon_linux
+from jarvis.collectors.telemetry import (
+    auditd,
+    native,
+    reconcile,
+    sysmon,
+    sysmon_linux,
+    sysmon_policy,
+    sysmon_pressure,
+)
 from jarvis.core import collection, retention
+from jarvis.core import mlworker as mlworker_mod
 from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
 from jarvis.intel import research as intel
 from jarvis.lab import audit as arena_audit
+from jarvis.platform import openvino as openvino_mod
 from jarvis.response import alert, llm
 from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting.cadence import run as report_due
 from jarvis.service import attackmap, connectivity, deadman, selfcheck
 from jarvis.service import coverage as coverage_mod
 from jarvis.service.schedule import JOBS
+
+# Composition root: core routing stays platform-independent, while the daemon
+# explicitly supplies the measured Windows OpenVINO executor.
+mlworker_mod.set_gpu_infer(openvino_mod.infer)
 
 
 @contextmanager
@@ -50,6 +73,38 @@ def _scan(hosts, db_path):
     # its own store handle inside the worker thread.
     with _store(db_path) as store:
         res = monitor.scan(store, hosts=hosts)
+        policy = (sysmon_policy.audit() if "win" in hosts else
+                  {"event1": "unknown", "detail": "Windows host not selected",
+                   "source": "unavailable"})
+        # Perception summary for the health endpoint: cheap persisted counts
+        # (VERIFIED vs UNRECONCILED vs UNKNOWN) so HTTP never touches the
+        # event log. Read-only; finding semantics live in reconcile.processes.
+        try:
+            import json as _json
+
+            from jarvis.collectors.telemetry import reconcile as _reconcile
+            verdicts = _reconcile.classify_snapshot(
+                res.get("processes", []), observed_at=res["ts"])
+            summary = {"verified": 0, "unreconciled": 0, "unknown": 0}
+            for v in verdicts:
+                label = v.get("label", "UNKNOWN")
+                if label == "VERIFIED":
+                    summary["verified"] += 1
+                elif label == "UNRECONCILED":
+                    summary["unreconciled"] += 1
+                else:
+                    summary["unknown"] += 1
+            store.set_meta("perception_summary_v1", _json.dumps({
+                "at": res["ts"], "windows_processes": len(verdicts),
+                "sysmon_process_create_policy": sysmon_policy.summary(policy),
+                "sysmon_process_create_coverage":
+                    _reconcile.coverage_evidence(res["ts"]),
+                "sysmon_pressure": sysmon_pressure.audit(),
+                **summary,
+            }))
+            store.commit()
+        except Exception:
+            pass
     out = []
     for f in res["findings"]:
         remotes = ", ".join(
@@ -72,7 +127,8 @@ def _scan(hosts, db_path):
             "detail": f"{p['ip']}:{p['port']} ← {p['proc']['name']}",
             "where": p["proc"].get("exe") or "",
         })
-    out.extend(reconcile.processes(res.get("processes", []), observed_at=res["ts"]))
+    out.extend(reconcile.processes(
+        res.get("processes", []), observed_at=res["ts"], policy=policy))
     return out
 
 

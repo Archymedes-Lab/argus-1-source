@@ -175,7 +175,8 @@ def audit_broker(now=None):
     if not broker.installed():
         return [_finding(
             "medium", "the elevated collector broker is not installed",
-            "posture, memscan and the firewall traffic log run unelevated and "
+            "posture, memscan, the firewall traffic log and Sysmon policy "
+            "inspection run unelevated or remain unreadable and "
             "report what administrator would see as unreadable. Install with "
             "`jarvis broker install` (one UAC prompt).", where)]
     drift = broker.drifted()
@@ -200,5 +201,5 @@ def audit_broker(now=None):
         return [_finding("high", "the elevated broker is running without administrator",
                          "its task is not using an elevated token, so its results "
                          "are no better than the unelevated collectors'", where)]
-    return [_finding("ok", "the elevated broker is feeding posture, memscan and firewall logs",
+    return [_finding("ok", "the elevated broker is feeding privileged read-only evidence",
                      "last run %dm ago, all jobs succeeded" % (age // 60), where)]

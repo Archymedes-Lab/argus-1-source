@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JARVIS · GeoSecurity</title>
 <link href="https://cdn.jsdelivr.net/npm/cesium@1.121/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
 <style>
   :root { --bg:#05070d; --panel:rgba(8,14,26,.82); --line:#1c2c46; --fg:#cde3ff;
           --dim:#6f89b3; --ok:#39d98a; --low:#7db4ff; --high:#ffb347; --crit:#ff5c72; }
@@ -13,9 +14,29 @@
     font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
   #globe { position:fixed; inset:0; }
   #globe .cesium-widget-credits, .cesium-viewer-bottom { display:none !important; }
+  #map2d { position:fixed; inset:0; display:none; background:#0a1424; z-index:1; }
+  #map2d.leaflet-container { font:inherit; }
+  #modebar { display:grid; grid-template-columns:repeat(4,1fr); gap:4px;
+    background:rgba(4,8,16,.5); border:1px solid var(--line); border-radius:8px; padding:4px; }
+  #modebar button { background:transparent; color:var(--dim); border:1px solid transparent;
+    border-radius:6px; padding:5px 4px; cursor:pointer; font:inherit; font-size:11px;
+    letter-spacing:.04em; }
+  #modebar button.on { color:var(--fg); background:#12203a; border-color:var(--line); }
+  #mebtn { display:none; width:100%; margin-top:6px;
+    background:#0a1424; color:var(--fg); border:1px solid var(--line);
+    border-radius:6px; padding:6px 10px; cursor:pointer; font:inherit; font-size:11px; }
+  #tilewarn { position:fixed; left:12px; bottom:18px; z-index:500; display:none;
+    max-width:min(420px,80vw); background:rgba(8,14,26,.9); border:1px solid var(--high);
+    color:var(--high); border-radius:8px; padding:8px 12px; font-size:11px; }
+  #map2dfallback { position:fixed; inset:0; display:none; align-items:center;
+    justify-content:center; color:var(--dim); text-align:center; padding:24px; z-index:1; }
+  .zbtn { background:transparent; color:var(--crit); border:1px solid var(--line);
+    border-radius:6px; padding:1px 8px; cursor:pointer; font:inherit; font-size:11px; }
+  .zrow { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:3px 0; }
   #fallback { position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     color:var(--dim); text-align:center; padding:24px; }
   #panel { position:fixed; top:0; right:0; width:min(380px,92vw); height:100%; overflow:auto;
+    z-index:1000;
     background:var(--panel); border-left:1px solid var(--line); backdrop-filter:blur(6px);
     padding:18px 18px 40px; }
   h1 { font-size:15px; letter-spacing:.14em; margin:0 0 2px; }
@@ -40,10 +61,22 @@
 </head>
 <body>
 <div id="globe"></div>
+<div id="map2d"></div>
+<div id="map2dfallback">The street map needs its tile library (offline?).<br>The 3D globe and the status panel still work.</div>
+<div id="tilewarn"></div>
 <div id="fallback">The globe needs internet for map imagery.<br>The GeoSecurity status is on the right.</div>
 <div id="panel">
   <h1>JARVIS // GEOSECURITY</h1>
   <div class="sub"><a class="back" href="/">‹ dashboard</a> · <span id="ts">…</span></div>
+  <div class="card"><h2>Map</h2>
+    <div id="modebar" role="tablist" aria-label="map mode">
+      <button data-mode="street" role="tab">Street</button>
+      <button data-mode="satellite" role="tab">Satellite</button>
+      <button data-mode="hybrid" role="tab">Hybrid</button>
+      <button data-mode="globe" role="tab">3D Globe</button>
+    </div>
+    <button id="mebtn" title="return to me">⌖ return to me</button>
+  </div>
   <div class="card"><h2>Location</h2><div id="loc"></div>
     <div class="meter"><i id="confbar" style="width:0"></i></div>
     <div id="signals" style="margin-top:6px"></div>
@@ -54,7 +87,7 @@
           style="flex:1;min-width:0;background:#0a1424;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;font:inherit">
         <button id="findbtn" style="background:#12203a;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer">find</button>
       </div>
-      <div id="geohint" class="sig dim" style="margin-top:6px">or click the globe to drop a pin, then confirm.</div>
+      <div id="geohint" class="sig dim" style="margin-top:6px">or click the map to drop a pin, then confirm.</div>
       <div id="confirm" style="display:none;margin-top:8px">
         <button id="setbtn" style="background:#123a2a;color:var(--ok);border:1px solid #1f6b4a;border-radius:6px;padding:6px 10px;cursor:pointer">set as my location</button>
         <button id="clearbtn" style="background:transparent;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer">clear</button>
@@ -62,14 +95,40 @@
     </div>
   </div>
   <div class="card"><h2>Devices</h2><div id="devices"></div></div>
-  <div class="card"><h2>Trusted zones</h2><div id="zones"></div></div>
+  <div class="card"><h2>Trusted zones</h2><div id="zones"></div>
+    <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--dim);margin-bottom:6px">ZONES: HOME · WORKPLACE · CUSTOM</div>
+      <div style="display:flex;gap:6px">
+        <input id="zonename" placeholder="name, e.g. HOME"
+          style="flex:1;min-width:0;background:#0a1424;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;font:inherit">
+        <input id="zoneradius" type="number" min="20" max="50000" placeholder="m" value="200" title="radius in metres"
+          style="width:70px;background:#0a1424;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;font:inherit">
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button id="zonehome" title="fill in HOME preset"
+          style="flex:1;background:#0a1424;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;cursor:pointer;font:inherit;font-size:11px">⌂ home</button>
+        <button id="zonework" title="fill in WORKPLACE preset"
+          style="flex:1;background:#0a1424;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;cursor:pointer;font:inherit;font-size:11px">⚒ workplace</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input id="zoneaddr" placeholder="address (optional) — type + find, or pin the map"
+          style="flex:1;min-width:0;background:#0a1424;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;font:inherit">
+        <button id="zonefind"
+          style="background:#12203a;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer;font:inherit">find</button>
+      </div>
+      <button id="zonesave" style="margin-top:6px;width:100%;background:#123a2a;color:var(--ok);border:1px solid #1f6b4a;border-radius:6px;padding:6px 10px;cursor:pointer">save pin as zone</button>
+      <div id="zonehint" class="sig dim" style="margin-top:4px">drop a pin first (click the map), then save.</div>
+    </div>
+  </div>
   <div class="card"><h2>Geo anomalies</h2><div id="anoms"></div></div>
   <div class="card"><h2>Imagery</h2><div id="imagery"></div></div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/cesium@1.121/Build/Cesium/Cesium.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const attr = s => esc(s).replace(/"/g,"&quot;");
 const cls = sev => ({ok:"ok",low:"low",medium:"high",high:"high",critical:"crit"}[sev]||"dim");
 
 function yesterday(){ const d=new Date(Date.now()-864e5); return d.toISOString().slice(0,10); }
@@ -143,10 +202,114 @@ function initGlobe(img){
   }catch(e){ console.error(e); $("#globe").style.display="none"; $("#fallback").style.display="flex"; }
 }
 
+/* Accuracy-aware camera: street scale for tight fixes, city scale for
+   loose ones, global context when there is no position. Pure. */
+function viewHeight(view){
+  const mode = (view||{}).mode;
+  if(mode==="street") return 1500;
+  if(mode==="city") return 60000;
+  return 2.2e6;
+}
+
+// -- 2D local security map (Leaflet) -----------------------------------------
+// The globe stays for global context; street-level work happens here:
+// named streets, accurate zoom, trusted-zone editing, scale, return-to-me.
+// Tile failures degrade to a notice — never a silent empty pane.
+let map2d=null, layers2d={}, marker2d=null, pin2d=null, zones2d=[],
+    mode="globe", lastPayload=null, map2dCentered=false, tileErrs=0;
+
+function setMode(m){
+  mode = (m==="satellite"||m==="hybrid"||m==="street") ? m : "globe";
+  document.querySelectorAll("#modebar button").forEach(b=>
+    b.classList.toggle("on", b.dataset.mode===mode));
+  const two = mode!=="globe";
+  $("#map2d").style.display = two ? "block" : "";
+  $("#globe").style.display = two ? "none" : "";
+  $("#mebtn").style.display = two ? "block" : "none";
+  if(two && lastPayload) sync2d(lastPayload, true);
+  if(map2d) map2d.invalidateSize();
+}
+
+function init2d(payload){
+  if(map2d) return true;
+  if(typeof L==="undefined"){
+    $("#map2dfallback").style.display="flex"; return false;
+  }
+  const v = payload.view||{};
+  const c = (payload.imagery||{}).center;
+  const lat = c ? c.lat : 0, lon = c ? c.lon : 0;
+  const zoom = c ? (v.zoom!=null ? v.zoom : 14) : 2;
+  layers2d = {
+    street: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom:19, attribution:"© OpenStreetMap contributors" }),
+    satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom:19, attribution:"Esri World Imagery" }),
+    hybrid: L.layerGroup([
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom:19 }),
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom:19, attribution:"Esri Reference" }) ])
+  };
+  Object.values(layers2d).forEach(l=>{
+    l.on("tileerror", ()=>{
+      if(++tileErrs===6) $("#tilewarn").textContent =
+        "map tiles are failing to load (offline or provider down?) — status panel and globe still work.";
+      $("#tilewarn").style.display="block";
+    });
+    l.on("load", ()=>{ tileErrs=0; $("#tilewarn").style.display="none"; });
+  });
+  map2d = L.map("map2d", { zoomControl:true }).setView([lat, lon], zoom);
+  map2d.addControl(L.control.scale({ imperial:false }));
+  layers2d.street.addTo(map2d);
+  map2d.on("click", e=>stage(e.latlng.lat, e.latlng.lng, "pin"));
+  map2dCentered = !!c;
+  sync2d(payload, false);
+  return true;
+}
+
+function sync2d(payload, recenter){
+  lastPayload = payload;
+  if(!map2d) return;
+  const want = layers2d[mode] || layers2d.street;
+  Object.entries(layers2d).forEach(([name, layer])=>{
+    if(layer===want){ if(!map2d.hasLayer(layer)) layer.addTo(map2d); }
+    else if(map2d.hasLayer(layer)) map2d.removeLayer(layer);
+  });
+  if(marker2d){ map2d.removeLayer(marker2d); marker2d=null; }
+  zones2d.forEach(l=>map2d.removeLayer(l)); zones2d=[];
+  (payload.zones||[]).forEach(z=>{
+    zones2d.push(L.circle([z.lat, z.lon], { radius:z.radius_m, color:"#39d98a",
+      weight:1, fillOpacity:.15 }).addTo(map2d).bindTooltip(esc(z.name)));
+  });
+  const c = (payload.imagery||{}).center;
+  if(c){
+    marker2d = L.circleMarker([c.lat, c.lon], { radius:7, color:"#fff",
+      weight:2, fillColor:"#7db4ff", fillOpacity:1 }).addTo(map2d)
+      .bindTooltip(c.source==="user-set" ? "you (set manually)" : "this device");
+    if(recenter || !map2dCentered){
+      map2d.setView([c.lat, c.lon], (payload.view||{}).zoom!=null ? payload.view.zoom : 14);
+      map2dCentered = true;
+    }
+  }
+  if(pin2d){ map2d.removeLayer(pin2d); pin2d=null; }
+  if(pending && pending.lat!=null){
+    pin2d = L.circleMarker([pending.lat, pending.lon], { radius:7, color:"#fff",
+      weight:2, fillColor:"#ffb347", fillOpacity:1 }).addTo(map2d);
+  }
+}
+
+function returnToMe(){
+  const c = lastPayload && (lastPayload.imagery||{}).center;
+  if(c && map2d) map2d.setView([c.lat, c.lon],
+    ((lastPayload||{}).view||{}).zoom!=null ? lastPayload.view.zoom : 14);
+}
+
 function place(payload){
+  lastPayload = payload;
+  if(map2d && mode!=="globe") sync2d(payload, false);
   if(!viewer) return;
   viewer.entities.removeAll(); pin=null;
-  const img = payload.imagery, c = img.center;
+  const img = payload.imagery, c = img.center, h = viewHeight(payload.view);
   // Trusted zones as circles.
   (payload.zones||[]).forEach(z=>{
     viewer.entities.add({ name:z.name,
@@ -169,7 +332,7 @@ function place(payload){
       label:{ text: label, font:"12px monospace",
         fillColor: Cesium.Color.fromCssColorString(col),
         pixelOffset:new Cesium.Cartesian2(0,18) } });
-    viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, 2.2e6), duration:2 });
+    viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(c.lon, c.lat, h), duration:2 });
   }
 }
 
@@ -179,6 +342,12 @@ function stage(lat, lon, label){
   pending={lat, lon, label};
   $("#geohint").innerHTML = `<span class="low">${esc(label||"")}</span> ${lat.toFixed(4)}, ${lon.toFixed(4)} — confirm below.`;
   $("#confirm").style.display="block";
+  if(map2d && mode!=="globe"){
+    map2d.setView([lat, lon], Math.max(map2d.getZoom(), 14));
+    if(pin2d) map2d.removeLayer(pin2d);
+    pin2d = L.circleMarker([lat, lon], { radius:7, color:"#fff",
+      weight:2, fillColor:"#ffb347", fillOpacity:1 }).addTo(map2d);
+  }
   if(viewer){
     if(pin) viewer.entities.remove(pin);
     pin = viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat),
@@ -195,9 +364,9 @@ function wireControls(){
     fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),
       { headers:{ "Accept":"application/json" } })
       .then(r=>r.json()).then(a=>{
-        if(!a.length){ $("#geohint").textContent = "no match — try a fuller name, or click the globe."; return; }
+        if(!a.length){ $("#geohint").textContent = "no match — try a fuller name, or click the map."; return; }
         stage(parseFloat(a[0].lat), parseFloat(a[0].lon), a[0].display_name.split(",").slice(0,2).join(",")||q);
-      }).catch(()=>{ $("#geohint").textContent = "lookup failed (offline?) — click the globe to drop a pin instead."; });
+      }).catch(()=>{ $("#geohint").textContent = "lookup failed (offline?) — click the map to drop a pin instead."; });
   };
   $("#place").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#findbtn").click(); }});
   $("#setbtn").onclick = ()=>{
@@ -218,6 +387,69 @@ function wireControls(){
       stage(Cesium.Math.toDegrees(carto.latitude), Cesium.Math.toDegrees(carto.longitude), "pin");
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   }
+  document.querySelectorAll("#modebar button").forEach(b=>{
+    b.onclick = ()=>{
+      if(b.dataset.mode==="globe"){ setMode("globe"); return; }
+      if(init2d(lastPayload||{imagery:{},view:{zoom:14}})) setMode(b.dataset.mode);
+    };
+  });
+  $("#mebtn").onclick = returnToMe;
+  let zoneKind = "custom";
+  const zonePreset = (name, kind, radius)=>{
+    $("#zonename").value = name; $("#zoneradius").value = radius; zoneKind = kind;
+    $("#zonehint").textContent = pending && pending.lat!=null
+      ? `pin ready — save it as ${name}.`
+      : `${name} preset filled — drop a pin on the map, then save.`;
+  };
+  $("#zonehome").onclick = ()=>zonePreset("HOME", "home", 200);
+  $("#zonework").onclick = ()=>zonePreset("WORKPLACE", "workplace", 300);
+  $("#zonefind").onclick = ()=>{
+    const q = $("#zoneaddr").value.trim(); if(!q) return;
+    $("#zonehint").textContent = "searching OpenStreetMap…";
+    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),
+      { headers:{ "Accept":"application/json" } })
+      .then(r=>r.json()).then(a=>{
+        if(!a.length){ $("#zonehint").textContent = "no match — try a fuller address, or pin the map."; return; }
+        $("#zoneaddr").value = a[0].display_name.split(",").slice(0,3).join(",");
+        stage(parseFloat(a[0].lat), parseFloat(a[0].lon), "address");
+        $("#zonehint").textContent = "address pinned — name it and save.";
+      }).catch(()=>{ $("#zonehint").textContent = "lookup failed (offline?) — pin the map instead."; });
+  };
+  $("#zoneaddr").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#zonefind").click(); }});
+  $("#zonesave").onclick = ()=>{
+    const name = $("#zonename").value.trim();
+    const radius = Math.max(20, Math.min(50000, parseInt($("#zoneradius").value||"200", 10)||200));
+    const address = $("#zoneaddr").value.trim();
+    if(!name){ $("#zonehint").textContent = "give the zone a name first."; return; }
+    if(!pending || pending.lat==null){ $("#zonehint").textContent = "drop a pin first (click the map), then save."; return; }
+    fetch("/api/geo/zone", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ name, lat:pending.lat, lon:pending.lon,
+        radius_m:radius, address, kind:zoneKind }) })
+      .then(r=>r.json()).then(res=>{
+        if(res.ok){ $("#zonehint").textContent = `zone '${name}' saved.`; refresh(); }
+        else $("#zonehint").textContent = "not saved: " + (res.error||"unknown");
+      }).catch(()=>{ $("#zonehint").textContent = "not saved (request failed)."; });
+  };
+  $("#zones").addEventListener("click", e=>{
+    const btn = e.target.closest("[data-rmzone]");
+    if(!btn) return;
+    fetch("/api/geo/zone", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ remove:btn.dataset.rmzone }) })
+      .then(r=>r.json()).then(()=>refresh()).catch(()=>{});
+  });
+  $("#zones").addEventListener("change", e=>{
+    const input = e.target.closest(".zrad");
+    if(!input) return;
+    const row = input.closest("[data-zone]");
+    const radius = Math.max(20, Math.min(50000, parseInt(input.value||"0", 10)||0));
+    if(!row || !radius){ refresh(); return; }
+    fetch("/api/geo/zone", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ name:row.dataset.zone, radius_m:radius }) })
+      .then(r=>r.json()).then(res=>{
+        if(!res.ok) $("#zonehint").textContent = "radius not saved: " + (res.error||"unknown");
+        refresh();
+      }).catch(()=>{ $("#zonehint").textContent = "radius not saved (request failed)."; });
+  });
 }
 
 function render(p){
@@ -232,6 +464,10 @@ function render(p){
       `<div class="sig">${esc(loc.reason||"JARVIS never guesses a position from your IP.")}</div>`;
   $("#loc").innerHTML = locHtml +
     `<div class="row" style="margin-top:6px"><span class="k">confidence</span><span class="v">${Math.round(conf.score*100)}%</span></div>`;
+  const v=p.view||{};
+  $("#loc").innerHTML += v.mode
+    ? `<div class="row"><span class="k">view</span><span class="v">${esc(v.mode)}${v.zoom!=null?" · z"+v.zoom:""}</span></div>`+
+      `<div class="sig dim">${esc(v.reason||"")}</div>` : "";
   $("#confbar").style.width = Math.round(conf.score*100)+"%";
   $("#signals").innerHTML = (conf.signals||[]).map(s=>`<div class="sig">• ${esc(s.name)} <span class="dim">(${s.weight})</span></div>`).join("")||`<div class="sig dim">no signals</div>`;
 
@@ -240,8 +476,15 @@ function render(p){
     `<span class="v ${d.trust==="trusted"?"ok":"high"}">${esc(d.trust)}</span></div>`).join("");
 
   $("#zones").innerHTML = (p.zones||[]).length ? (p.zones||[]).map(z=>
-    `<div class="row"><span class="k">${esc(z.name)}</span><span class="v dim">${z.lat.toFixed(3)}, ${z.lon.toFixed(3)} · ${z.radius_m}m</span></div>`).join("")
-    : `<div class="sig dim">none — set one with <br>jarvis geo zone add HOME LAT LON</div>`;
+    `<div class="zrow" data-zone="${attr(z.name)}">`+
+    `<span class="k">${esc(z.name)}${z.kind?` <span class="pill dim">${esc(z.kind)}</span>`:""}`+
+    `<br><span class="v dim">${z.lat.toFixed(3)}, ${z.lon.toFixed(3)}`+
+    `${z.address?` · ${esc(z.address)}`:""}</span></span>`+
+    `<span style="white-space:nowrap"><input class="zrad" type="number" min="20" max="50000" `+
+    `value="${z.radius_m}" title="radius in metres — edits on change" `+
+    `style="width:64px;background:#0a1424;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:2px 6px;font:inherit"> `+
+    `<button class="zbtn" data-rmzone="${attr(z.name)}" title="remove zone">✕</button></span></div>`).join("")
+    : `<div class="sig dim">none — drop a pin on the map and save it below,<br>or: jarvis geo zone add HOME LAT LON</div>`;
 
   $("#anoms").innerHTML = (p.anomalies||[]).length ? (p.anomalies||[]).map(a=>
     `<div class="anom ${cls(a.severity)}"><b class="${cls(a.severity)}">${esc(a.kind)}</b><br>${esc(a.detail)}</div>`).join("")
@@ -260,10 +503,21 @@ function render(p){
 let started=false;
 function refresh(){
   return fetch("/api/geo").then(r=>r.json()).then(p=>{
-    if(!started){ initGlobe(p.imagery||{}); wireControls(); started=true; }
+    lastPayload = p;
+    if(!started){
+      initGlobe(p.imagery||{});
+      wireControls();
+      // Open where the accuracy says something useful: street/city fixes
+      // start on the 2D street map, unknown position on the 3D globe.
+      const vm = (p.view||{}).mode;
+      if((vm==="street"||vm==="city") && init2d(p)) setMode("street");
+      else setMode("globe");
+      started=true;
+    }
     render(p); place(p);
     $("#confirm").style.display="none"; pending=null;
-    $("#geohint").innerHTML="or click the globe to drop a pin, then confirm.";
+    if(map2d && mode!=="globe" && pin2d){ map2d.removeLayer(pin2d); pin2d=null; }
+    $("#geohint").innerHTML="or click the map to drop a pin, then confirm.";
   });
 }
 refresh().catch(e=>{ $("#fallback").style.display="flex";

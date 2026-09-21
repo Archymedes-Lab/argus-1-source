@@ -369,6 +369,16 @@
     <div class="body" id="performance"><div class="empty">sampling…</div></div>
   </div>
 
+  <div class="card" id="continuitycard">
+    <h2>Continuity <span class="cnt" id="contcnt">invariants · governor · perception</span></h2>
+    <div class="body" id="continuity"><div class="empty">evaluating…</div></div>
+  </div>
+
+  <div class="card" id="activitycard">
+    <h2>Activity <span class="cnt" id="actcnt">correlated stories, not alert streams</span></h2>
+    <div class="body" id="activity"><div class="empty">correlating…</div></div>
+  </div>
+
   <div class="card">
     <h2>
       <span>Findings</span>
@@ -535,6 +545,8 @@ function render(s) {
   renderHealth(s);
   renderTiles(s);
   renderPerformance(s);
+  renderContinuity(s);
+  renderActivity(s);
   renderJobs(s);
   renderChart(s);
   renderCats(s);
@@ -683,6 +695,20 @@ function renderHealth(s) {
        ${spark}
      </div></div>
      <div class="areas">${areas}</div>`;
+
+  if (s.posture) {
+    const p = s.posture, d = p.debt_counts;
+    const sh = p.sustained_health || {}, ar = p.automatic_remediation || {};
+    el.innerHTML += `<details><summary>Security convergence · ${esc(p.readiness)}</summary>
+      <p>${d.security} security findings · ${d.coverage} coverage gaps · ${d.accepted} accepted risks</p>
+      <p>Sustained health: ${esc(sh.status || 'unverified')}${sh.duration_s ? ` · ${Math.floor(sh.duration_s / 60)} min · ${sh.samples} samples` : ''}.</p>
+      <p>Bounded automatic repairs: ${ar.verified || 0} verified · ${ar.failed || 0} failed · ${ar.blocked || 0} blocked.</p>
+      <p>Projected after verified remediation: ${p.projected_after_verified_remediation}%.
+      Verification pending; individual gains overlap.</p>
+      ${(p.candidates || []).slice(0, 6).map(c => `<p>${esc(c.title)} · +${c.projected_recovery} projected
+      <br>Requires review and fresh checks: ${esc(c.verification_jobs.join(', '))}</p>`).join('')}
+    </details>`;
+  }
 
   const top = (h.next_steps || [])[0];
   document.getElementById("healthsub").textContent =
@@ -838,6 +864,56 @@ function renderPerformance(s) {
     <b class="${cls}">${duty.toFixed(1)}%</b> scheduled duty · sum of each collector's last duration ÷ cadence
   </div>${rows || '<div class="empty">waiting for collector timings…</div>'}${ownerRows}
   ${db.bytes ? `<div style="padding:10px 0;border-top:1px solid var(--line)"><b>database ${(Number(db.bytes)/1048576).toFixed(0)} MiB</b> · ${dbRows}</div>` : ""}${accel}`;
+}
+
+/* ---------- continuity + activity ----------
+   Pure view functions (no DOM): continuityHTML/activityHTML take state
+   slices and return HTML strings. Thin render* wrappers mount them. */
+function continuityHTML(cont) {
+  if (!cont) return `<div class="empty">continuity systems not reporting yet</div>`;
+  const inv = cont.invariants || {}, names = Object.keys(inv).filter(k => k !== "ok");
+  const rows = names.map(k => {
+    const v = inv[k] || {};
+    return `<div class="job"><span class="dot ${v.ok ? "" : "err"}" title="${v.ok ? "holding" : "violated"}"></span>` +
+      `<span class="name"><b>${esc(k)}</b><div style="opacity:.75">${esc(v.reason || "")}</div></span>` +
+      `<span class="age">${v.ok ? "holding" : "VIOLATED"}</span></div>`;
+  }).join("");
+  const gov = cont.governor || {};
+  const govRow = `<div class="job"><span class="dot ${gov.pressured ? "stale" : ""}"></span>` +
+    `<span class="name"><b>governor</b><div style="opacity:.75">${esc(gov.reason || "unknown")}</div></span>` +
+    `<span class="age">${gov.pressured ? "deferring noncritical" : "all tiers"}</span></div>`;
+  const p = cont.perception;
+  const percRow = p ? `<div class="job"><span class="name"><b>perception</b>` +
+    `<div style="opacity:.75">${p.verified || 0} verified · ${p.unreconciled || 0} unreconciled · ${p.unknown || 0} unknown` +
+    `${p.windows_processes != null ? ` across ${p.windows_processes} windows processes` : ""}</div></span></div>` : "";
+  return rows + govRow + percRow;
+}
+
+function activityHTML(chains) {
+  if (!chains || !chains.length) return `<div class="empty">no correlated activity — single observations stay in Findings.</div>`;
+  return chains.map(c => {
+    const over = c.member_overflow ? ` · +${c.member_overflow} more` : "";
+    const causal = c.causal ? ` · causal edge` : ` · grouped, causality unverified`;
+    return `<div class="job"><span class="name">${pill(c.worst_severity)} <b>${esc(c.headline || "")}</b>` +
+      `<div style="opacity:.75">${c.count} observation${c.count === 1 ? "" : "s"} · ${(c.jobs || []).map(esc).join(", ")} · ${esc(c.host || "")}${causal}${over}</div></span>` +
+      `<span class="age">${c.last ? ago(c.last) : ""}</span></div>`;
+  }).join("");
+}
+
+function renderContinuity(s) {
+  const cont = s.continuity;
+  const bad = cont && cont.invariants
+    ? Object.keys(cont.invariants).filter(k => k !== "ok" && !((cont.invariants[k] || {}).ok)) : [];
+  document.getElementById("contcnt").textContent = !cont ? "not reporting"
+    : bad.length ? `${bad.length} invariant${bad.length === 1 ? "" : "s"} violated` : "all invariants holding";
+  document.getElementById("continuity").innerHTML = continuityHTML(cont);
+}
+
+function renderActivity(s) {
+  const chains = (s.continuity && s.continuity.activity) || [];
+  document.getElementById("actcnt").textContent =
+    chains.length ? `${chains.length} ${chains.length === 1 ? "story" : "stories"}` : "no stories";
+  document.getElementById("activity").innerHTML = activityHTML(chains);
 }
 
 function renderChart(s) {

@@ -120,3 +120,24 @@ class NotificationsTests(unittest.TestCase):
         self.store.set_meta('report_daily_last_ok',now)
         self.assertFalse(cadence.daily_due(self.store,conf,now+100))
         self.assertTrue(cadence.daily_due(self.store,conf,now+86400))
+
+
+class DigestChainsTests(NotificationsTests):
+    def test_related_findings_arrive_as_one_story(self):
+        base = {**self.f, 'severity': 'critical', 'host': 'win',
+                'subject_id': 'edge-1', 'title': 'browser launched helper'}
+        other = {**base, 'title': 'helper reached an outside peer'}
+        self.observe(findings=[base, other])
+        self.send.assert_called_once()
+        body = self.send.call_args.args[2]
+        self.assertIn('RELATED ACTIVITY (1 story)', body)
+        self.assertIn('2 related observations', body)
+
+    def test_unrelated_findings_gain_no_story_section(self):
+        one = {**self.f, 'severity': 'critical', 'host': 'win',
+               'title': 'first thing', 'where': 'a'}
+        two = {**self.f, 'severity': 'critical', 'host': 'wsl',
+               'title': 'second thing', 'where': 'b'}
+        self.observe(findings=[one, two])
+        self.send.assert_called_once()
+        self.assertNotIn('RELATED ACTIVITY', self.send.call_args.args[2])

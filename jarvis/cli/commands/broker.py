@@ -7,6 +7,7 @@
     jarvis broker remove     unregister and delete (one UAC prompt)
 """
 
+import base64
 import subprocess
 import time
 
@@ -20,6 +21,12 @@ def _winpath(path):
     return out.stdout.strip()
 
 
+def _ps_args(script):
+    """PowerShell argv immune to WSL/Windows command-line quote rewriting."""
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    return [win._PS, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
+
+
 def _elevated(args, timeout=240):
     """Run broker-jarvis.ps1 with `args` through a UAC prompt, from a local copy.
 
@@ -29,9 +36,9 @@ def _elevated(args, timeout=240):
     """
     if not win.available():
         return 1, "the Windows interop bridge is not available"
-    stage = subprocess.run([win._PS, "-NoProfile", "-Command",
-                            "$d=Join-Path $env:TEMP ('jarvis-broker-'+[guid]::NewGuid());"
-                            "New-Item -ItemType Directory $d | Out-Null; $d"],
+    stage_script = ("$d=Join-Path $env:TEMP ('jarvis-broker-'+[guid]::NewGuid());"
+                    "New-Item -ItemType Directory $d | Out-Null; $d")
+    stage = subprocess.run(_ps_args(stage_script),
                            capture_output=True, text=True, errors="replace", cwd="/").stdout.strip()
     if not stage:
         return 1, "could not create a staging folder on Windows"
@@ -44,7 +51,7 @@ def _elevated(args, timeout=240):
     script = (f"{copy}; $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
               f"-ArgumentList {argline}; Remove-Item -LiteralPath '{stage}' -Recurse -Force; exit $p.ExitCode")
     try:
-        r = subprocess.run([win._PS, "-NoProfile", "-Command", script],
+        r = subprocess.run(_ps_args(script),
                            capture_output=True, text=True, errors="replace", timeout=timeout, cwd="/")
     except subprocess.TimeoutExpired:
         return 1, "timed out waiting for the UAC prompt"
@@ -76,7 +83,13 @@ def cmd_broker(args, store=None):
         code, out = _elevated(["-Remove"])
     if out:
         print(out)
-    ok = broker.installed() if args.action == "install" else not broker.installed()
+    if args.action == "install":
+        # An older installation does not make a failed restage successful.
+        # The elevated command must complete and every staged script must
+        # match this checkout before we say "done".
+        ok = code == 0 and broker.installed() and not broker.drifted()
+    else:
+        ok = code == 0 and not broker.installed()
     print("done" if ok else "did not complete — the prompt may have been declined")
     return 0 if ok else 1
 

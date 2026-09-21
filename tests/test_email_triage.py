@@ -141,3 +141,52 @@ class DigestTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DigestDesignTests(unittest.TestCase):
+    def _ordered(self, severity="critical"):
+        a = f("present", severity, "OpenAI API key in plaintext", where="/h/.env:1")
+        b = {**a, "title": "Second secret", "subject_id": "edge-1"}
+        a = {**a, "subject_id": "edge-1"}
+        return [("a", {"finding": a, "job": "secrets", "tag": "NEW", "first": 0, "level": 0}),
+                ("b", {"finding": b, "job": "secrets", "tag": "NEW", "first": 0, "level": 0})]
+
+    def test_urgent_digest_arrives_red_with_hero_and_mood(self):
+        subject, text, html = emails.digest(self._ordered(), True, None, None, 7200)
+        self.assertIn("#b91c1c", html)  # red-700 hero
+        self.assertIn("need you", html)
+        self.assertIn("These need you now.", text)
+
+    def test_calm_digest_arrives_green_with_splendid_mood(self):
+        subject, text, html = emails.digest([], False, None, None, 7200)
+        self.assertIn("nothing needs you", subject)
+        self.assertIn("#047857", html)  # emerald-700 hero
+        self.assertIn("Splendid.", text)
+
+    def test_related_findings_render_as_story_cards(self):
+        subject, text, html = emails.digest(self._ordered(), True, None, None, 7200)
+        self.assertIn("RELATED ACTIVITY (1 story)", text)
+        self.assertIn("2 related observations", text)
+        self.assertIn("one causal edge links these observations", html)
+        self.assertIn("border-left-color:#7c3aed", html)  # violet story accent
+
+    def test_story_headlines_are_escaped(self):
+        evil = {**f("present", "critical", "<img src=x>", where="x"), "subject_id": "e",
+                "title": "<img src=x>"}
+        evil2 = {**evil, "title": "second <b>half</b>"}
+        ordered = [("a", {"finding": evil, "job": "j", "tag": "NEW", "first": 0, "level": 0}),
+                   ("b", {"finding": evil2, "job": "j", "tag": "NEW", "first": 0, "level": 0})]
+        _s, _t, html = emails.digest(ordered, True, None, None, 7200)
+        self.assertNotIn("<img src=x>", html)
+        self.assertIn("&lt;img", html)
+
+    def test_health_email_wears_violet_with_score_hero(self):
+        result = {"score": 80, "grade": "B+", "coverage": 90, "areas": [],
+                  "next_steps": []}
+        subject, text, html = emails.health(result, 0, {}, 7200)
+        self.assertIn("#6d28d9", html)  # violet-700 hero
+        self.assertIn("80%", html)
+        self.assertIn("Splendid.", text)
+
+    def test_unknown_tone_falls_back_to_slate(self):
+        self.assertIn("#0f172a", ui.header("k", "t", "s", tone="nope"))

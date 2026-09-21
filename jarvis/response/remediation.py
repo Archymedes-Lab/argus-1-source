@@ -19,6 +19,42 @@ WINDOW = 86400
 MAX_ATTEMPTS = 3
 
 
+def audit(store, now=None):
+    """Return a redacted summary of the durable bounded-repair ledger."""
+    now = int(time.time() if now is None else now)
+    try:
+        records = json.loads(store.get_meta(META, '{}') or '{}')
+        if not isinstance(records, dict):
+            raise ValueError('invalid repair state')
+    except (ValueError, TypeError, AttributeError):
+        return {"status": "unavailable", "reason": "repair history unreadable",
+                "actions": [], "verified": 0, "failed": 0, "blocked": 0}
+    actions = []
+    def _timestamp(value):
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+    for action, record in sorted(records.items()):
+        if not isinstance(record, dict):
+            continue
+        status = record.get('status')
+        if status not in ('attempting', 'verified', 'failed', 'blocked'):
+            status = 'unknown'
+        actions.append({"action": str(action)[:80], "status": status,
+                        "job": str(record.get('job', ''))[:80],
+                        "at": _timestamp(record.get('at')),
+                        "verified_at": _timestamp(record.get('verified_at')),
+                        "attempts_24h": sum(
+                            now - _timestamp(ts) < WINDOW
+                            for ts in record.get('attempts', [])
+                            if isinstance(ts, (int, float)))})
+    return {"status": "active", "actions": actions,
+            "verified": sum(row["status"] == "verified" for row in actions),
+            "failed": sum(row["status"] == "failed" for row in actions),
+            "blocked": sum(row["status"] == "blocked" for row in actions)}
+
+
 def action_for(job, finding):
     identity = (job, finding.get('category'), finding.get('title'))
     if identity == ('sysmon_linux', 'sysmon-linux',

@@ -6,8 +6,10 @@ import os
 import shutil
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
+from jarvis.cli.commands import broker as broker_cli
 from jarvis.core.paths import REPO_ROOT, win_script
 from jarvis.platform import broker
 
@@ -50,3 +52,19 @@ class BrokerResultTests(unittest.TestCase):
     def test_not_installed(self):
         os.remove(os.path.join(self.tmp, "broker-jarvis.ps1"))
         self.assertIsNone(broker.result("memscan")[0])
+
+    def test_failed_restage_cannot_pass_because_old_broker_exists(self):
+        args = SimpleNamespace(action="install", firewall_logging=False)
+        with mock.patch.object(broker_cli, "_elevated",
+                               return_value=(1, "staging failed")), \
+                mock.patch.object(broker, "installed", return_value=True), \
+                mock.patch.object(broker, "drifted", return_value=[]):
+            self.assertEqual(broker_cli.cmd_broker(args), 1)
+
+    def test_powershell_commands_are_encoded_for_wsl_interop(self):
+        with mock.patch.object(broker_cli.win, "_PS", "powershell.exe"):
+            args = broker_cli._ps_args("$x='quoted value'; $x")
+        self.assertEqual(args[:3],
+                         ["powershell.exe", "-NoProfile", "-NonInteractive"])
+        self.assertEqual(base64.b64decode(args[-1]).decode("utf-16le"),
+                         "$x='quoted value'; $x")

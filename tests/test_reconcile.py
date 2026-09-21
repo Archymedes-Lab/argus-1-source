@@ -31,6 +31,14 @@ class ProcessReconciliationTests(unittest.TestCase):
             time=iso(started), received=iso(self.now), category="process",
             action=action, process={"pid": pid, "guid": guid, "image": r"C:\x\worker.exe"})
 
+    def dropped(self, record, count, at):
+        return event.make(
+            host="WINBOX", sensor="sensor", device="device", boot="boot-7",
+            channel=SYSMON, generation="generation", record=record,
+            source="sysmon", source_event=255, time=iso(at), received=iso(self.now),
+            category="sensor", action="error",
+            attrs={"Description": f"Events dropped from driver queue: ProcessCreate:{count}."})
+
     def commit(self, events, *, created=None, continuous=None, status="complete", gap=None):
         created = self.now if created is None else created
         continuous = self.now - 300 if continuous is None else continuous
@@ -52,6 +60,33 @@ class ProcessReconciliationTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["rule_id"], "temporal-process-start-missing")
         self.assertIn("boot-7:42", findings[0]["subject_id"])
+
+    def test_missing_start_names_policy_attribution(self):
+        self.commit([self.ev(1, 7, "{other}", self.now - 80)])
+        findings = reconcile.processes(
+            self.snapshot(), self.now, self.root,
+            policy={"event1": "filtered", "excludes": ["Image x"]})
+        self.assertIn("likely Sysmon ProcessCreate filtering",
+                      findings[0]["detail"])
+
+    def test_driver_queue_loss_attributes_unmatched_missing_start(self):
+        self.commit([self.ev(1, 7, "{first}", self.now - 80),
+                     self.dropped(2, 12, self.now - 70)])
+        findings = reconcile.processes(
+            self.snapshot(), self.now, self.root,
+            policy={"event1": "full"})
+        self.assertIn("driver-queue loss", findings[0]["detail"])
+        self.assertIn("dropped ProcessCreate", findings[0]["detail"])
+        self.assertIn("12 observed this boot", findings[0]["detail"])
+
+    def test_coverage_evidence_exposes_loss_without_raw_events(self):
+        self.commit([self.ev(1, 7, "{first}", self.now - 80),
+                     self.dropped(2, 12, self.now - 70)])
+        evidence = reconcile.coverage_evidence(self.now, self.root)
+        self.assertEqual(evidence["status"], "observed")
+        self.assertEqual(evidence["boot"], "boot-7")
+        self.assertEqual(evidence["dropped_process_create"], 12)
+        self.assertNotIn("events", evidence)
 
     def test_exact_instance_match_is_consistent(self):
         started = self.now - 60
@@ -83,6 +118,18 @@ class ProcessReconciliationTests(unittest.TestCase):
                     continuous=self.now - 30)
         self.assertEqual(reconcile.processes(
             self.snapshot(started=self.now - 60), self.now, self.root), [])
+
+    def test_previous_boot_continuity_does_not_accuse_early_boot_process(self):
+        # The first retained event in boot-7 is newer than this snapshot
+        # process. Continuity inherited from an earlier boot cannot make the
+        # absent ProcessCreate a discrepancy.
+        self.commit([self.ev(1, 7, "{first}", self.now - 40)],
+                    continuous=self.now - 3600)
+        self.assertEqual(reconcile.processes(
+            self.snapshot(started=self.now - 60), self.now, self.root), [])
+        verdict = reconcile.classify_snapshot(
+            self.snapshot(started=self.now - 60), self.now, self.root)[0]
+        self.assertEqual(verdict["label"], "UNKNOWN")
 
     def test_stale_or_gapped_stream_cannot_contradict_snapshot(self):
         self.commit([self.ev(1, 7, "{other}", self.now - 400)], created=self.now - 400)

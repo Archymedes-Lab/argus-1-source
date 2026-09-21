@@ -50,14 +50,32 @@ def set_zones(store, zones):
     store.commit()
 
 
-def add_zone(store, name, lat, lon, radius_m=200):
+def add_zone(store, name, lat, lon, radius_m=200, address="", kind=""):
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         raise ValueError("latitude/longitude out of range")
     zones = [z for z in get_zones(store) if z["name"] != name]
     zones.append({"name": name, "lat": float(lat), "lon": float(lon),
-                  "radius_m": max(20, int(radius_m))})
+                  "radius_m": max(20, int(radius_m)),
+                  "address": str(address or "")[:200],
+                  "kind": str(kind or "")[:20]})
     set_zones(store, zones)
     return zones
+
+
+def update_zone(store, name, radius_m=None, address=None, kind=None):
+    """Edit a zone in place (radius/address/kind). Raises ValueError if missing."""
+    zones = get_zones(store)
+    for z in zones:
+        if z["name"] == name:
+            if radius_m is not None:
+                z["radius_m"] = max(20, min(50000, int(radius_m)))
+            if address is not None:
+                z["address"] = str(address)[:200]
+            if kind is not None:
+                z["kind"] = str(kind)[:20]
+            set_zones(store, zones)
+            return zones
+    raise ValueError(f"no trusted zone '{name}'")
 
 
 def remove_zone(store, name):
@@ -199,6 +217,35 @@ def imagery(loc):
             "mid": IMAGERY_MID, "detail": IMAGERY_DETAIL, "center": center}
 
 
+def view(loc):
+    """Accuracy-aware default view: street, city, or globe. Pure.
+
+    A tight fix opens at street scale; a loose one at city scale; no
+    position (or a user-set point with no accuracy) opens the global
+    context with no marker. `tile_center` is rounded to ~1 km so tile
+    requests never encode the exact position — the precise marker
+    overlay stays local (Phase 11); tiles only need the neighbourhood.
+    """
+    if (loc or {}).get("status") == "ok" and "lat" in (loc or {}):
+        acc = loc.get("accuracy_m")
+        if isinstance(acc, (int, float)) and acc <= 100:
+            mode, zoom = "street", 16
+            reason = f"±{int(acc)} m fix: street scale is useful"
+        elif isinstance(acc, (int, float)) and acc <= 5000:
+            mode, zoom = "city", 11
+            reason = f"±{int(acc)} m fix: city scale matches the uncertainty"
+        else:
+            mode, zoom = "city", 11
+            reason = ("user-declared point without a measured accuracy: "
+                      "city scale, zone context")
+        return {"mode": mode, "zoom": zoom, "reason": reason,
+                "tile_center": {"lat": round(float(loc["lat"]), 2),
+                                "lon": round(float(loc["lon"]), 2)}}
+    return {"mode": "globe", "zoom": 2,
+            "reason": "no position: global context only, no marker",
+            "tile_center": None}
+
+
 def set_here(store, lat, lon, label=None):
     """Record a user-declared current location (labelled, never a GNSS fix)."""
     return geo.set_manual(store, lat, lon, label)
@@ -221,6 +268,7 @@ def state(store, health_state=None, recent_findings=None):
     return {
         "location": loc or {"status": "unknown"},
         "confidence": fusion(store, loc),
+        "view": view(loc),
         "zones": zones,
         "devices": _devices(store, loc, health_state),
         "anomalies": anomalies(store, loc, recent_findings),

@@ -55,6 +55,12 @@ class AssuranceScoreTests(unittest.TestCase):
         self.assertFalse(rep["complete"])
         self.assertFalse(rep["absence_of_alerts_proves_safety"])
 
+    def test_performance_claim_requires_measured_gpu_evidence(self):
+        entry = assurance.report()["capabilities"]["performance"]
+        self.assertEqual(entry["implementation"], "partial")
+        self.assertIn("GPU", entry["basis"])
+        self.assertIn("GPU", entry["blind_spot"] + entry["basis"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -310,6 +310,8 @@ def _ollama(store, question, conf, jobs=None):
         "verification command or say that human approval is needed. Answer in at most "
         "70 words and finish the final sentence."
     )
+    from jarvis.response import guardrails as guardrails_mod
+    system += guardrails_mod.PREAMBLE
     user = "<DATA>" + json.dumps(context) + "</DATA>\nQUESTION: " + question[:2000]
     text, error = llm.chat(conf, system, user)
     if error == llm.BUSY:
@@ -318,7 +320,7 @@ def _ollama(store, question, conf, jobs=None):
     if error:
         return ("The deterministic assistant does not know that question, and the local "
                 f"Ollama model `{llm.model_name(conf)}` is unavailable: {error}."), "unavailable"
-    return text, "ollama"
+    return guardrails_mod.scrub(text), "ollama"
 
 
 def answer(store, question, conf=None, jobs=None):

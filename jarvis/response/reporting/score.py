@@ -51,6 +51,10 @@ K = 16             # penalty at which an area reads 50%: two highs, or 8 mediums
 
 HISTORY_META = "security_score_history"
 HISTORY_KEEP = 400
+SUSTAINED_META = "security_sustained_history_v1"
+SUSTAINED_KEEP = 2016
+SUSTAINED_MIN_S = 15 * 60
+SUSTAINED_MAX_GAP_S = 10 * 60
 
 GRADES = ((90, "secure"), (75, "good"), (50, "needs work"), (0, "at risk"))
 
@@ -114,8 +118,9 @@ def compute(snapshots, jobs, now=None, acks=None):
                 blind.append({"job": job, "state": state})
                 continue
             observed_jobs += 1
-            kept = _scored(snap.get("findings"), job, acks, now)
-            acknowledged += len(_scored(snap.get("findings"))) - len(kept)
+            kept = _scored(snap.get("findings"), job)
+            acknowledged += sum(acknowledge.is_acknowledged(acks or {}, f, job, now)
+                                for f in kept)
             p, c = _job_penalty(kept)
             penalty += p
             for sev, n in c.items():
@@ -131,13 +136,13 @@ def compute(snapshots, jobs, now=None, acks=None):
         observed = len(present) - len(blind)
         areas.append({
             "name": area,
-            "score": _area_score(penalty) if observed else None,
+            "score": (0 if blind else _area_score(penalty)) if observed else None,
             "open": counts,
             "jobs": len(present),
             "observed": observed,
             "blind": blind,
         })
-    scored = [a["score"] for a in areas if a["score"] is not None]
+    scored = [a["score"] or 0 for a in areas if a["jobs"]]
     coverage = observed_jobs / scored_jobs if scored_jobs else 0.0
     base = sum(scored) / len(scored) if scored else 0.0
     # A machine that is half unobserved cannot score better than half-way
@@ -168,6 +173,14 @@ def record(store, jobs, now=None):
     history = history_of(store)
     history.append([result["at"], result["score"]])
     store.set_meta(HISTORY_META, json.dumps(history[-HISTORY_KEEP:]))
+    sustained = sustained_history_of(store)
+    sustained.append({
+        "at": result["at"], "score": result["score"],
+        "coverage": result["coverage"],
+        "verified": (result["score"] == 100 and result["coverage"] == 100
+                     and all(not area["blind"] for area in result["areas"])),
+    })
+    store.set_meta(SUSTAINED_META, json.dumps(sustained[-SUSTAINED_KEEP:]))
     store.set_meta("security_score_latest", json.dumps(result))
     return result
 
@@ -178,6 +191,44 @@ def history_of(store):
         return [p for p in value if isinstance(p, list) and len(p) == 2]
     except (TypeError, ValueError):
         return []
+
+
+def sustained_history_of(store):
+    """Validated health samples only; malformed persisted state fails closed."""
+    try:
+        value = json.loads(store.get_meta(SUSTAINED_META, "[]") or "[]")
+        return [row for row in value if isinstance(row, dict)
+                and isinstance(row.get("at"), (int, float))
+                and isinstance(row.get("score"), int)
+                and isinstance(row.get("coverage"), int)
+                and isinstance(row.get("verified"), bool)]
+    except (TypeError, ValueError):
+        return []
+
+
+def sustained_health(samples, now=None, min_seconds=SUSTAINED_MIN_S,
+                     max_gap_seconds=SUSTAINED_MAX_GAP_S):
+    """Describe the latest uninterrupted run of recorded perfect health."""
+    now = int(time.time() if now is None else now)
+    rows = sorted((row for row in samples if row["at"] <= now),
+                  key=lambda row: row["at"])
+    base = {"status": "unverified", "since": None, "duration_s": 0,
+            "samples": 0, "latest_at": rows[-1]["at"] if rows else None,
+            "required_s": int(min_seconds), "max_gap_s": int(max_gap_seconds)}
+    if not rows or now - rows[-1]["at"] > max_gap_seconds:
+        return base
+    if not rows[-1]["verified"]:
+        return {**base, "status": "broken"}
+    run = [rows[-1]]
+    for row in reversed(rows[:-1]):
+        if not row["verified"] or run[0]["at"] - row["at"] > max_gap_seconds:
+            break
+        run.insert(0, row)
+    duration = int(run[-1]["at"] - run[0]["at"])
+    return {**base,
+            "status": "verified" if duration >= min_seconds else "collecting",
+            "since": run[0]["at"], "duration_s": duration,
+            "samples": len(run), "latest_at": run[-1]["at"]}
 
 
 def change_within(store, seconds, now=None):

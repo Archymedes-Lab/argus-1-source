@@ -312,5 +312,149 @@ class GeoRouteTests(unittest.TestCase):
         self.assertIn("outside_zone_with_activity", kinds)
 
 
+class ViewModeTests(unittest.TestCase):
+    """Accuracy-aware default view: street, city, or globe. Pure and bounded."""
+
+    def test_tight_fix_opens_at_street_scale(self):
+        view = geosecurity.view({"status": "ok", "lat": -1.95, "lon": 30.06,
+                                 "accuracy_m": 25})
+        self.assertEqual(view["mode"], "street")
+        self.assertEqual(view["zoom"], 16)
+        self.assertIn("reason", view)
+
+    def test_loose_fix_opens_at_city_scale(self):
+        view = geosecurity.view({"status": "ok", "lat": -1.95, "lon": 30.06,
+                                 "accuracy_m": 1500})
+        self.assertEqual(view["mode"], "city")
+        self.assertEqual(view["zoom"], 11)
+
+    def test_manual_point_without_accuracy_gets_city_context(self):
+        view = geosecurity.view({"status": "ok", "lat": -1.95, "lon": 30.06,
+                                 "accuracy_m": None})
+        self.assertEqual(view["mode"], "city")
+
+    def test_no_position_is_globe_without_marker(self):
+        for loc in (None, {}, {"status": "denied"}, {"status": "ok"}):
+            view = geosecurity.view(loc)
+            self.assertEqual(view["mode"], "globe")
+            self.assertIsNone(view["tile_center"])
+
+    def test_tile_center_is_rounded_for_privacy(self):
+        view = geosecurity.view({"status": "ok", "lat": -1.95065, "lon": 30.06113,
+                                 "accuracy_m": 10})
+        self.assertEqual(view["tile_center"], {"lat": -1.95, "lon": 30.06})
+
+
+class LocalMapTests(unittest.TestCase):
+    """The 2D local map: modes, controls, zone editing, graceful degradation."""
+
+    def setUp(self):
+        self.html = (Path(__file__).parents[1]
+                     / "jarvis/web/static/geo.html").read_text()
+
+    def test_four_modes_are_offered(self):
+        for mode in ("street", "satellite", "hybrid", "globe"):
+            self.assertIn(f'data-mode="{mode}"', self.html)
+
+    def test_2d_map_has_scale_and_return_to_me(self):
+        self.assertIn('id="map2d"', self.html)
+        self.assertIn("control.scale", self.html)
+        self.assertIn('id="mebtn"', self.html)
+        self.assertIn("returnToMe", self.html)
+
+    def test_hybrid_overlays_labels_on_satellite(self):
+        self.assertIn("World_Imagery/MapServer", self.html)
+        self.assertIn("World_Boundaries_and_Places/MapServer", self.html)
+
+    def test_zones_can_be_saved_and_removed_from_the_page(self):
+        self.assertIn('id="zonesave"', self.html)
+        self.assertIn("/api/geo/zone", self.html)
+        self.assertIn("data-rmzone", self.html)
+
+    def test_tile_failure_degrades_to_a_notice(self):
+        self.assertIn("tileerror", self.html)
+        self.assertIn('id="tilewarn"', self.html)
+
+    def test_missing_tile_library_falls_back_without_throwing(self):
+        self.assertIn('id="map2dfallback"', self.html)
+        self.assertIn('typeof L==="undefined"', self.html)
+
+    def test_initial_mode_follows_payload_view(self):
+        self.assertIn("(p.view||{}).mode", self.html)
+        self.assertIn('setMode("street")', self.html)
+        self.assertIn('setMode("globe")', self.html)
+
+    def test_geo_csp_allows_street_tiles(self):
+        csp = Handler.CSP_GEO
+        self.assertTrue(re.search(r"img-src[^;]*tile\.openstreetmap\.org", csp),
+                        f"img-src must allow street tiles in {csp}")
+        self.assertTrue(re.search(r"connect-src[^;]*tile\.openstreetmap\.org", csp),
+                        f"connect-src must allow street tiles in {csp}")
+
+    def test_panel_stacks_above_the_2d_map(self):
+        """The 2D map once painted over the status panel (no z-index)."""
+        css = self.html
+        panel = re.search(r"#panel\s*\{([^}]*)\}", css)
+        map2d = re.search(r"#map2d\s*\{([^}]*)\}", css)
+        self.assertIsNotNone(panel)
+        self.assertIsNotNone(map2d)
+
+        def zindex(rule):
+            match = re.search(r"z-index\s*:\s*(\d+)", rule.group(1))
+            return int(match.group(1)) if match else 0
+        self.assertGreater(zindex(panel), zindex(map2d),
+                           "status panel must paint above the 2D map")
+
+    def test_zone_editor_has_presets_address_and_radius(self):
+        self.assertIn('id="zonehome"', self.html)
+        self.assertIn('id="zonework"', self.html)
+        self.assertIn('id="zoneaddr"', self.html)
+        self.assertIn('id="zonefind"', self.html)
+        self.assertIn('class="zrad"', self.html)
+
+
+class ZoneEditTests(unittest.TestCase):
+    """Zones are editable ground truth: radius, address and kind included."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Store(str(Path(self.tmp.name) / "zones.db"))
+        self.addCleanup(self.store.close)
+
+    def test_add_carries_address_and_kind(self):
+        zones = geosecurity.add_zone(self.store, "HOME", -1.95, 30.06, 200,
+                                     address="Kigali", kind="home")
+        self.assertEqual(zones[0]["address"], "Kigali")
+        self.assertEqual(zones[0]["kind"], "home")
+        self.assertEqual(geosecurity.get_zones(self.store)[0]["address"], "Kigali")
+
+    def test_update_radius_in_place_without_moving(self):
+        geosecurity.add_zone(self.store, "HOME", -1.95, 30.06, 200)
+        zones = geosecurity.update_zone(self.store, "HOME", radius_m=500)
+        self.assertEqual(zones[0]["radius_m"], 500)
+        self.assertEqual(zones[0]["lat"], -1.95)
+
+    def test_update_clamps_radius_and_rejects_the_missing(self):
+        geosecurity.add_zone(self.store, "HOME", -1.95, 30.06, 200)
+        zones = geosecurity.update_zone(self.store, "HOME", radius_m=5)
+        self.assertEqual(zones[0]["radius_m"], 20)
+        with self.assertRaises(ValueError):
+            geosecurity.update_zone(self.store, "NOWHERE", radius_m=100)
+
+    def test_update_address_and_kind(self):
+        geosecurity.add_zone(self.store, "WORKPLACE", -1.96, 30.07, 300)
+        zones = geosecurity.update_zone(self.store, "WORKPLACE",
+                                        address="Norrsken Kigali", kind="workplace")
+        self.assertEqual(zones[0]["address"], "Norrsken Kigali")
+        self.assertEqual(zones[0]["kind"], "workplace")
+
+    def test_extra_zone_keys_do_not_break_classification(self):
+        geosecurity.add_zone(self.store, "HOME", -1.95, 30.06, 200,
+                             address="Kigali", kind="home")
+        zones = geosecurity.get_zones(self.store)
+        self.assertEqual(geo.classify(-1.95, 30.06, zones), "HOME")
+
+
 if __name__ == "__main__":
     unittest.main()

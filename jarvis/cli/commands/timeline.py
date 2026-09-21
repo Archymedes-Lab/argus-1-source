@@ -116,12 +116,49 @@ def cmd_timeline(args, store):
             for ev in rows[-args.limit:]:
                 print(json.dumps(ev) if args.json else _line(ev))
             return 0
+        if action in ("state", "detect"):
+            # One ordered feed, many consumers: the same recent window
+            # answers the state projection and the detectors without
+            # rescanning the machine.
+            from jarvis.core import temporal as temporal_mod
+            start = max(0, log.last_seq - args.limit * 20)
+            window = list(log.iter_events(after=start))[-args.limit * 5:]
+            projection = temporal_mod.project(window)
+            if action == "state":
+                if args.json:
+                    print(json.dumps(projection, indent=2, default=str))
+                else:
+                    print(f"folded {projection['events_folded']} events "
+                          f"#{projection['first_seq']}–#{projection['last_seq']}"
+                          + (" (truncated)" if projection["truncated"] else ""))
+                    print(f"alive {len(projection['alive'])} processes, "
+                          f"{len(projection['peers'])} peers, "
+                          f"{len(projection['dns'])} dns names, "
+                          f"{len(projection['files'])} files, "
+                          f"{len(projection['tasks'])} tasks, "
+                          f"{len(projection.get('registry', {}))} registry keys, "
+                          f"{len(projection.get('drivers', {}))} drivers")
+                    for line in temporal_mod.changes(
+                            temporal_mod.reduce(window[:0]), projection)[:args.limit]:
+                        print("  " + line)
+                return 0
+            found = temporal_mod.detectors(window, projection)
+            if args.json:
+                print(json.dumps(found, indent=2, default=str))
+            else:
+                if not found:
+                    print("no detector fired on this window")
+                for f in found:
+                    seqs = ",".join(str(s) for s in f.get("seqs", [])[:8])
+                    print(f"[{f['severity']}] {f['detector']}: {f['detail']} (seqs {seqs})")
+            return 0
     return 1
 
 
 def add_parser(sub):
     p = sub.add_parser("timeline", help="the recorded event history: search, lineage, integrity")
-    p.add_argument("action", choices=["status", "ingest", "verify", "search", "tree", "show", "tail"])
+    p.add_argument("action", choices=["status", "ingest", "verify", "search", "tree", "show", "tail",
+                                      "state", "detect"])
     p.add_argument("guid", nargs="?", help="tree: a process GUID")
     p.add_argument("--sha256"); p.add_argument("--dns"); p.add_argument("--ip")
     p.add_argument("--image", help="full image path")

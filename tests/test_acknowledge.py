@@ -62,15 +62,15 @@ class AcknowledgeTests(unittest.TestCase):
         self.assertIsNotNone(ack.revoke(self.store, fid))
         self.assertEqual(ack.load(self.store), {})
 
-    def test_confirmed_findings_leave_the_score_and_the_to_do_list(self):
+    def test_accepted_risk_keeps_score_debt_but_leaves_notification_list(self):
         snaps = {job: {"ts": NOW - 1, "findings": [], "error": ""} for job in JOBS}
         snaps["backdoor"]["findings"] = [f()]
         before = score.compute(snaps, JOBS, NOW)
         ack.acknowledge(self.store, f(), "backdoor", "Codex sandbox", now=NOW)
         acks = ack.load(self.store)
         after = score.compute(snaps, JOBS, NOW, acks)
-        self.assertLess(before["score"], after["score"])
-        self.assertEqual(after["score"], 100)
+        self.assertEqual(before["score"], after["score"])
+        self.assertLess(after["score"], 100)
         self.assertEqual(after["acknowledged"], 1)
         self.assertEqual(triage.current(snaps, acks=acks, now=NOW), [])
 

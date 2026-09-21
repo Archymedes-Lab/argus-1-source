@@ -25,11 +25,12 @@ from jarvis.core import incidents
 from jarvis.core.paths import REPO_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
-from jarvis.response import acknowledge, alert, assistant, protocols, questions
+from jarvis.response import acknowledge, alert, assistant, protocols, questions, remediation
 from jarvis.response.reporting import score, voice
 from jarvis.service import attackmap, sdnotify
-from jarvis.service.protection import health
+from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
+from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
 
@@ -146,6 +147,46 @@ def _meta_object(store, key):
         return {}
 
 
+def _continuity_state(store, snaps, scheduler, findings):
+    """Continuity systems for the dashboard: invariants, governor,
+    perception, activity. Read-only, cheap, never raises.
+
+    Sources are rebuilt from the already-loaded snapshots with the same
+    freshness budgets the health endpoint uses, so both pages judge from
+    one rulebook. Activity correlates a bounded slice of the findings the
+    page already holds — no new scans, no new queries.
+    """
+    try:
+        from jarvis.core import activity as activity_mod
+        from jarvis.core import governor as governor_mod
+        from jarvis.service import protection as protection_mod
+        stamp = time.time()
+        required = {"scan": 180}
+        if "win" in scheduler.hosts:
+            required.update(bridge=135, sysmon=1500, native=180)
+        optional = {"internet": 300, "veil": 90, "secrets": 90000,
+                    "resources": 900}
+        sources = {}
+        for name, limit in {**required, **optional}.items():
+            snap = snaps.get(name)
+            row = (name, snap["ts"], snap["error"],
+                   json.dumps(snap["findings"])) if snap else None
+            sources[name] = protection_mod._state(row, limit, stamp)
+        invariants = protection_mod._invariants(sources, scheduler, stamp)
+        pressured, reason = governor_mod.live_pressure()
+        perception = _meta_object(store, "perception_summary_v1") or None
+        chains = activity_mod.correlate(findings[:300], now=stamp)[:30]
+        activity = [{**c, "members": c["members"][:6],
+                     "member_overflow": max(0, len(c["members"]) - 6)}
+                    for c in chains]
+        return {"invariants": invariants,
+                "governor": {"pressured": pressured, "reason": reason},
+                "perception": perception, "activity": activity}
+    except Exception:
+        return {"invariants": None, "governor": None, "perception": None,
+                "activity": []}
+
+
 def build_state(db_path, scheduler):
     store = Store(db_path)
     try:
@@ -237,6 +278,10 @@ def build_state(db_path, scheduler):
             # from the history the report job records every five minutes.
             "security": {**score.compute(snaps, JOBS, acks=acknowledge.load(store)),
                          "history": score.history_of(store)[-300:]},
+            "posture": posture_mod.build(
+                snaps, JOBS, acks=acknowledge.load(store),
+                sustained_samples=score.sustained_history_of(store),
+                repair_state=remediation.audit(store)),
             "questions": questions.build(store, snaps, alert.load_conf())[:12],
             "attack": attackmap.latest(store),
             "baseline_at": store.get_meta("baseline_at"),
@@ -244,7 +289,9 @@ def build_state(db_path, scheduler):
             "reliability": _reliability_state(scheduler, snaps),
             "performance": {**_performance_state(jobs, scheduler),
                             "subsystems": _meta_object(store, "resource_profile_v1"),
-                            "accelerator": _meta_object(store, "accelerator_probe_v1")},
+                            "accelerator": _meta_object(store, "accelerator_probe_v2")
+                            or _meta_object(store, "accelerator_probe_v1")},
+            "continuity": _continuity_state(store, snaps, scheduler, all_findings),
             "fix": _fix_state(db_path),
         }
     finally:
@@ -276,6 +323,8 @@ def _fix_state(db_path):
                      "generation_error": e.get("generation_error", ""),
                      "patch_chars": len(e.get("patch_draft", "")),
                      "directive_objective": (e.get("directive") or {}).get("objective", ""),
+                     "jev": ((e.get("jev") or {}).get("proposal") or {}).get("answers", {}),
+                     "jev_validation": ((e.get("jev_validation") or e.get("jev") or {}).get("validation") or {}).get("answers", {}),
                      "last_event": (e.get("decision_history") or [{}])[-1]}
                     for e in selffix.list_open(store)]
         finally:
@@ -370,18 +419,21 @@ class Handler(BaseHTTPRequestHandler):
     CSP_STRICT = ("default-src 'none'; style-src 'unsafe-inline'; "
                   "script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'")
     # The GeoSecurity globe is inherently external: the Cesium engine and the
-    # satellite tiles come from named third parties, and place-name lookup from
-    # OpenStreetMap. This relaxation is scoped to the /geo page alone and names
-    # the exact origins; every other route keeps the strict policy above.
+    # satellite tiles come from named third parties, place-name lookup from
+    # OpenStreetMap, and the 2D street map from OSM and Esri tiles. This
+    # relaxation is scoped to the /geo page alone and names the exact
+    # origins; every other route keeps the strict policy above.
     CSP_GEO = (
         "default-src 'none'; "
         "script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
         "style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data: blob: https://gibs.earthdata.nasa.gov https://cdn.jsdelivr.net "
-        "https://server.arcgisonline.com https://tiles.maps.eox.at; "
+        "https://server.arcgisonline.com https://tiles.maps.eox.at "
+        "https://tile.openstreetmap.org; "
         "connect-src 'self' blob: https://gibs.earthdata.nasa.gov "
         "https://cdn.jsdelivr.net https://nominatim.openstreetmap.org "
-        "https://server.arcgisonline.com https://tiles.maps.eox.at; "
+        "https://server.arcgisonline.com https://tiles.maps.eox.at "
+        "https://tile.openstreetmap.org; "
         "worker-src blob: https://cdn.jsdelivr.net; child-src blob:; font-src data:")
 
     def _send(self, code, body, ctype="application/json", csp=None):
@@ -404,8 +456,8 @@ class Handler(BaseHTTPRequestHandler):
         # has a tiny schema, returns no observations, and stores only aggregate
         # metadata.  Keep it before the dashboard's same-origin gate.
         if url.path == "/api/veil/events":
-            from jarvis.core.veil import TOKEN_KEY
             from jarvis.collectors.host.veil import classify, validate_report
+            from jarvis.core.veil import TOKEN_KEY
             payload = self._json_body(8192)
             token = self.headers.get("X-JARVIS-Veil-Token", "")
             store = Store(self.db_path)
@@ -507,6 +559,56 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"ok": True}))
             finally:
                 store.close()
+        if url.path == "/api/geo/zone":
+            # Same trust model as /api/geo/here: localhost + same-origin POST
+            # from you editing your own trusted zones on the /geo page.
+            from jarvis.service import geosecurity
+            payload = self._json_body(2048)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                if payload.get("remove"):
+                    geosecurity.remove_zone(store, str(payload["remove"])[:80])
+                    return self._send(200, json.dumps({"ok": True, "removed": True}))
+                name = str(payload.get("name") or "").strip()[:80]
+                if not name:
+                    return self._send(400, json.dumps({"error": "zone name required"}))
+                if "lat" not in payload or "lon" not in payload:
+                    # In-place edit of radius/address/kind; nothing moves.
+                    radius = payload.get("radius_m")
+                    if radius is not None:
+                        try:
+                            radius = int(radius)
+                        except (TypeError, ValueError):
+                            return self._send(400, json.dumps(
+                                {"error": "radius_m must be a number"}))
+                    try:
+                        zones = geosecurity.update_zone(
+                            store, name, radius_m=radius,
+                            address=payload.get("address"),
+                            kind=payload.get("kind"))
+                    except (TypeError, ValueError) as exc:
+                        return self._send(400, json.dumps({"error": str(exc)}))
+                    return self._send(200, json.dumps({"ok": True, "zones": len(zones)}))
+                try:
+                    lat, lon = float(payload["lat"]), float(payload["lon"])
+                except (KeyError, TypeError, ValueError):
+                    return self._send(400, json.dumps({"error": "lat and lon required"}))
+                try:
+                    radius = int(payload.get("radius_m", 200))
+                except (TypeError, ValueError):
+                    return self._send(400, json.dumps({"error": "radius_m must be a number"}))
+                try:
+                    zones = geosecurity.add_zone(
+                        store, name, lat, lon, radius,
+                        address=str(payload.get("address") or "")[:200],
+                        kind=str(payload.get("kind") or "")[:20])
+                except ValueError as exc:
+                    return self._send(400, json.dumps({"error": str(exc)}))
+                return self._send(200, json.dumps({"ok": True, "zones": len(zones)}))
+            finally:
+                store.close()
 
         if url.path == "/api/answer":
             payload = self._json_body(4096)
@@ -580,6 +682,19 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/state":
             return self._send(200, json.dumps(
                 build_state(self.db_path, self.scheduler), default=str))
+
+        if url.path in ("/api/posture", "/api/posture/path-to-100"):
+            from jarvis.service import posture
+            store = Store(self.db_path)
+            try:
+                payload = posture.build(
+                    store.get_snapshots(), JOBS,
+                    acks=acknowledge.load(store),
+                    sustained_samples=score.sustained_history_of(store),
+                    repair_state=remediation.audit(store))
+            finally:
+                store.close()
+            return self._send(200, json.dumps(payload))
 
         if url.path == "/api/defender":
             params = parse_qs(url.query)

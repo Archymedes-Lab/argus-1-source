@@ -6,6 +6,7 @@
     jarvis fix propose --title T --problem P
                                   file a proposal yourself
     jarvis fix approve <id>       approve Ollama directive + OpenCode drafting
+    jarvis fix judge <id>         advisory Jev assessment (records opinion only)
     jarvis fix draft <id>         retry a failed approved drafting run
     jarvis fix authorize <id>     separately authorize the reviewed patch
     jarvis fix reject <id>        reject with an optional reason
@@ -70,6 +71,10 @@ def _print_proposal(entry, full=False):
         if entry.get("patch_draft"):
             print("  --- patch draft (not applied) ---")
             print("  " + entry["patch_draft"].replace("\n", "\n  ")[:4000])
+        if entry.get("jev") or entry.get("jev_validation"):
+            print("  --- Jev assessment (advisory only) ---")
+            print("  " + json.dumps(entry.get("jev") or entry.get("jev_validation"),
+                                    indent=2, sort_keys=True).replace("\n", "\n  ")[:2000])
         if entry.get("apply_log"):
             print("  --- apply log ---")
             print("  " + entry["apply_log"].replace("\n", "\n  ")[-2000:])
@@ -150,6 +155,9 @@ def cmd_fix(args, store):
     if action == "draft":
         return _draft(args, store)
 
+    if action == "judge":
+        return _judge(args, store)
+
     if action == "apply":
         return _apply(args, store)
 
@@ -173,6 +181,58 @@ def cmd_fix(args, store):
 
     print(f"unknown fix action {action}")
     return 1
+
+
+def _judge(args, store):
+    """Run advisory Jev judgments over a proposal and persist them.
+
+    Human gates are untouched: this records an opinion for review, it
+    authorizes nothing and changes no status.
+    """
+    from jarvis.response import jev as jev_mod
+    if not _valid_pid(args.id):
+        print(f"no proposal {args.id}")
+        return 1
+    if not jev_mod.available():
+        print("TYPESAFE_API_KEY is not configured — nothing to judge with.")
+        return 1
+    entry = selffix.get(store, args.id)
+    if entry is None:
+        print(f"no proposal {args.id}")
+        return 1
+    from jarvis.response import cascade as cascade_mod
+    if not jev_mod.available():
+        # Without Jev the cascade still runs its local leg; a missing key
+        # only removes the escalation path, never the command.
+        print("note: TYPESAFE_API_KEY not configured — local model only.")
+    entry = selffix.get(store, args.id)
+    if entry is None:
+        print(f"no proposal {args.id}")
+        return 1
+    started = time.time()
+    result = {"at": int(started), "route": "cascade",
+              "proposal": cascade_mod.judge_proposal(entry, alert.load_conf())}
+    if (entry.get("patch_draft") or "").strip():
+        result["validation"] = cascade_mod.validate_patch(entry, alert.load_conf())
+    result["latency_s"] = round(time.time() - started, 2)
+    proposals = selffix._load(store)
+    item = proposals.get(args.id)
+    if item is None:
+        print(f"no proposal {args.id}")
+        return 1
+    item["jev"] = result
+    item["updated_at"] = int(time.time())
+    selffix._history(item, "jev_assessed", "operator",
+                     f"proposal={result['proposal'].get('route', '?')}:"
+                     f"{result['proposal'].get('recommendation', '?')}"
+                     + (f"; validation={result['validation'].get('route', '?')}:"
+                        f"{result['validation'].get('recommendation', '?')}"
+                        if "validation" in result else ""))
+    selffix._save(store, proposals)
+    print(f"Cascade assessment recorded for {args.id} "
+          f"({result.get('latency_s', '?')}s, advisory only — no status changed).")
+    print(json.dumps(result, indent=2, sort_keys=True)[:3000])
+    return 0
 
 
 def _draft(args, store):
@@ -419,7 +479,7 @@ def _record(store, pid, status, log, base_commit="", touched=()):
 def add_parser(sub):
     p = sub.add_parser("fix", help="self-fix proposals: JARVIS asks, you decide")
     p.add_argument("action", nargs="?", default=None,
-                   choices=["list", "show", "propose", "draft", "approve", "authorize",
+                   choices=["list", "show", "propose", "draft", "judge", "approve", "authorize",
                             "reject", "apply", "rollback", "email", "check"],
                    help="what to do (default: list open proposals)")
     p.add_argument("id", nargs="?", help="proposal id (fx-…)")

@@ -12,14 +12,18 @@ advanced past that creation. Processes that predate coverage or are still in
 the ingestion settling window are unknown, not discrepancies.
 """
 
+import re
 from datetime import datetime, timezone
 
+from jarvis.core import perception as perception_mod
 from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
 from jarvis.platform.native.normalize import SYSMON
 
 FRESH_SECONDS = 180
 SETTLE_SECONDS = 10
 START_TOLERANCE_SECONDS = 2
+_BOOT_EVIDENCE = {}
+_BOOT_CACHE_LIMIT = 16
 
 
 def _stamp(value):
@@ -41,6 +45,82 @@ def _same_start(left, right):
     return a is not None and b is not None and abs(a - b) <= START_TOLERANCE_SECONDS
 
 
+def _boot_boundary(log, cursor, continuous):
+    """Clamp legacy continuity to the first retained event in this boot.
+
+    Older cursors carried continuity across reboot. Cache the one-time replay
+    by store/host/boot/generation so the 30-second process scan does not turn
+    into repeated event-log IO.
+    """
+    boot = cursor.get("boot")
+    if not boot:
+        return continuous
+    key = (str(log.root), cursor.get("host"), boot, cursor.get("generation"))
+    if key in _BOOT_EVIDENCE:
+        return max(continuous, _BOOT_EVIDENCE[key]["boundary"])
+    boundary = None
+    dropped_process_create = 0
+    for event in log.iter_events(since=cursor.get("continuous_since")):
+        if (event.get("host") != cursor.get("host")
+                or event.get("boot") != boot
+                or event.get("channel") != SYSMON):
+            continue
+        if event.get("category") == "process" and event.get("action") == "start":
+            stamp = _stamp(event.get("time"))
+            if stamp is not None and (boundary is None or stamp < boundary):
+                boundary = stamp
+        if event.get("source_event") == 255:
+            description = str((event.get("attrs") or {}).get("Description") or "")
+            dropped = re.search(r"(?i)\bProcessCreate:(\d+)\b", description)
+            if dropped:
+                dropped_process_create += int(dropped.group(1))
+    if boundary is not None:
+        if len(_BOOT_EVIDENCE) >= _BOOT_CACHE_LIMIT:
+            _BOOT_EVIDENCE.pop(next(iter(_BOOT_EVIDENCE)))
+        _BOOT_EVIDENCE[key] = {
+            "boundary": boundary,
+            "dropped_process_create": dropped_process_create,
+        }
+        return max(continuous, boundary)
+    return continuous
+
+
+def _boot_dropped_process_create(log, cursor):
+    continuous = _stamp(cursor.get("continuous_since")) or 0.0
+    _boot_boundary(log, cursor, continuous)
+    key = (str(log.root), cursor.get("host"), cursor.get("boot"),
+           cursor.get("generation"))
+    return int((_BOOT_EVIDENCE.get(key) or {}).get("dropped_process_create") or 0)
+
+
+def coverage_evidence(observed_at, root=DEFAULT_ROOT):
+    """Return health-safe process-stream coverage evidence for this boot.
+
+    This deliberately exposes counts and boundaries, never raw events. An
+    unavailable or stale cursor remains explicit rather than looking like
+    zero loss.
+    """
+    observed_at = _stamp(observed_at)
+    if observed_at is None:
+        return {"status": "unknown"}
+    try:
+        with EventLog(root) as log:
+            stream = _cursor(log, observed_at)
+            if stream is None:
+                return {"status": "unknown"}
+            cursor, cursor_at, continuous_since = stream
+            return {
+                "status": "observed",
+                "boot": cursor.get("boot"),
+                "cursor_at": cursor_at,
+                "continuous_since": continuous_since,
+                "dropped_process_create": _boot_dropped_process_create(
+                    log, cursor),
+            }
+    except (LogError, OSError):
+        return {"status": "unknown"}
+
+
 def _cursor(log, observed_at):
     candidates = [c for c in log.cursors.values()
                   if c.get("channel") == SYSMON and c.get("status") == "complete"
@@ -57,10 +137,84 @@ def _cursor(log, observed_at):
     # existing incidents unobserved rather than spuriously replaced.
     if observed_at - created > FRESH_SECONDS or created - observed_at > FRESH_SECONDS:
         return None
-    return cursor, created, continuous
+    return cursor, created, _boot_boundary(log, cursor, continuous)
 
 
-def processes(snapshot, observed_at, root=DEFAULT_ROOT):
+def classify_snapshot(snapshot, observed_at, root=DEFAULT_ROOT):
+    """Per-process perception verdicts: OBSERVED/INFERRED/RECONCILED/UNOBSERVED.
+
+    Pure read path shared by findings and UX. Every snapshot row gets one
+    verdict with confidence, source, freshness and corroboration; only
+    RECONCILED rows may be presented as VERIFIED. Rows the stream cannot
+    judge (pre-coverage, settling, stale/gapped) are UNOBSERVED/UNKNOWN,
+    never false discrepancies.
+    """
+    observed_at = _stamp(observed_at)
+    if observed_at is None:
+        return []
+    try:
+        with EventLog(root) as log:
+            stream = _cursor(log, observed_at)
+            if stream is None:
+                return [
+                    {"pid": p.get("pid"), "name": p.get("name"),
+                     **perception_mod.classify(
+                         event_present=False, snapshot_present=True,
+                         coverage_valid=False)}
+                    for p in snapshot if p.get("host") == "win" and p.get("pid")
+                ]
+            cursor, cursor_at, continuous_since = stream
+            verdicts = []
+            for proc in snapshot:
+                if proc.get("host") != "win" or not proc.get("pid"):
+                    continue
+                started = _stamp(proc.get("started"))
+                if started is None or started < continuous_since:
+                    verdicts.append({
+                        "pid": proc.get("pid"), "name": proc.get("name"),
+                        **perception_mod.classify(
+                            event_present=False, snapshot_present=True,
+                            coverage_valid=False)})
+                    continue
+                if started > cursor_at - SETTLE_SECONDS:
+                    verdicts.append({
+                        "pid": proc.get("pid"), "name": proc.get("name"),
+                        **perception_mod.classify(
+                            event_present=False, snapshot_present=True,
+                            coverage_valid=False)})
+                    continue
+                rows = log.process_instances(cursor["host"], proc["pid"])
+                instance = next(
+                    (r for r in rows
+                     if _same_start(r.get("started"), proc["started"])), None)
+                if instance is None:
+                    verdicts.append({
+                        "pid": proc.get("pid"), "name": proc.get("name"),
+                        **perception_mod.classify(
+                            event_present=False, snapshot_present=True,
+                            coverage_valid=True)})
+                    continue
+                ended = _stamp(instance.get("ended"))
+                snapshot_at = _stamp(proc.get("observed_at")) or observed_at
+                if ended is not None and ended <= snapshot_at - SETTLE_SECONDS:
+                    verdicts.append({
+                        "pid": proc.get("pid"), "name": proc.get("name"),
+                        **perception_mod.classify(
+                            event_present=True, snapshot_present=True,
+                            identity_match=False, coverage_valid=True)})
+                    continue
+                verdicts.append({
+                    "pid": proc.get("pid"), "name": proc.get("name"),
+                    **perception_mod.classify(
+                        event_present=True, snapshot_present=True,
+                        identity_match=True, coverage_valid=True)})
+            return verdicts
+    except (LogError, OSError):
+        return []
+
+
+def processes(snapshot, observed_at, root=DEFAULT_ROOT, policy=None,
+              dropped_process_create=False):
     """Return visibility findings for snapshot/event-state contradictions."""
     observed_at = _stamp(observed_at)
     if observed_at is None:
@@ -71,6 +225,7 @@ def processes(snapshot, observed_at, root=DEFAULT_ROOT):
             if stream is None:
                 return []
             cursor, cursor_at, continuous_since = stream
+            dropped_in_boot = _boot_dropped_process_create(log, cursor)
             findings = []
             for proc in snapshot:
                 if proc.get("host") != "win" or not proc.get("pid"):
@@ -88,6 +243,10 @@ def processes(snapshot, observed_at, root=DEFAULT_ROOT):
                 subject = (f"{cursor.get('device') or cursor['host']}:"
                            f"{cursor.get('boot') or 'unknown'}:{proc['pid']}:{proc['started']}")
                 if instance is None:
+                    from jarvis.collectors.telemetry import sysmon_policy
+                    drops = dropped_process_create or dropped_in_boot
+                    cause = sysmon_policy.gap_cause(
+                        policy, dropped_process_create=drops, process=proc)
                     findings.append({
                         "category": "visibility", "severity": "high", "host": "win",
                         "rule_id": "temporal-process-start-missing", "subject_id": subject,
@@ -95,7 +254,8 @@ def processes(snapshot, observed_at, root=DEFAULT_ROOT):
                         "detail": ("The current process snapshot contains this exact execution, but the "
                                    "continuous native Sysmon stream has no matching ProcessGuid start. "
                                    "This can indicate an event-log gap, excluded telemetry, sensor "
-                                   "tampering, or a process hidden from the event path."),
+                                   "tampering, or a process hidden from the event path. "
+                                   f"Policy attribution: {cause}."),
                         "where": proc.get("exe") or f"pid {proc['pid']}",
                     })
                     continue

@@ -162,12 +162,55 @@ def document(title, preheader, inner):
         f"{inner}</table></td></tr></table></body></html>")
 
 
-def header(kicker, title, subtitle=""):
-    return (f'<tr><td {tw("bg-slate-900 px-6 pt-6 pb-5")}>'
+# Header tones: the hero answers "how worried should I be?" before a word
+# is read. Urgent mail arrives red, calm mail emerald, digests indigo,
+# health violet, everything else the familiar slate.
+TONES = {
+    "slate": "bg-slate-900",
+    "urgent": "bg-red-700",
+    "calm": "bg-emerald-700",
+    "digest": "bg-indigo-600",
+    "health": "bg-violet-700",
+    "plan": "bg-sky-600",
+}
+
+
+def header(kicker, title, subtitle="", tone="slate"):
+    bg = TONES.get(tone, TONES["slate"])
+    return (f'<tr><td {tw(f"{bg} px-6 pt-6 pb-5")}>'
             f'<div {tw("text-xs font-semibold uppercase tracking-widest text-sky-200")}>{esc(kicker)}</div>'
             f'<div {tw("text-2xl font-bold text-white mt-1 leading-tight")}>{esc(title)}</div>'
             + (f'<div {tw("text-sm text-slate-300 mt-2")}>{esc(subtitle)}</div>' if subtitle else "")
             + "</td></tr>")
+
+
+def hero(stats):
+    """One glanceable stat strip: [(value, label)] in big friendly numerals."""
+    cells = "".join(
+        f'<td width="{100 // max(1, len(stats))}%" {tw("align-top px-2")}>'
+        f'<div {tw("text-4xl font-extrabold text-slate-900 leading-tight")}>{esc(value)}</div>'
+        f'<div {tw("text-xs font-semibold uppercase tracking-wider text-slate-500")}>{esc(label)}</div></td>'
+        for value, label in stats)
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+            f"{cells}</tr></table>")
+
+
+def story_card(chain):
+    """One correlated narrative: headline, size, and causal honesty."""
+    note = ("one causal edge links these observations"
+            if chain.get("causal") else
+            "grouped by host and subject; causality unverified")
+    over = (f" · +{chain['member_overflow']} more on the dashboard"
+            if chain.get("member_overflow") else "")
+    jobs = ", ".join(str(j) for j in (chain.get("jobs") or [])[:4])
+    return (
+        f'<div {tw("rounded-xl border border-slate-200 bg-white p-4 mt-3 border-l-4 border-l-violet-600")}>'
+        f'<div {tw("text-base font-semibold text-slate-900 leading-snug")}>'
+        f"&#9670; {esc(chain.get('headline', ''))}</div>"
+        f'<div {tw("text-sm text-slate-600 mt-1")}>{chain.get("count", 0)} '
+        f'observation{"s" if chain.get("count", 0) != 1 else ""}'
+        f"{(' · ' + esc(jobs)) if jobs else ''}{esc(over)}</div>"
+        f'<div {tw("text-xs text-slate-400 mt-1")}>{esc(note)}</div></div>')
 
 
 def voice(line, by_model=False):

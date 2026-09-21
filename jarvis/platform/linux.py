@@ -67,6 +67,20 @@ TCP_STATES = {
 
 
 def socket_table():
+    """inode -> connection detail, built from all four /proc/net socket tables.
+
+    One authoritative read per interval: shared via jarvis.core.state so
+    process, firewall and hidden-socket consumers do not each walk
+    /proc/net. Falls back to a direct read if the cache is unavailable.
+    """
+    try:
+        from jarvis.core import state as _state
+        return _state.get_socket_table(_read_socket_table)
+    except Exception:
+        return _read_socket_table()
+
+
+def _read_socket_table():
     """inode -> connection detail, built from all four /proc/net socket tables."""
     table = {}
     for fname, proto in (("tcp", "tcp"), ("tcp6", "tcp6"), ("udp", "udp"), ("udp6", "udp6")):

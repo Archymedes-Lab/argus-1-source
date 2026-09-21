@@ -14,24 +14,3 @@ venv/
 
 # stray agent checkpoint store, not project source
 .archymedes/
-
-# Rust build artifacts
-rust-runtime/target/
-**/target/
-Cargo.lock
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Test outputs
-*.test.out
-.coverage/
-htmlcov/
-
-# Build artifacts
-dist/
-build/
-*.egg-info/
