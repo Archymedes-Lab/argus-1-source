@@ -52,6 +52,12 @@ CHANNEL = "Microsoft-Windows-Sysmon/Operational"
 # PROCESS_VM_READ and 0x0400 is PROCESS_QUERY_INFORMATION; the classic
 # credential-dumping combination is 0x1010 or 0x1410.
 VM_READ = 0x0010
+# Rights that cannot touch LSASS memory, threads or handles:
+# PROCESS_QUERY_LIMITED_INFORMATION (0x1000), PROCESS_QUERY_INFORMATION
+# (0x0400) and SYNCHRONIZE (0x100000). Windows components ask for these
+# constantly. They still allow OpenProcessToken, the first step of
+# SYSTEM-token theft, so a query-only open stays reportable at medium.
+QUERY_ONLY = 0x1000 | 0x0400 | 0x100000
 
 # Processes that legitimately open LSASS. Windows' own protection stack and
 # a few management agents do this by design.
@@ -465,11 +471,12 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             if base in LSASS_EXPECTED:
                 continue
             try:
-                mask = int(str(e.get("granted") or "0"), 16)
+                mask = int(str(e.get("granted") or ""), 16)
             except ValueError:
-                mask = 0
+                mask = None     # unreadable rights are judged as memory access
             lsass_hits.append((image, e.get("granted"), e.get("time"),
-                               bool(mask & VM_READ)))
+                               bool(mask and mask & VM_READ),
+                               bool(mask) and not mask & ~QUERY_ONLY))
         elif eid == 8:
             remote_threads.append((image, e.get("target"), e.get("time"),
                                    e.get("start_module") or "", e.get("start_function") or "",
@@ -506,7 +513,12 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 drop_times.append(e.get("time") or "")
 
     # -- credential access -------------------------------------------------
-    for image, granted, when, read in lsass_hits:
+    for image, granted, when, read, query_only in lsass_hits:
+        if query_only:
+            out.append(_finding(
+                "credential access", "medium", f"{_base(image)} queried LSASS",
+                _lsass_query_detail(granted, iso_of(when)), image))
+            continue
         out.append(_finding(
             "credential access", "critical" if read else "high",
             f"{_base(image)} opened LSASS memory",
@@ -609,6 +621,12 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     return sort_findings(out)
 
 
+def _lsass_query_detail(granted, when):
+    return (f"granted access {granted} — {when}. Query-only rights cannot read "
+            f"LSASS memory; they can open its token, so an unfamiliar process "
+            f"doing this is still worth a look.")
+
+
 def iso_of(t):
     """Sysmon timestamps arrive as ISO strings already; keep them readable."""
     return (t or "")[:19].replace("T", " ")
@@ -661,10 +679,30 @@ def _remember(store, findings, hours):
                 continue
             if m["severity"] != r["severity"]:
                 continue   # re-emitted at its new strength if it recurs
+        severity, title = r["severity"], r["title"]
+        # LSASS rows stored before query-only rights were told apart claimed
+        # a memory read. Re-judge them from their recorded mask and migrate
+        # the row, so a later repeat updates it instead of duplicating it.
+        if r["category"] == "credential access" and title.endswith(" opened LSASS memory"):
+            m = re.match(r"granted access (0x[0-9a-fA-F]+) — ([^.]*)", detail)
+            mask = int(m.group(1), 16) if m else 0
+            if mask and not mask & ~QUERY_ONLY:
+                severity = "medium"
+                title = title[:-len(" opened LSASS memory")] + " queried LSASS"
+                detail = _lsass_query_detail(m.group(1), m.group(2))
+                store.db.execute(
+                    """INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_)
+                       VALUES(?,?,?,?,?,?)
+                       ON CONFLICT(category,title,where_) DO UPDATE SET
+                           ts=MAX(ts, excluded.ts)""",
+                    (r["ts"], r["category"], severity, title, detail[:600], r["where_"]))
+                store.db.execute(
+                    "DELETE FROM sysmon_hits WHERE category=? AND title=? AND where_=?",
+                    (r["category"], r["title"], r["where_"]))
+                store.commit()
         if ts - r["ts"] > 900:
             detail += f"  [last seen {iso(r['ts'])}]"
-        out.append(_finding(r["category"], r["severity"], r["title"],
-                            detail, r["where_"]))
+        out.append(_finding(r["category"], severity, title, detail, r["where_"]))
     return out
 
 

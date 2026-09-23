@@ -98,6 +98,12 @@ def audit_linux():
             "~/.config/systemd/user/*.service")):
         for path in glob.glob(pattern):
             target = os.path.realpath(path)
+            if target == os.devnull:
+                # `systemctl mask` links a unit to /dev/null so nothing can
+                # start it: a disabled unit, not a service.
+                out.append(_finding("persistence", "low", "masked systemd unit",
+                                    os.path.basename(path), path))
+                continue
             if os.path.islink(path) and target.startswith(PACKAGED_UNIT_DIRS):
                 # `systemctl enable` writes aliases like syslog.service ->
                 # rsyslog.service. The unit itself belongs to a package; a link

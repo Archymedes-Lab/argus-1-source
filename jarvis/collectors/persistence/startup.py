@@ -207,3 +207,26 @@ SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 def sort_findings(f):
     return sorted(f, key=lambda x: (CAT_ORDER.get(x["category"], 9),
                                     SEV_ORDER.get(x["severity"], 9), x["title"]))
+
+
+def apply_verified_tasks(findings, control_findings):
+    """Lower boot runs of tasks the control audit fully verified.
+
+    `control_findings` must come from a current, error-free control snapshot;
+    the caller owns that freshness check. Verification there covers the exact
+    action, arguments, principal, run level and script fingerprint, which the
+    run record here cannot see. A name match alone never lowers anything:
+    only a task whose own definition passed verification does.
+    """
+    verified = {str(f.get("where") or "").casefold()
+                for f in control_findings or ()
+                if isinstance(f, dict) and f.get("title") == "verified scheduled task"}
+    out = []
+    for f in findings:
+        if (f.get("category") == "ran" and f.get("title") == "task ran at boot"
+                and str(f.get("where") or "").casefold() in verified):
+            f = dict(f, severity="low",
+                     detail=f"{f.get('detail')} — definition and script "
+                            f"fingerprint verified by the control audit")
+        out.append(f)
+    return out

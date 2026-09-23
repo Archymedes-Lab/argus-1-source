@@ -29,6 +29,57 @@ class WindowsSysmonImpactTests(unittest.TestCase):
         }])
         self.assertEqual([f for f in findings if f["category"] == "impact"], [])
 
+    def lsass(self, granted):
+        findings = self.audit([{
+            "id": 10, "image": r"C:\x\tool.exe",
+            "target": r"C:\Windows\System32\lsass.exe",
+            "granted": granted, "time": "2026-09-15T10:00:00Z",
+        }])
+        return [f for f in findings if f["category"] == "credential access"]
+
+    def test_lsass_access_severity_follows_granted_rights(self):
+        # Query-only rights cannot read memory but can open the token.
+        for granted in ("0x1000", "0x400", "0x101400"):
+            hit = self.lsass(granted)
+            self.assertEqual([(f["severity"], f["title"]) for f in hit],
+                             [("medium", "tool.exe queried LSASS")], granted)
+        for granted, severity in (("0x1010", "critical"), ("0x1410", "critical"),
+                                  ("0x1fffff", "critical"), ("0x1040", "high"),
+                                  ("0x1080", "high"), ("0x1800", "high"),
+                                  ("", "high"), ("junk", "high"), ("0x0", "high")):
+            hit = self.lsass(granted)
+            self.assertEqual([(f["severity"], f["title"]) for f in hit],
+                             [(severity, "tool.exe opened LSASS memory")], granted)
+
+    def test_stored_query_only_lsass_rows_are_rejudged_and_migrated(self):
+        import tempfile
+        from pathlib import Path
+
+        from jarvis.core.store import Store
+        from jarvis.core.util import now
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(str(Path(tmp) / "j.db"))
+            try:
+                old = "granted access 0x{} — 2026-09-22 19:20:33. This is the detection"
+                for tool, mask in (("hp.exe", "1000"), ("dump.exe", "1010")):
+                    store.db.execute(
+                        "INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_) "
+                        "VALUES(?,?,?,?,?,?)",
+                        (now(), "credential access", "critical" if mask == "1010" else "high",
+                         f"{tool} opened LSASS memory", old.format(mask), tool))
+                store.commit()
+                out = {f["where"]: f for f in sysmon._remember(store, [], 24)}
+                self.assertEqual((out["hp.exe"]["severity"], out["hp.exe"]["title"]),
+                                 ("medium", "hp.exe queried LSASS"))
+                self.assertEqual((out["dump.exe"]["severity"], out["dump.exe"]["title"]),
+                                 ("critical", "dump.exe opened LSASS memory"))
+                titles = [r["title"] for r in store.db.execute(
+                    "SELECT title FROM sysmon_hits ORDER BY title")]
+                self.assertEqual(titles, ["dump.exe opened LSASS memory",
+                                          "hp.exe queried LSASS"])
+            finally:
+                store.close()
+
     def test_unsigned_adjacent_dll_in_user_directory_is_sideload_signal(self):
         findings = self.audit([{
             "id": 7, "image": r"C:\Users\u\Downloads\host.exe",

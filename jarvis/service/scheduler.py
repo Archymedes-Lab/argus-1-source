@@ -35,6 +35,10 @@ from jarvis.service.schedule import JOBS
 # by. Each must stay well under a few seconds, or it starves its own lane.
 FAST = ("bridge", "input_hook", "scan")
 ISOLATED = {"native"}
+# Longest the cold-start gate may hold coverage and report back. One full
+# sweep takes a few minutes; past this the audits run and report honestly
+# on whatever has still not caught up.
+COLD_START_HOLD_S = 900
 
 
 def _isolated_job(name, hosts, db_path, timeout):
@@ -91,7 +95,11 @@ class Scheduler(threading.Thread):
         # sends a burst of false "stale" pages for perfectly healthy jobs later
         # in the dict. Hold the automatic coverage pass until every other job
         # has attempted once. A manually forced pass still runs immediately.
-        self.cold_start_pending = set(JOBS) - {"coverage", "report"}
+        # Only jobs coverage would actually flag hold the gate, and the hold
+        # is bounded: under host pressure a daily collector can lose every
+        # turn for hours, and a gate waiting on it froze the recorded score
+        # and the coverage audit for 6h on 2026-09-22.
+        self.cold_start_pending = self._cold_start_gate()
         self.forced = []
         self.current = None
         # Bumped at the top of every loop iteration. The systemd watchdog pings
@@ -114,6 +122,31 @@ class Scheduler(threading.Thread):
         self.specs = reliability.build_specs(JOBS)
         self.reliability = reliability.ReliabilityState(self.specs)
         self._worker_seq = 0
+
+    def _cold_start_gate(self):
+        """Jobs whose persisted result coverage would call missing, failing
+        or stale. A fresh result from the previous process already proves its
+        collector; waiting on it can only delay the audits."""
+        pending = set(JOBS) - {"coverage", "report"}
+        try:
+            store = Store(self.db_path)
+            try:
+                snaps = store.get_snapshots()
+            finally:
+                store.close()
+        except Exception:
+            return pending
+        now = time.time()
+        fresh = {name for name in pending
+                 if (snaps.get(name) or {}).get("ts")
+                 and not snaps[name].get("error")
+                 and now - float(snaps[name]["ts"]) <= max(
+                     JOBS[name][0] * 2, JOBS[name][0] + 300)}
+        return pending - fresh
+
+    def _cold_start_holding(self, now):
+        return bool(self.cold_start_pending) and \
+            now - self.started_at < COLD_START_HOLD_S
 
     def force(self, name):
         if name in JOBS:
@@ -147,7 +180,7 @@ class Scheduler(threading.Thread):
         for name, t in self.next_run.items():
             if not member(name):
                 continue
-            if name in ("coverage", "report") and self.cold_start_pending:
+            if name in ("coverage", "report") and self._cold_start_holding(now):
                 continue
             if t > now:
                 continue

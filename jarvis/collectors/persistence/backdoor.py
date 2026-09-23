@@ -258,6 +258,10 @@ def check_persistence():
             if not fn.endswith((".service", ".timer")):
                 continue
             full = os.path.join(d, fn)
+            # A masked unit is a link to /dev/null that systemd refuses to
+            # start; it is the removal of persistence, not an instance of it.
+            if os.path.realpath(full) == os.devnull:
+                continue
             body = _read(full)
             execs = re.findall(r"^\s*Exec\w*\s*=\s*(.+)$", body, re.M)
             # Do not report ourselves. jarvis's own units are installed by

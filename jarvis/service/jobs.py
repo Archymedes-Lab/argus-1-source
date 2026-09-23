@@ -8,6 +8,7 @@ Jobs that touch the database open their own store: they run inside the
 scheduler's worker thread, and a sqlite handle must not cross threads.
 """
 
+import time
 from contextlib import contextmanager
 
 from jarvis.collectors.host import (
@@ -98,7 +99,8 @@ def _scan(hosts, db_path):
                 "at": res["ts"], "windows_processes": len(verdicts),
                 "sysmon_process_create_policy": sysmon_policy.summary(policy),
                 "sysmon_process_create_coverage":
-                    _reconcile.coverage_evidence(res["ts"]),
+                    _reconcile.coverage_evidence(
+                        res["ts"], snapshot=res.get("processes", [])),
                 "sysmon_pressure": sysmon_pressure.audit(),
                 **summary,
             }))
@@ -309,6 +311,18 @@ def _sorted(module):
     return lambda hosts, db_path: module.sort_findings(module.audit())
 
 
+def _boot(hosts, db_path):
+    findings = startup.sort_findings(startup.audit())
+    # Reuse the control audit's full task verification, but only while its
+    # result is current: stale or failing evidence verifies nothing.
+    from jarvis.response.reporting.score import freshness
+    with _store(db_path) as store:
+        snap = store.get_snapshots().get("control")
+    if freshness(snap, JOBS["control"][0], time.time()) == "current":
+        findings = startup.apply_verified_tasks(findings, snap.get("findings"))
+    return startup.sort_findings(findings)
+
+
 def _coverage(hosts, db_path):
     findings = coverage_mod.sort_findings(
         coverage_mod.audit(db_path=db_path, hosts=hosts))
@@ -350,7 +364,7 @@ RUNNERS = {
     "intrusion": _sorted(intrusion_mod),
     "evasion": _sorted(evasion_mod),
     "coverage": _coverage,
-    "boot": _sorted(startup),
+    "boot": _boot,
     "hunt": _hunt,
     "gaps": _gaps,
     "intel": _intel,

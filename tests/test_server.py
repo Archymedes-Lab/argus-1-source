@@ -52,6 +52,30 @@ class SchedulerColdStartTests(unittest.TestCase):
         self.scheduler.cold_start_pending.clear()
         self.assertEqual(self.scheduler._due(), "report")
 
+    def test_cold_start_hold_is_bounded(self):
+        # A starved or governor-deferred collector must not freeze the
+        # coverage audit and the recorded score indefinitely.
+        from jarvis.service import scheduler as scheduler_mod
+        self.assertIsNone(self.scheduler._due())
+        self.scheduler.started_at -= scheduler_mod.COLD_START_HOLD_S + 1
+        self.assertTrue(self.scheduler.cold_start_pending)
+        self.assertEqual(self.scheduler._due(), "coverage")
+
+    def test_fresh_persisted_results_do_not_hold_cold_start(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "j.db")
+            store = Store(db)
+            try:
+                store.save_snapshot("secrets", [], 1.0, "")
+                store.save_snapshot("posture", [], 1.0, "collector failed")
+            finally:
+                store.close()
+            pending = Scheduler(db, ("wsl",)).cold_start_pending
+        self.assertNotIn("secrets", pending)
+        self.assertIn("posture", pending)    # failing still holds the gate
+        self.assertIn("deep_hidden", pending)    # never ran
+        self.assertNotIn("coverage", pending)
+
     def test_initial_deadlines_use_current_time_not_epoch(self):
         scheduler = Scheduler(":memory:", ("wsl",))
         created = time.time()

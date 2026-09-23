@@ -136,3 +136,99 @@ class SystemdAliasTests(unittest.TestCase):
         self.assertEqual(out[units[1]]["severity"], "low")       # syslog -> packaged
         self.assertEqual(out[units[0]]["severity"], "medium")    # evil -> elsewhere
         self.assertEqual(out[units[0]]["title"], "custom systemd service")
+
+
+class MaskedUnitTests(unittest.TestCase):
+    """A unit linked to /dev/null cannot start; it is not persistence. A
+    same-named real unit, or a link anywhere else, stays reported."""
+
+    def units(self, root):
+        import os
+        masked, real = os.path.join(root, "masked.service"), os.path.join(root, "real.service")
+        os.symlink(os.devnull, masked)
+        with open(real, "w") as fh:
+            fh.write("[Service]\nExecStart=/tmp/x/payload\n")
+        return masked, real
+
+    def test_control_reports_masked_unit_as_inventory(self):
+        import tempfile
+        from unittest import mock
+
+        from jarvis.collectors.persistence import control
+        with tempfile.TemporaryDirectory() as root:
+            masked, real = self.units(root)
+
+            def fake_glob(pattern):
+                return [masked, real] if pattern == "/etc/systemd/system/*.service" else []
+
+            with mock.patch.object(control.glob, "glob", side_effect=fake_glob), \
+                 mock.patch.object(control, "_run", return_value=""):
+                out = {f["where"]: f for f in control.audit_linux()
+                       if f["where"] in (masked, real)}
+        self.assertEqual((out[masked]["severity"], out[masked]["title"]),
+                         ("low", "masked systemd unit"))
+        self.assertEqual(out[real]["severity"], "medium")
+
+    def test_backdoor_audit_skips_only_masked_user_units(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        from jarvis.collectors.persistence import backdoor
+        with tempfile.TemporaryDirectory() as home:
+            d = os.path.join(home, ".config", "systemd", "user")
+            os.makedirs(d)
+            self.units(d)
+            with mock.patch.object(backdoor, "_home_dirs",
+                                   return_value=[("u", home, 1000)]):
+                titles = [f["title"] for f in backdoor.check_persistence()
+                          if "systemd user unit" in f["title"]]
+        self.assertEqual(titles, ["systemd user unit for u: real.service"])
+
+
+class BootTaskVerificationTests(unittest.TestCase):
+    def ran(self, task):
+        return {"category": "ran", "severity": "high", "title": "task ran at boot",
+                "detail": f"{task} (ran 2026-09-22 22:00:47)", "where": task}
+
+    def test_only_control_verified_tasks_are_lowered(self):
+        from jarvis.collectors.persistence import startup
+        control_findings = [
+            {"title": "verified scheduled task", "where": "\\JARVIS connectivity guard"},
+            # Failed verification is reported under another title and must
+            # not lower anything, even with a matching name.
+            {"title": "scheduled task", "where": "\\jarvis wake watchdog"},
+        ]
+        out = startup.apply_verified_tasks(
+            [self.ran("\\JARVIS connectivity guard"), self.ran("\\jarvis wake watchdog"),
+             self.ran("\\Evil")], control_findings)
+        self.assertEqual([f["severity"] for f in out], ["low", "high", "high"])
+        self.assertIn("verified by the control audit", out[0]["detail"])
+        self.assertEqual(startup.apply_verified_tasks([self.ran("\\x")], None)[0]["severity"],
+                         "high")
+
+    def test_boot_job_ignores_stale_control_evidence(self):
+        import tempfile
+        import time
+        from pathlib import Path
+        from unittest import mock
+
+        from jarvis.collectors.persistence import startup
+        from jarvis.core.store import Store
+        from jarvis.service import jobs
+        from jarvis.service.schedule import JOBS
+        task = "\\JARVIS connectivity guard"
+        verified = [{"category": "persistence", "severity": "low",
+                     "title": "verified scheduled task", "detail": "", "where": task}]
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "j.db")
+            store = Store(db)
+            store.save_snapshot("control", verified, 1.0, "")
+            store.close()
+            with mock.patch.object(startup, "audit", return_value=[self.ran(task)]):
+                fresh = jobs._boot(("win",), db)
+                later = time.time() + 3 * JOBS["control"][0] + 600
+                with mock.patch.object(jobs.time, "time", return_value=later):
+                    stale = jobs._boot(("win",), db)
+        self.assertEqual([f["severity"] for f in fresh if f["where"] == task], ["low"])
+        self.assertEqual([f["severity"] for f in stale if f["where"] == task], ["high"])

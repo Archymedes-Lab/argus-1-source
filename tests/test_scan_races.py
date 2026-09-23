@@ -21,6 +21,17 @@ class StagedExecutableTests(unittest.TestCase):
         out = self.audit(staged(sha256=intrusion.EMPTY_SHA256.upper()))
         self.assertEqual([f["severity"] for f in out], ["low"])
 
+    def test_powershell_policy_probe_is_inventory_only_with_its_exact_body(self):
+        name = r"C:\Users\u\AppData\Local\Temp\__PSScriptPolicyTest_vmpzjz4a.mto.ps1"
+        probe = staged(path=name, sig="NotSigned",
+                       sha256=intrusion.PS_POLICY_TEST_SHA256.upper())
+        self.assertEqual([f["severity"] for f in self.audit(probe)], ["low"])
+        # The same name with any other body, or the body under another name,
+        # stays a high staged-script finding.
+        for item in (dict(probe, sha256="49D3" + "0" * 60),
+                     dict(probe, path=r"C:\Users\u\AppData\Local\Temp\run.ps1")):
+            self.assertEqual([f["severity"] for f in self.audit(item)], ["high"])
+
     def test_non_empty_unsigned_file_in_temp_stays_high(self):
         out = self.audit(staged(sha256="49D3" + "0" * 60, sig="NotSigned"))
         self.assertEqual([f["severity"] for f in out], ["high"])

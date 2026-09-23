@@ -15,10 +15,20 @@ try {
             if ($apps.Count -ne 1) { continue }
             $program = [Environment]::ExpandEnvironmentVariables([string]$apps[0].Program)
             if ($program -notmatch '^[A-Za-z]:\\.+\.exe$') { continue }
-            # Check the parent too: an inaccessible/unmounted directory is not absence.
-            $parent = Split-Path -Parent $program
-            if (-not (Test-Path -LiteralPath $parent -PathType Container)) { continue }
             if (Test-Path -LiteralPath $program) { continue }
+            # Prove absence from the nearest existing ancestor: updaters remove
+            # whole version directories, while an unmounted drive or a
+            # directory this token cannot list is not absence.
+            $ancestor = Split-Path -Parent $program
+            $child = Split-Path -Leaf $program
+            while ($ancestor -and -not (Test-Path -LiteralPath $ancestor -PathType Container)) {
+                $child = Split-Path -Leaf $ancestor
+                $ancestor = Split-Path -Parent $ancestor
+            }
+            if (-not $ancestor) { continue }
+            try { $names = @(Get-ChildItem -LiteralPath $ancestor -Force -Name -ErrorAction Stop) }
+            catch { continue }
+            if ($names -contains $child) { continue }
             [pscustomobject]@{ Name = $rule.Name; Program = $program; Enabled = $rule.Enabled }
         }
     )

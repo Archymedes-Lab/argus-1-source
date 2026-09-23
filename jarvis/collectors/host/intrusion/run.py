@@ -27,6 +27,10 @@ BROAD_PERMS = re.compile(r"<all_urls>|\*://\*/\*|http://\*/\*|https://\*/\*|"
 
 
 PS_INTRUSION = load_win_script("intrusion.ps1")
+# SHA-256 of "# PowerShell test file to determine AppLocker lockdown mode ",
+# the entire body PowerShell writes to its policy-test files.
+PS_POLICY_TEST_SHA256 = "96ad1146eb96877eab5942ae0736b82d8b5e2039a80d3d6932665c1a4c87dcf7"
+PS_POLICY_TEST_NAME = re.compile(r"\\__PSScriptPolicyTest_[a-z0-9]+\.[a-z0-9]+\.ps1$", re.I)
 
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
@@ -156,6 +160,12 @@ def audit():
             # Zero bytes cannot execute, and an empty file has no signature to
             # check — Authenticode reports UnknownError for it. Temp is full of
             # placeholder files that tools create and never fill.
+            sev = "low"
+        elif ((f.get("sha256") or "").lower() == PS_POLICY_TEST_SHA256
+              and PS_POLICY_TEST_NAME.search(path)):
+            # PowerShell probes AppLocker/WDAC by writing this exact one-line
+            # comment to Temp; a crashed shell leaves it behind. Pinned to
+            # the content hash, so any other body under the name stays high.
             sev = "low"
         elif in_temp or sig in ("HashMismatch", "NotTrusted"):
             sev = "high"

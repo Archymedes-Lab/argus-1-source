@@ -131,6 +131,55 @@ class ProcessReconciliationTests(unittest.TestCase):
             self.snapshot(started=self.now - 60), self.now, self.root)[0]
         self.assertEqual(verdict["label"], "UNKNOWN")
 
+    def kernel(self, name, started):
+        return {"host": "win", "pid": 4, "name": name, "exe": "",
+                "started": iso(started), "observed_at": iso(self.now)}
+
+    def test_previous_boot_shutdown_tail_does_not_set_boundary(self):
+        # The sensor labels the unread shutdown tail of the previous boot with
+        # the new boot id. A start older than this boot's kernel processes
+        # cannot belong to it, so it must not open continuity for boot-time
+        # processes whose ProcessCreate Sysmon never delivered.
+        self.commit([self.ev(1, 7, "{tail}", self.now - 200),
+                     self.ev(2, 8, "{first}", self.now - 40),
+                     self.dropped(3, 5, self.now - 39)],
+                    continuous=self.now - 200)
+        boot = [self.kernel("Registry", self.now - 120)] + \
+            self.snapshot(started=self.now - 60)
+        self.assertEqual(reconcile.processes(boot, self.now, self.root), [])
+        evidence = reconcile.coverage_evidence(self.now, self.root, snapshot=boot)
+        self.assertAlmostEqual(evidence["continuous_since"], self.now - 40, delta=1)
+        self.assertEqual(evidence["dropped_process_create"], 5)
+
+    def test_boot_floor_never_hides_a_gap_after_the_first_boot_start(self):
+        self.commit([self.ev(1, 7, "{tail}", self.now - 200),
+                     self.ev(2, 8, "{first}", self.now - 90)],
+                    continuous=self.now - 200)
+        boot = [self.kernel("Registry", self.now - 120)] + \
+            self.snapshot(started=self.now - 60)
+        findings = reconcile.processes(boot, self.now, self.root)
+        self.assertEqual([f["rule_id"] for f in findings],
+                         ["temporal-process-start-missing"])
+
+    def test_boot_floor_requires_imageless_kernel_process(self):
+        impostor = dict(self.kernel("Registry", self.now - 30), exe=r"C:\x\Registry")
+        self.assertIsNone(reconcile.boot_floor([impostor]))
+        self.assertIsNone(reconcile.boot_floor([]))
+
+    def test_kernel_minimal_processes_are_unknown_not_missing(self):
+        self.commit([self.ev(1, 7, "{other}", self.now - 80)])
+        vm = self.kernel("vmmemWSL", self.now - 60)
+        self.assertEqual(reconcile.processes([vm], self.now, self.root), [])
+        self.assertEqual(reconcile.classify_snapshot(
+            [vm], self.now, self.root)[0]["label"], "UNKNOWN")
+
+    def test_named_impostor_of_kernel_process_is_still_judged(self):
+        self.commit([self.ev(1, 7, "{other}", self.now - 80)])
+        impostor = dict(self.kernel("vmmemWSL", self.now - 60),
+                        exe=r"C:\Users\x\vmmemWSL")
+        findings = reconcile.processes([impostor], self.now, self.root)
+        self.assertEqual(len(findings), 1)
+
     def test_stale_or_gapped_stream_cannot_contradict_snapshot(self):
         self.commit([self.ev(1, 7, "{other}", self.now - 400)], created=self.now - 400)
         self.assertEqual(reconcile.processes(self.snapshot(), self.now, self.root), [])
