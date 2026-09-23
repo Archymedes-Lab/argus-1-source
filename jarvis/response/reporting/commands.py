@@ -50,6 +50,7 @@ JOB_COMMANDS = {
     "sysmon_linux": "sysmon-linux",
     "sysmon": "sysmon",
     "native": "timeline status",
+    "rust_mirror": "status",
     "arena": "arena suite",
     "geo": "geo status",
     "watchdogs": "selfcheck",

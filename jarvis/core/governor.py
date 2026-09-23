@@ -28,7 +28,7 @@ NONCRITICAL = TIER_1 + TIER_2
 GOVERNED_JOBS = frozenset({
     "intel", "feeds", "secrets", "memscan", "spy", "posture", "toolchain",
     "webshell", "hunt", "gaps", "attackmap", "arena", "model", "geo",
-    "pixel", "intrusion",
+    "pixel", "intrusion", "rust_mirror",
 })
 
 CPU_PRESSURE_PCT = 75.0

@@ -1,4 +1,5 @@
 """Cheap persisted coverage assessment; never launches Windows from HTTP."""
+import json
 import sqlite3
 import time
 
@@ -122,9 +123,27 @@ def health(db_path, scheduler, stamp=None):
         governor_state = None
     runtime_state = None
     try:
+        from jarvis.collectors.telemetry import mirror as mirror_mod
         from jarvis.core import runtime as runtime_mod
         runtime_state = runtime_mod.metrics()
-        runtime_state["storage"] = runtime_mod.verify_store()
+        # The mirror job verifies the store; health only reports its last
+        # recorded result, so an HTTP request never pays O(store) work.
+        storage = None
+        try:
+            row = db.execute('SELECT v FROM meta WHERE k=?',
+                             (mirror_mod.META,)).fetchone()
+            storage = json.loads(row[0]) if row else None
+        except (NameError, sqlite3.Error, ValueError, TypeError):
+            storage = None
+        if not isinstance(storage, dict):
+            storage = {"ok": False, "runtime": runtime_state.get("runtime"),
+                       "error": ("binary_absent" if not runtime_mod.available()
+                                 else "not_yet_mirrored")}
+        else:
+            storage = dict(storage, age_s=(round(stamp - storage["at"])
+                                           if type(storage.get("at")) is int
+                                           else None))
+        runtime_state["storage"] = storage
     except Exception:
         runtime_state = None
     mlworker_state = None

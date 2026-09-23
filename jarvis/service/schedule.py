@@ -124,4 +124,9 @@ JOBS = {
     # bridge round trip), never a generation, never the model lock — so it is
     # cheap enough for its own cadence and a dead model becomes a known state.
     "model":    (1800,  "Local model availability"),
+    # Copies the authoritative event history into the independent Rust
+    # store. Each run re-verifies the whole retained store (O(store), about
+    # 20s at its 128 MiB budget), so it is governed and runs rarely; the
+    # 1200s interval also gives it a 120s reliability budget.
+    "rust_mirror": (1200, "Independent evidence mirror"),
 }

@@ -1,7 +1,15 @@
 # Read-only Sysmon pressure evidence for the elevated JARVIS broker.
 # Returns aggregate counts only: no registry values, command lines, or raw events.
+#
+# Reads through EventLogReader and positional Properties rather than
+# Get-WinEvent: Get-WinEvent renders every event's message text, which took
+# 230s for 14.6k events and outran the broker's 120s job timeout. The reader
+# path measured 2.3s for the same query. Sysmon 12/13/14 share the layout
+# RuleName(0), EventType, UtcTime, ProcessGuid, ProcessId, Image(5), ...
 
 $ErrorActionPreference = 'Stop'
+$MaxEvents = 200000
+$BudgetSeconds = 90
 $result = [ordered]@{
   ok = $false
   boot = ''
@@ -13,44 +21,56 @@ $result = [ordered]@{
   error = ''
 }
 
+$reader = $null
 try {
-  $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
-  $result.boot = $boot.ToUniversalTime().ToString('o')
-  $events = @(Get-WinEvent -FilterHashtable @{
-    LogName = 'Microsoft-Windows-Sysmon/Operational'
-    Id = 12,13,14,255
-    StartTime = $boot
-  } -MaxEvents 50000 -ErrorAction Stop)
-  $result.truncated = $events.Count -eq 50000
+  $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime()
+  $result.boot = $boot.ToString('o')
+  $xpath = "*[System[(EventID=12 or EventID=13 or EventID=14 or EventID=255) and " +
+           "TimeCreated[@SystemTime>='" + $boot.ToString('o') + "']]]"
+  $query = New-Object System.Diagnostics.Eventing.Reader.EventLogQuery(
+    'Microsoft-Windows-Sysmon/Operational',
+    [System.Diagnostics.Eventing.Reader.PathType]::LogName, $xpath)
+  $reader = New-Object System.Diagnostics.Eventing.Reader.EventLogReader($query)
+  $clock = [Diagnostics.Stopwatch]::StartNew()
+  $seen = 0
   $rules = @{}
   $images = @{}
-  foreach ($event in $events) {
-    if ($event.Id -eq 255) {
-      $counts = [ordered]@{}
-      foreach ($match in [regex]::Matches([string]$event.Message,
-          '([A-Za-z][A-Za-z0-9]+):(\d+)')) {
-        if ($match.Groups[1].Value -ne 'DriverQueueSize') {
-          $counts[$match.Groups[1].Value] = [int64]$match.Groups[2].Value
+  while ($null -ne ($event = $reader.ReadEvent())) {
+    try {
+      $seen++
+      if ($event.Id -eq 255) {
+        # UtcTime | ID | Description; the description carries the counts.
+        $text = (@($event.Properties | ForEach-Object { [string]$_.Value }) -join ' ')
+        $counts = [ordered]@{}
+        foreach ($match in [regex]::Matches($text, '([A-Za-z][A-Za-z0-9]+):(\d+)')) {
+          if ($match.Groups[1].Value -ne 'DriverQueueSize') {
+            $counts[$match.Groups[1].Value] = [int64]$match.Groups[2].Value
+          }
         }
+        $queue = [regex]::Match($text, 'DriverQueueSize:\s*(\d+)')
+        if ($result.drops.Count -lt 20) {
+          $result.drops += [ordered]@{
+            at = $event.TimeCreated.ToUniversalTime().ToString('o')
+            counts = $counts
+            driver_queue_size = if ($queue.Success) { [int64]$queue.Groups[1].Value } else { $null }
+          }
+        }
+      } else {
+        $result.retained_registry_events++
+        $props = $event.Properties
+        $rule = if ($props.Count -gt 0 -and [string]$props[0].Value) { [string]$props[0].Value } else { '(none)' }
+        $path = if ($props.Count -gt 5) { [string]$props[5].Value } else { '' }
+        $image = if ($path) { [IO.Path]::GetFileName($path) } else { '(unknown)' }
+        $rules[$rule] = 1 + [int64]($rules[$rule])
+        $images[$image] = 1 + [int64]($images[$image])
       }
-      $queue = [regex]::Match([string]$event.Message, 'DriverQueueSize:\s*(\d+)')
-      $result.drops += [ordered]@{
-        at = $event.TimeCreated.ToUniversalTime().ToString('o')
-        counts = $counts
-        driver_queue_size = if ($queue.Success) { [int64]$queue.Groups[1].Value } else { $null }
-      }
-      continue
+    } finally {
+      $event.Dispose()
     }
-    $result.retained_registry_events++
-    $xml = [xml]$event.ToXml()
-    $fields = @{}
-    foreach ($data in $xml.Event.EventData.Data) {
-      $fields[[string]$data.Name] = [string]$data.'#text'
+    if ($seen -ge $MaxEvents -or $clock.Elapsed.TotalSeconds -ge $BudgetSeconds) {
+      $result.truncated = $true
+      break
     }
-    $rule = if ($fields.RuleName) { $fields.RuleName } else { '(none)' }
-    $image = if ($fields.Image) { [IO.Path]::GetFileName($fields.Image) } else { '(unknown)' }
-    $rules[$rule] = 1 + [int64]($rules[$rule])
-    $images[$image] = 1 + [int64]($images[$image])
   }
   $result.by_rule = @($rules.GetEnumerator() | Sort-Object Value -Descending |
     Select-Object -First 20 | ForEach-Object {
@@ -63,6 +83,8 @@ try {
   $result.ok = $true
 } catch {
   $result.error = [string]$_.Exception.Message
+} finally {
+  if ($null -ne $reader) { $reader.Dispose() }
 }
 
 $json = $result | ConvertTo-Json -Depth 7 -Compress
