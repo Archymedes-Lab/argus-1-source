@@ -115,3 +115,46 @@ class WalkSkipTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DesignatedStoreTests(unittest.TestCase):
+    """A token in its own tool's owner-only store is inventory; any copy
+    elsewhere, a loose mode, or another account keeps it critical."""
+
+    def run_audit(self, home, files, others=()):
+        with patch("jarvis.collectors.identity.secrets.run.walk", return_value=files), \
+             patch("jarvis.collectors.identity.secrets.run.scan_file",
+                   side_effect=lambda p: [("GitHub token", "gho_same", 4, "critical")]), \
+             patch("jarvis.collectors.identity.secrets.run._other_humans", return_value=list(others)), \
+             patch("jarvis.collectors.identity.secrets.run._git_tracked", return_value=(False, "")), \
+             patch("jarvis.collectors.identity.secrets.run.os.path.expanduser", return_value=home):
+            return [f for f in audit(roots=[home], deep=True) if "GitHub token" in f["title"]]
+
+    def store(self, home, mode=0o600):
+        path = os.path.join(home, ".config", "gh", "hosts.yml")
+        os.makedirs(os.path.dirname(path))
+        with open(path, "w") as fh:
+            fh.write("x")
+        os.chmod(path, mode)
+        return path
+
+    def test_owner_only_tool_store_is_medium_and_named(self):
+        with tempfile.TemporaryDirectory() as home:
+            out = self.run_audit(home, [self.store(home)])
+        self.assertEqual([(f["severity"], f["title"]) for f in out],
+                         [("medium", "GitHub token in GitHub CLI's credential store")])
+
+    def test_copy_outside_the_store_stays_critical(self):
+        with tempfile.TemporaryDirectory() as home:
+            leak = os.path.join(home, "history.jsonl")
+            open(leak, "w").close()
+            out = self.run_audit(home, [self.store(home), leak])
+        self.assertEqual([f["severity"] for f in out], ["critical"])
+
+    def test_loose_mode_or_other_accounts_stay_critical(self):
+        with tempfile.TemporaryDirectory() as home:
+            self.assertEqual([f["severity"] for f in self.run_audit(
+                home, [self.store(home, 0o640)])], ["critical"])
+        with tempfile.TemporaryDirectory() as home:
+            out = self.run_audit(home, [self.store(home)], others=["guest"])
+            self.assertEqual([f["severity"] for f in out], ["critical"])

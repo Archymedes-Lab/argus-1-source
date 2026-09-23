@@ -240,14 +240,25 @@ def visibility():
         pass
 
     # -- elevation ---------------------------------------------------------
-    if os.geteuid() != 0:
+    from jarvis.platform import privilege
+    lacking = privilege.missing()
+    if lacking:
         out.append(_finding(
             "visibility", "medium", "running unprivileged",
-            "invisible from here: other users' process command lines, some "
-            "/proc entries, kernel module details, and eBPF map contents. "
-            "Windows-side elevation is separate and also absent: Defender "
-            "exclusions and protected-process identities cannot be read.",
-            "run `sudo jarvis ...` for the Linux half"))
+            "invisible from here: other accounts' open files, memory maps and "
+            "environment, root-only kernel tracing state, and kernel module "
+            f"addresses (missing {', '.join(lacking)}).",
+            "sudo install -m 644 systemd/capabilities.conf "
+            "/etc/systemd/system/jarvis.service.d/ && sudo systemctl daemon-reload "
+            "&& sudo systemctl restart jarvis.service"))
+    elif os.geteuid() != 0:
+        out.append(_finding(
+            "limits", "low", "least-privilege visibility",
+            "reading other accounts' processes, kernel tracing and module "
+            "addresses through " + ", ".join(privilege.CAPS) + ". Deliberately "
+            "not held: " + ", ".join(privilege.NOT_REQUESTED) + "; those views "
+            "stay dark rather than run the monitor with near-root power.",
+            "systemd/capabilities.conf"))
 
     # -- Linux cross-views -------------------------------------------------
     if hidden.view_getdents() is None:

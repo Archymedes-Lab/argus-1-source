@@ -2,6 +2,7 @@
 
 import os
 import re
+import stat
 
 from jarvis.core.finding import finding as _finding
 
@@ -139,6 +140,38 @@ def default_roots():
 
 # Files that are worth reading individually even though scanning their parent
 # directory would be far too broad.
+# Files that exist to hold one tool's own login, relative to $HOME. A token
+# here is where that tool must keep it: WSL has no keyring daemon, and a
+# keyring would not stop malware running as this user anyway. Its remaining
+# risks are covered where they belong: other accounts and git are checked
+# below, and the unencrypted disk is its own posture finding. So a copy here
+# is at-rest inventory (medium, still scored). The same value anywhere else
+# is a leak and keeps its full severity.
+DESIGNATED_STORES = {
+    ".claude/.credentials.json": "Claude Code",
+    ".config/gh/hosts.yml": "GitHub CLI",
+    ".config/cursor/auth.json": "Cursor",
+    # The owner's own app keeps its API key in its XDG config (2026-09-23).
+    ".config/archymedes/settings.json": "archymedes",
+}
+
+
+def _designated_store(path, home):
+    """The tool that owns `path` as its credential store, or None. Requires a
+    regular file (not a link) owned by this user with no group/other bits."""
+    rel = os.path.relpath(path, home)
+    tool = DESIGNATED_STORES.get(rel)
+    if not tool:
+        return None
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        return None
+    return tool
+
+
 LOOSE_FILES = (".bash_history", ".zsh_history", ".npmrc", ".netrc",
                ".pypirc", ".git-credentials", ".env", ".env.local",
                ".my.cnf", ".pgpass", ".rediscli_history", ".psql_history")
@@ -201,11 +234,20 @@ def audit(roots=None, hosts=("wsl",), deep=False):
             sev = "critical" if sev in ("critical", "high") else "high"
             extra = ("  the file is readable by other accounts on this system ("
                      + ", ".join(others[:3]) + ")")
+        stores = {_designated_store(p, home) for p, _ in paths}
+        store_tool = next(iter(stores)) if len(stores) == 1 else None
+        if cat == "present" and store_tool and not others:
+            sev = "medium" if sev in ("critical", "high") else sev
+            extra = (f"  Stored where {store_tool} keeps its login (owner-only file, "
+                     "no other accounts, not tracked by git). Any process running "
+                     "as you can still read it.")
 
         where = f"{first_path}:{first_line}"
         more = (f" (+{len(paths) - 1} more location"
                 f"{'s' if len(paths) > 2 else ''})" if len(paths) > 1 else "")
         description = "stored locally" if info['kind'].startswith("private key block") else "in plaintext"
+        if cat == "present" and store_tool and not others:
+            description = f"in {store_tool}'s credential store"
         context = "Volume encryption has not been verified for this file; credential validity and external exposure were not checked."
         if info['kind'] == "AWS access key id":
             context += " An access key ID alone cannot authenticate; the matching secret access key is required."

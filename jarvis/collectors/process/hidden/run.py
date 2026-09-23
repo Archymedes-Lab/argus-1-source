@@ -3,6 +3,8 @@
 import os
 import time
 
+from jarvis.platform import privilege
+
 from .common import DEFAULT_SWEEP, PROC, _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -215,7 +217,7 @@ def audit_linux(deep=False):
             f"{hit['name']} [pid {hit['pid']}] — {hit['reasons'][0][1][:80]}",
             hit["cmdline"][:120]))
 
-    if os.geteuid() == 0:
+    if privilege.can_read_other_processes():
         for conn in orphan_sockets():
             out.append(_finding(
                 "high", "network connection with no owning process",

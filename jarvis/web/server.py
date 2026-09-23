@@ -772,6 +772,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
+    # Before any thread exists: keep the visibility capabilities for our own
+    # reads, never for the programs we launch. See platform/privilege.py.
+    from jarvis.platform import privilege
+    privilege.drop_ambient()
     scheduler = Scheduler(db_path, hosts)
     scheduler.start()
 

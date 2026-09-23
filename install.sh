@@ -158,6 +158,8 @@ if $want_seal; then
   sudo mkdir -p /etc/systemd/system/jarvis.service.d
   sudo cp "$HERE/systemd/hardening.conf" \
           /etc/systemd/system/jarvis.service.d/hardening.conf
+  sudo cp "$HERE/systemd/capabilities.conf" \
+          /etc/systemd/system/jarvis.service.d/capabilities.conf
   sudo systemctl daemon-reload
   sudo systemctl restart jarvis.service
   echo "  drop-in:  /etc/systemd/system/jarvis.service.d/hardening.conf"
