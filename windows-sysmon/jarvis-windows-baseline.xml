@@ -81,16 +81,57 @@
       <TargetFilename condition="end with">.ps1</TargetFilename>
     </FileDeleteDetected>
 
-    <!-- Narrow registry collection prevents the previous driver-queue flood. -->
-    <RegistryEvent onmatch="include">
-      <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
-      <TargetObject condition="contains">\CurrentVersion\RunOnce</TargetObject>
-      <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
-      <TargetObject condition="contains">\Windows NT\CurrentVersion\Winlogon</TargetObject>
-      <TargetObject condition="contains">\Image File Execution Options\</TargetObject>
-      <TargetObject condition="contains">\CurrentVersion\Policies\Explorer\Run</TargetObject>
-      <TargetObject condition="contains">\CurrentVersion\App Paths\</TargetObject>
-    </RegistryEvent>
+    <!-- Narrow registry collection prevents the previous driver-queue flood.
+         Include and exclude for one event type need separate rule groups;
+         Sysmon applies the exclude group first. -->
+    <RuleGroup name="registry-persistence" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+        <TargetObject condition="contains">\CurrentVersion\RunOnce</TargetObject>
+        <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+        <TargetObject condition="contains">\Windows NT\CurrentVersion\Winlogon</TargetObject>
+        <TargetObject condition="contains">\Image File Execution Options\</TargetObject>
+        <TargetObject condition="contains">\CurrentVersion\Policies\Explorer\Run</TargetObject>
+        <TargetObject condition="contains">\CurrentVersion\App Paths\</TargetObject>
+      </RegistryEvent>
+    </RuleGroup>
+    <!-- Measured 2026-09-22 (boot 94, 35,859 registry events): 97% were
+         these operations, none of which change security state.
+         * CreateKey under Services opens an existing key with create access
+           (24,929 on Tcpip\Parameters from every networked app). A new
+           service still appears through its ImagePath/ServiceDll SetValue.
+         * bam\State\UserSettings SetValue stamps every process launch
+           (~6,900); ProcessCreate above already records every launch, and
+           deleting BAM entries (anti-forensics) stays visible.
+         * W32Time secure-time estimates, SharedAccess epochs and VSS
+           diagnostics are counters. NtpServer and every other W32Time,
+           firewall and Tcpip value change (DNS NameServer) stay visible.
+         Only SetValue/CreateKey are excluded; DeleteKey, DeleteValue and
+         RenameKey anywhere in the include list are always recorded. -->
+    <RuleGroup name="registry-noise" groupRelation="or">
+      <RegistryEvent onmatch="exclude">
+        <Rule name="service-key-open" groupRelation="and">
+          <EventType condition="is">CreateKey</EventType>
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+        </Rule>
+        <Rule name="bam-launch-stamp" groupRelation="and">
+          <EventType condition="is">SetValue</EventType>
+          <TargetObject condition="contains">\Services\bam\State\UserSettings\</TargetObject>
+        </Rule>
+        <Rule name="w32time-estimate" groupRelation="and">
+          <EventType condition="is">SetValue</EventType>
+          <TargetObject condition="contains">\Services\W32Time\SecureTimeLimits\</TargetObject>
+        </Rule>
+        <Rule name="sharedaccess-epoch" groupRelation="and">
+          <EventType condition="is">SetValue</EventType>
+          <TargetObject condition="contains">\Services\SharedAccess\Epoch</TargetObject>
+        </Rule>
+        <Rule name="vss-diagnostics" groupRelation="and">
+          <EventType condition="is">SetValue</EventType>
+          <TargetObject condition="contains">\Services\VSS\Diag\</TargetObject>
+        </Rule>
+      </RegistryEvent>
+    </RuleGroup>
 
     <WmiEvent onmatch="exclude" />
     <PipeEvent onmatch="include">

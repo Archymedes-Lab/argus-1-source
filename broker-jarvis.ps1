@@ -18,7 +18,10 @@
 # against the checkout and reports drift.
 #
 # The scripts run are the collectors' own: they read state and print base64
-# JSON. The broker adds no remediation and runs nothing else.
+# JSON. The one writer is vault.ps1, which only appends copies of JARVIS's own
+# sealed history into C:\ProgramData\Jarvis\Vault (Administrators/SYSTEM
+# write, owner read) and never overwrites or deletes. The broker adds no
+# remediation and runs nothing else.
 #
 #   .\broker-jarvis.ps1 -Install -Source <folder with the .ps1 collectors>
 #       (from an elevated shell, or via Start-Process -Verb RunAs)
@@ -45,6 +48,7 @@ $Jobs = [ordered]@{
     internet = @{ script = 'internetwatch.ps1'; timeout = 120 }
     sysmon_policy = @{ script = 'sysmon_policy.ps1'; timeout = 30 }
     sysmon_pressure = @{ script = 'sysmon_pressure.ps1'; timeout = 120 }
+    vault    = @{ script = 'vault.ps1';          timeout = 120 }
 }
 
 function Test-Admin {

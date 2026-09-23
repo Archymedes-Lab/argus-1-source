@@ -129,4 +129,10 @@ JOBS = {
     # 20s at its 128 MiB budget), so it is governed and runs rarely; the
     # 1200s interval also gives it a 120s reliability budget.
     "rust_mirror": (1200, "Independent evidence mirror"),
+    # Stages sealed history for the broker's administrator-only vault,
+    # verifies the vault against the live log, checks the running Sysmon
+    # rules against the baseline, and timestamps chain heads publicly
+    # (a 32-byte digest at most every 6h). Incremental: new vaulted segments
+    # are hashed each run, every vaulted payload once a day.
+    "evidence": (900,   "Evidence vault & anchors"),
 }

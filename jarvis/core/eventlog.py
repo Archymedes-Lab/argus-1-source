@@ -100,6 +100,11 @@ def _header_hash(header):
     return hashlib.sha256(_canonical(body).encode()).hexdigest()
 
 
+def header_hash(header):
+    """The chain hash a segment header must carry; for independent verifiers."""
+    return _header_hash(header)
+
+
 def _fsync_dir(path):
     fd = os.open(path, os.O_RDONLY)
     try:

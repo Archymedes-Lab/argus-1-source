@@ -51,6 +51,7 @@ JOB_COMMANDS = {
     "sysmon": "sysmon",
     "native": "timeline status",
     "rust_mirror": "status",
+    "evidence": "broker status",
     "arena": "arena suite",
     "geo": "geo status",
     "watchdogs": "selfcheck",

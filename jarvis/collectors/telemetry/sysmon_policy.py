@@ -19,12 +19,40 @@ log-wrap, sensor stop or tampering instead of policy. Either way the
 verdict is evidence, not a coverage claim.
 """
 
+import hashlib
 import re
 from collections import Counter
 
+from jarvis.core.paths import repo_file
 from jarvis.platform import broker
 
 EVENT_CREATE = "ProcessCreate"
+BASELINE = "windows-sysmon/jarvis-windows-baseline.xml"
+
+
+def config_hash(dump):
+    """The running configuration's SHA-256 as `Sysmon -c` reports it, or None.
+    Sysmon hashes the XML file it was given, byte for byte."""
+    match = re.search(r"(?im)Config hash:\s*SHA256=([0-9a-f]{64})", str(dump or ""))
+    return match.group(1).lower() if match else None
+
+
+def baseline_sha256(path=None):
+    """SHA-256 of the checkout's reviewed Sysmon baseline, or None."""
+    try:
+        with open(path or repo_file(BASELINE), "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def drift(policy, baseline=None):
+    """'match', 'drift' or 'unknown': running config vs reviewed baseline."""
+    running = (policy or {}).get("config_hash")
+    expected = baseline if baseline is not None else baseline_sha256()
+    if not running or not expected:
+        return "unknown"
+    return "match" if running == expected else "drift"
 
 
 def _rules(lines):
@@ -128,6 +156,7 @@ def audit(now=None):
     try:
         dump, error = _broker_dump(now=now)
         verdict = parse(dump)
+        verdict["config_hash"] = config_hash(dump)
         verdict["source"] = "elevated_broker" if dump is not None else "unavailable"
         if error:
             verdict["detail"] = error
@@ -142,7 +171,8 @@ def summary(policy):
     """Health-safe policy metadata; never expose raw paths or command rules."""
     policy = policy or {}
     return {key: policy.get(key) for key in (
-        "event1", "mode", "detail", "rule_count", "field_counts", "source")
+        "event1", "mode", "detail", "rule_count", "field_counts", "source",
+        "config_hash")
         if policy.get(key) is not None}
 
 

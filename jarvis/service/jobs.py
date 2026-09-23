@@ -30,6 +30,7 @@ from jarvis.collectors.process import evasion as evasion_mod
 from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
 from jarvis.collectors.telemetry import (
     auditd,
+    evidence,
     mirror,
     native,
     reconcile,
@@ -390,6 +391,7 @@ RUNNERS = {
     "sysmon": _with_store(sysmon.audit, incremental=True),
     "native": _with_store(native.audit),
     "rust_mirror": _with_store(mirror.audit),
+    "evidence": _with_store(evidence.audit),
     "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
     "geo": _with_store(geo.audit),
     "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),

@@ -26,6 +26,7 @@ SCRIPTS = {
     "internet": "internetwatch.ps1",
     "sysmon_policy": "sysmon_policy.ps1",
     "sysmon_pressure": "sysmon_pressure.ps1",
+    "vault": "vault.ps1",
 }
 MAX_AGE = 45 * 60          # three missed 15-minute runs
 

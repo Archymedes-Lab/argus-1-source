@@ -40,7 +40,7 @@ AREAS = (
     ("Network", ("internet", "netwatch")),
     ("Developer toolchain", ("toolchain",)),
     ("Monitoring", ("coverage", "bridge", "watchdogs", "native", "arena",
-                    "rust_mirror")),
+                    "rust_mirror", "evidence")),
 )
 UNSCORED = ("gaps", "intel", "feeds", "ledger", "report", "resources", "controls",
             "attackmap", "model")
