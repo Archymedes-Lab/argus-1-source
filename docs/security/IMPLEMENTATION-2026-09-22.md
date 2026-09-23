@@ -31,8 +31,9 @@ The broker killed the probe at 120s every run. `Get-WinEvent` rendered every eve
 message: it took 230s for 14,609 events, while `ToXml` parsing took only 0.3s per 1,000. The probe now
 uses `EventLogReader` with positional properties, a 90s budget, and the same
 aggregate-only output. It measured 4.3s wall time unelevated for 15,021 registry
-events plus one drop record. **Pending:** `jarvis broker install` (one UAC
-prompt) to stage it. Until then the broker correctly reports its copy as drifted.
+events plus one drop record. After `jarvis broker install` on 2026-09-23 the
+elevated broker ran it in 2s over 34,002 registry events, not truncated. The only
+drop record this boot is still the 12:48:51Z overflow under the previous policy.
 
 ## Sysmon evidence
 
