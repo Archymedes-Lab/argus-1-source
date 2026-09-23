@@ -84,7 +84,7 @@ def _related_chains(active):
         return []
 
 
-def digest(ordered, urgent, health, delta, now, conf=None):
+def digest(ordered, urgent, health, delta, now, conf=None, store=None):
     """ordered: [(key, queue item)] -> (subject, text, html)."""
     active = [(item["finding"], item["job"], item["tag"]) for _key, item in ordered
               if item["tag"] != "RESOLVED"]
@@ -92,7 +92,7 @@ def digest(ordered, urgent, health, delta, now, conf=None):
     grouped = _grouped(active)
     counts = _counts(grouped)
 
-    kind = "priority changes" if urgent else "change digest"
+    kind = "priority interrupt" if urgent else "change digest"
     need = _needs_you(counts)
     headline = (f"{need} need{'s' if need == 1 else ''} you" if need
                 else "nothing needs you")
@@ -100,13 +100,13 @@ def digest(ordered, urgent, health, delta, now, conf=None):
     line, by_model = voice.opener(conf, voice.facts_for(
         "change digest", counts, urgent, health, delta, len(resolved),
         [f.get("title") for f, _job, _tag in active]),
-        time.strftime("%Y-%m-%d", time.localtime(now)))
+        time.strftime("%Y-%m-%d", time.localtime(now)), store=store)
 
     tone = "urgent" if urgent else ("digest" if need else "calm")
     mood = ("These need you now." if urgent else
             f"{need} need you — the rest is handled or listed below." if need else
             "All quiet — nothing needs you. Splendid.")
-    text = ["JARVIS PRIORITY CHANGES" if urgent else "JARVIS CHANGE DIGEST",
+    text = ["JARVIS PRIORITY INTERRUPT" if urgent else "JARVIS CHANGE DIGEST",
             f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS"
             + (f" · {len(resolved)} no longer observed" if resolved else ""),
             mood, "", line, ""]
@@ -126,8 +126,10 @@ def digest(ordered, urgent, health, delta, now, conf=None):
                  "  Absent from the latest collector result; this alone does not prove "
                  "remediation.", RULE]
         text += [f"- {item['finding'].get('title', '')} ({item['job']})" for item in resolved]
-    text += ["", "Unchanged findings stay on the dashboard and in the daily advisory; "
-                 "they do not generate repeat emails."]
+    text += ["", ("Interrupts are only for something new or worsening; everything else waits "
+                  "for the next briefing." if urgent else
+                  "Unchanged findings stay on the dashboard and in the daily advisory; "
+                  "they do not generate repeat emails.")]
 
     for owner in triage.ORDER:
         for f, job, t, tag in grouped[owner]:
@@ -137,7 +139,7 @@ def digest(ordered, urgent, health, delta, now, conf=None):
                 grouped[owner][grouped[owner].index((f, job, t, tag))] = (
                     f, job, t, f"escalated · {hours}h open")
 
-    inner = ui.header("JARVIS · " + ("priority changes" if urgent else "change digest"),
+    inner = ui.header("JARVIS · " + ("priority interrupt" if urgent else "change digest"),
                       headline[0].upper() + headline[1:],
                       time.strftime("%A %d %B, %H:%M", time.localtime(now)), tone=tone)
     inner += ui.section(ui.hero([(need, "need you"),
@@ -167,6 +169,182 @@ def digest(ordered, urgent, health, delta, now, conf=None):
     return subject, "\n".join(text) + "\n", html
 
 
+# ── the scheduled briefing ────────────────────────────────────────────────
+#
+# JARVIS reports on a schedule, like a chief of staff, instead of mailing every
+# change: a condition code, the one thing worth doing, what changed since the
+# last briefing, what it is watching on its own, the wins, and the state of its
+# own evidence. Only something new and critical, or a confirmed outage,
+# interrupts between briefings (notifications.py).
+
+def condition(need, critical):
+    """(code, reason) — deterministic, from counts only."""
+    if critical:
+        return "RED", (f"{critical} critical matter{'s' if critical != 1 else ''} "
+                       "open. Start with the mission below.")
+    if need:
+        return "AMBER", (f"No critical matters. {need} item{'s' if need != 1 else ''} "
+                         "want your hands.")
+    return "GREEN", "Nothing needs you. The watch continues."
+
+
+def _custody_lines(state):
+    """Plain facts about JARVIS's own evidence, from the evidence job's record."""
+    if not state:
+        return []
+    out = []
+    vault = state.get("vault_job") or {}
+    if vault.get("ok"):
+        out.append(f"Evidence vault: {vault.get('vaulted_segments', 0)} sealed segments held "
+                   "where only administrators can write"
+                   + ("; DIVERGENCE recorded" if vault.get("diverged") else "") + ".")
+    elif state.get("vault_job"):
+        out.append("Evidence vault: not running — sealed history is not being vaulted.")
+    anchors = state.get("anchors") or {}
+    if anchors.get("records"):
+        confirmed = anchors.get("confirmed", 0)
+        out.append(f"Public anchors: {anchors['records']} timestamped chain head"
+                   f"{'s' if anchors['records'] != 1 else ''}, {confirmed} confirmed in Bitcoin"
+                   + (f" (latest block {anchors['latest_confirmed_height']})"
+                      if anchors.get("latest_confirmed_height") else "") + ".")
+    sysmon = (state.get("sysmon") or {}).get("state")
+    if sysmon == "match":
+        out.append("Sysmon: running the reviewed baseline.")
+    elif sysmon == "drift":
+        out.append("Sysmon: NOT running the reviewed baseline — see the findings.")
+    return out
+
+
+def _mission(protocol_state, grouped):
+    """(title, lines) for the single most valuable thing to do, or None.
+
+    An open critical always comes first: the condition is RED because of it.
+    Then the next protocol, then the worst remaining item."""
+    for owner in (triage.YOU_DO, triage.YOU_CONFIRM):
+        for f, _job, t, _tag in grouped[owner]:
+            if f.get("severity") == "critical":
+                lines = [t["action"]] + ([t["command"]] if t.get("command") else [])
+                if owner == triage.YOU_CONFIRM and t.get("id"):
+                    lines.append(f"If this was you: jarvis ack {t['id']} --reason \"…\"")
+                return f.get("title", ""), lines
+    item = protocols.pick_next(protocol_state) if protocol_state else None
+    if item:
+        lines = protocols.email_lines(item, protocol_state)
+        return lines[0].rsplit("[", 1)[0].strip(), lines[1:]
+    for owner in (triage.YOU_DO, triage.YOU_CONFIRM):
+        if grouped[owner]:
+            f, _job, t, _tag = grouped[owner][0]
+            lines = [t["action"]] + ([t["command"]] if t.get("command") else [])
+            if owner == triage.YOU_CONFIRM and t.get("id"):
+                lines.append(f"If this was you: jarvis ack {t['id']} --reason \"…\"")
+            return f.get("title", ""), lines
+    return None
+
+
+def briefing(pending, result, delta, snapshots, now, store=None, conf=None,
+             protocol_state=(), custody=None, part="morning"):
+    """-> (subject, text, html) for a scheduled briefing.
+
+    `pending` [(key, queue item)] are the changes held since the last briefing.
+    Everything stated is computed here; the model writes only the opener.
+    """
+    acks = acknowledge.load(store) if store is not None else {}
+    current, seen = [], set()
+    for f, job in triage.current(snapshots, levels=("critical", "high"), acks=acks, now=now):
+        if (job, f.get("title")) not in seen:
+            seen.add((job, f.get("title")))
+            current.append((f, job, ""))
+    grouped_now = _grouped(current)
+    counts = _counts(grouped_now)
+    need = _needs_you(counts)
+    critical = sum(1 for owner in (triage.YOU_DO, triage.YOU_CONFIRM)
+                   for f, *_rest in grouped_now[owner] if f.get("severity") == "critical")
+    code, reason = condition(need, critical)
+
+    changes = [(item["finding"], item["job"], item["tag"]) for _k, item in pending
+               if item["tag"] != "RESOLVED"]
+    resolved = [item for _k, item in pending if item["tag"] == "RESOLVED"]
+    grouped_changes = _grouped(changes)
+    for owner in triage.ORDER:
+        for i, (f, job, t, tag) in enumerate(grouped_changes[owner]):
+            if tag == "ESCALATED":
+                item = next(it for _k, it in pending if it["finding"] is f)
+                days = max(1, (now - item["first"]) // 86400)
+                grouped_changes[owner][i] = (f, job, t, f"reminder · open {days}d")
+    new = sum(1 for _f, _j, tag in changes if tag in ("NEW", "WORSENED", "REOPENED"))
+    reminders = sum(1 for _f, _j, tag in changes if tag == "ESCALATED")
+
+    part_title = part.capitalize()
+    score_bit = f" · {result['score']}%" if result else ""
+    subject = (f"[JARVIS] {part_title} briefing — condition {code}{score_bit} · "
+               + (f"{need} for you" if need else "nothing for you"))
+    facts = voice.facts_for("security briefing", counts, False, result, delta,
+                            len(resolved), [f.get("title") for f, _j, _t in current])
+    facts["part_of_day"] = part
+    if changes:
+        facts["new_since_last_briefing"] = new
+    line, by_model = voice.opener(conf, facts, time.strftime("%Y-%m-%d", time.localtime(now))
+                                  + part, store=store)
+    mission = _mission(protocol_state, grouped_now)
+    custody_lines = _custody_lines(custody)
+    watching = [f.get("title", "") for f, _job, _t, _tag in grouped_now[triage.JARVIS][:5]]
+    wins = [f"{i['finding'].get('title', '')} — no longer observed" for i in resolved]
+    if delta and delta > 0:
+        wins.insert(0, f"Security score up {delta} point{'s' if delta != 1 else ''} in 24h.")
+
+    text = [f"JARVIS {part.upper()} BRIEFING", f"Condition {code}: {reason}", "", line, ""]
+    if mission:
+        text += [RULE, f"MISSION OF THE DAY: {mission[0]}", RULE,
+                 *[f"  {line_}" for line_ in mission[1]], ""]
+    if changes or resolved:
+        text += [RULE, f"SINCE MY LAST BRIEFING: {new} new, {reminders} reminder(s), "
+                       f"{len(resolved)} no longer observed", RULE]
+        for owner in triage.ORDER:
+            text += _text_group(owner, grouped_changes[owner], limit=10)
+    else:
+        text += ["Since my last briefing: no changes worth your time."]
+    if watching:
+        text += ["", "ON WATCH (JARVIS is handling):", *[f"- {w}" for w in watching]]
+    if wins:
+        text += ["", "WINS:", *[f"- {w}" for w in wins]]
+    if custody_lines:
+        text += ["", "EVIDENCE CUSTODY:", *[f"- {c}" for c in custody_lines]]
+    if result:
+        text += [""] + _text_health(result, delta)
+    footer = ("Briefings arrive on schedule; between them JARVIS interrupts only for something "
+              "new and critical, or an outage that lasts. Every finding and its history: the "
+              "local JARVIS dashboard.")
+    text += ["", footer]
+
+    tone = ui.CONDITION_STYLE[code][0]
+    inner = ui.header(f"JARVIS · {part} briefing",
+                      {"RED": "Eyes on this first", "AMBER": "A few things for your hands",
+                       "GREEN": "All quiet on the perimeter"}[code],
+                      time.strftime("%A %d %B, %H:%M", time.localtime(now)), tone=tone)
+    stats = [(need, "for you"), (counts[triage.JARVIS], "on watch")]
+    if result:
+        stats.insert(0, (f"{result['score']}%", "security score"))
+    inner += ui.section(ui.hero(stats), "px-6 pt-5 pb-1")
+    inner += ui.condition_banner(code, reason)
+    inner += ui.voice(line, by_model)
+    if mission:
+        inner += ui.mission(mission[0], mission[1])
+    if changes or resolved:
+        inner += ui.section(ui.heading(
+            "Since my last briefing",
+            f"{new} new · {reminders} reminder(s) · {len(resolved)} no longer observed"),
+            "px-6 pt-5 pb-1")
+        for owner in triage.ORDER:
+            inner += ui.owner_section(owner, grouped_changes[owner], limit=8, show_detail=False)
+    inner += ui.bullets("On watch", "JARVIS is handling these; nothing needed from you.", watching)
+    inner += ui.bullets("Wins", "", wins)
+    inner += ui.bullets("Evidence custody", "The state of JARVIS's own records.", custody_lines)
+    if result:
+        inner += ui.section(ui.health_panel(result, delta), "px-6 py-5 bg-slate-50")
+    inner += ui.footer(footer)
+    return subject, "\n".join(text) + "\n", ui.document(subject, line, inner)
+
+
 # ── daily security health ─────────────────────────────────────────────────
 
 def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=()):
@@ -193,7 +371,7 @@ def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=
     line, by_model = voice.opener(conf, voice.facts_for(
         "daily security health", counts, False, result, delta,
         top=[f.get("title") for f, _job, _tag in top]),
-        time.strftime("%Y-%m-%d", time.localtime(now)))
+        time.strftime("%Y-%m-%d", time.localtime(now)), store=store)
 
     text = ["JARVIS SECURITY HEALTH",
             f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS",
@@ -276,7 +454,7 @@ def action_plan(result, protocol_state, snapshots, now, store=None, conf=None, d
     day = time.strftime("%Y-%m-%d", time.localtime(now))
     line, by_model = voice.opener(conf, voice.facts_for(
         "action plan", {triage.YOU_DO: total}, False, result, delta,
-        top=[i["protocol"].title for i in tasks]), day)
+        top=[i["protocol"].title for i in tasks]), day, store=store)
     personalized = int(by_model)
 
     text = ["JARVIS ACTION PLAN", f"{len(tasks)} protocol(s) in order, then "

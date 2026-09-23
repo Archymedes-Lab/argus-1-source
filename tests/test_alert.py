@@ -30,7 +30,13 @@ class AdvisoryReportTests(unittest.TestCase):
     def test_collector_outages_still_page(self):
         finding = {"category": "collectors", "severity": "high",
                    "title": "collector 'scan' is stale", "detail": "no results", "where": ""}
-        with patch.object(alert, "send_email", return_value="") as send:
+        # Once it has lasted: restart-length outages are not worth an email.
+        with patch.object(alert, "send_email", return_value="") as send, \
+                patch("time.time", return_value=1_000_000):
+            notifications.dispatch(self.store, CONF, "coverage", [finding], "")
+            send.assert_not_called()
+        with patch.object(alert, "send_email", return_value="") as send, \
+                patch("time.time", return_value=1_000_000 + notifications.OUTAGE_CONFIRM_S):
             notifications.dispatch(self.store, CONF, "coverage", [finding], "")
         send.assert_called_once()
 

@@ -9,6 +9,17 @@ from . import emails, score
 QUEUE = 'alert_pending_changes'
 LAST_DIGEST = 'alert_digest_last_ok'
 RETRY_AT = 'alert_delivery_retry_at'
+# A collector outage must last this long before it can page: restarts and
+# brief interop hiccups made every daemon restart an email (measured
+# 2026-09-23: nine in one hour, all "collector … is failing/stale").
+OUTAGE_CONFIRM_S = 900
+# Only these changes to a critical finding interrupt. Age reminders
+# (ESCALATED) wait for the next briefing: known problems are the briefing's
+# job, the interrupt is for something new.
+INTERRUPT_TAGS = ('NEW', 'WORSENED', 'REOPENED')
+# A new high from a detector of live activity interrupts too; a high from a
+# hardening or posture check is a to-do, and waits for the briefing.
+THREAT_AREA = "Active threats"
 ESCALATIONS = {
     'critical': (3600, 21600, 86400),
     'high': (86400, 259200, 604800),
@@ -73,22 +84,27 @@ def dispatch(store, conf, job, findings, error=''):
         st['outage'] = outage
         old = queue.get(key)
         age = max(0, now - int(st.get('first',now)))
+        if outage and age < OUTAGE_CONFIRM_S:
+            continue            # not yet an outage worth anyone's attention
         thresholds = (900,3600,21600) if outage else ESCALATIONS.get(sev, ESCALATIONS['high'])
         level = sum(age >= t for t in thresholds)
-        urgent = outage or sev == 'critical'
+        threat = sev == 'critical' or (
+            sev == 'high' and score.AREA_OF.get(job) == THREAT_AREA)
+        pageable = outage or threat
         tag = None
         if old and old['tag'] == 'RESOLVED':
             tag = 'REOPENED'
-        elif not st.get('last_sent') and (urgent or not first_observation or f.get('remediation')):
+        elif not st.get('last_sent') and (pageable or not first_observation or f.get('remediation')):
             tag = 'NEW'
         elif rank.get(sev,9) < rank.get(was,9):
             tag = 'WORSENED'
         elif st.get('last_sent') and level > int(st.get('escalation',0)):
             tag = 'ESCALATED'
+        urgent = (outage and not st.get('last_sent')) or (threat and tag in INTERRUPT_TAGS)
         if old and old['tag'] != 'RESOLVED':
             # Retain an unsent worsening even if no further severity change
             # occurs; severity improvements before send must remain truthful.
-            old.update(finding=f, urgent=urgent, level=level)
+            old.update(finding=f, urgent=bool(old.get('urgent')) or urgent, level=level)
         elif tag:
             queue[key] = {'tag':tag, 'finding':f, 'job':job, 'queued':now,
                           'urgent':urgent, 'level':level, 'first':st['first']}
@@ -130,10 +146,14 @@ def flush(store, conf):
         store.set_meta(QUEUE, json.dumps(queue))
     if not queue or now < int(store.get_meta(RETRY_AT,0) or 0):
         return False
-    period = max(60, alert.parse_int(conf.get('alert_digest_interval'),3600))
-    last = int(store.get_meta(LAST_DIGEST,0) or 0)
-    oldest = min(item['queued'] for item in queue.values())
-    due = now - (last or oldest) >= period
+    if briefings(conf):
+        # Non-urgent changes wait for the next scheduled briefing.
+        due = False
+    else:
+        period = max(60, alert.parse_int(conf.get('alert_digest_interval'),3600))
+        last = int(store.get_meta(LAST_DIGEST,0) or 0)
+        oldest = min(item['queued'] for item in queue.values())
+        due = now - (last or oldest) >= period
     batch = {k:v for k,v in queue.items() if v.get('urgent') or due}
     if not batch:
         return False
@@ -146,12 +166,39 @@ def flush(store, conf):
     health = score.latest(store)
     subject, text, html = emails.digest(
         ordered, urgent, health, score.change_since(store, 86400, now) if health else None, now,
-        conf)
+        conf, store=store)
     err = alert.send_email(conf, subject, text, html=html)
     if err:
         store.set_meta('alert_last_error',f'{now}: {err}'[:300])
         store.set_meta(RETRY_AT,now + 300)
         return False
+    mark_sent(store, ordered, now, digest=due)
+    return True
+
+
+def briefings(conf):
+    """Scheduled briefings replace the rolling digest unless a fixed
+    `alert_digest_interval` is configured or `briefings` is false."""
+    return (conf.get('briefings', True) is not False
+            and conf.get('alert_digest_interval') in (None, ''))
+
+
+def pending_for_briefing(store, conf, now=None):
+    """Queued, unacknowledged, non-urgent changes for the next briefing, worst first."""
+    now = int(time.time() if now is None else now)
+    queue = _load(store, QUEUE)
+    acks = acknowledge.load(store)
+    items = [(k, v) for k, v in queue.items()
+             if not v.get('urgent') and (v.get('tag') != 'RESOLVED'
+                                         or conf.get('alert_on_clear', False) is True)
+             and not (v.get('tag') != 'RESOLVED'
+                      and acknowledge.is_acknowledged(acks, v['finding'], v['job'], now))]
+    return sorted(items, key=lambda kv: alert.SEV_RANK.get(kv[1]['finding'].get('severity'), 9))
+
+
+def mark_sent(store, ordered, now, digest=True):
+    """Record delivery of `ordered` [(key, queue item)] after a successful send."""
+    queue = _load(store, QUEUE)
     state = _load(store,alert.STATE_META)
     for key, item in ordered:
         if item['tag'] != 'RESOLVED':
@@ -165,8 +212,8 @@ def flush(store, conf):
     store.set_meta(alert.STATE_META,json.dumps(state))
     store.set_meta(QUEUE,json.dumps(queue))
     alert.record_send(store)
-    if due: store.set_meta(LAST_DIGEST,now)
+    if digest:
+        store.set_meta(LAST_DIGEST,now)
     store.set_meta(RETRY_AT,0)
     store.set_meta('alert_last_ok',now)
     store.set_meta('alert_last_error','')
-    return True

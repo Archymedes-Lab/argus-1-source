@@ -142,6 +142,63 @@ class EmailTests(unittest.TestCase):
         self.assertIn("Tom &amp; Jerry", html)
 
 
+class VarietyTests(unittest.TestCase):
+    class Store:
+        def __init__(self):
+            self.meta = {}
+
+        def get_meta(self, key, default=None):
+            return self.meta.get(key, default)
+
+        def set_meta(self, key, value):
+            self.meta[key] = value
+
+    def test_style_examples_satisfy_the_rules_they_teach(self):
+        for name, _direction, (asked, answered) in voice.STYLES:
+            with self.subTest(style=name):
+                self.assertTrue(voice.acceptable(answered, voice.json.loads(asked)))
+
+    def test_a_repeated_line_is_refused_and_another_style_is_tried(self):
+        store = self.Store()
+        line = "One matter needs you, and the score sits at 43."
+        with mock.patch.object(llm, "chat", return_value=(line, "")):
+            self.assertEqual(voice.opener(ON, facts(), "d1", store=store), (line, True))
+        replies = iter([(line, ""), ("A single task is ready for your hands.", "")])
+        with mock.patch.object(llm, "chat", side_effect=lambda *a, **k: next(replies)) as chat:
+            got, by_model = voice.opener(ON, facts(), "d2", store=store)
+        self.assertEqual((got, by_model), ("A single task is ready for your hands.", True))
+        self.assertEqual(chat.call_count, 2)
+        self.assertIn("style", voice.json.loads(store.meta[voice.RECENT_META]))
+
+    def test_fallbacks_rotate_away_from_recent_lines(self):
+        store = self.Store()
+        seen = [voice.opener({}, facts(), "same-day", store=store)[0] for _ in range(4)]
+        self.assertEqual(len(set(seen)), 4)
+        for line in seen:
+            self.assertIn(line, voice._FALLBACK["needs_you"])
+
+    def test_styles_never_repeat_the_last_one_and_interrupts_stay_serious(self):
+        f = facts()
+        first = voice.styles_for(f, "d")[0][0]
+        self.assertNotEqual(voice.styles_for(f, "d", last_style=first)[0][0], first)
+        urgent = facts(urgent=True)
+        for day in ("a", "b", "c", "d"):
+            for name, *_rest in voice.styles_for(urgent, day):
+                self.assertIn(name, ("mission control", "sidekick", "field report"))
+
+    def test_measured_gloom_and_misattributed_counts_are_rejected(self):
+        f = dict(facts(action=9), new_since_last_briefing=1)
+        self.assertFalse(voice.acceptable(
+            "A sombre morning, the score stuck at 43, a worrying state of affairs.", f))
+        self.assertFalse(voice.acceptable("Nine new matters await your attention.", f))
+        self.assertTrue(voice.acceptable("One new matter since last time, nine on the list.", f))
+
+    def test_offline_model_is_asked_once(self):
+        with mock.patch.object(llm, "chat", return_value=("", "offline")) as chat:
+            voice.opener(ON, facts(), "d", store=self.Store())
+        self.assertEqual(chat.call_count, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
 

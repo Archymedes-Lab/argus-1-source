@@ -94,6 +94,16 @@ _HYPERBOLE = re.compile(
 _REASSURE = re.compile(
     r"\b(all clear|nothing to worry|no threats?|you'?re safe|fully secure|all is (right|well)|"
     r"all'?s well|safe and sound|nothing to fear|out of the woods|in the clear)\b", re.I)
+# Measured on llama3.2:3b briefings (2026-09-23): "a sombre morning indeed ...
+# a worrying state of affairs", "a risk level warning that's only going to get
+# more serious by the hour". The voice is upbeat; gloom is not information.
+_GLOOM = re.compile(
+    r"\b(sombre|somber|worr\w*|dire|grim|bleak|dismal|gloom\w*|troubling|alarming|"
+    r"i'?m afraid|dread\w*|ominous|sorry state|sad|warning|more serious|getting worse|"
+    r"by the hour)\b", re.I)
+# "N new" must be the new count, not another number from FACTS. Measured:
+# "nine new matters" when one was new and nine needed the user.
+_NEW_COUNT = re.compile(r"\b(\d+|[a-z]+) new\b", re.I)
 _UP = re.compile(r"\b(climb\w*|rose|risen|rising|improv\w*|gain\w*|higher|better)\b", re.I)
 _DOWN = re.compile(r"\b(drop\w*|dip\w*|declin\w*|fell|fall\w*|slip\w*|tumbl\w*|lower|worse)\b", re.I)
 # "one" is left out: "this one", "no one" are idiom far more often than count.
@@ -105,24 +115,52 @@ _NUMBER_WORDS = {word: str(n) for n, word in enumerate(
 _NUMBER_WORDS.update(pair="2", couple="2", trio="3", quartet="4", dozen="12")
 
 # Fallbacks keyed by situation, each true for every state it is chosen in.
+# Several per situation, and the recently used ones are skipped, so a model
+# that is off or busy still does not repeat itself day after day.
 _FALLBACK = {
     "urgent": (
         "Something has turned up uninvited, and I have rushed it to you ahead of the usual "
         "digest. The good news: early is by far the best time to show it the door.",
         "Pardon the grand entrance, but this one could not wait for the digest. Caught "
         "early, it is a much friendlier conversation.",
+        "Interrupting on purpose: this one earned a seat at the front of the queue. Details "
+        "below, freshest first.",
+        "Priority channel open. One matter jumped the queue, and it is laid out below so you "
+        "can deal with it swiftly.",
+        "Forgive the knock on the door; this could not wait for the next briefing. Everything "
+        "you need to act is right below.",
     ),
     "needs_you": (
         "A few matters are ready for a human touch, laid out below in order of importance. "
         "Each one makes this machine a little harder to bully.",
         "The items below need your hands rather than mine — opposable thumbs, you see. I "
         "shall hold the torch and cheer.",
+        "Briefing ready. The list below is short on drama and long on opportunity; the top "
+        "item is today's mission.",
+        "Status report, freshly pressed. A few jobs await your signature, and the first one "
+        "pays the most.",
+        "The workshop is open and the tools are laid out. Start with the mission at the top "
+        "and the rest will follow.",
+        "Your security to-do list, served warm. Tackle the first item and the board gets "
+        "noticeably tidier.",
+        "Reporting in. The defences are up, the logs are rolling, and a couple of tasks are "
+        "waiting on your say-so.",
+        "Another shift on watch, another short list for you. The top of it is where the "
+        "real value lives.",
     ),
     "quiet": (
         "Nothing on the list needs you today. Splendid. I shall keep watching anyway; it is "
         "rather the point of me, and I do so enjoy it.",
         "A gloriously uneventful report. Savour it; I shall keep one eye on the doors and the "
         "other on the biscuits.",
+        "Quiet skies over the machine. The sensors are humming and the logs are sealed; I "
+        "will shout if anything changes.",
+        "Nothing for you to do, which is my favourite kind of briefing. The watch continues "
+        "while you get on with your day.",
+        "All stations reporting in, no jobs for your hands. I shall keep polishing the "
+        "perimeter.",
+        "An empty inbox for once, at least from me. Consider this a postcard from the night "
+        "shift.",
     ),
 }
 
@@ -161,11 +199,130 @@ def _situation(facts):
     return "quiet"
 
 
-def fallback(facts, day=""):
-    """A deterministic line for the situation; `day` varies it without randomness."""
+def fallback(facts, day="", recent=()):
+    """A deterministic line for the situation; `day` varies it without randomness,
+    and lines used recently are passed over while any other remains."""
     lines = _FALLBACK[_situation(facts)]
     digest = hashlib.sha256(f"{facts['email']}|{day}".encode()).digest()
-    return lines[digest[0] % len(lines)]
+    start = digest[0] % len(lines)
+    ordered = lines[start:] + lines[:start]
+    fresh = [line for line in ordered if not _too_similar(line, recent)]
+    return (fresh or ordered)[0]
+
+
+# ── variety ────────────────────────────────────────────────────────────────
+#
+# One persona and four examples produced the same joke for weeks. Each email
+# now draws a delivery style (stable for the day and email kind, never the one
+# used last), and remembers its recent openers: a line too close to one of them
+# is rejected like any other bad line, so the model gets one retry in another
+# style before the fallback pool, which skips recent lines too.
+
+STYLES = (
+    ("butler",
+     "Deliver it as a dry-witted British butler who is quietly proud of the household.",
+     _example("Two matters await your hands this morning, and the score sits at 61. I have "
+              "laid out the good pen and the finest biscuits.",
+              email="security briefing", part_of_day="morning", urgent=False,
+              needs_your_action=2, needs_your_confirmation=0, jarvis_is_handling=5,
+              top_findings=["SSH server running"], security_score_percent=61, grade="fair",
+              score_trend="unchanged")),
+    ("mission control",
+     "Deliver it as a calm mission-control status call: crisp, confident, with a hint of "
+     "swagger.",
+     _example("Evening status: all stations reporting, score holding at 74. One task is on the "
+              "board for you; everything else is flying itself.",
+              email="security briefing", part_of_day="evening", urgent=False,
+              needs_your_action=1, needs_your_confirmation=0, jarvis_is_handling=4,
+              top_findings=["firewall profile disabled"], security_score_percent=74,
+              grade="fair", score_trend="unchanged")),
+    ("sidekick",
+     "Deliver it as FRIDAY, a quick, warm AI sidekick with an easy-going lilt who teases "
+     "gently and gets straight to the point.",
+     _example("Morning, boss. Score's at 58 and three jobs are waiting on you, the plaintext "
+              "password file first. Let's make it a short one.",
+              email="security briefing", part_of_day="morning", urgent=False,
+              needs_your_action=3, needs_your_confirmation=0, jarvis_is_handling=2,
+              top_findings=["password file in plaintext"], security_score_percent=58,
+              grade="at risk", score_trend="unchanged")),
+    ("field report",
+     "Deliver it as a veteran field operative's radio report: terse, dry, faintly amused.",
+     _example("Field report, evening edition. Perimeter intact, score 81, nothing for your "
+              "hands. Keeping the lights on and the logs sealed.",
+              email="security briefing", part_of_day="evening", urgent=False,
+              needs_your_action=0, needs_your_confirmation=0, jarvis_is_handling=3,
+              top_findings=[], security_score_percent=81, grade="good",
+              score_trend="unchanged")),
+    ("forecast",
+     "Deliver it as a cheerful weather forecaster describing the machine's security weather.",
+     _example("Today's security forecast: mostly sunny at 66, with two small clouds that need "
+              "your umbrella. Clear spells expected once they pass.",
+              email="security briefing", part_of_day="morning", urgent=False,
+              needs_your_action=2, needs_your_confirmation=0, jarvis_is_handling=1,
+              top_findings=["guest account enabled"], security_score_percent=66, grade="fair",
+              score_trend="unchanged")),
+    ("workshop",
+     "Deliver it as a proud engineer in a workshop, delighted by a well-tuned machine.",
+     _example("The engine is purring at 70, and one bolt wants tightening by your hand. Give it "
+              "a turn and she will run even sweeter.",
+              email="security briefing", part_of_day="evening", urgent=False,
+              needs_your_action=1, needs_your_confirmation=0, jarvis_is_handling=2,
+              top_findings=["remote desktop enabled"], security_score_percent=70,
+              grade="fair", score_trend="unchanged")),
+)
+RECENT_META = "voice_recent_openers"
+RECENT_KEEP = 20
+SIMILARITY = 0.45        # word-set overlap (Jaccard) that counts as a repeat
+
+
+def _words(text):
+    return set(re.findall(r"[a-z']+", text.lower())) - {
+        "the", "a", "an", "and", "of", "to", "is", "it", "i", "on", "in", "for", "your",
+        "you", "at", "with", "this", "that", "one", "be", "are"}
+
+
+def _too_similar(text, recent):
+    mine = _words(text)
+    opening = text.lower().split()[:3]
+    for old in recent or ():
+        theirs = _words(old)
+        union = mine | theirs
+        if union and len(mine & theirs) / len(union) >= SIMILARITY:
+            return True
+        if opening and opening == old.lower().split()[:3]:
+            return True
+    return False
+
+
+def styles_for(facts, day, last_style=""):
+    """Two delivery styles for this email: stable for the day, never last time's."""
+    digest = hashlib.sha256(f"{facts.get('email')}|{facts.get('part_of_day', '')}|{day}"
+                            .encode()).digest()
+    order = [STYLES[(digest[0] + i) % len(STYLES)] for i in range(len(STYLES))]
+    order = [style for style in order if style[0] != last_style] or order
+    if facts.get("urgent"):
+        # An interrupt is no time for a weather forecast.
+        order = [s for s in order if s[0] in ("mission control", "sidekick", "field report")]
+    return order[:2]
+
+
+def _recent(store):
+    if store is None:
+        return [], ""
+    try:
+        data = json.loads(store.get_meta(RECENT_META) or "{}")
+    except (TypeError, ValueError):
+        data = {}
+    lines = [str(line) for line in data.get("lines", []) if isinstance(line, str)]
+    return lines[-RECENT_KEEP:], str(data.get("style", ""))
+
+
+def _remember(store, line, style):
+    if store is None:
+        return
+    lines, _last = _recent(store)
+    lines = (lines + [line])[-RECENT_KEEP:]
+    store.set_meta(RECENT_META, json.dumps({"lines": lines, "style": style}))
 
 
 def _numbers(text):
@@ -186,8 +343,13 @@ def _within_rules(text, facts):
     """The checks every model-written line must pass, whatever it introduces."""
     if not text or len(text) > MAX_CHARS or len(text.split()) > MAX_WORDS:
         return False
-    if any(rule.search(text) for rule in (_FORBIDDEN, _SEVERITY, _ALARM, _HYPERBOLE, _CLAIM)):
+    if any(rule.search(text) for rule in (_FORBIDDEN, _SEVERITY, _ALARM, _HYPERBOLE, _CLAIM,
+                                           _GLOOM)):
         return False
+    for said in _NEW_COUNT.findall(text):
+        said = _NUMBER_WORDS.get(said.lower(), said)
+        if said.isdigit() and said != str(facts.get("new_since_last_briefing")):
+            return False
     # ensure_ascii=False: an escaped "—" would otherwise read as the number 2014.
     return _numbers(text) <= _numbers(json.dumps(facts, ensure_ascii=False))
 
@@ -201,18 +363,31 @@ def acceptable(text, facts):
     return not _contradicts_trend(text, facts)
 
 
-def opener(conf, facts, day=""):
-    """-> (line, written_by_model). Uses the model only when `email_voice` is on."""
+def opener(conf, facts, day="", store=None):
+    """-> (line, written_by_model). Uses the model only when `email_voice` is on.
+
+    With a `store`, recent openers are remembered and a repeat is refused.
+    """
+    recent, last_style = _recent(store)
     if not conf or conf.get("email_voice", False) is not True:
-        return fallback(facts, day), False
-    text, error = llm.chat(
-        conf, PERSONA, json.dumps(facts, ensure_ascii=False), examples=EXAMPLES,
-        model=(conf.get("email_voice_model") or DEFAULT_MODEL).strip(),
-        num_predict=70, temperature=0.6, timeout=TIMEOUT, wait=WAIT)
-    text = " ".join(text.split()).strip('"')
-    if not error and acceptable(text, facts):
-        return text, True
-    return fallback(facts, day), False
+        line = fallback(facts, day, recent)
+        _remember(store, line, last_style)
+        return line, False
+    for name, direction, example in styles_for(facts, day, last_style):
+        text, error = llm.chat(
+            conf, f"{PERSONA} {direction}", json.dumps(facts, ensure_ascii=False),
+            examples=(example, *EXAMPLES[:2]),
+            model=(conf.get("email_voice_model") or DEFAULT_MODEL).strip(),
+            num_predict=70, temperature=0.8, timeout=TIMEOUT, wait=WAIT)
+        text = " ".join(text.split()).strip('"')
+        if error:
+            break                 # offline or busy: another style will not help
+        if acceptable(text, facts) and not _too_similar(text, recent):
+            _remember(store, text, name)
+            return text, True
+    line = fallback(facts, day, recent)
+    _remember(store, line, last_style)
+    return line, False
 
 
 # ── per-task notes for the action plan ─────────────────────────────────────

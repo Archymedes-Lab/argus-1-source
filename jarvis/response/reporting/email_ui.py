@@ -172,7 +172,40 @@ TONES = {
     "digest": "bg-indigo-600",
     "health": "bg-violet-700",
     "plan": "bg-sky-600",
+    "amber": "bg-amber-600",
 }
+
+# The briefing's condition code, chosen by deterministic rules in emails.py.
+CONDITION_STYLE = {
+    "GREEN": ("calm", "bg-emerald-100 text-emerald-700"),
+    "AMBER": ("amber", "bg-amber-100 text-amber-700"),
+    "RED": ("urgent", "bg-red-100 text-red-700"),
+}
+
+
+def condition_banner(code, reason):
+    _tone, pill_classes = CONDITION_STYLE[code]
+    return section(
+        f'<div>{pill(f"Condition {code}", pill_classes)}</div>'
+        f'<div {tw("text-sm text-slate-600 mt-2")}>{esc(reason)}</div>', "px-6 pt-5 pb-1")
+
+
+def mission(title, lines):
+    """Today's one thing: the single most valuable action, commands in mono."""
+    body = "".join(
+        f'<div {tw(_BRIEF_MONO if _is_command(line) else "text-sm text-slate-700 mt-2 leading-relaxed")}>'
+        f"{esc(line.strip())}</div>" for line in lines if line.strip())
+    return section(
+        f'<div {tw("rounded-xl border-l-4 border-l-sky-500 bg-sky-50 px-4 py-3")}>'
+        + heading("Mission of the day", title) + body + "</div>")
+
+
+def bullets(title, sub, rows):
+    """A short headed list of plain-text rows."""
+    if not rows:
+        return ""
+    items = "".join(f'<div {tw("text-sm text-slate-700 py-1")}>&#8226; {esc(r)}</div>' for r in rows)
+    return section(heading(title, sub) + f'<div {tw("mt-2")}>{items}</div>')
 
 
 def header(kicker, title, subtitle="", tone="slate"):
