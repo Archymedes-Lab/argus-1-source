@@ -11,6 +11,7 @@ Design constraints that shaped this:
     listener is 127.0.0.1 and there is no option to change that to 0.0.0.0.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -36,6 +37,16 @@ from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watch
 
 PAGE = str(STATIC_DIR / "dashboard.html")
 GEO_PAGE = str(STATIC_DIR / "geo.html")
+# The /coverage view and its two scripts, served from this origin only. The
+# vendored three.js build is pinned: a file that no longer matches is refused,
+# so a modified engine cannot run inside the dashboard's origin.
+COVERAGE_ASSETS = {
+    "/coverage": ("coverage.html", "text/html; charset=utf-8", None),
+    "/static/coverage.js": ("coverage.js", "text/javascript; charset=utf-8", None),
+    "/static/vendor/three.module.min.js": (
+        "vendor/three.module.min.js", "text/javascript; charset=utf-8",
+        "08fd7545d13d2c7fb65ab691530a802dafefd638596501854f267d0fb13c39e7"),
+}
 
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -436,6 +447,21 @@ class Handler(BaseHTTPRequestHandler):
         "https://tile.openstreetmap.org; "
         "worker-src blob: https://cdn.jsdelivr.net; child-src blob:; font-src data:")
 
+    # /coverage runs no inline script and loads nothing from another origin.
+    CSP_COVERAGE = ("default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; "
+                    "connect-src 'self'; img-src data:")
+
+    def _coverage_asset(self, path):
+        name, ctype, digest = COVERAGE_ASSETS[path]
+        try:
+            with open(STATIC_DIR / name, "rb") as fh:
+                body = fh.read()
+        except OSError:
+            return self._send(500, f"{name} missing", "text/plain")
+        if digest and hashlib.sha256(body).hexdigest() != digest:
+            return self._send(500, f"{name} does not match its pinned hash", "text/plain")
+        return self._send(200, body, ctype, csp=self.CSP_COVERAGE)
+
     def _send(self, code, body, ctype="application/json", csp=None):
         if isinstance(body, str):
             body = body.encode("utf-8")
@@ -712,6 +738,14 @@ class Handler(BaseHTTPRequestHandler):
             if result is None:
                 return self._send(404, json.dumps({"error": "unknown incident"}))
             return self._send(200, json.dumps(result))
+
+        if url.path in COVERAGE_ASSETS:
+            return self._coverage_asset(url.path)
+
+        if url.path == "/api/coverage":
+            from jarvis.service import coveragemap
+            return self._send(200, json.dumps(
+                coveragemap.build(self.db_path, self.scheduler), default=str))
 
         if url.path == "/geo":
             try:

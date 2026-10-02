@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS · Defense coverage</title>
+<style>
+  :root {
+    --bg: #04060b; --panel: rgba(10, 14, 24, .72); --line: rgba(140, 170, 220, .16);
+    --ink: #e8eefb; --ink-2: #a9b6cf; --ink-3: #6b7890;
+    --validated: #3ddbd0; --claimed: #f2b84b; --blind: #55627d; --regressed: #ff5d6c;
+    --node: #cfe3ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  canvas#scene.dragging { cursor: grabbing; }
+  .num { font-variant-numeric: tabular-nums; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+
+  #head { top: 20px; left: 20px; padding: 16px 18px 14px; width: 330px; }
+  #head h1 { margin: 0; font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-2); font-weight: 600; }
+  #hero { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 2px; }
+  #hero b { font-size: 46px; line-height: 1; font-weight: 650; letter-spacing: -.02em; }
+  #hero span { color: var(--ink-2); }
+  #sub { color: var(--ink-3); margin-bottom: 12px; }
+  #bar { display: flex; height: 8px; gap: 2px; margin-bottom: 12px; }
+  #bar i { display: block; height: 100%; border-radius: 3px; min-width: 2px; }
+  .legend { display: grid; grid-template-columns: 18px 1fr auto; gap: 6px 8px; align-items: center; }
+  .legend .n { color: var(--ink); font-weight: 600; }
+  .legend .l { color: var(--ink-2); }
+  .legend small { display: block; color: var(--ink-3); font-size: 11px; }
+  .glyph { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+  .glyph.validated { background: var(--validated); box-shadow: 0 0 10px rgba(61, 219, 208, .6); }
+  .glyph.claimed { border: 2px solid var(--claimed); }
+  .glyph.blind { border: 1px solid var(--blind); position: relative; }
+  .glyph.blind::after { content: ""; position: absolute; inset: 5px; background: var(--blind); border-radius: 50%; }
+  .glyph.regressed { background: repeating-linear-gradient(45deg, var(--regressed) 0 3px, transparent 3px 5px);
+    border: 1px solid var(--regressed); }
+  #meta { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--ink-3);
+    display: flex; justify-content: space-between; gap: 10px; }
+  #meta b { color: var(--ink); font-weight: 600; }
+
+  #tactics { top: 20px; right: 20px; width: 300px; padding: 14px 14px 10px; max-height: calc(100% - 40px); overflow: auto; }
+  #tactics h2, #feed h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 600; }
+  .tactic { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 6px; border-radius: 8px;
+    cursor: pointer; border: 0; background: none; color: inherit; font: inherit; text-align: left; width: 100%; }
+  .tactic:hover, .tactic:focus-visible, .tactic.on { background: rgba(140, 170, 220, .10); outline: none; }
+  .tactic .name { color: var(--ink); }
+  .tactic .count { color: var(--ink-3); }
+  .tactic .tbar { grid-column: 1 / -1; display: flex; gap: 2px; height: 5px; }
+  .tactic .tbar i { display: block; height: 100%; border-radius: 2px; }
+
+  #feed { left: 20px; bottom: 20px; width: 330px; padding: 14px 16px 12px; }
+  #feed ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+  #feed li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; color: var(--ink-2);
+    white-space: nowrap; overflow: hidden; }
+  #feed li span { overflow: hidden; text-overflow: ellipsis; }
+  #feed li time { color: var(--ink-3); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--node); }
+  .dot.failing, .dot.missing { background: var(--regressed); }
+  .dot.stale { background: var(--claimed); }
+  #health { display: flex; gap: 14px; margin-bottom: 10px; color: var(--ink-2); flex-wrap: wrap; }
+  #health b { color: var(--ink); }
+
+  #tools { right: 20px; bottom: 20px; padding: 6px; display: flex; gap: 4px; }
+  #tools button, #close, #tclose { background: none; border: 0; color: var(--ink-2); font: inherit; padding: 7px 11px;
+    border-radius: 9px; cursor: pointer; }
+  #tools button:hover, #tools button[aria-pressed="true"], #close:hover, #tclose:hover {
+    background: rgba(140, 170, 220, .14); color: var(--ink); }
+
+  #tip { position: fixed; pointer-events: none; padding: 9px 11px; max-width: 320px; display: none; z-index: 5;
+    border-radius: 10px; }
+  #tip .k { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  #tip .t { color: var(--ink); font-weight: 600; margin: 1px 0 3px; }
+  #tip .d { color: var(--ink-2); }
+
+  #detail { left: 50%; bottom: 20px; transform: translateX(-50%); width: min(560px, calc(100% - 740px));
+    min-width: 340px; padding: 14px 16px; display: none; }
+  #detail h3 { margin: 0 28px 2px 0; font-size: 15px; font-weight: 600; }
+  #detail .k { color: var(--ink-3); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  #detail p { margin: 6px 0 0; color: var(--ink-2); }
+  #detail .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); font-size: 12px; }
+  #close { position: absolute; top: 8px; right: 8px; padding: 4px 9px; }
+
+  .tag { position: fixed; transform: translate(-50%, -50%); pointer-events: none; font-size: 10.5px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap;
+    text-shadow: 0 0 8px #000, 0 0 2px #000; transition: opacity .25s; }
+  .tag b { color: var(--ink); font-weight: 600; margin-left: 5px; letter-spacing: 0; }
+
+  #banner { top: 20px; left: 50%; transform: translateX(-50%); padding: 8px 14px; display: none;
+    border-color: rgba(255, 93, 108, .5); color: var(--ink); }
+
+  #table { inset: 20px; padding: 16px; display: none; z-index: 10; overflow: auto; background: rgba(6, 9, 16, .94); }
+  #table table { border-collapse: collapse; width: 100%; }
+  #table th, #table td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  #table th { color: var(--ink-3); font-weight: 600; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    position: sticky; top: -16px; background: rgba(6, 9, 16, .98); }
+  #table td { color: var(--ink-2); }
+  #table td:nth-child(2) { color: var(--ink); }
+  #tclose { position: sticky; top: 0; float: right; }
+
+  @media (max-width: 1100px) { #tactics { display: none; } #detail { width: calc(100% - 40px); bottom: 240px; } }
+  @media (max-width: 720px) { #feed { display: none; } #head { width: calc(100% - 40px); } #detail { bottom: 70px; } }
+</style>
+</head>
+<body>
+<canvas id="scene" aria-label="Three-dimensional view of JARVIS defense coverage. Use the table view for the same data as text."></canvas>
+
+<section class="panel" id="head">
+  <h1>Defense coverage</h1>
+  <div id="hero"><b class="num" id="pct">–</b><span id="pctnote">of the attack surface is proven</span></div>
+  <div id="sub">ATT&amp;CK techniques for Windows and Linux</div>
+  <div id="bar" role="img" aria-label="Share of techniques by level"></div>
+  <div class="legend" id="legend"></div>
+  <div id="meta"><span>Security score <b class="num" id="score">–</b></span><span id="mapage"></span></div>
+</section>
+
+<nav class="panel" id="tactics" aria-label="Tactics"><h2>Tactics, in attack order</h2><div id="tlist"></div></nav>
+
+<section class="panel" id="feed">
+  <h2>Collectors, live</h2>
+  <div id="health"></div>
+  <ol id="runs"></ol>
+</section>
+
+<div class="panel" id="tools">
+  <button id="spin" aria-pressed="true">Rotate</button>
+  <button id="reset">Reset view</button>
+  <button id="showtable">Table</button>
+</div>
+
+<div class="panel" id="tip"></div>
+<section class="panel" id="detail" aria-live="polite"><button id="close" aria-label="Close">✕</button><div id="dbody"></div></section>
+<div class="panel" id="banner" role="status"></div>
+<section class="panel" id="table" aria-label="Coverage as a table"><button id="tclose">Close ✕</button><div id="tbody"></div></section>
+<div id="tags"></div>
+
+<script type="module" src="/static/coverage.js"></script>
+</body>
+</html>
