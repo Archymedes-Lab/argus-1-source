@@ -24,8 +24,10 @@ from unittest import mock
 from jarvis.collectors.telemetry import sysmon, sysmon_linux, techniques
 from jarvis.core.store import Store
 from jarvis.intel import feeds
-from jarvis.service import attackmap
-from jarvis.service.schedule import ALL_JOBS
+from jarvis.service import attackmap, schedule
+
+# Every audit JARVIS has; a release from before the per-machine schedule has only JOBS.
+ALL_JOBS = getattr(schedule, "ALL_JOBS", schedule.JOBS)
 
 WHEN = "2026-01-01T00:00:00.000Z"
 GUID = "{11111111-1111-1111-1111-111111111111}"

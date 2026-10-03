@@ -317,8 +317,15 @@ PROBES = {
     "T1574": (probe_sideload, ("sysmon",)),
     "T1006": (probe_raw_device, ("sysmon_linux",)),
     "T1542": (probe_boot_drift, ("preos",)),
-    "T1620": (probe_reflective_image, ("memscan",)),
 }
+# A probe exists only where its detector does: a release without the in-memory
+# image classifier has nothing to prove, and the technique keeps its mapped
+# (claimed) level instead of reading as a regression.
+try:
+    from jarvis.collectors.process import assemblies as _assemblies  # noqa: F401
+    PROBES["T1620"] = (probe_reflective_image, ("memscan",))
+except ImportError:
+    pass
 # Techniques whose only detection is contextual: a discovery command is
 # reported inside a burst and deliberately not alone, so a single `whoami` by
 # an intruder goes unreported. Their probes still run (a broken burst rule is a
