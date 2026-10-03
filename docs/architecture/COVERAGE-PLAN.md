@@ -45,6 +45,47 @@ is absent from the catalogue) and the `partial` level for sub-techniques; the re
 techniques of Phase 2 (T1056, T1078, T1110, T1133, T1204, T1497, T1556, T1557, T1571); Phase 3
 B to F; and Arena emulation for any of it.
 
+## Status 2026-10-04: Phase 2 and part of Phase 3 built
+
+Live after the first release: 72 validated, 33 claimed, 81 blind of 186. This round projects
+**90 validated, 24 claimed, 62 blind of 176** (51%) once deployed and the catalogue reloads.
+
+- **Phase 2, proven through the collector's own rules.** Probes hand a synthetic payload to the
+  real function (`data=`, `lines=`, `dirs=`, `home=` parameters; the same code runs either way):
+  T1204 pasted-command lures, T1056 keyboard hooks, T1557 gateway and resolver changes, T1689
+  Wi-Fi encryption downgrade, T1110 login-guess spikes, T1133 remote desktop logons, T1556 rogue
+  PAM modules, T1068 exploitable drivers, T1102 dead-drop hosts, T1185 browser remote debugging,
+  T1195 package-registry redirection, T1200 new option ROM code.
+- **Phase 2, claims removed.** T1497 and T1571 had no rule a probe could fire; they are blind.
+  The retired T1562 mapping is gone, and the map now reports any mapping to a technique the
+  catalogue no longer lists (Phase 0 item 2, done at run time rather than as a unit test, since
+  tests have no catalogue).
+- **Held at claimed although the probe fires.** T1078: every successful remote logon is
+  reported, but a stolen credential looks the same as the owner's. The 23 burst-only discovery
+  techniques, as before. Both are listed in `attackmap.HELD` with the reason shown on the tile.
+- **Phase 3 A additions.** Rules keyed on the parent process: a document application starting a
+  script host (T1203), a server process starting a shell (T1190), the print spooler or LSASS
+  starting one (T1068). These report the after-effect of an exploit, never the exploit, and say
+  so. Certificate export (T1649).
+- **Phase 3 C, first two.** Outbound file-share connection to a public address (T1187) and one
+  process resolving 15 or more non-existent names in ten minutes (T1568), both from Sysmon
+  events already ingested.
+
+Noise, measured before scoring: 687,887 retained process, network and DNS events replayed through
+`sysmon.audit` itself. The new rules produced nothing; the only findings were real owner actions.
+No outbound public SMB exists in 294,236 network events, and no process reached the
+non-existent-name threshold.
+
+Live positive controls on the deployed rules: a seven-command discovery burst on Linux and one
+on Windows were each reported within a minute.
+
+A probe is registered only where its detector exists (`attackmap._optional`), so a narrow release
+that lacks a module keeps that technique's mapped level instead of reporting a regression.
+A contract test ties the fields the probes build to the fields the collection scripts emit.
+
+Still open: `partial` level for sub-techniques; T1674 input injection (the detector exists, no
+probe yet); Phase 3 B file canaries, the rest of C, D, E and F; Arena emulation.
+
 ## Rules for every phase
 
 - **No claim without a probe.** New mappings land together with a probe in

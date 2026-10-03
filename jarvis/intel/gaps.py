@@ -22,7 +22,6 @@ COVERAGE = {
     "T1547":     "control / startup — boot and logon autostart",
     "T1546":     "asep — event-triggered execution",
     "T1574":     "asep — hijacked execution flow",
-    "T1562":     "control — impaired defenses",
     "T1564":     "evasion — hidden files, streams and artefacts",
     "T1070":     "evasion — indicator removal and log tampering",
     "T1056":     "spy — input capture",
@@ -30,7 +29,6 @@ COVERAGE = {
     "T1123":     "spy — audio capture",
     "T1125":     "spy — video capture",
     "T1021":     "firewall — remote services and inbound access",
-    "T1571":     "firewall / peers — non-standard ports",
     "T1071":     "monitor — application layer C2 egress",
     "T1059":     "detect — command and scripting interpreter",
     "T1105":     "detect — ingress tool transfer (download-and-run)",
@@ -38,7 +36,6 @@ COVERAGE = {
     "T1219":     "control — remote access software",
     "T1218":     "detect / asep — signed binary proxy execution",
     "T1620":     "hidden — in-memory / reflective loading",
-    "T1497":     "hidden — sandbox and analysis evasion",
     "T1082":     "scan — system information discovery",
     # Closed by the modules added alongside the intel engine.
     "T1556":     "implant / backdoor — PAM stack and auth configuration",
@@ -79,6 +76,10 @@ COVERAGE = {
     "T1059.006": "toolchain / sysmon_linux — Python execution, including "
                  "site-triggered startup code",
 }
+
+# Removed 2026-10-04 (COVERAGE-PLAN.md, phase 2): T1497 (sandbox evasion) and
+# T1571 (non-standard port) were listed against `hidden` and `firewall`, but
+# neither collector has a rule a probe could make fire. They read blind now.
 
 # Techniques recognised from single process-creation events by the shared rule
 # table. Listed here so the gap report stops calling them unchecked; whether

@@ -54,7 +54,8 @@ def tagged(findings):
 class RuleTableTests(unittest.TestCase):
     def test_every_sample_fires_and_no_lookalike_does(self):
         for rule in techniques.RULES:
-            out = tagged(replay(rule.platform, [rule.sample]))
+            kw = {"parent": rule.sample_parent} if rule.sample_parent else {}
+            out = tagged(replay(rule.platform, [rule.sample], **kw))
             self.assertTrue(any(set(rule.tids) <= set(f["techniques"]) for f in out), rule.title)
             for pair in rule.benign:
                 hits = [f for f in tagged(replay(rule.platform, [pair]))
@@ -99,6 +100,58 @@ class RuleTableTests(unittest.TestCase):
         out = tagged(win([(r"C:\Windows\System32\wevtutil.exe", "wevtutil cl Security")] * 5))
         self.assertEqual(len(out), 1)
         self.assertIn("5 times", out[0]["detail"])
+
+
+class ParentAndNetworkTests(unittest.TestCase):
+    PS = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+    def test_the_parent_decides_not_the_child(self):
+        word = r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"
+        hit = tagged(win([(self.PS, "powershell -c calc")], parent=word))
+        self.assertEqual([f["techniques"] for f in hit], [["T1203"]])
+        for parent in (r"C:\Windows\explorer.exe", r"C:\Program Files\Google\Chrome\chrome.exe", ""):
+            self.assertEqual(tagged(win([(self.PS, "powershell -c calc")], parent=parent)), [], parent)
+        # A document application starting an ordinary program is not it either.
+        self.assertEqual(tagged(win([(r"C:\Windows\System32\splwow64.exe", "splwow64 8192")],
+                                    parent=word)), [])
+
+    def test_server_and_spooler_shells_are_critical(self):
+        cmd = (r"C:\Windows\System32\cmd.exe", "cmd /c whoami")
+        for parent, tid in ((r"C:\Windows\System32\inetsrv\w3wp.exe", "T1190"),
+                            (r"C:\Windows\System32\spoolsv.exe", "T1068")):
+            out = tagged(win([cmd], parent=parent))
+            self.assertEqual(len(out), 1)
+            self.assertEqual(out[0]["severity"], "critical")
+            self.assertIn(tid, out[0]["techniques"])
+
+    def smb(self, dest, port="445", initiated=True):
+        return tagged(sysmon.audit(events=[{"id": 3, "image": r"C:\Windows\explorer.exe",
+                                            "dest": dest, "dport": port, "initiated": initiated,
+                                            "time": WHEN}]))
+
+    def test_only_outbound_public_file_share_connections_are_reported(self):
+        self.assertEqual([f["techniques"] for f in self.smb("8.8.4.4")], [["T1187"]])
+        self.assertEqual(len(self.smb("8.8.4.4", initiated=None)), 1)     # direction unknown: kept
+        for dest, port, initiated in (("192.168.1.9", "445", True), ("10.0.0.4", "139", True),
+                                      ("8.8.4.4", "443", True), ("8.8.4.4", "445", False),
+                                      ("8.8.4.4", "445", "false"), ("not-an-ip", "445", True),
+                                      ("", "445", True)):
+            self.assertEqual(self.smb(dest, port, initiated), [], (dest, port, initiated))
+
+    def lookups(self, n, status=techniques.NXDOMAIN, guid="{9}", when=WHEN, names=None):
+        return [{"id": 22, "image": r"C:\t\a.exe", "process_guid": guid, "dns_status": status,
+                 "query": (names[i] if names else f"n{i}.example"), "time": when} for i in range(n)]
+
+    def test_generated_domain_burst_needs_distinct_nonexistent_names_from_one_process(self):
+        n = techniques.DGA_NAMES
+        self.assertEqual(len(tagged(sysmon.audit(events=self.lookups(n)))), 1)
+        self.assertEqual(tagged(sysmon.audit(events=self.lookups(n - 1))), [])
+        self.assertEqual(tagged(sysmon.audit(events=self.lookups(n * 3, status="9701"))), [])
+        self.assertEqual(tagged(sysmon.audit(events=self.lookups(n * 3, status="0"))), [])
+        same = self.lookups(n * 3, names=["typo.example"] * (n * 3))        # one name, retried
+        self.assertEqual(tagged(sysmon.audit(events=same)), [])
+        split = self.lookups(n // 2, guid="{1}") + self.lookups(n // 2, guid="{2}")
+        self.assertEqual(tagged(sysmon.audit(events=split)), [])
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -220,7 +273,8 @@ class CoverageMapTests(unittest.TestCase):
         levels = self.levels()
         for tid in attackmap.CONTEXT_ONLY:
             self.assertEqual(levels[tid]["level"], "claimed", tid)
-            self.assertIn("never by itself", levels[tid]["evidence"])
+            self.assertIn(attackmap.HELD[tid], levels[tid]["evidence"])
+        self.assertIn("never by itself", levels["T1033"]["evidence"])
         with mock.patch.object(techniques, "bursts", return_value=[]):
             self.assertEqual(self.levels()["T1033"]["level"], "regressed")
 
@@ -231,6 +285,22 @@ class CoverageMapTests(unittest.TestCase):
         row = {t["tid"]: t for t in data["techniques"]}["T1047"]
         self.assertEqual(row["level"], "regressed")
         self.assertTrue(any(f["severity"] == "high" and "T1047" in f["title"] for f in findings))
+
+    def test_mappings_to_techniques_the_catalogue_dropped_are_reported(self):
+        findings, _ = attackmap.measure(self.store)
+        self.assertFalse([f for f in findings if "no longer lists" in f["title"]
+                          and "T1047" in f["detail"]])
+        self.store.db.execute("DELETE FROM attack_techniques WHERE tid='T1047'")
+        self.store.commit()
+        findings, _ = attackmap.measure(self.store)
+        orphan = [f for f in findings if "no longer lists" in f["title"]]
+        self.assertEqual(len(orphan), 1)
+        self.assertEqual(orphan[0]["severity"], "low")
+        self.assertIn("T1047", orphan[0]["detail"])
+        self.store.db.execute("DELETE FROM attack_techniques")
+        self.store.commit()
+        findings, _ = attackmap.measure(self.store)     # no catalogue: nothing to compare
+        self.assertFalse([f for f in findings if "no longer lists" in f["title"]])
 
     def test_retired_techniques_leave_the_catalogue_only_on_a_full_load(self):
         def catalogue(n, extra=()):
@@ -249,6 +319,82 @@ class CoverageMapTests(unittest.TestCase):
         have = {r[0] for r in self.store.db.execute("SELECT tid FROM attack_techniques")}
         self.assertNotIn("T9990", have)
         self.assertEqual(len(have), feeds.ATTACK_MIN_ROWS)
+
+
+
+class CollectorSeamTests(unittest.TestCase):
+    """A probe may hand a collector its evidence; it may never make it fetch."""
+
+    def test_firewall_payload_is_judged_without_asking_windows(self):
+        from jarvis.collectors.network import firewall
+        with mock.patch.object(firewall, "ps_json") as ps:
+            out = firewall.audit_windows(data={"profiles": [], "secReadable": True, "logons": [
+                {"type": "10", "user": "a", "ip": "198.51.100.7", "time": WHEN}]})
+            ps.assert_not_called()
+        self.assertTrue(any("RDP logon succeeded" in f["title"] for f in out))
+        with mock.patch.object(firewall, "ps_json", return_value=None) as ps:
+            unavailable = firewall.audit_windows()
+            ps.assert_called_once()
+        self.assertEqual(unavailable[0]["title"], "firewall audit unavailable")
+
+    def test_bruteforce_lines_are_judged_without_reading_logs(self):
+        from jarvis.collectors.identity import bruteforce
+        with mock.patch.object(bruteforce, "_linux_lines") as read:
+            spread = [f"sshd: Failed password for invalid user u{i} from 198.51.100.{i} port 1 ssh2"
+                      for i in range(bruteforce.SPIKE_ONE_SOURCE)]
+            out = bruteforce._linux(lines=spread)        # many sources, none concentrated
+            read.assert_not_called()
+        self.assertFalse(any(f["severity"] == "high" for f in out))
+        with mock.patch.object(bruteforce, "_linux_lines", return_value=[]) as read:
+            self.assertEqual(bruteforce._linux()[0]["severity"], "low")   # unreadable, said so
+            read.assert_called_once()
+
+    def test_only_modules_are_judged_in_a_pam_directory(self):
+        from jarvis.collectors.persistence import implant
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("notes.txt", "pam_x.so.bak"):
+                open(os.path.join(tmp, name), "wb").close()
+            with mock.patch.object(implant, "_dpkg_owns", return_value=False):
+                self.assertEqual(implant.unowned_pam_modules(dirs=(tmp, tmp + "-missing")), [])
+                open(os.path.join(tmp, "pam_x.so"), "wb").close()
+                self.assertEqual(len(implant.unowned_pam_modules(dirs=(tmp,))), 1)
+            with mock.patch.object(implant, "_dpkg_owns", return_value=True):
+                self.assertEqual(implant.unowned_pam_modules(dirs=(tmp,)), [])
+
+    def test_probe_payload_fields_are_ones_the_collection_scripts_emit(self):
+        # A probe hands a collector a payload it built. If the PowerShell
+        # script stopped emitting a field the probe relies on, the rule would
+        # be proven while the real collector fed it nothing.
+        from jarvis.core.paths import load_win_script
+        for script, fields in (("firewall.ps1", ("logons", "profiles", "secReadable")),
+                               ("evasion.ps1", ("drivers", "dns"))):
+            text = load_win_script(script)
+            for field in fields:
+                self.assertRegex(text, r"\b%s\b" % field, f"{script} no longer emits {field}")
+
+    def test_valid_accounts_is_held_at_claimed_with_its_reason(self):
+        self.assertIn("T1078", attackmap.CONTEXT_ONLY)
+        self.assertIn("stolen credential", attackmap.HELD["T1078"])
+        self.assertTrue(attackmap.PROBES["T1078"][0]()[0])      # the probe still runs
+
+    def test_claims_no_detector_backs_are_gone(self):
+        from jarvis.intel import gaps
+        for tid in ("T1497", "T1571"):
+            self.assertNotIn(tid, gaps.COVERAGE)
+            self.assertNotIn(tid, attackmap.PROBES)
+
+    def test_an_optional_probe_is_absent_when_its_detector_is(self):
+        before = dict(attackmap.PROBES)
+        try:
+            attackmap.PROBES.pop("T9991", None)
+            attackmap._optional("T9991", lambda: (True, "x"), ("scan",),
+                                lambda: attackmap._has("jarvis.no_such_module"))
+            self.assertNotIn("T9991", attackmap.PROBES)
+            attackmap._optional("T9991", lambda: (True, "x"), ("scan",), lambda: True)
+            self.assertIn("T9991", attackmap.PROBES)
+        finally:
+            attackmap.PROBES.clear()
+            attackmap.PROBES.update(before)
 
 
 if __name__ == "__main__":

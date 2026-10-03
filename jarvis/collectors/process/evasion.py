@@ -124,8 +124,10 @@ def _describe_invisible(text: str) -> str:
 PS_EVASION = load_win_script("evasion.ps1")
 
 
-def audit():
-    data = ps_json(PS_EVASION, timeout=300)
+def audit(data=None):
+    """`data` is a payload already collected (the coverage map's probes)."""
+    if data is None:
+        data = ps_json(PS_EVASION, timeout=300)
     if data is None:
         return [_finding("byovd", "medium", "evasion audit unavailable",
                          "powershell.exe returned no data", "interop")]

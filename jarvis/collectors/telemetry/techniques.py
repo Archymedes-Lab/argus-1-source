@@ -66,6 +66,8 @@ class Rule:
     benign: tuple = ()      # (image, command line) pairs that must not
     quiet: bool = False     # never quote the command line (it carries a secret)
     not_images: tuple = ()  # images this rule never applies to
+    parents: tuple = ()     # when set, the parent's image must be one of these
+    sample_parent: str = ""  # parent image the sample runs under
 
     def regex(self):
         return _compiled(self.pattern)
@@ -608,6 +610,45 @@ RULES = (
 )
 
 
+# ── a program starting something it has no business starting ────────────────
+# Keyed on the parent as well as the child. These report the visible effect of
+# an exploit or a malicious document, not the exploit: the vulnerable code path
+# itself is never observed.
+SCRIPT_CHILDREN = ("cmd", "powershell", "pwsh", "wscript", "cscript", "mshta", "rundll32",
+                   "regsvr32", "certutil", "bitsadmin", "msiexec")
+DOCUMENT_APPS = ("winword", "excel", "powerpnt", "outlook", "onenote", "msaccess", "mspub",
+                 "visio", "acrord32", "acrobat", "foxitreader", "foxitpdfreader", "wordpad",
+                 "eqnedt32")
+WINDOWS_SERVERS = ("w3wp", "httpd", "nginx", "tomcat", "tomcat9", "tomcat10", "php-cgi",
+                   "sqlservr")
+
+RULES += (
+    Rule(("T1203",), WIN, SCRIPT_CHILDREN, r"\S", "high",
+         "a document application started a script host or system tool (the effect of an exploit or macro)",
+         (S32 + "WindowsPowerShell\\v1.0\\powershell.exe", "powershell -nop -c iex $env:x"),
+         ((S32 + "cmd.exe", "cmd /c dir"),),        # same child, ordinary parent
+         parents=DOCUMENT_APPS,
+         sample_parent=r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"),
+    Rule(("T1190", "T1505"), WIN, ("cmd", "powershell", "pwsh"), r"\S", "critical",
+         "a server process started a shell (the effect of an exploited service)",
+         (S32 + "cmd.exe", "cmd.exe /c whoami"),
+         ((S32 + "cmd.exe", "cmd /c dir"),),
+         parents=WINDOWS_SERVERS, sample_parent=r"C:\Windows\System32\inetsrv\w3wp.exe"),
+    Rule(("T1068",), WIN, ("cmd", "powershell", "pwsh"), r"\S", "critical",
+         "the print spooler or LSASS started a shell",
+         (S32 + "cmd.exe", "cmd.exe /c whoami"),
+         ((S32 + "cmd.exe", "cmd /c dir"),),
+         parents=("spoolsv", "lsass"), sample_parent=S32 + "spoolsv.exe"),
+    _w("T1649", "certutil", r"-exportpfx\b", "high",
+       "certificate and private key exported with certutil",
+       (S32 + "certutil.exe", "certutil -exportPFX -p x My 01ab c:\\t\\c.pfx"),
+       [(S32 + "certutil.exe", "certutil -store My")], quiet=True),
+    Rule(("T1649",), WIN, ANY, r"\bcrypto::(certificates|capi|cng|keys)\b", "critical",
+         "Mimikatz certificate export syntax",
+         (r"C:\t\m.exe", 'm.exe "crypto::capi" "crypto::certificates /export" exit')),
+)
+
+
 # ── discovery ───────────────────────────────────────────────────────────────
 # (technique, platform, images, argument pattern). Ordinary one at a time;
 # reported only as a burst of distinct techniques under one parent.
@@ -764,16 +805,19 @@ def _args(cmdline):
     return (cmdline or "")[:MAX_CMDLINE]
 
 
-def match(image, cmdline, platform):
+def match(image, cmdline, platform, parent=""):
     """Rules this one process start is evidence of. -> [(rule, quoted span)]."""
     base, cmd = image_base(image), _args(cmdline)
     if not base or not cmd:
         return []
+    pbase = image_base(parent)
     out = []
     for rule in RULES:
         if rule.platform != platform or base in rule.not_images:
             continue
         if rule.images and base not in rule.images:
+            continue
+        if rule.parents and pbase not in rule.parents:
             continue
         m = rule.regex().search(cmd)
         if m:
@@ -839,4 +883,49 @@ def bursts(observations):
         if len(tids) >= BURST_TECHNIQUES and key not in seen:
             seen.add(key)       # one finding per parent, not one per window
             out.append((label, set(tids), commands))
+    return out
+
+
+# ── network and name-resolution events ──────────────────────────────────────
+SMB_PORTS = ("445", "139")
+# Windows DNS client status for a name that does not exist (NXDOMAIN). Other
+# non-zero statuses (no record of that type, timeout) are everyday noise.
+NXDOMAIN = "9003"
+DGA_NAMES = 15          # distinct non-existent names from one process in one window
+
+
+def outbound_smb(dest_ip, dest_port, initiated=None):
+    """True for a connection this machine opened to a public address on SMB.
+
+    A file share on the internet is rare; a connection to one is how a lure
+    makes Windows send the user's NTLM hash to an attacker (T1187). An inbound
+    connection, or one whose direction is known to be inbound, is not this.
+    """
+    import ipaddress
+    if str(dest_port) not in SMB_PORTS or initiated is False or str(initiated).lower() == "false":
+        return False
+    try:
+        return ipaddress.ip_address(dest_ip or "").is_global
+    except ValueError:
+        return False
+
+
+def dga_bursts(lookups):
+    """Processes resolving many names that do not exist (T1568).
+
+    `lookups` are (process key, label, epoch or None, name, status). Malware
+    that generates its rendezvous domains tries dozens before one resolves; an
+    ordinary program mistypes one. -> [(label, {names})]
+    """
+    groups = {}
+    for key, label, when, name, status in lookups:
+        if not key or str(status) != NXDOMAIN or not name:
+            continue
+        slot = int(when // BURST_WINDOW_S) if when is not None else None
+        groups.setdefault((key, slot), (label, set()))[1].add(name.lower().rstrip("."))
+    out, seen = [], set()
+    for (key, _slot), (label, names) in groups.items():
+        if len(names) >= DGA_NAMES and key not in seen:
+            seen.add(key)
+            out.append((label, names))
     return out

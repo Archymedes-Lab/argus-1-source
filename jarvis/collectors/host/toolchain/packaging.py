@@ -104,16 +104,18 @@ def check_git_hooks(hosts=("wsl", "win")):
     return out
 
 
-def check_package_config(hosts=("wsl", "win")):
-    """Where packages come from, and what they are allowed to run on install."""
-    if "wsl" not in hosts:
-        return []
+def registry_redirects(home=None):
+    """npm and pip configured to install from somewhere other than their default.
+
+    `home` points the check at another home directory (the coverage map's
+    probe uses a temporary one)."""
     out = []
+    home = _home() if home is None else home
 
     # Registry redirection: the quiet half of a supply-chain compromise. A
     # poisoned mirror needs no malicious package name — the names stay right and
     # the contents change.
-    npmrc = _read(os.path.join(_home(), ".npmrc"))
+    npmrc = _read(os.path.join(home, ".npmrc"))
     for m in re.finditer(r"^\s*(?:[^=\s]*:)?registry\s*=\s*(\S+)", npmrc, re.M):
         url = m.group(1)
         if not re.match(r"https://registry\.npmjs\.org/?$", url):
@@ -126,7 +128,7 @@ def check_package_config(hosts=("wsl", "win")):
                 "~/.npmrc"))
 
     for cfg in ("~/.pip/pip.conf", "~/.config/pip/pip.conf", "~/.pydistutils.cfg"):
-        text = _read(os.path.expanduser(cfg))
+        text = _read(os.path.join(home, cfg[2:]))
         for m in re.finditer(r"^\s*(?:extra-)?index-url\s*=\s*(\S+)", text, re.M):
             url = m.group(1)
             if "pypi.org" not in url:
@@ -137,6 +139,14 @@ def check_package_config(hosts=("wsl", "win")):
                     f"the higher version, which is dependency confusion by "
                     f"configuration.",
                     cfg))
+    return out
+
+
+def check_package_config(hosts=("wsl", "win")):
+    """Where packages come from, and what they are allowed to run on install."""
+    if "wsl" not in hosts:
+        return []
+    out = registry_redirects()
 
     out.extend(_check_pth_files())
     if not out:

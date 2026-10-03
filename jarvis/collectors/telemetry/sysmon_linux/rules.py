@@ -399,7 +399,7 @@ def _rules(events, store=None):
             # A shell's command line is judged as the operator typed it, with
             # the harness wrapper and quoted heredocs (file contents) removed.
             tcmd = _without_quoted_heredocs(pcmd) if base in techniques.SHELLS else cmd
-            for rule, span in techniques.match(img, tcmd, techniques.LINUX):
+            for rule, span in techniques.match(img, tcmd, techniques.LINUX, parent):
                 hit = technique_hits.setdefault(rule, [0, span, base])
                 hit[0] += 1
             if not mine and pbase not in BUILD_PARENTS:

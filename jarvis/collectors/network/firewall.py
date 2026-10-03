@@ -91,8 +91,11 @@ def audit_linux():
 PS_FW = load_win_script("firewall.ps1")
 
 
-def audit_windows():
-    data = ps_json(PS_FW, timeout=240)
+def audit_windows(data=None):
+    """`data` is a payload already collected: the coverage map's probes pass a
+    synthetic one so they exercise these rules rather than a copy of them."""
+    if data is None:
+        data = ps_json(PS_FW, timeout=240)
     if data is None:
         return [_finding("posture", "medium", "firewall audit unavailable",
                          "powershell.exe returned no data", "interop")]

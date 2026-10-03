@@ -710,11 +710,23 @@ function frame() {
       });
       pos.needsUpdate = true;
     }
-    world.wedges.forEach((w, i) => {
-      const tag = world.tags[i], s = screen(w.tagPos);
+    // Labels near the limb of the sphere crowd together on screen. The one
+    // facing the camera most keeps its place; a label that would overlap an
+    // already placed one is hidden rather than drawn on top of it.
+    const placed = [];
+    world.wedges.map((w, i) => {
+      const s = screen(w.tagPos);
       const facing = v3.copy(camera.position).normalize().dot(w.tagPos.clone().normalize());
+      return { w, tag: world.tags[i], s, facing };
+    }).sort((a, b) => b.facing - a.facing).forEach(({ w, tag, s, facing }) => {
       const dim = (pinned || focus) && (pinned || focus).tactic && (pinned || focus).tactic !== w.name;
-      tag.style.opacity = s ? Math.max(0, Math.min(1, (facing - 0.42) * 4)) * (dim ? 0.3 : 1) : 0;
+      let opacity = s ? Math.max(0, Math.min(1, (facing - 0.42) * 4)) * (dim ? 0.3 : 1) : 0;
+      if (opacity > 0.02) {
+        const half = tag.offsetWidth / 2 + 8;
+        if (placed.some((p) => Math.abs(p.x - s[0]) < p.half + half && Math.abs(p.y - s[1]) < 16)) opacity = 0;
+        else placed.push({ x: s[0], y: s[1], half });
+      }
+      tag.style.opacity = opacity;
       if (s) { tag.style.left = `${s[0]}px`; tag.style.top = `${s[1]}px`; }
     });
   }

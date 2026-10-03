@@ -198,13 +198,15 @@ PAM_DIRS = ("/lib/security", "/usr/lib/security",
 _dpkg_owns = dpkg_owns
 
 
-def audit_linux():
-    out = []
+def unowned_pam_modules(dirs=PAM_DIRS):
+    """PAM modules no package owns.
 
-    # -- PAM modules no package owns ---------------------------------------
-    # This closes the T1556 gap the intel corpus keeps raising: a PAM module is
-    # loaded into every authentication, so a rogue one sees every password.
-    for d in PAM_DIRS:
+    This closes the T1556 gap the intel corpus keeps raising: a PAM module is
+    loaded into every authentication, so a rogue one sees every password.
+    `dirs` lets the coverage map's probe point this at a directory of its own.
+    """
+    out = []
+    for d in dirs:
         if not os.path.isdir(d):
             continue
         try:
@@ -222,6 +224,11 @@ def audit_linux():
                 "every authentication on this system loads the PAM stack, so a "
                 "module here sees every password that is typed",
                 full, "wsl"))
+    return out
+
+
+def audit_linux():
+    out = unowned_pam_modules()
 
     # -- preloaded objects --------------------------------------------------
     if os.path.exists("/etc/ld.so.preload"):

@@ -95,9 +95,10 @@ def _linux_lines():
     return lines
 
 
-def _linux():
+def _linux(lines=None):
+    """`lines` are auth-log lines already read (the coverage map's probes)."""
     out = []
-    lines = _linux_lines()
+    lines = _linux_lines() if lines is None else lines
     if not lines:
         out.append(_finding(
             "bruteforce", "low", "no readable auth log on the Linux side",

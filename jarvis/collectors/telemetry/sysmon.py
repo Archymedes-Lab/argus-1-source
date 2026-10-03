@@ -239,6 +239,7 @@ def rows_from_events(events):
             "query": t.get("query") or "", "loaded": t.get("path") or "",
             "signed": t.get("signed") or "", "sigstat": t.get("signature_status") or "",
             "dest": t.get("ip") or "", "dport": str(t.get("port") or ""),
+            "initiated": t.get("initiated"), "dns_status": str(t.get("status") or ""),
             "cmdline": p.get("cmdline") or "", "type": t.get("tamper") or "",
             "start_module": t.get("start_module") or "",
             "start_function": t.get("start_function") or "",
@@ -577,6 +578,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
     technique_hits, discovery_seen = {}, []
+    smb_out, failed_lookups = {}, []
     dropped, drop_times = {}, []
     boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
 
@@ -618,6 +620,13 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             q = (e.get("query") or "").lower().rstrip(".")
             if q:
                 dns_names.setdefault(q, set()).add(base)
+                failed_lookups.append((e.get("process_guid") or image, base, _epoch(e.get("time")),
+                                       q, e.get("dns_status") or ""))
+        elif eid == 3:
+            if techniques.outbound_smb(e.get("dest"), e.get("dport"), e.get("initiated")):
+                seen = smb_out.setdefault(image, [set(), e.get("time")])
+                seen[0].add(e.get("dest"))
+                seen[1] = e.get("time") or seen[1]
         elif eid == 1:
             h = _sha256_of(e.get("hashes"))
             if h:
@@ -625,7 +634,8 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             cmdline = e.get("cmdline") or ""
             if RANSOM_RECOVERY.search(cmdline):
                 recovery_tamper.append((image, cmdline, e.get("time")))
-            for rule, span in techniques.match(image, cmdline, techniques.WIN):
+            for rule, span in techniques.match(image, cmdline, techniques.WIN,
+                                               e.get("parent") or ""):
                 hit = technique_hits.setdefault((rule, image), [0, span, e.get("time")])
                 hit[0] += 1
                 hit[2] = e.get("time") or hit[2]
@@ -752,6 +762,23 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
         f = _finding("technique", "medium", techniques.burst_title(parent),
                      techniques.burst_detail(tids, commands), parent)
         f["techniques"] = sorted(tids)
+        out.append(f)
+    for image, (dests, when) in smb_out.items():
+        f = _finding(
+            "technique", "high", f"{_base(image)} opened a file-share connection to the internet (T1187)",
+            f"SMB to {', '.join(sorted(dests)[:4])} at {iso_of(when)}. Windows offers the "
+            f"signed-in account's NTLM credentials to a file share it connects to, which is "
+            f"how a link or document is used to capture them.", image)
+        f["techniques"] = ["T1187"]
+        out.append(f)
+    for label, names in techniques.dga_bursts(failed_lookups):
+        f = _finding(
+            "technique", "medium", f"{label} looked up many names that do not exist (T1568)",
+            f"{len(names)} distinct non-existent names in ten minutes, for example "
+            f"{', '.join(sorted(names)[:3])}. Software that generates its contact domains "
+            f"tries many before one answers; a misconfigured program can look the same.",
+            label)
+        f["techniques"] = ["T1568"]
         out.append(f)
 
     # -- the sensor's own losses ---------------------------------------------
