@@ -19,8 +19,8 @@ Layout under ~/.jarvis/eventlog/:
                       carries the previous header's hash, so deleting,
                       editing, reordering or inserting a segment breaks the
                       chain at that point.
-  pruned.jsonl        segments removed by retention: known absence, which
-                      verification reports differently from unexplained loss.
+  pruned.jsonl        legacy retention losses, preserved as explicit gaps.
+                      New history is never automatically pruned.
   holds.jsonl         sequence ranges retention must not remove (evidence).
   index.db            a projection for fast questions — has this hash ever
                       run, which process started which. Rebuildable from the
@@ -38,25 +38,26 @@ the standard library has no authenticated cipher, and a hand-rolled one would
 be worse than none. Both are recorded as open work, not implied.
 """
 
-import fcntl
 import gzip
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import time
 from pathlib import Path
 
 from jarvis.core import event as event_mod
+from jarvis.core import filelock
 
 DEFAULT_ROOT = Path(os.path.expanduser("~/.jarvis/eventlog"))
 GENESIS = "0" * 64
 
-# A segment seals at whichever comes first. An hour bounds how much history
+# A segment seals at whichever comes first. Five minutes bounds how much history
 # sits in the unsealed, unchained file; the sizes bound one segment's rewrite.
 SEAL_EVENTS = 20_000
 SEAL_BYTES = 32 * 1024 * 1024
-SEAL_AGE = 3600
+SEAL_AGE = 300
 
 DEFAULT_BUDGET = 2 * 1024 ** 3
 
@@ -91,6 +92,10 @@ class LogError(RuntimeError):
     pass
 
 
+class LogCapacityError(LogError):
+    """Evidence is retained; a new batch cannot safely be committed."""
+
+
 def _canonical(obj):
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -105,7 +110,20 @@ def header_hash(header):
     return _header_hash(header)
 
 
+def _free_bytes(path):
+    """Bytes an unprivileged writer can still use on the volume holding `path`."""
+    if hasattr(os, "statvfs"):
+        disk = os.statvfs(path)
+        return disk.f_bavail * disk.f_frsize
+    return shutil.disk_usage(path).free
+
+
 def _fsync_dir(path):
+    if os.name == "nt":
+        # Windows cannot open a directory to sync it. The file's own data is
+        # fsynced by every caller; the directory entry rides on the NTFS
+        # journal, which is weaker than an explicit sync and recorded as such.
+        return
     fd = os.open(path, os.O_RDONLY)
     try:
         os.fsync(fd)
@@ -148,9 +166,12 @@ class EventLog:
     and see only committed batches, however the writer is interrupted.
     """
 
-    def __init__(self, root=DEFAULT_ROOT, writer=False):
+    def __init__(self, root=DEFAULT_ROOT, writer=False, budget=DEFAULT_BUDGET):
         self.root = Path(root)
         self.writer = writer
+        if type(budget) is not int or budget < 0:
+            raise ValueError("history budget must be a nonnegative byte count")
+        self.budget = budget
         self.segdir = self.root / "segments"
         self.active = self.root / "active.jsonl"
         self.chain_path = self.root / "chain.jsonl"
@@ -162,18 +183,21 @@ class EventLog:
             os.chmod(self.root, 0o700)
             self._lock = open(self.root / "writer.lock", "a")
             try:
-                fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                filelock.acquire(self._lock)
             except OSError:
                 self._lock.close()
                 raise LogError("another process is writing the event log")
         self.db = None
         if writer or (self.root / "index.db").exists():
-            self.db = sqlite3.connect(self.root / "index.db", timeout=10)
+            self.db = (sqlite3.connect(self.root / "index.db", timeout=10) if writer else
+                       sqlite3.connect((self.root / "index.db").resolve().as_uri()
+                                       + "?mode=ro", uri=True, timeout=10))
             self.db.row_factory = sqlite3.Row
             if writer:
                 self.db.execute("PRAGMA journal_mode=WAL")
                 self.db.executescript(INDEX_SCHEMA)
         self._load()
+        self.sealed_bytes = sum(p.stat().st_size for p in self.segdir.glob("*.jseg"))
         if writer:
             self._reindex()
 
@@ -242,6 +266,8 @@ class EventLog:
             self.cursors = dict(head["cursors"]) if head else {}
             committed = 0
         self.active_bytes = committed
+        self._active_age_base = max(0, time.time() - self.active_started) if self.active_started else 0
+        self._active_mono_at = time.monotonic()
         if self.writer and self.active.exists() and self.active.stat().st_size != committed:
             # Everything past the last cursor line is an uncommitted batch.
             with open(self.active, "r+b") as fh:
@@ -303,6 +329,16 @@ class EventLog:
         cursor = dict(cursor, at=time.time(), through_seq=seq)
         lines.append(_canonical({"cursor": cursor}))
         data = ("\n".join(lines) + "\n").encode()
+        # Never reclaim history to make an append succeed. Refusal happens
+        # before the durable commit point, so native ingestion cannot ack it.
+        metadata_bytes = sum(p.stat().st_size for p in
+                             (self.chain_path, self.pruned_path, self.holds_path) if p.exists())
+        if self.sealed_bytes + self.active_bytes + metadata_bytes + len(data) > self.budget:
+            raise LogCapacityError("history capacity reached; retained evidence unchanged; "
+                                   "new batch and source cursor not committed")
+        if _free_bytes(self.root) < len(data) + 2 * SEAL_BYTES:
+            raise LogCapacityError("history disk reserve reached; retained evidence unchanged; "
+                                   "new batch and source cursor not committed")
         with open(self.active, "ab") as fh:
             fh.write(data)
             fh.flush()
@@ -313,15 +349,19 @@ class EventLog:
         self.active_bytes += len(data)
         if self.active_started is None:
             self.active_started = cursor["at"]
+            self._active_age_base = 0
+            self._active_mono_at = time.monotonic()
         self.cursors[_cursor_key(cursor["sensor"], cursor["channel"])] = cursor
         self._index(stamped)
         return first, seq
 
     def due(self, now=None):
-        now = time.time() if now is None else now
+        age = ((now - self.active_started) if now is not None and self.active_started is not None
+               else max(self._active_age_base + time.monotonic() - self._active_mono_at,
+                        time.time() - self.active_started if self.active_started is not None else 0))
         return self.active_events > 0 and (
             self.active_events >= SEAL_EVENTS or self.active_bytes >= SEAL_BYTES
-            or (self.active_started is not None and now - self.active_started >= SEAL_AGE))
+            or age >= SEAL_AGE)
 
     def seal(self, force=False):
         """Close the active segment into the chain. Returns its header, or None."""
@@ -372,8 +412,11 @@ class EventLog:
         os.replace(fresh, self.active)
         _fsync_dir(self.root)
         self.head_hash, self.sealed_seq = header["hash"], header["last_seq"]
+        self.sealed_bytes += path.stat().st_size
         self.active_events = self.active_bytes = 0
         self.active_started = None
+        self._active_age_base = 0
+        self._active_mono_at = time.monotonic()
         with self.db:
             self.db.execute(
                 "INSERT OR REPLACE INTO segments VALUES(?,?,?,?,?,?,?,?,?,'sealed')",
@@ -476,7 +519,10 @@ class EventLog:
                 try:
                     with gzip.open(path, "rb") as fh:
                         stored = json.loads(fh.readline())
-                        digest = hashlib.sha256(fh.read()).hexdigest()
+                        hasher = hashlib.sha256()
+                        for block in iter(lambda: fh.read(1024 * 1024), b""):
+                            hasher.update(block)
+                        digest = hasher.hexdigest()
                 except (OSError, ValueError, EOFError) as exc:
                     problems.append(f"segment {n}: unreadable ({exc})")
                 else:
@@ -512,34 +558,14 @@ class EventLog:
                                        "reason": str(reason)[:200], "at": time.time()})
 
     def prune(self, budget=DEFAULT_BUDGET):
-        """Remove the oldest unheld segments until sealed data fits the budget.
+        """Compatibility hook: persistent forensic history is never pruned.
 
-        Age is never a reason on its own: an event that looked routine may
-        become evidence when intelligence arrives later, so history goes only
-        when space requires it. Returns the segments removed.
+        A budget cannot authorize deletion. append() refuses before commit
+        when full; existing pruned markers remain historical loss evidence.
         """
         if not self.writer:
             raise LogError("event log opened read-only")
-        pruned = self._pruned()
-        held = self.holds()
-        live = [h for h in self.chain if h["segment"] not in pruned]
-        sizes = {h["segment"]: self._segment_path(h["segment"]).stat().st_size for h in live}
-        total = sum(sizes.values())
-        removed = []
-        for header in live[:-1]:           # the newest sealed segment always stays
-            if total <= budget:
-                break
-            if any(a <= header["last_seq"] and header["first_seq"] <= b for a, b, _ in held):
-                continue
-            _append_line(self.pruned_path, {"segment": header["segment"], "at": time.time(),
-                                            "reason": "space budget"})
-            self._segment_path(header["segment"]).unlink()
-            total -= sizes[header["segment"]]
-            removed.append(header["segment"])
-            with self.db:
-                self.db.execute("UPDATE segments SET state='pruned' WHERE segment=?",
-                                (header["segment"],))
-        return removed
+        return []
 
     # -- index projection --------------------------------------------------
 
@@ -680,7 +706,12 @@ class EventLog:
                 "sealed_through": self.sealed_seq, "segments": len(self.chain),
                 "pruned": len(self._pruned()), "sealed_bytes": sealed_bytes,
                 "unsealed_events": self.active_events, "unsealed_bytes": self.active_bytes,
-                "cursors": list(self.cursors.values()), "head": self.head()}
+                "cursors": list(self.cursors.values()), "head": self.head(),
+                "retention": "preserve; no automatic deletion",
+                "payload_budget_bytes": self.budget,
+                "payload_capacity_remaining": max(0, self.budget - sealed_bytes
+                                                   - self.active_bytes),
+                "deletion_protection": "application only; local administrator can delete"}
 
 
 def _norm(kind, value):

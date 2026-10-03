@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 from jarvis.collectors.network import internetwatch
 from jarvis.core import incidents
-from jarvis.core.paths import REPO_ROOT, STATIC_DIR
+from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.response import acknowledge, alert, assistant, protocols, questions, remediation
@@ -34,6 +34,7 @@ from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
+from jarvis.web import stream
 
 PAGE = str(STATIC_DIR / "dashboard.html")
 GEO_PAGE = str(STATIC_DIR / "geo.html")
@@ -287,7 +288,10 @@ def build_state(db_path, scheduler):
             "intel": _intel_state(store),
             # Live from the same snapshots the page shows; the trend comes
             # from the history the report job records every five minutes.
-            "security": {**score.compute(snaps, JOBS, acks=acknowledge.load(store)),
+            "security": {**score.stable(store, JOBS, acks=acknowledge.load(store),
+                                        live=score.compute(snaps, JOBS,
+                                                           acks=acknowledge.load(store)),
+                                        snapshots=snaps, phase=_wake_phase(scheduler)),
                          "history": score.history_of(store)[-300:]},
             "posture": posture_mod.build(
                 snaps, JOBS, acks=acknowledge.load(store),
@@ -309,12 +313,22 @@ def build_state(db_path, scheduler):
         store.close()
 
 
+def _wake_phase(scheduler):
+    """The scheduler's re-verification phase for the score. Never raises."""
+    try:
+        fn = getattr(scheduler, "wake_phase", None)
+        return fn() if callable(fn) else {}
+    except Exception:
+        return {}
+
+
 def _reliability_state(scheduler, snaps):
     """Collector reliability plane for the dashboard. Never raises."""
     try:
         status_fn = getattr(scheduler, "reliability_status", None)
         if callable(status_fn):
-            return status_fn(snapshots=snaps)["summary"]
+            status = status_fn(snapshots=snaps)
+            return {**status["summary"], "resume": status.get("resume") or {}}
     except Exception:
         pass
     return {"levels": {}, "stale_collectors": [], "recovering": [],
@@ -360,7 +374,7 @@ def _start_fix_draft(db_path, pid):
         store = Store(db_path)
         try:
             try:
-                fixdraft.generate(store, pid, repo=str(REPO_ROOT))
+                fixdraft.generate(store, pid, repo=str(SOURCE_ROOT))
             except Exception as exc:
                 fixdraft.record_failure(
                     store, pid, f"unexpected drafting failure: {type(exc).__name__}: {exc}")
@@ -386,6 +400,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "JARVIS"
     db_path = DEFAULT_DB
     scheduler = None
+    hub = None          # stream.Hub, shared by every /api/pulse and /api/stream client
 
     def log_message(self, *a):
         pass  # the dashboard polls constantly; access logs would be noise
@@ -471,7 +486,47 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Security-Policy", csp or self.CSP_STRICT)
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # The client closed the connection (a dashboard poll replaced by
+            # the next one). Nothing to deliver, and nothing to log.
+            self.close_connection = True
+
+    def _hub(self):
+        if Handler.hub is None:
+            Handler.hub = stream.Hub(self.db_path, self.scheduler)
+        return Handler.hub
+
+    def _stream(self):
+        """Server-Sent Events of the live pulse (see web/stream.py)."""
+        # Checked before a slot is taken: a cross-site page cannot read the
+        # stream, but without this it could still hold every slot open.
+        if not self._same_origin():
+            return self._send(403, json.dumps({"error": "cross-site"}))
+        hub = self._hub()
+        if not hub.acquire():
+            return self._send(503, json.dumps({"error": "too many live streams; poll /api/pulse"}))
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Security-Policy", self.CSP_STRICT)
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            def write(chunk):
+                self.wfile.write(chunk)
+                self.wfile.flush()
+
+            try:
+                stream.run_stream(hub, write,
+                                  gone=lambda: stream.peer_closed(self.connection))
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass  # the client left; nothing to deliver
+        finally:
+            hub.release()
+            self.close_connection = True
 
     def do_POST(self):
         if not self._host_ok():
@@ -709,6 +764,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(
                 build_state(self.db_path, self.scheduler), default=str))
 
+        if url.path == "/api/pulse":
+            return self._send(200, json.dumps(self._hub().latest(), default=str))
+
+        if url.path == "/api/stream":
+            return self._stream()
+
         if url.path in ("/api/posture", "/api/posture/path-to-100"):
             from jarvis.service import posture
             store = Store(self.db_path)
@@ -812,6 +873,10 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
     privilege.drop_ambient()
     scheduler = Scheduler(db_path, hosts)
     scheduler.start()
+    # Execution identities (docs/architecture/EVIDENCE-FABRIC.md): issued only
+    # when this sealed daemon can read the root-owned key. Never raises.
+    from jarvis.platform.provenance import authority
+    print(f"provenance authority: {authority.start()}", flush=True)
 
     # Tell systemd we are up, then keep the watchdog fed for as long as the
     # scheduler is actually making progress. Both are no-ops when not run under
@@ -830,6 +895,7 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
 
     Handler.db_path = db_path
     Handler.scheduler = scheduler
+    Handler.hub = stream.Hub(db_path, scheduler)
     # Localhost only, deliberately and without an override.
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     # flush=True so journalctl shows these immediately under systemd, where

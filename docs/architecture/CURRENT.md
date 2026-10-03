@@ -27,7 +27,7 @@ docs and the dashboard. Numbers are for the baseline commit.
 | Threat intel | feeds, intel, hunt, vet |
 | Response | alert, remediation, repair, fixit, ledger, evidence/ |
 | Reporting | reporting/ |
-| Service and self-supervision | server (scheduler, job dispatch, HTTP), coverage, selfcheck, deadman, connectivity, protection, sdnotify |
+| Service and self-supervision | server (scheduler, job dispatch, HTTP), coverage, selfcheck, supervisors, connectivity, protection, sdnotify |
 | Interfaces | cli/, server HTTP handler, static/dashboard.html |
 | Sensor ingest | native/ |
 
@@ -66,7 +66,7 @@ docs and the dashboard. Numbers are for the baseline commit.
 - `python3 -m jarvis …`: `install.sh`, `quickstart.*`, systemd units, and
   PowerShell tasks.
 - `python3 -m jarvis.flash` and `python3 -m jarvis.native` (documented).
-- `wake-jarvis.ps1`, `deadman-jarvis.ps1`, and `connectivity-jarvis.ps1` are
+- `jarvis-wake-watchdog.ps1`, `jarvis-health-monitor.ps1`, and `jarvis-connectivity-guard.ps1` are
   hashed by `control.py` to verify the installed Windows tasks.
 - Finding `(category, severity, title, detail, host)` → `alert._key` identity,
   DB schema, config keys, and meta keys.

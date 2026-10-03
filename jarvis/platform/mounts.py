@@ -21,7 +21,9 @@ import errno
 import os
 import time
 
-WINDOWS_DRIVE = "/mnt/c"
+from jarvis.platform import host
+
+WINDOWS_DRIVE = host.windows_root()
 
 # How long one verdict is reused. Long enough to calm a run storm, short
 # enough that a remount is noticed within a minute.

@@ -18,6 +18,7 @@ from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import classify_ip
+from jarvis.platform import firewall_state
 from jarvis.platform.linux import read_file, socket_table
 from jarvis.platform.windows import aslist, ps_json
 
@@ -118,6 +119,7 @@ def audit_windows():
 
     # -- inbound allow rules ----------------------------------------------
     rules = aslist(data.get("rules"))
+    inbound_rules_ignored = firewall_state.rule_inactive()
     for r in rules:
         app = r.get("app") or ""
         remote = r.get("remote") or "Any"
@@ -166,10 +168,16 @@ def audit_windows():
             sev = "high"
         else:
             sev = "medium"
+        # With every profile ignoring allow rules ("block all incoming
+        # connections"), the rule admits nothing now. A remote-access agent's
+        # rule stays critical: the agent is installed and one toggle away.
+        inactive = sev != "critical" and inbound_rules_ignored
         out.append(_finding(
-            "rules", sev, "permissive inbound rule",
+            "rules", "low" if inactive else sev, "permissive inbound rule",
             f"{name} — {', '.join(risky)}"
-            + (f" [{r.get('port')}]" if r.get("port") else ""),
+            + (f" [{r.get('port')}]" if r.get("port") else "")
+            + (" — inactive: every firewall profile blocks all incoming "
+               "connections, allow rules included" if inactive else ""),
             app or r.get("group") or ""))
 
     out.append(_finding("rules", "ok", "inbound allow rules",
@@ -249,9 +257,11 @@ def audit_windows():
     for name, e in sorted(installs.items(), key=lambda kv: kv[1]["last"], reverse=True):
         sev = "high" if USER_WRITABLE.search(e["file"]) else "medium"
         times = f" ×{e['n']}" if e["n"] > 1 else ""
-        out.append(_finding("posture", sev, "service installed recently",
-                            f"{name}{times} — {e['file'][:90] or 'path unknown'}",
-                            e["last"].replace("T", " ")[:19]))
+        finding = _finding("posture", sev, "service installed recently",
+                           f"{name}{times} — {e['file'][:90] or 'path unknown'}",
+                           e["last"].replace("T", " ")[:19])
+        finding["program"] = e["file"]      # untruncated, for verification
+        out.append(finding)
 
     return out
 

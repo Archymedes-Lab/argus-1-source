@@ -86,7 +86,40 @@ def collect(report, verify_at, freshness_limit, now=None):
     stages["fresh"] = (
         stage("ok", "evidence within its freshness budget") if ingested else
         stage("down", f"no current evidence; budget is {freshness_limit}s"))
-    return {"at": now, "stages": stages, "backlog": backlog,
+    channels = {}
+    if isinstance(health, dict) and health.get("mode") == "isolated":
+        delivered = {ch.get("channel"): ch for ch in report["channels"]
+                     if ch.get("channel")}
+        for name, source in (health.get("channels") or {}).items():
+            source = source if isinstance(source, dict) else {}
+            delivery = delivered.get(name) or {}
+            active = source.get("status") in ("complete", "partial")
+            error = delivery.get("error")
+            waiting = int(delivery.get("backlog") or 0)
+            channel_gaps = delivery.get("gaps") or []
+            channels[name] = {
+                "installed": stage("ok", "channel service configured") if active else
+                    stage("unknown", "no valid channel receipt"),
+                "running": stage("ok", "recent channel progress receipt") if active else
+                    stage("down", str(source.get("reason") or "channel receipt unavailable")),
+                "producing": stage("ok" if source.get("status") == "complete" else
+                                   "degraded" if active else "down",
+                                   "channel read pass status: " + str(source.get("status", "unknown"))),
+                "arriving": stage("ok" if active and not error else "down",
+                                  f"{waiting} batches waiting" if waiting else
+                                  str(error or "spool addressed")),
+                "ingested": stage("ok" if active and not error else "down",
+                                  f"{delivery.get('events', 0)} events this pass"),
+                "gaps": stage("degraded" if channel_gaps else "ok",
+                              f"{len(channel_gaps)} gap(s) this pass"),
+                "integrity": stages["integrity"],
+                "fresh": stage("ok" if active and not error and waiting == 0 else "down",
+                               "channel evidence current" if active and not error and waiting == 0
+                               else "channel evidence incomplete"),
+                "last_sequence": source.get("last_sequence"),
+                "backlog": waiting,
+            }
+    return {"at": now, "stages": stages, "channels": channels, "backlog": backlog,
             "last_sequence": last_sequence, "gaps": len(gaps),
             "quarantined": quarantined, "checkpoint": last_sequence}
 

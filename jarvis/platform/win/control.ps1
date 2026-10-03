@@ -25,11 +25,18 @@ $o.tasks = @(Get-ScheduledTask | Where-Object {
         if ($_.Arguments -match '(?i)(?:^|\s)-File\s+(?:"([^"]+)"|([^\s]+))') {
             $target = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
         }
+        # A COM-handler action runs the DLL registered for its class id.
+        $handler = $null
+        if ($_.ClassId) {
+            $handler = (Get-ItemProperty -LiteralPath "Registry::HKEY_CLASSES_ROOT\CLSID\$($_.ClassId)\InprocServer32" `
+                -ErrorAction SilentlyContinue).'(default)'
+        }
         [pscustomobject]@{
             execute=$_.Execute
             arguments=$_.Arguments
             target=$target
             targetHash=(Get-NormalizedTextHash $target)
+            handler=$handler
         }
     })
     [pscustomobject]@{

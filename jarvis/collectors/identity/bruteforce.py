@@ -33,6 +33,32 @@ SPIKE_ONE_SOURCE = 20      # failures from a single source in the window
 SPRAY_USERS = 10           # distinct usernames targeted from one source
 TOTAL_ELEVATED = 40        # total failures in the window worth a medium
 
+# 4625 status codes that are a policy refusing a logon, not a wrong guess.
+# Measured 2026-09-24: all 20 failures were msedge.exe / msedgewebview2.exe
+# Windows single sign-on attempts refused with 0xc000006e (account
+# restriction), which read as a 20-failure guessing attack. Wrong-password
+# (0xc000006a), unknown-user (0xc0000064) and every unlisted status still count
+# as guessing, so an unfamiliar status can never quietly lower the verdict.
+POLICY_REFUSALS = {
+    "0xc000006e": "account restriction",
+    "0xc000006f": "outside allowed logon hours",
+    "0xc0000070": "workstation not permitted",
+    "0xc0000071": "password expired",
+    "0xc0000072": "account disabled",
+    "0xc0000193": "account expired",
+    "0xc0000133": "clock out of sync with the domain",
+    "0xc000015b": "logon type not granted",
+    "0xc0000224": "password must change at next logon",
+}
+
+
+def _refusal(status, sub):
+    """The policy reason for a failure, or "" when it counts as a guess."""
+    status, sub = (status or "").lower(), (sub or "").lower()
+    if status == "0xc000006d" and sub in POLICY_REFUSALS:
+        return POLICY_REFUSALS[sub]
+    return POLICY_REFUSALS.get(status, "")
+
 _LINUX_FAIL = re.compile(
     r"Failed password for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+)"
     r"|authentication failure;.*?(?:user=(?P<user2>\S+))?.*?rhost=(?P<ip2>\S+)"
@@ -165,17 +191,34 @@ def _windows():
     top = d.get("top") or []
     if isinstance(top, dict):
         top = [top]
+    guesses, refused = {}, {}
     for row in top:
         n = int(row.get("n") or 0)
-        key = (row.get("key") or "?|?").split("|", 1)
-        user, ip = (key + ["?"])[:2]
+        user, ip, status, sub, proc = ((row.get("key") or "").split("|") + [""] * 5)[:5]
+        why = _refusal(status, sub)
+        if why:
+            r = refused.setdefault(why, [0, set()])
+            r[0] += n
+            r[1].add(proc or "an unnamed process")
+        else:
+            guesses[(user, ip)] = guesses.get((user, ip), 0) + n
+    refused_total = sum(n for n, _ in refused.values())
+    for (user, ip), n in sorted(guesses.items(), key=lambda kv: -kv[1]):
         if n >= SPIKE_ONE_SOURCE:
             out.append(_finding(
                 "bruteforce", "high",
                 f"{n} failed Windows logons for {user or '(blank)'} "
-                f"from {ip or 'local'} in 24h",
+                f"from {ip if ip not in ('', '-') else 'local'} in 24h",
                 "a concentrated logon-guessing attempt — confirm the source",
                 "Security log 4625", host="win"))
+    for why, (n, procs) in sorted(refused.items(), key=lambda kv: -kv[1][0]):
+        out.append(_finding(
+            "bruteforce", "low",
+            f"{n} Windows sign-in attempt{'s' if n != 1 else ''} refused by policy ({why})",
+            f"by {', '.join(sorted(procs)[:4])} — a rule refused these logons; they are "
+            "not wrong-password guesses. Worth a look only if the process is unfamiliar.",
+            "Security log 4625", host="win"))
+    total -= refused_total
 
     if int(d.get("lockouts") or 0):
         out.append(_finding(
@@ -185,16 +228,17 @@ def _windows():
             "stale credential hammering the domain", "Security log 4740",
             host="win"))
 
-    if not out and total >= TOTAL_ELEVATED:
+    if not any(f["severity"] in ("high", "critical") for f in out) and total >= TOTAL_ELEVATED:
         out.append(_finding(
             "bruteforce", "medium",
             f"{total} failed Windows logons in 24h",
             "elevated but not concentrated on one source", "Security log 4625",
             host="win"))
-    if not out:
+    if not any(f["severity"] != "low" for f in out):
         out.append(_finding(
             "bruteforce", "ok", "no failed-logon spike on the Windows side",
-            f"{total} failed logons in 24h, none concentrated", "Security log",
+            f"{total} wrong-password or unknown-user failures in 24h, none "
+            "concentrated", "Security log",
             host="win"))
     return out
 

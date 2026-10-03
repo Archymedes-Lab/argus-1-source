@@ -17,13 +17,12 @@ import subprocess
 import time
 
 from jarvis.core.paths import REPO_ROOT, WIN_SCRIPTS_DIR
-from jarvis.platform import broker
+from jarvis.platform import broker, host
 from jarvis.platform import windows as win
 
 
 def _winpath(path):
-    out = subprocess.run(["wslpath", "-w", str(path)], capture_output=True, text=True, errors="replace")
-    return out.stdout.strip()
+    return host.windows_name(path)
 
 
 def _ps_args(script):
@@ -81,7 +80,7 @@ def _sysmon_baseline():
 
 
 def _elevated(args, timeout=240):
-    """Run broker-jarvis.ps1 with `args` through a UAC prompt, from a local copy.
+    """Run jarvis-elevated-broker.ps1 with `args` through a UAC prompt, from a local copy.
 
     The script must not be launched from the \\\\wsl share: an elevated shell
     executing a file the user can edit is the hole the broker is built to
@@ -95,12 +94,12 @@ def _elevated(args, timeout=240):
                            capture_output=True, text=True, errors="replace", cwd="/").stdout.strip()
     if not stage:
         return 1, "could not create a staging folder on Windows"
-    names = ["broker-jarvis.ps1"] + list(broker.SCRIPTS.values())
+    names = [broker.BROKER_SCRIPT] + list(broker.SCRIPTS.values())
     copy = ";".join(
-        f"Copy-Item -LiteralPath '{_winpath((REPO_ROOT if n == 'broker-jarvis.ps1' else WIN_SCRIPTS_DIR) / n)}' "
+        f"Copy-Item -LiteralPath '{_winpath((REPO_ROOT if n == broker.BROKER_SCRIPT else WIN_SCRIPTS_DIR) / n)}' "
         f"-Destination '{stage}\\{n}'" for n in names)
     argline = ",".join(f"'{a}'" for a in (["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                                          f"{stage}\\broker-jarvis.ps1"] + args + ["-Source", stage]))
+                                          f"{stage}\\{broker.BROKER_SCRIPT}"] + args + ["-Source", stage]))
     script = (f"{copy}; $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
               f"-ArgumentList {argline}; Remove-Item -LiteralPath '{stage}' -Recurse -Force; exit $p.ExitCode")
     try:

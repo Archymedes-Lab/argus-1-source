@@ -61,6 +61,14 @@ class TriageTests(unittest.TestCase):
         self.assertEqual((t["owner"], t["command"]), (triage.YOU_DO, ""))
         self.assertIn("already readable only by you", t["action"])
 
+    def test_private_project_env_is_advisory_not_a_rotation_task(self):
+        path = self.secret_file("app/.env.local", 0o600)
+        t = triage.classify(f("present", "low",
+                              "API key in a private project environment file",
+                              where=f"{path}:3"), "secrets")
+        self.assertEqual((t["owner"], t["command"]), (triage.YOU_CONFIRM, ""))
+        self.assertIn("Git-ignored", t["action"])
+
     def test_a_private_tool_credential_store_is_a_confirmation(self):
         path = self.secret_file(".config/gh/hosts.yml", 0o600)
         t = triage.classify(f("present", "critical", "GitHub token in plaintext",

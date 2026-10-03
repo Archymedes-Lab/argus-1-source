@@ -36,6 +36,8 @@ export function loadPage(relPath, exportNames) {
   globalThis.fetch = () => new Promise(() => {});
   globalThis.setInterval = () => 0;
   globalThis.clearInterval = () => {};
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
   const names = exportNames.join(",");
   // Indirect eval keeps "use strict" scripts scoped; re-export explicitly.
   (0, eval)(scripts.join("\n;\n") + `\n;globalThis.__page = {${names}};`);

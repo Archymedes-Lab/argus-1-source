@@ -1,0 +1,411 @@
+"""Run one scheduled audit by name and return its findings in the common shape.
+
+Most collectors already return findings; the ones that do not (the process scan,
+feeds, intel) are adapted here, so the scheduler only ever sees one shape.
+
+Each job is a small function registered in RUNNERS under its schedule name.
+Jobs that touch the database open their own store: they run inside the
+scheduler's worker thread, and a sqlite handle must not cross threads.
+"""
+
+import time
+from contextlib import contextmanager
+
+from jarvis.collectors.host import (
+    accelerator,
+    containers,
+    controlwatch,
+    geo,
+    inputwatch,
+    pixel,
+    posture,
+    spyware,
+    toolchain,
+)
+from jarvis.collectors.host import intrusion as intrusion_mod
+from jarvis.collectors.identity import bruteforce, impersonation, secrets
+from jarvis.collectors.network import firewall, internetwatch, netwatch, sniffing, webshell
+from jarvis.collectors.persistence import asep as asep_mod
+from jarvis.collectors.persistence import backdoor, control, implant, startup
+from jarvis.collectors.process import evasion as evasion_mod
+from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
+from jarvis.collectors.telemetry import (
+    auditd,
+    evidence,
+    mirror,
+    native,
+    reconcile,
+    sysmon,
+    sysmon_linux,
+    sysmon_policy,
+    sysmon_pressure,
+)
+from jarvis.core import collection, retention
+from jarvis.core import mlworker as mlworker_mod
+from jarvis.core.store import Store
+from jarvis.intel import feeds, gaps, hunt
+from jarvis.intel import research as intel
+from jarvis.lab import audit as arena_audit
+from jarvis.platform import openvino as openvino_mod
+from jarvis.response import alert, llm
+from jarvis.response import ledger as ledger_mod
+from jarvis.response.reporting.cadence import run as report_due
+from jarvis.service import attackmap, connectivity, deadman, selfcheck
+from jarvis.service import coverage as coverage_mod
+from jarvis.service.schedule import JOBS
+
+# Composition root: core routing stays platform-independent, while the daemon
+# explicitly supplies the measured Windows OpenVINO executor.
+mlworker_mod.set_gpu_infer(openvino_mod.infer)
+
+
+@contextmanager
+def _store(db_path):
+    store = Store(db_path)
+    try:
+        yield store
+    finally:
+        store.close()
+
+
+# ---------------------------------------------------------------------------
+# Jobs that adapt a collector's own result shape
+# ---------------------------------------------------------------------------
+
+def _scan(hosts, db_path):
+    # The process scan is stateful (it maintains the baseline), so it needs
+    # its own store handle inside the worker thread.
+    with _store(db_path) as store:
+        res = monitor.scan(store, hosts=hosts)
+        policy = (sysmon_policy.audit() if "win" in hosts else
+                  {"event1": "unknown", "detail": "Windows host not selected",
+                   "source": "unavailable"})
+        # Perception summary for the health endpoint: cheap persisted counts
+        # (VERIFIED vs UNRECONCILED vs UNKNOWN) so HTTP never touches the
+        # event log. Read-only; finding semantics live in reconcile.processes.
+        try:
+            import json as _json
+
+            from jarvis.collectors.telemetry import reconcile as _reconcile
+            verdicts = _reconcile.classify_snapshot(
+                res.get("processes", []), observed_at=res["ts"])
+            summary = {"verified": 0, "unreconciled": 0, "unknown": 0}
+            for v in verdicts:
+                label = v.get("label", "UNKNOWN")
+                if label == "VERIFIED":
+                    summary["verified"] += 1
+                elif label == "UNRECONCILED":
+                    summary["unreconciled"] += 1
+                else:
+                    summary["unknown"] += 1
+            store.set_meta("perception_summary_v1", _json.dumps({
+                "at": res["ts"], "windows_processes": len(verdicts),
+                "sysmon_process_create_policy": sysmon_policy.summary(policy),
+                "sysmon_process_create_coverage":
+                    _reconcile.coverage_evidence(
+                        res["ts"], snapshot=res.get("processes", [])),
+                "sysmon_pressure": sysmon_pressure.audit(),
+                **summary,
+            }))
+            store.commit()
+        except Exception:
+            pass
+    out = []
+    for f in res["findings"]:
+        remotes = ", ".join(
+            f"{r['ip']}:{r['port']}" for r in f["remotes"][:3]
+            if r["scope"] == "public")
+        out.append({
+            "category": "process", "severity": f["severity"],
+            "host": f["host"],
+            "title": f"{f['name']} [pid {f['pid']}]"
+                     + (" — NEW" if f["unknown"] else ""),
+            "detail": (f["cmdline"] or "")[:160]
+                      + (f"  →  {remotes}" if remotes else ""),
+            "where": f["exe"] or f.get("script") or "",
+        })
+    for p in res["new_public_peers"]:
+        out.append({
+            "category": "peer", "severity": "medium",
+            "host": p["proc"]["host"],
+            "title": "new external peer",
+            "detail": f"{p['ip']}:{p['port']} ← {p['proc']['name']}",
+            "where": p["proc"].get("exe") or "",
+        })
+    out.extend(reconcile.processes(
+        res.get("processes", []), observed_at=res["ts"], policy=policy))
+    return out
+
+
+def _watchdogs(hosts, db_path):
+    # Both halves of the supervision loop: the systemd timer that restarts
+    # this daemon, and the Windows task that reports it missing when WSL
+    # itself is down.
+    out = (deadman.audit() + deadman.audit_reviver() + deadman.audit_broker()
+           + connectivity.audit())
+    active, enabled_state = selfcheck.timer_state()
+    if not active:
+        return out + [{
+            "category": "daemon", "severity": "high", "host": "wsl",
+            "title": "the out-of-daemon watchdog is not installed",
+            "detail": "jarvis-selfcheck.timer is absent, so nothing outside "
+                      "this process can restart it if it dies — and a dead "
+                      "daemon cannot report its own death. Install with "
+                      "`./install.sh --seal`.",
+            "where": "jarvis-selfcheck.timer"}]
+    err = selfcheck.ensure_timer()
+    if err:
+        return out + [{
+            "category": "daemon", "severity": "high", "host": "wsl",
+            "title": "the out-of-daemon watchdog has stopped",
+            "detail": f"jarvis-selfcheck.timer is {active}/{enabled_state} "
+                      f"and could not be re-armed: {err}",
+            "where": "jarvis-selfcheck.timer"}]
+    if active != "active" or enabled_state != "enabled":
+        # ensure_timer() fixed it. Say so — a watchdog that keeps needing
+        # to be restarted is a finding, not a routine success.
+        return out + [{
+            "category": "daemon", "severity": "medium", "host": "wsl",
+            "title": "the out-of-daemon watchdog had stopped and was re-armed",
+            "detail": f"jarvis-selfcheck.timer was {active}/{enabled_state}; "
+                      f"it is running again. Repeated occurrences mean "
+                      f"something is stopping it.",
+            "where": "jarvis-selfcheck.timer"}]
+    return out + [{
+        "category": "daemon", "severity": "ok", "host": "wsl",
+        "title": "watchdogs supervise each other",
+        "detail": f"jarvis-selfcheck.timer {active}/{enabled_state} — it "
+                  f"restarts this daemon, this daemon re-arms it",
+        "where": "jarvis-selfcheck.timer"}]
+
+
+def _report(hosts, db_path):
+    with _store(db_path) as store:
+        return report_due(store, JOBS)
+
+
+def _ledger(hosts, db_path):
+    with _store(db_path) as store:
+        # A row is only "stale" relative to whether its own collector has
+        # run since; the snapshot table is where that is recorded.
+        snaps = store.get_snapshots()
+        job_ts = {k: int(v.get("ts") or 0) for k, v in snaps.items()
+                  if not v.get("error")}
+        return ledger_mod.audit(store, job_ts=job_ts)
+
+
+def _input(deep):
+    def run(hosts, db_path):
+        with _store(db_path) as store:
+            # The Windows-side hook does not survive a reboot or a WSL restart
+            # and nothing outside this loop respawns it, so supervise() keeps
+            # it up — cheaply on the healthy path, with backoff and flap
+            # detection when it is not. "input_hook" is the short-interval
+            # watchdog; "input" additionally runs the full injected-event audit.
+            pids, findings = inputwatch.supervise(store, deep=deep)
+            # A monitor that is down is not a successful observation: recording
+            # it as one would leave the score, coverage, the dashboard and the
+            # daily email all reporting input monitoring as fine.
+            outage = next((f for f in findings if alert.is_outage(f)), None)
+            if outage:
+                collection.failed("input-hook", outage.get("title", "monitor down"))
+            if deep:
+                findings += inputwatch.audit(store, pids=pids, supervised=True)
+            return findings
+    return run
+
+
+def _netwatch(hosts, db_path):
+    with _store(db_path) as store:
+        netwatch.record(store)
+        return netwatch.audit(store)
+
+
+def _feeds(hosts, db_path):
+    with _store(db_path) as store:
+        results = feeds.refresh(store)
+        results.append(feeds.refresh_attack(store))
+        results.append(feeds.refresh_tranco(store))
+        out = []
+        for r in results:
+            if r.get("error"):
+                out.append({"category": "feed", "severity": "medium",
+                            "host": "wsl",
+                            "title": f"{r['name']} feed failed",
+                            "detail": r["error"], "where": ""})
+        kept = sum(r.get("kept", 0) for r in results if not r.get("error"))
+        if kept:
+            out.append({"category": "feed", "severity": "low", "host": "wsl",
+                        "title": f"{kept} indicators refreshed",
+                        "detail": ", ".join(
+                            r["name"] for r in results
+                            if r.get("kept")), "where": ""})
+        feeds.prune(store)
+        # Retire-then-remove: prune() marks feed entries retired, and
+        # retention deletes the ones that have stayed retired. Without
+        # this second step the indicators table only ever grows.
+        removed = sum(r["rows"] for r in retention.apply(store))
+        if removed:
+            out.append({"category": "feed", "severity": "low",
+                        "host": "wsl",
+                        "title": f"{removed} aged rows removed",
+                        "detail": "database retention policy; run "
+                                  "`jarvis retention` to see what it keeps",
+                        "where": ""})
+        return out
+
+
+def _intel(hosts, db_path):
+    with _store(db_path) as store:
+        try:
+            options = intel.daemon_options(store)
+            stats = intel.refresh(store, **options)
+        except intel.BudgetExceeded as exc:
+            # Not a failure: the brake worked. Say so quietly and keep the
+            # previous findings on the dashboard.
+            return [{"category": "intel", "severity": "low",
+                     "host": "wsl", "title": "intel refresh paused",
+                     "detail": str(exc), "where": ""}]
+    out = []
+    if stats["errors"]:
+        out.append({
+            "category": "intel", "severity": "medium", "host": "wsl",
+            "title": "intel refresh had errors",
+            "detail": "; ".join(stats["errors"])[:400], "where": ""})
+    out.append({
+        "category": "intel", "severity": "low", "host": "wsl",
+        "title": f"refreshed {', '.join(stats['topics'])}",
+        "detail": f"{stats['docs']} documents, {stats['kept']} indicators "
+                  f"kept of {stats['seen']} candidates, "
+                  f"${stats['cost']:.3f}",
+        "where": ""})
+    return out
+
+
+def _hunt(hosts, db_path):
+    with _store(db_path) as store:
+        return hunt.sort_findings(hunt.hunt(store, hosts=hosts))
+
+
+def _gaps(hosts, db_path):
+    with _store(db_path) as store:
+        return gaps.gaps(store)[0]
+
+
+# ---------------------------------------------------------------------------
+# Jobs that call a collector directly
+# ---------------------------------------------------------------------------
+
+def _with_store(audit, **kwargs):
+    """A job whose collector takes (store, hosts=...)."""
+    def run(hosts, db_path):
+        with _store(db_path) as store:
+            return audit(store, hosts=hosts, **kwargs)
+    return run
+
+
+def _hosts_only(audit):
+    """A job whose collector takes only hosts=..."""
+    return lambda hosts, db_path: audit(hosts=hosts)
+
+
+def _sorted(module):
+    """A job whose collector takes no arguments and ships its own ordering."""
+    return lambda hosts, db_path: module.sort_findings(module.audit())
+
+
+def _boot(hosts, db_path):
+    findings = startup.sort_findings(startup.audit())
+    # Reuse the control audit's full task verification, but only while its
+    # result is current: stale or failing evidence verifies nothing.
+    from jarvis.response.reporting.score import freshness
+    with _store(db_path) as store:
+        snap = store.get_snapshots().get("control")
+    if freshness(snap, JOBS["control"][0], time.time()) == "current":
+        findings = startup.apply_verified_tasks(findings, snap.get("findings"))
+        findings = startup.apply_signed_tasks(findings, snap.get("findings"))
+    return startup.sort_findings(findings)
+
+
+def _coverage(hosts, db_path):
+    findings = coverage_mod.sort_findings(
+        coverage_mod.audit(db_path=db_path, hosts=hosts))
+    # Human-in-the-loop self-fix: the self-audit that just ran is the right
+    # moment to notice JARVIS itself needs help. maintain() only proposes and
+    # mails (rate-limited); it never runs commands or models, and never raises
+    # into the scheduler.
+    try:
+        from jarvis.response import selffix
+        selffix.maintain(db_path, schedule=JOBS)
+    except Exception:
+        pass
+    return findings
+
+
+def _resources(hosts, db_path):
+    with _store(db_path) as store:
+        findings = list(resourcewatch.audit(store, hosts=hosts))
+        findings.extend(accelerator.audit(store, hosts=hosts))
+        return findings
+
+
+RUNNERS = {
+    "scan": _scan,
+    "bridge": lambda hosts, db_path: coverage_mod.bridge_status(),
+    "input_hook": _input(deep=False),
+    "watchdogs": _watchdogs,
+    "resources": _resources,
+    "internet": _with_store(internetwatch.audit),
+    "controls": _with_store(controlwatch.audit),
+    "deep_hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, deep=True)[0],
+    "hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, db_path=db_path)[0],
+    "firewall": _hosts_only(firewall.audit),
+    "control": _hosts_only(control.audit),
+    "asep": _sorted(asep_mod),
+    "spy": _sorted(spyware),
+    "pixel": _hosts_only(pixel.audit),
+    "identity": _with_store(impersonation.audit),
+    "intrusion": _sorted(intrusion_mod),
+    "evasion": _sorted(evasion_mod),
+    "coverage": _coverage,
+    "boot": _boot,
+    "hunt": _hunt,
+    "gaps": _gaps,
+    "intel": _intel,
+    "report": _report,
+    "feeds": _feeds,
+    "implant": _hosts_only(implant.audit),
+    "netwatch": _netwatch,
+    "posture": _hosts_only(posture.audit),
+    "backdoor": _hosts_only(backdoor.audit),
+    "toolchain": _with_store(toolchain.audit),
+    "ledger": _ledger,
+    "input": _input(deep=True),
+    "memscan": _hosts_only(memscan.audit),
+    "secrets": lambda hosts, db_path: secrets.audit(),
+    "bruteforce": _hosts_only(bruteforce.audit),
+    "sniffing": _hosts_only(sniffing.audit),
+    "webshell": _hosts_only(webshell.audit),
+    "auditd": _hosts_only(auditd.audit),
+    # Incremental: each run reads only what happened since the last one,
+    # instead of re-reading a day of log every ten minutes.
+    "sysmon_linux": _with_store(sysmon_linux.audit, incremental=True),
+    "sysmon": _with_store(sysmon.audit, incremental=True),
+    "native": _with_store(native.audit),
+    "rust_mirror": _with_store(mirror.audit),
+    "evidence": _with_store(evidence.audit),
+    "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
+    "geo": _with_store(geo.audit),
+    "containers": _hosts_only(containers.audit),
+    "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),
+    "model": lambda hosts, db_path: [llm.status_findings(alert.load_conf())],
+}
+
+
+def run_job(name, hosts, db_path):
+    """Run one audit and return its findings in the common shape."""
+    runner = RUNNERS.get(name)
+    if runner is None:
+        raise ValueError(name)
+    from jarvis.collectors import verify_inventory
+    return verify_inventory.apply(name, runner(hosts, db_path))

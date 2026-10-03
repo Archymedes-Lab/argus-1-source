@@ -1,0 +1,36 @@
+{
+  "stage": "/home/chris/.cache/jarvis-release-staging/20260930-containers-on-db8fb2bdb4b2",
+  "base_release_id": "sha256:db8fb2bdb4b2b972c82804257c9fbd646ba10222231eeafeae0e7aaa19f118f5",
+  "changed": [
+    "jarvis/cli/commands/__init__.py",
+    "jarvis/cli/commands/audit.py",
+    "jarvis/cli/parser.py",
+    "jarvis/core/assurance.py",
+    "jarvis/response/reporting/commands.py",
+    "jarvis/response/reporting/score.py",
+    "jarvis/service/jobs.py",
+    "jarvis/service/schedule.py",
+    "tests/test_assurance.py"
+  ],
+  "added": [
+    "docs/security/CONTAINER-INVENTORY-REVIEW-2026-09-30.md",
+    "jarvis/collectors/host/containers.py",
+    "scripts/reviews/container_inventory_advisory.py",
+    "tests/test_containers.py"
+  ],
+  "removed": [],
+  "checkout": "/home/chris/jarvis/.container-release-overlay-20260930",
+  "staged_at": 1790786030,
+  "deploy": [
+    "sudo",
+    "python3",
+    "-I",
+    "/opt/jarvis/current/scripts/deploy_root_runtime.py",
+    "--source",
+    "/home/chris/.cache/jarvis-release-staging/20260930-containers-on-db8fb2bdb4b2",
+    "--checkout",
+    "/home/chris/jarvis/.container-release-overlay-20260930",
+    "--expect-base",
+    "sha256:db8fb2bdb4b2b972c82804257c9fbd646ba10222231eeafeae0e7aaa19f118f5"
+  ]
+}

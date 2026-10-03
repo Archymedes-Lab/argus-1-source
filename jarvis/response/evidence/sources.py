@@ -11,6 +11,8 @@ records which view it used.
 import errno
 import os
 
+from jarvis.platform import host
+
 _PROC = "/proc"
 
 # The namespace that last worked. Scanning /proc costs a stat per process, so
@@ -19,10 +21,11 @@ _cached_pid = None
 
 
 def to_wsl(path):
-    """`C:\\Users\\x` -> `/mnt/c/Users/x`; POSIX paths pass through."""
+    """`C:\\Users\\x` as this process names it (`/mnt/c/Users/x` under WSL);
+    POSIX paths pass through."""
     p = (path or "").replace("\\", "/")
     if len(p) > 1 and p[1] == ":" and p[0].isalpha():
-        return "/mnt/" + p[0].lower() + p[2:]
+        return host.local_path(path) or p
     return p
 
 
@@ -53,7 +56,11 @@ def _candidate_pids():
     Only our own processes are readable without privilege, so a root-owned
     service is skipped rather than raising.
     """
-    for name in os.listdir(_PROC):
+    try:
+        names = os.listdir(_PROC)
+    except OSError:
+        return                  # no /proc (native Windows): nothing to traverse
+    for name in names:
         if not name.isdigit():
             continue
         pid = int(name)

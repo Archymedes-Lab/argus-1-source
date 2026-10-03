@@ -33,9 +33,11 @@ class PrivilegeTests(unittest.TestCase):
 
 
 class CoveragePrivilegeTests(unittest.TestCase):
-    def findings(self, lacking):
+    def findings(self, lacking, sealed=True):
         from jarvis.service import coverage
         with mock.patch.object(privilege, "missing", return_value=lacking), \
+             mock.patch.object(privilege, "code_tree_problems",
+                               return_value=[] if sealed else ["writable"]), \
              mock.patch.object(privilege.os, "geteuid", return_value=1000):
             return [f for f in coverage.visibility()
                     if f["title"] in ("running unprivileged", "least-privilege visibility")]

@@ -1,8 +1,10 @@
-"""Collect Windows processes and TCP connections through WSL interop.
+"""Collect Windows processes and TCP connections through PowerShell.
 
-Everything happens in one powershell.exe invocation because crossing the interop
-boundary costs ~1s; doing it per-process would make scanning unusable. The
-payload comes back base64-encoded so console codepage quirks can't corrupt it.
+From the WSL guest powershell.exe is reached through interop; on native Windows
+it is started directly (platform/host.py says which). Everything happens in one
+powershell.exe invocation because starting it costs ~1s either way; doing it
+per-process would make scanning unusable. The payload comes back base64-encoded
+so console codepage quirks can't corrupt it.
 """
 
 import base64
@@ -16,6 +18,7 @@ import subprocess
 from jarvis.core import collection
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import fingerprint
+from jarvis.platform import host
 
 HOST = "win"
 
@@ -42,6 +45,10 @@ def ensure_interop() -> bool:
     looking perfectly healthy, so we resolve a working socket ourselves instead
     of trusting the environment.
     """
+    if host.native_windows():
+        return True     # no interop boundary: powershell.exe is a local program
+    if not host.on_wsl():
+        return False
     current = os.environ.get("WSL_INTEROP")
     if current and os.path.exists(current):
         return True
@@ -70,15 +77,16 @@ def ensure_interop() -> bool:
 # Where powershell.exe lives when PATH cannot help. A login shell gets the
 # Windows directories appended to PATH by WSL; a systemd service does not, so
 # shutil.which() finds nothing there and every Windows collector goes quiet.
-FALLBACK_PS = [
-    "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
-    "/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe",
-    "/mnt/c/Program Files/PowerShell/7/pwsh.exe",
-]
+# On native Windows PATH is not consulted at all: the search order there would
+# let a powershell.exe planted in a writable PATH directory run as JARVIS.
+FALLBACK_PS = host.powershell_candidates()
 
 
 def find_powershell() -> str:
-    found = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
+    if not host.has_windows():
+        return ""
+    found = "" if host.native_windows() else (
+        shutil.which("powershell.exe") or shutil.which("pwsh.exe"))
     if found:
         return found
     for path in FALLBACK_PS:
@@ -97,12 +105,17 @@ def available() -> bool:
     return bool(_PS) and os.path.isfile(_PS) and ensure_interop()
 
 
+# The reason recorded when PowerShell cannot be reached at all.
+UNREACHABLE = "interop unavailable" if not host.native_windows() else "PowerShell unavailable"
+
 _SESSION_PROBE = ("\"$((Get-Process -Id $PID).SessionId):"
                   "$((Get-Process explorer -EA SilentlyContinue | Select-Object -First 1).SessionId)\"")
 
 
 def interop_sockets():
     """Live interop sockets, newest first. Each reaches its own Windows session."""
+    if not host.on_wsl():
+        return []
     try:
         paths = [os.path.join("/run/WSL", n) for n in os.listdir("/run/WSL")
                  if n.endswith("_interop")]
@@ -114,11 +127,13 @@ def interop_sockets():
 
 
 def _run_via(sock, script, timeout):
+    env = {**os.environ, "WSL_INTEROP": sock} if sock else None
     try:
         return subprocess.run([_PS or find_powershell(), "-NoProfile", "-NonInteractive",
                                "-Command", script],
                               capture_output=True, text=True, errors="replace",
-                              timeout=timeout, cwd="/", env={**os.environ, "WSL_INTEROP": sock})
+                              timeout=timeout, cwd=host.subprocess_cwd(), env=env,
+                              **host.spawn_options())
     except (OSError, subprocess.SubprocessError):
         return None
 
@@ -134,6 +149,8 @@ def desktop_interop() -> str:
     alive. So each socket is asked where it lands, and only one reaching the
     session Explorer runs in is returned. "" when none does (no WSL terminal is
     open on the desktop).
+
+    Native Windows has no sockets to choose between: see on_desktop().
     """
     if not (_PS or find_powershell()):
         return ""
@@ -143,6 +160,23 @@ def desktop_interop() -> str:
         if own.isdigit() and own == desktop and own != "0":
             return sock
     return ""
+
+
+def on_desktop() -> bool:
+    """True when a program started from here lands in the user's desktop session.
+
+    The native-Windows form of desktop_interop(): JARVIS itself runs in some
+    session, and only when that is the one Explorer runs in can it see input
+    and windows. A daemon started by a boot task runs in session 0 and answers
+    False; an unanswered probe is False too, never assumed.
+    """
+    if host.on_wsl():
+        return bool(desktop_interop())
+    if not (host.native_windows() and (_PS or find_powershell())):
+        return False
+    r = _run_via("", _SESSION_PROBE, 30)
+    own, _, desktop = (r.stdout.strip() if r else "").partition(":")
+    return own.isdigit() and own == desktop and own != "0"
 
 
 def run_in_every_session(script, timeout=60):
@@ -155,6 +189,10 @@ def run_in_every_session(script, timeout=60):
     """
     if not (_PS or find_powershell()):
         return 0
+    if host.native_windows():
+        # One process, one session: other sessions' helpers are out of reach
+        # from here, which the caller sees as a count of one, not of "all".
+        return 1 if _run_via("", script, timeout) else 0
     return sum(1 for sock in interop_sockets() if _run_via(sock, script, timeout))
 
 
@@ -177,14 +215,14 @@ def _script_target(cmd: str, exe_base: str) -> str:
 def collect(timeout: int = 45):
     """Return a list of process records for the Windows side (empty if unreachable)."""
     if not available():
-        collection.failed('windows-processes', 'interop unavailable')
+        collection.failed('windows-processes', UNREACHABLE)
         return []
     try:
         res = subprocess.run(
             [_PS, "-NoProfile", "-NonInteractive", "-Command", PS_SCRIPT],
             capture_output=True,
             timeout=timeout,
-            cwd="/",  # avoids the UNC-path warning when cwd is a Linux dir
+            cwd=host.subprocess_cwd(), **host.spawn_options(),
         )
     except (subprocess.TimeoutExpired, OSError):
         collection.failed('windows-processes', 'query failed or timed out')
@@ -252,23 +290,47 @@ def collect(timeout: int = 45):
     return procs
 
 
-def ps_json(script, timeout=120):
+def stdin_text(var):
+    """PowerShell that reads the whole stdin as UTF-8 into `$<var>`.
+
+    Pair with ps_json(..., payload=...). Data that used to travel as an inline
+    base64 literal decoded by FromBase64String put model prompts and finding
+    paths into every process listing and Sysmon Event 1, and made JARVIS's own
+    helper match the encoded-command rule it enforces (measured 2026-09-24:
+    ~140 critical/high scan events in two days). Raw bytes are read so the
+    console input codepage cannot corrupt non-ASCII text.
+    """
+    if not re.fullmatch(r"[A-Za-z]\w*", var or ""):
+        raise ValueError("invalid PowerShell variable name")
+    return ("$jarvisIn=New-Object IO.MemoryStream;"
+            "[Console]::OpenStandardInput().CopyTo($jarvisIn);"
+            f"${var}=[Text.Encoding]::UTF8.GetString($jarvisIn.ToArray());")
+
+
+def ps_json(script, timeout=120, payload=None):
     """Run a PowerShell script and decode its base64 JSON payload.
+
+    `payload` (str or bytes) is written to the script's stdin; read it with
+    stdin_text(). Nothing from it reaches the command line.
 
     Retries once after forcing interop re-resolution: the socket named in
     WSL_INTEROP can go stale between calls when the session that created it
     ends, and the only symptom is empty output.
     """
     if not available():
-        collection.failed('windows', 'interop unavailable')
+        collection.failed('windows', UNREACHABLE)
         return None
+    if isinstance(payload, str):
+        payload = payload.encode("utf-8")
+    stdin = {} if payload is None else {"input": payload}
 
     for attempt in (1, 2):
         try:
             r = subprocess.run(
                 [_PS, "-NoProfile", "-NonInteractive",
                  "-Command", script],
-                capture_output=True, timeout=timeout, cwd="/",
+                capture_output=True, timeout=timeout,
+                cwd=host.subprocess_cwd(), **stdin, **host.spawn_options(),
             )
         except (OSError, subprocess.TimeoutExpired):
             collection.failed('windows', 'PowerShell failed or timed out')
@@ -291,6 +353,7 @@ def ps_json(script, timeout=120):
         if attempt == 1:
             # No output at all: most likely a dead interop socket. Drop the
             # cached value so ensure_interop() picks a fresh one, and retry.
+            # Natively there is no socket; the retry is one plain second try.
             os.environ.pop("WSL_INTEROP", None)
             if not ensure_interop():
                 collection.failed('windows', 'interop retry unavailable')

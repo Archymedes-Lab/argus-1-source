@@ -1,16 +1,16 @@
 # Rewraps JARVIS's existing monitor tasks in conhost --headless (no window ever),
 # keeping their triggers, principal, settings and arguments exactly as registered.
 # -SyncScripts also refreshes each installed script copy from this checkout. Leave it off
-# until jarvis.service runs the same checkout: the new dead-man requires protection_healthy
+# until jarvis.service runs the same checkout: the new health monitor requires protection_healthy
 # from /api/health and would alert against an older service that does not send it.
 param([Parameter(Mandatory)][string]$RepoRoot, [switch]$DryRun, [switch]$SyncScripts)
 $ErrorActionPreference = 'Stop'
 $conhost = "$env:SystemRoot\System32\conhost.exe"
 $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 $tasks = @{
-    'JARVIS independent health monitor' = 'deadman-jarvis.ps1'
-    'JARVIS connectivity guard'         = 'connectivity-jarvis.ps1'
-    'jarvis wake watchdog'              = 'wake-jarvis.ps1'
+    'JARVIS independent health monitor' = 'jarvis-health-monitor.ps1'
+    'JARVIS connectivity guard'         = 'jarvis-connectivity-guard.ps1'
+    'jarvis wake watchdog'              = 'jarvis-wake-watchdog.ps1'
 }
 foreach ($name in $tasks.Keys) {
     $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue

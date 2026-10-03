@@ -7,7 +7,7 @@ all of its subchecks succeeded; review visibility findings as well.
 | Surface | Observation | Remaining gap |
 | --- | --- | --- |
 | Brightness and display | Windows brightness provider and display driver state every 5 minutes | Physical button source, rapid changes, external monitor OSD and unsupported displays |
-| Keyboard, mouse, HID | Device inventory; existing injected-input hook and watchdog | Firmware-origin input and secure-desktop attribution are not established |
+| Keyboard, mouse, HID | Device inventory; injected-input hook and watchdog; hook-chain latency and per-interval stall episodes; pointer settings and LowLevelHooksTimeout; elevated Win32k audit trace of which processes register low-level hooks and background raw-input sinks (`inputaudit.ps1`) | Firmware-origin input and secure-desktop attribution are not established. Key-state polling is not logged by Windows on this build, and watchers registered before the broker's audit trace starts each boot are unseen, so a smooth cursor or an empty watcher list does not mean nothing is watching input |
 | Camera, audio, Bluetooth | Device presence/status inventory; separate capability checks | No content recording or complete attribution of every device control change |
 | Remote control | Existing control, backdoor, firewall and startup collectors | Protected Windows processes require additional privileges |
 | App traffic | TCP/UDP endpoint samples every 2 minutes; bounded history | Short-lived traffic and packet payloads; UDP direction unknown |

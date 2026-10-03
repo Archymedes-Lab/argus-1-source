@@ -13,7 +13,8 @@ import os
 import re
 import subprocess
 
-from jarvis.platform.windows import ps_json
+from jarvis.platform import host
+from jarvis.platform.windows import ps_json, stdin_text
 
 # Defender's scanner, in the versioned platform directory it ships in.
 _MPCMDRUN = (r"$d=(Get-ChildItem 'C:\ProgramData\Microsoft\Windows Defender\Platform' "
@@ -33,13 +34,11 @@ def defender_scan(win_path, timeout=180):
     if not isinstance(win_path, str) or not re.match(r"^[A-Za-z]:\\", win_path):
         return {"available": False, "clean": None, "threat": "",
                 "output": "not a Windows path"}
-    # The path travels as base64 so nothing from a finding is interpolated
-    # into the command line.
-    import base64
-    blob = base64.b64encode(win_path.encode("utf-8")).decode()
+    # The path travels over stdin so nothing from a finding is interpolated
+    # into (or visible on) the command line.
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
-        f"$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'));"
+        + stdin_text("p") +
         f"{_MPCMDRUN}"
         "$out='';$code=-1;"
         "if(Test-Path -LiteralPath $exe){"
@@ -50,7 +49,7 @@ def defender_scan(win_path, timeout=180):
         "Select-Object -First 1;if($t){$threat=[string]$t.ThreatName}}catch{}"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(@{exe=$exe;code=$code;out=$out;threat=$threat}|ConvertTo-Json -Compress)))")
-    result = ps_json(script, timeout=timeout)
+    result = ps_json(script, timeout=timeout, payload=win_path)
     if not isinstance(result, dict) or int(result.get("code", -1)) < 0:
         return {"available": False, "clean": None, "threat": "",
                 "output": "Defender could not be run (no Windows bridge, or MpCmdRun missing)"}
@@ -67,18 +66,16 @@ def authenticode(win_path):
     if not isinstance(win_path, str) or not re.match(r"^[A-Za-z]:\\", win_path):
         return {"available": False, "status": "", "signer": "",
                 "output": "not a Windows path"}
-    import base64
-    blob = base64.b64encode(win_path.encode("utf-8")).decode()
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
-        f"$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'));"
+        + stdin_text("p") +
         "$s=Get-AuthenticodeSignature -LiteralPath $p;"
         "$o=@{exists=[bool](Test-Path -LiteralPath $p);status=[string]$s.Status;"
         "signer=if($s.SignerCertificate){[string]$s.SignerCertificate.Subject}else{''};"
         "error=[string]$s.StatusMessage};"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "($o|ConvertTo-Json -Compress)))")
-    result = ps_json(script, timeout=30)
+    result = ps_json(script, timeout=30, payload=win_path)
     if not isinstance(result, dict):
         return {"available": False, "status": "", "signer": "",
                 "output": "Windows signature query unavailable"}
@@ -206,8 +203,7 @@ def inspect(path="", pid=None, yara_rules=""):
     local = path
     win_path = path if isinstance(path, str) and re.match(r"^[A-Za-z]:\\", path) else ""
     if win_path:
-        drive = win_path[0].lower()
-        local = "/mnt/" + drive + win_path[2:].replace("\\", "/")
+        local = host.local_path(win_path)
         report["defender"] = defender_scan(win_path)
         report["authenticode"] = authenticode(win_path)
     if local:

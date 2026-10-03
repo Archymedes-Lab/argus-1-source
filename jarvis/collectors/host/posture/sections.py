@@ -1,10 +1,13 @@
 """Posture rules, one function per area, each reading the sample and returning findings."""
 
+from jarvis.core import observation
 from jarvis.platform.windows import aslist
 
 from .common import _finding
 
 CONHOST = "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}"
+# Defender's AntivirusSignatureAge encodes "not initialized" as 65535.
+SIGNATURE_AGE_SENTINELS = {65535: "Defender reported its not-initialized value (65535)"}
 
 
 # The five ASR rules that matter most on a workstation that runs Office and a
@@ -77,11 +80,23 @@ def _malware_defense(d):
                 "Defender — which is the first thing most intrusions do",
                 "Windows Security > Virus & threat protection > "
                 "Manage settings > Tamper Protection ON"))
-        age = dfn.get("AntivirusSignatureAge")
-        if isinstance(age, int) and age > 3:
+        # Typed reading: 65535 is Defender's "unknown", seen while the engine
+        # is still starting; it is not an age and must not read as 179 years.
+        # A missing or malformed value is unknown too, never a fresh age.
+        age = observation.judge(
+            observation.reading("Defender signature age",
+                                dfn.get("AntivirusSignatureAge"),
+                                SIGNATURE_AGE_SENTINELS, "Get-MpComputerStatus"),
+            lambda days: days <= 3)
+        if not age.known:
             out.append(_finding(
-                "malware defense", "high" if age > 14 else "medium",
-                f"malware signatures are {age} days old",
+                "visibility", "low", "Defender signature age is not known yet",
+                f"{age.reason} (sensor {age.health}); unknown, not current; the next "
+                "posture run re-reads it", "Get-MpComputerStatus"))
+        elif age.verdict == observation.KNOWN_UNSAFE:
+            out.append(_finding(
+                "malware defense", "high" if age.value > 14 else "medium",
+                f"malware signatures are {age.value} days old",
                 "signature updates ship several times a day",
                 "Update-MpSignature"))
         if not dfn.get("BehaviorMonitorEnabled"):
@@ -95,6 +110,14 @@ def _malware_defense(d):
                 f"Defender is running in {mode} mode",
                 "passive mode means it is not the primary protection"))
 
+    if not pref:
+        # An absent preference read is not "off": the broker's boot-time sample
+        # had none and read as three protections disabled plus every ASR rule.
+        out.append(_finding(
+            "visibility", "medium", "Defender preferences could not be read",
+            "PUA blocking, Network Protection and attack-surface-reduction rules "
+            "are unverified this run, not known to be off", "Get-MpPreference"))
+        return out
     if str(pref.get("PUAProtection")) not in ("1", "True"):
         out.append(_finding(
             "malware defense", "medium",

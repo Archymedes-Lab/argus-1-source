@@ -244,11 +244,12 @@ def rows_from_events(events):
             "start_address": t.get("start_address") or "",
             "description": (e.get("attrs") or {}).get("Description") or "",
             "error_id": (e.get("attrs") or {}).get("ID") or "",
+            "state": (e.get("attrs") or {}).get("State") or "",
         })
     return rows
 
 
-def _native(store, root=None, since=None):
+def _native(store, root=None, since=None, event_ids=None):
     """Read Sysmon events from the event log, if the sensor is delivering.
 
     New events since this consumer's offset, or with `since` (epoch seconds)
@@ -273,7 +274,9 @@ def _native(store, root=None, since=None):
             offset = 0
             start = datetime.fromtimestamp(since, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         events = [e for e in log.iter_events(after=offset, since=start)
-                  if e.get("channel") == CHANNEL and (start is None or (e.get("time") or "") >= start)]
+                  if e.get("channel") == CHANNEL
+                  and (start is None or (e.get("time") or "") >= start)
+                  and (event_ids is None or e.get("source_event") in event_ids)]
         through = log.last_seq
         lost = [a for a, b in log.missing() if b > offset]
     finally:
@@ -281,6 +284,46 @@ def _native(store, root=None, since=None):
     return ({"events": rows_from_events(events), "complete": not lost,
              "rareComplete": not lost, "source": "native sensor",
              "pruned": bool(lost)}, through)
+
+
+# A driver-queue drop reported within this many seconds after the service's
+# own "Started" event is the boot backlog, not loss while running.
+BOOT_DROP_WINDOW_S = 5
+BOOT_DROP_TITLE = "Sysmon lost events while starting at boot"
+
+
+def _epoch(value):
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _boot_backlog(when, eventlog=None):
+    """True when the native log holds a Sysmon "Started" event up to
+    BOOT_DROP_WINDOW_S before `when` (UTC "YYYY-MM-DD HH:MM:SS")."""
+    at = _epoch(when.replace(" ", "T") + "Z")
+    if at is None:
+        return False
+    since = datetime.fromtimestamp(at - BOOT_DROP_WINDOW_S - 1, timezone.utc)
+    try:
+        log = EventLog(eventlog) if eventlog else EventLog()
+    except (LogError, OSError):
+        return False
+    try:
+        for e in log.iter_events(since=since.strftime("%Y-%m-%dT%H:%M:%S")):
+            t = _epoch(e.get("time"))
+            if t is not None and t > at + 1:
+                break
+            if (e.get("channel") == CHANNEL and e.get("source_event") == 4
+                    and str((e.get("attrs") or {}).get("State")).lower() == "started"
+                    and t is not None and 0 <= at - int(t) <= BOOT_DROP_WINDOW_S + 1):
+                return True
+    except (LogError, OSError):
+        return False
+    finally:
+        log.close()
+    return False
 
 
 def drop_verdict(description):
@@ -300,13 +343,17 @@ def drop_verdict(description):
 # Categories that describe a run rather than something that happened.
 RUN_STATE = ("visibility", "telemetry")
 
-THREAD_RULES = "start-module-v1"
+THREAD_RULES = "start-module-v2"
+# A changed rule must replay every remote-thread event in the retained window
+# before replacing persisted injection findings. A partial or oversized replay
+# keeps the prior warning rather than silently erasing it.
+REJUDGE_REMOTE_MAX = 5000
 KERNEL_SPACE = 0xFFFF800000000000
 LOADLIBRARY = {"loadlibrarya", "loadlibraryw", "loadlibraryexa", "loadlibraryexw",
                "ldrloaddll"}
 
 
-def thread_verdict(image, target, module, function, address):
+def thread_verdict(image, target, module, function, address, ctrl_addresses=()):
     """-> None for routine, or (severity, why) for a remote thread (Sysmon 8).
 
     Where the new thread starts decides it, as mature rules do. Measured here
@@ -326,6 +373,14 @@ def thread_verdict(image, target, module, function, address):
         return None                     # user-mode code cannot start a thread here
     if func == "ctrlroutine" and _base(module) in ("kernelbase.dll", "kernel32.dll"):
         return None                     # console control (Ctrl+C) delivery
+    if (not module and _base(image) == "csrss.exe" and start
+            and start in ctrl_addresses):
+        # Measured 2026-09-23: at shutdown csrss delivers console close to
+        # llama-server; Sysmon, racing the teardown, left the module blank
+        # but the address was exactly KERNELBASE!CtrlRoutine as resolved for
+        # ollama.exe in the same boot. System DLLs share one base per boot,
+        # so an equal address is that routine, not unbacked memory.
+        return None
     if src in SYSTEM_INJECTORS and dst in SYSTEM_INJECTORS:
         return None
     if func in LOADLIBRARY:
@@ -344,6 +399,40 @@ def thread_verdict(image, target, module, function, address):
                           + ", a file-backed start in another process")
     return ("high", "a thread starting in another process's address space; Sysmon "
                     "recorded no start module to judge it by")
+
+
+CTRL_ROUTINE_WINDOW_S = 30
+
+
+def _ctrl_routine_addresses(remote_threads):
+    """Resolved CtrlRoutine starts in this batch, with source timestamps.
+
+    A bare address saved across boots is not proof: ASLR addresses can be
+    reused. Require a resolved system-DLL event in the same short burst.
+    """
+    known = {}
+    for _img, _tgt, when, module, function, address in remote_threads:
+        if (str(function or "").strip().lower() != "ctrlroutine"
+                or _base(module) not in ("kernelbase.dll", "kernel32.dll")):
+            continue
+        at = _epoch(when)
+        try:
+            value = int(str(address), 16)
+        except ValueError:
+            continue
+        if at is not None and value:
+            known.setdefault(value, []).append(at)
+    return known
+
+
+def _near_ctrl_routine(address, when, known):
+    try:
+        value = int(str(address), 16)
+    except ValueError:
+        return False
+    at = _epoch(when)
+    return at is not None and any(
+        abs(at - ref) <= CTRL_ROUTINE_WINDOW_S for ref in known.get(value, ()))
 
 
 def _sha256_of(hashes):
@@ -405,28 +494,29 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     # the fallback for machines without the sensor, or while it is down.
     rejudge = store is not None and store.get_meta("sysmon_thread_rules", "") != THREAD_RULES
     native = None
+    replay_data = None
     if store is not None:
         # Incremental runs start from the consumer offset — on first use, the
         # whole retained history, not just the last day. A one-off CLI read
         # asks for its window by source time instead.
-        native = _native(store, eventlog, since=None if incremental else now() - hours * 3600)
+        native = _native(store, eventlog,
+                         since=None if incremental else now() - hours * 3600)
+        if native is not None and rejudge and incremental:
+            # Keep the ordinary offset stream intact. Rule changes need only
+            # the rare Event 8 history, not every event from a busy full day.
+            replay = _native(store, eventlog, since=now() - hours * 3600,
+                             event_ids={8})
+            if replay is not None:
+                replay_data = replay[0]
     query_started = now()
     minutes = None
     if native is not None:
         data, through = native
-        if rejudge:
-            store.db.execute("DELETE FROM sysmon_hits WHERE category='injection'")
-            store.commit()
     else:
         through = None
         failed = _query_blocked()
         if failed:
             return failed
-        if rejudge:
-            # Stored injection hits predate the start-module rules and carry no
-            # start module to re-judge by: drop them and re-read the whole window.
-            store.db.execute("DELETE FROM sysmon_hits WHERE category='injection'")
-            store.commit()
         if incremental and store is not None:
             last = int(store.get_meta("sysmon_last_run", 0) or 0)
             if last:
@@ -438,7 +528,21 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
         collection.failed('sysmon', 'event query incomplete; cursor retained')
         return [_finding('visibility', 'high', 'Sysmon event query failed',
                          'Previous cursor retained; missing events are not a clean result.', CHANNEL)]
+    if replay_data is not None and replay_data.get('complete') and replay_data.get('rareComplete'):
+        seen_seq = {e.get('seq') for e in data['events'] if e.get('seq') is not None}
+        data['events'] = list(data['events']) + [
+            e for e in replay_data.get('events', ())
+            if e.get('seq') is not None and e.get('seq') not in seen_seq
+            and (through is None or e['seq'] <= through)]
+        data['rareComplete'] = True
+    elif rejudge and native is not None and incremental:
+        # A failed historical replay cannot erase stored injection verdicts,
+        # but it must not obstruct the complete live incremental stream.
+        data['rareComplete'] = False
     events = aslist(data.get("events"))
+    replay_complete = (rejudge and data.get('complete') and data.get('rareComplete')
+                       and sum(int(e.get('id') or 0) == 8 for e in events)
+                       <= REJUDGE_REMOTE_MAX)
     out = []
     if not data.get('complete', False):
         if native is not None:
@@ -452,13 +556,15 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                                 'The query cap was reached or completeness was not established. '
                                 'The cursor is retained; install the native sensor '
                                 '(windows-sensor/install.ps1) to drain the backlog.', CHANNEL))
-    window = ("the native sensor since the last run" if native is not None and incremental
+    window = ("the native sensor's full review window" if native is not None and replay_complete
+              else "the native sensor since the last run" if native is not None and incremental
               else f"the last {minutes} minutes" if minutes else f"the last {hours}h")
 
     lsass_hits, remote_threads, tampering = [], [], []
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
     dropped, drop_times = {}, []
+    boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
 
     for e in events:
         eid = int(e.get("id") or 0)
@@ -476,7 +582,8 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 mask = None     # unreadable rights are judged as memory access
             lsass_hits.append((image, e.get("granted"), e.get("time"),
                                bool(mask and mask & VM_READ),
-                               bool(mask) and not mask & ~QUERY_ONLY))
+                               bool(mask) and not mask & ~QUERY_ONLY,
+                               e.get("process_guid") or ""))
         elif eid == 8:
             remote_threads.append((image, e.get("target"), e.get("time"),
                                    e.get("start_module") or "", e.get("start_function") or "",
@@ -504,17 +611,39 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             cmdline = e.get("cmdline") or ""
             if RANSOM_RECOVERY.search(cmdline):
                 recovery_tamper.append((image, cmdline, e.get("time")))
+        elif eid == 4:
+            if str(e.get("state") or "").lower() == "started":
+                service_starts.append(_epoch(e.get("time")))
         elif eid == 255:
             desc = e.get("description") or ""
             if "dropped" in desc.lower():
-                for kind, n in DROPPED.findall(desc):
-                    if kind != "DriverQueueSize" and int(n):
-                        dropped[kind] = dropped.get(kind, 0) + int(n)
-                drop_times.append(e.get("time") or "")
+                drop_reports.append((e.get("time") or "", desc))
+
+    # -- the sensor's queue: boot backlog vs loss while running ---------------
+    # Classified after the loop: the service's "Started" and its drop report
+    # are milliseconds apart and may arrive in either order.
+    for when, desc in drop_reports:
+        at = _epoch(when)
+        boot = at is not None and any(
+            s is not None and 0 <= at - s <= BOOT_DROP_WINDOW_S for s in service_starts)
+        into, times = (boot_dropped, boot_drop_times) if boot else (dropped, drop_times)
+        for kind, n in DROPPED.findall(desc):
+            if kind != "DriverQueueSize" and int(n):
+                into[kind] = into.get(kind, 0) + int(n)
+        times.append(when)
 
     # -- credential access -------------------------------------------------
-    for image, granted, when, read, query_only in lsass_hits:
+    for image, granted, when, read, query_only, guid in lsass_hits:
         if query_only:
+            script = _broker_script(guid, eventlog)
+            if script:
+                out.append(_finding(
+                    "credential access", "low",
+                    f"{_base(image)} queried LSASS (JARVIS broker)",
+                    _lsass_query_detail(granted, iso_of(when)) + f" This process ran "
+                    f"JARVIS's reviewed broker script {script} from the "
+                    f"administrator-only broker folder.", image))
+                continue
             out.append(_finding(
                 "credential access", "medium", f"{_base(image)} queried LSASS",
                 _lsass_query_detail(granted, iso_of(when)), image))
@@ -531,9 +660,18 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
 
     # -- injection ---------------------------------------------------------
     routine = 0
-    for image, target, when, module, function, address in remote_threads[:40]:
+    replayed_injections = set()
+    ctrl_addresses = _ctrl_routine_addresses(remote_threads)
+    for image, target, when, module, function, address in (
+            remote_threads if replay_complete else remote_threads[:40]):
         src, dst = _base(image), _base(target)
-        verdict = thread_verdict(image, target, module, function, address)
+        if replay_complete:
+            replayed_injections.add((
+                f"{src or '<unknown process>'} created a thread inside "
+                f"{dst or '<exited process>'}", image))
+        nearby = {int(str(address), 16)} if _near_ctrl_routine(
+            address, when, ctrl_addresses) else set()
+        verdict = thread_verdict(image, target, module, function, address, nearby)
         if verdict is None:
             routine += 1
             continue
@@ -590,6 +728,18 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             f"events — narrow the noisiest event type in the Sysmon configuration.",
             CHANNEL))
 
+    if boot_dropped:
+        total = sum(boot_dropped.values())
+        worst = ", ".join(f"{k} {v}" for k, v in sorted(boot_dropped.items(), key=lambda kv: -kv[1]))
+        out.append(_finding(
+            "telemetry loss", "medium", BOOT_DROP_TITLE,
+            f"{total} events queued by the driver before the Sysmon service started "
+            f"did not fit its queue ({worst}), last at {iso_of(max(boot_drop_times))}. "
+            f"The window is bounded: from boot until the service starts, when "
+            f"configuration filtering begins, so most of these are event types the "
+            f"policy would discard. Process starts in that window are treated as "
+            f"unknown, never as verified.", CHANNEL))
+
     # -- correlation with the intelligence corpus --------------------------
     if store is not None:
         out += _correlate(store, dns_names, proc_hashes)
@@ -597,7 +747,15 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     # Persist and re-surface. Reading incrementally means each run sees only
     # new events, so anything worth reporting has to outlive its own snapshot.
     if store is not None:
-        out = _remember(store, out, hours)
+        if replay_complete:
+            # Only replace a verdict when its underlying event was actually
+            # replayed. A formerly observed event absent from retained source
+            # evidence is uncertainty, not proof that the alert was false.
+            for title, image in replayed_injections:
+                store.db.execute(
+                    "DELETE FROM sysmon_hits WHERE category='injection' "
+                    "AND title=? AND where_=?", (title[:300], image[:400]))
+        out = _remember(store, out, hours, eventlog)
         if native is not None and incremental and data.get('complete'):
             store.set_meta('sysmon_eventlog_seq', through)
             store.set_meta('sysmon_last_run', query_started)
@@ -607,7 +765,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             # of skipping unseen records. The native store makes this atomic.
             store.set_meta('sysmon_last_run', query_started)
             store.commit()
-        if rejudge and data.get('rareComplete'):
+        if replay_complete:
             store.set_meta('sysmon_thread_rules', THREAD_RULES)
             store.commit()
 
@@ -621,6 +779,35 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     return sort_findings(out)
 
 
+_BROKER_FILE = re.compile(
+    r'-File\s+"?C:\\ProgramData\\Jarvis\\Broker\\([A-Za-z0-9_.-]+\.ps1)"?(\s|$)', re.I)
+
+
+def _broker_script(guid, eventlog=None):
+    """The broker script a process ran, when its recorded start shows JARVIS's
+    elevated broker running a staged script that still matches the reviewed
+    checkout; "" otherwise. The broker folder is administrator-only."""
+    if not guid:
+        return ""
+    try:
+        from jarvis.platform import broker
+        log = EventLog(eventlog) if eventlog else EventLog()
+    except (LogError, OSError):
+        return ""
+    try:
+        if log.db is None:
+            return ""
+        row = log.db.execute("SELECT cmdline FROM processes WHERE guid=?", (guid,)).fetchone()
+    except Exception:
+        return ""
+    finally:
+        log.close()
+    m = _BROKER_FILE.search(str(row[0] if row else ""))
+    if not m or m.group(1) not in broker.SCRIPTS.values() or m.group(1) in broker.drifted():
+        return ""
+    return m.group(1)
+
+
 def _lsass_query_detail(granted, when):
     return (f"granted access {granted} — {when}. Query-only rights cannot read "
             f"LSASS memory; they can open its token, so an unfamiliar process "
@@ -632,7 +819,7 @@ def iso_of(t):
     return (t or "")[:19].replace("T", " ")
 
 
-def _remember(store, findings, hours):
+def _remember(store, findings, hours, eventlog=None):
     """Store this run's real findings, and return everything still in window.
 
     The `ok` rows are per-run status and are not kept — only things that
@@ -695,6 +882,23 @@ def _remember(store, findings, hours):
                        VALUES(?,?,?,?,?,?)
                        ON CONFLICT(category,title,where_) DO UPDATE SET
                            ts=MAX(ts, excluded.ts)""",
+                    (r["ts"], r["category"], severity, title, detail[:600], r["where_"]))
+                store.db.execute(
+                    "DELETE FROM sysmon_hits WHERE category=? AND title=? AND where_=?",
+                    (r["category"], r["title"], r["where_"]))
+                store.commit()
+        if r["category"] == "telemetry loss" and title == "Sysmon dropped events before logging them":
+            m = re.search(r"most recently (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)", detail)
+            if m and _boot_backlog(m.group(1), eventlog):
+                # Stored before boot backlog was told apart from runtime loss.
+                severity, title = "medium", BOOT_DROP_TITLE
+                detail = detail.split(". Nothing that reads")[0] + (
+                    ". Reported with the service's own start at boot: the driver's "
+                    "backlog before filtering began, a bounded window.")
+                store.db.execute(
+                    """INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_)
+                       VALUES(?,?,?,?,?,?) ON CONFLICT(category,title,where_)
+                       DO UPDATE SET ts=MAX(ts, excluded.ts)""",
                     (r["ts"], r["category"], severity, title, detail[:600], r["where_"]))
                 store.db.execute(
                     "DELETE FROM sysmon_hits WHERE category=? AND title=? AND where_=?",

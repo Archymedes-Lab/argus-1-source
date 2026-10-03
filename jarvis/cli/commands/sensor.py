@@ -12,6 +12,7 @@ Status and health need no privilege: they read the spool the service writes.
 import subprocess
 
 from jarvis.core.paths import repo_file
+from jarvis.platform import host
 from jarvis.platform import windows as win
 from jarvis.platform.native import ingest
 
@@ -19,9 +20,7 @@ SENSOR_FILES = ["JarvisSensor.cs", "install.ps1"]
 
 
 def _winpath(path):
-    out = subprocess.run(["wslpath", "-w", str(path)], capture_output=True, text=True,
-                         errors="replace")
-    return out.stdout.strip()
+    return host.windows_name(path)
 
 
 def _elevated(args, timeout=300):

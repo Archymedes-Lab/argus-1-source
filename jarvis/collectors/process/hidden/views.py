@@ -8,6 +8,8 @@ import os
 import re
 import struct
 
+from jarvis.platform.linux import signal_zero
+
 from .common import DEFAULT_SWEEP, PROC, _read
 
 SYS_getdents64 = {"x86_64": 217, "aarch64": 61, "armv7l": 217, "i686": 220}
@@ -87,7 +89,7 @@ def view_kill_probe(limit=DEFAULT_SWEEP):
     found = set()
     for pid in range(1, limit + 1):
         try:
-            os.kill(pid, 0)
+            signal_zero(pid)
         except ProcessLookupError:
             continue
         except PermissionError:
@@ -99,6 +101,22 @@ def view_kill_probe(limit=DEFAULT_SWEEP):
     return found
 
 
+# Linux 5.13 moved /proc/sched_debug here; reading it needs root or
+# CAP_DAC_READ_SEARCH (debugfs is 0700).
+SCHED_DEBUGFS = "/sys/kernel/debug/sched/debug"
+# The kernel's initial pid namespace (PROC_PID_INIT_INO).
+INIT_PID_NS = "pid:[4026531836]"
+
+
+def pid_namespace_nested():
+    """True inside a child pid namespace (a container, or a WSL2 distro),
+    where the scheduler's global pids cannot be matched to this /proc."""
+    try:
+        return os.readlink(f"{PROC}/self/ns/pid") != INIT_PID_NS
+    except OSError:
+        return False
+
+
 def view_sched_debug():
     """Read pids out of /proc/sched_debug.
 
@@ -108,7 +126,9 @@ def view_sched_debug():
     not. Returns None when the kernel was built without CONFIG_SCHED_DEBUG,
     which is a missing view rather than a clean one.
     """
-    text = _read(f"{PROC}/sched_debug")
+    if pid_namespace_nested():
+        return None     # the scheduler lists global pids; /proc here does not
+    text = _read(f"{PROC}/sched_debug") or _read(SCHED_DEBUGFS)
     if not text.strip():
         return None
     pids = set()

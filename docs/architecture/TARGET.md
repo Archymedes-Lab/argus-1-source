@@ -33,7 +33,7 @@ jarvis/
                  flash (startup tracing), evidence/,
                  reporting/ (notifications, advisory, cadence, commands, diff)
   service/       schedule (job table), jobs (runner), scheduler, coverage,
-                 selfcheck, deadman, connectivity, protection, sdnotify
+                 selfcheck, supervisors, connectivity, protection, sdnotify
   lab/           JARVIS Arena: adversarial validation (scenario, isolation,
                  scoring, regression, runner, providers/, intel candidate boundary)
   web/           server (dashboard state + HTTP), static/
@@ -47,7 +47,7 @@ Kept at the repository root on purpose:
 
 - `install.sh`, `quickstart.sh`, `quickstart.ps1`, `jarvis.sh`, `README.md`,
   `QUICKSTART.md`: the documented entry points.
-- `wake-jarvis.ps1`, `deadman-jarvis.ps1`, `connectivity-jarvis.ps1`: the
+- `jarvis-wake-watchdog.ps1`, `jarvis-health-monitor.ps1`, `jarvis-connectivity-guard.ps1`: the
   installed Windows tasks self-sync from `<RepoRoot>\<name>`, and
   `control.py` hashes them there. If one moved, the deployed copy would log
   "self-sync skipped" and silently stop receiving fixes.

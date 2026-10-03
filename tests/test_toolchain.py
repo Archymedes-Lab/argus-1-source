@@ -1,9 +1,11 @@
+import hashlib
 import json
 import os
 import tempfile
 import unittest
 
 from jarvis.collectors.host import toolchain as tc
+from jarvis.collectors.host.toolchain import agents as tc_agents
 
 # Patch where each name is looked up: tc re-exports these, but the callers
 # resolve them inside their own module, so rebinding on tc has no effect.
@@ -150,6 +152,39 @@ class InstructionFileTests(unittest.TestCase):
             self.assertEqual(tc._check_instruction_files([d]), [])
 
 
+class ReviewedPluginTests(unittest.TestCase):
+    def test_only_exact_reviewed_files_and_source_are_low(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as home:
+            base = os.path.join(home, ".claude", "plugins")
+            plugin = os.path.join(base, "cache", "typesafe-ai", "typesafe", "0.5.7")
+            os.makedirs(plugin)
+            _write(os.path.join(plugin, "skills", "typesafe-ai", "SKILL.md"), "reviewed")
+            wanted = {"skills/typesafe-ai/SKILL.md": hashlib.sha256(b"reviewed").hexdigest()}
+            _write(os.path.join(base, "installed_plugins.json"), json.dumps({"plugins": {
+                "typesafe@typesafe-ai": [{"version": "0.5.7", "installPath": plugin,
+                                        "gitCommitSha": tc_agents.REVIEWED_TYPESAFE_COMMIT}]}}))
+            _write(os.path.join(base, "known_marketplaces.json"), json.dumps({
+                "typesafe-ai": {"source": {"source": "github", "repo": "typesafe-ai/skills"}}}))
+            with mock.patch.object(tc_agents, "_home", return_value=home), \
+                 mock.patch.object(tc_agents, "REVIEWED_TYPESAFE", wanted):
+                self.assertEqual([f["severity"] for f in tc_agents._check_agent_plugins()],
+                                 ["low"])
+                self.assertNotIn("gitCommitSha", tc_agents._check_agent_plugins()[0]["detail"])
+                _write(os.path.join(plugin, "skills", "typesafe-ai", "SKILL.md"), "changed")
+                self.assertEqual([f["severity"] for f in tc_agents._check_agent_plugins()],
+                                 ["medium"])
+                _write(os.path.join(plugin, "skills", "typesafe-ai", "SKILL.md"), "reviewed")
+                _write(os.path.join(plugin, "hooks", "run.sh"), "echo surprise")
+                self.assertEqual([f["severity"] for f in tc_agents._check_agent_plugins()],
+                                 ["medium"])
+                os.unlink(os.path.join(plugin, "hooks", "run.sh"))
+                _write(os.path.join(base, "known_marketplaces.json"), json.dumps({
+                    "typesafe-ai": {"source": {"source": "github", "repo": "wrong/repo"}}}))
+                self.assertEqual([f["severity"] for f in tc_agents._check_agent_plugins()],
+                                 ["medium"])
+
+
 class PthTests(unittest.TestCase):
     def test_the_standard_shims_are_exempt_on_name_and_content_together(self):
         self.assertTrue(tc._is_packaging_shim(
@@ -287,3 +322,53 @@ class RepoCacheTests(unittest.TestCase):
             tc.reset_cache()
             fresh, _ = tc.repos(root=d)
             self.assertEqual(len(fresh), 2)      # next run: sees the new clone
+
+
+class SelfAuthoredHookTests(unittest.TestCase):
+    def setUp(self):
+        import subprocess
+        import tempfile
+        self.sp = subprocess
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = self.tmp.name
+        os.makedirs(os.path.join(self.home, ".config", "gh"))
+        with open(os.path.join(self.home, ".config", "gh", "hosts.yml"), "w") as fh:
+            fh.write("github.com:\n    oauth_token: x\n    user: owner\n")
+        self.repo = os.path.join(self.home, "proj")
+        os.makedirs(os.path.join(self.repo, ".claude"))
+        self.path = os.path.join(self.repo, ".claude", "settings.json")
+        self.git("init", "-q")
+        self.git("config", "user.email", "me@example.com")
+        self.git("config", "user.name", "me")
+        self.git("remote", "add", "origin", "https://github.com/owner/proj.git")
+        self.commit("{}")
+
+    def git(self, *args, env=None):
+        self.sp.run(["git", "-C", self.repo, *args], check=True, capture_output=True,
+                    env={**os.environ, **(env or {})})
+
+    def commit(self, body, email=None):
+        with open(self.path, "w") as fh:
+            fh.write(body)
+        self.git("add", ".")
+        env = {"GIT_AUTHOR_EMAIL": email} if email else None
+        self.git("commit", "-q", "-m", "x", env=env)
+
+    def verified(self):
+        from jarvis.collectors.host.toolchain import agents
+        return agents._self_authored(self.path, self.home)
+
+    def test_own_committed_hook_in_own_repo_is_verified(self):
+        self.assertTrue(self.verified())
+
+    def test_foreign_author_uncommitted_edit_or_foreign_origin_is_not(self):
+        with open(self.path, "a") as fh:
+            fh.write(" ")
+        self.assertFalse(self.verified())                       # uncommitted
+        self.git("checkout", "--", ".claude/settings.json")
+        self.git("remote", "set-url", "origin", "https://github.com/someone/proj.git")
+        self.assertFalse(self.verified())                       # not your account
+        self.git("remote", "set-url", "origin", "https://github.com/owner/proj.git")
+        self.commit('{"hooks": 1}', email="other@example.com")
+        self.assertFalse(self.verified())                       # someone else wrote it

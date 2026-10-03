@@ -62,17 +62,39 @@ class AcknowledgeTests(unittest.TestCase):
         self.assertIsNotNone(ack.revoke(self.store, fid))
         self.assertEqual(ack.load(self.store), {})
 
-    def test_accepted_risk_keeps_score_debt_but_leaves_notification_list(self):
+    def _snaps(self, finding):
         snaps = {job: {"ts": NOW - 1, "findings": [], "error": ""} for job in JOBS}
-        snaps["backdoor"]["findings"] = [f()]
+        snaps["backdoor"]["findings"] = [finding]
+        return snaps
+
+    def _area(self, result):
+        return next(a for a in result["areas"] if a["name"] == "Persistence & access")
+
+    def test_accepted_finding_is_charged_as_low_and_stays_visible(self):
+        snaps = self._snaps(f())
         before = score.compute(snaps, JOBS, NOW)
         ack.acknowledge(self.store, f(), "backdoor", "Codex sandbox", now=NOW)
         acks = ack.load(self.store)
         after = score.compute(snaps, JOBS, NOW, acks)
-        self.assertEqual(before["score"], after["score"])
-        self.assertLess(after["score"], 100)
+        self.assertGreater(after["score"], before["score"])
+        self.assertEqual(self._area(after)["score"], 100)
+        self.assertEqual(self._area(after)["open"], {"low": 1})
         self.assertEqual(after["acknowledged"], 1)
+        self.assertEqual(snaps["backdoor"]["findings"][0]["severity"], "high")
+        self.assertFalse(any(s["job"] == "backdoor" for s in after["next_steps"]))
         self.assertEqual(triage.current(snaps, acks=acks, now=NOW), [])
+
+    def test_acceptance_stops_lowering_on_worse_expiry_or_a_different_finding(self):
+        ack.acknowledge(self.store, f("medium"), "backdoor", "expected", days=30, now=NOW)
+        acks = ack.load(self.store)
+        for label, finding, when in (
+                ("worse", f("high"), NOW),
+                ("expired", f("medium"), NOW + 30 * 86400),
+                ("different", f("medium", detail="another account"), NOW)):
+            with self.subTest(label):
+                snaps = self._snaps(finding)
+                self.assertEqual(score.compute(snaps, JOBS, when, acks)["score"],
+                                 score.compute(snaps, JOBS, when)["score"])
 
     def test_confirm_cards_show_the_ack_command(self):
         from jarvis.response.reporting import email_ui

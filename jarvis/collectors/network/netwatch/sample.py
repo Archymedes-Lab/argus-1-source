@@ -43,7 +43,7 @@ def _parse_wlan(text):
             out["state"] = v.lower()
         elif k == "ssid" and "bssid" not in k:
             out["ssid"] = v
-        elif k == "bssid":
+        elif k in ("bssid", "ap bssid"):
             out["bssid"] = v.lower()
         elif k == "channel":
             out["channel"] = int(v) if v.isdigit() else 0
@@ -58,12 +58,13 @@ def _parse_wlan(text):
     return out
 
 
-def sample(since_ts=None):
+def sample(since_ts=None, posture=False):
     """One reading of current network state plus every log entry since `since_ts`.
 
     Reading the Windows logs incrementally is what makes complete coverage
     affordable: a full week costs seconds, five minutes of new entries costs
-    almost nothing, and nothing is skipped either way.
+    almost nothing, and nothing is skipped either way. `posture` adds the
+    half-hourly wireless posture block (see posture.py).
     """
     if since_ts:
         # A minute of overlap so an entry written between the query and the
@@ -72,7 +73,8 @@ def sample(since_ts=None):
         since = f"(Get-Date).AddSeconds(-{secs})"
     else:
         since = "(Get-Date).AddDays(-7)"
-    script = PS_NET.replace("__SINCE__", since)
+    script = (PS_NET.replace("__SINCE__", since)
+                    .replace("__POSTURE__", "$true" if posture else "$false"))
     data = ps_json(script, timeout=180)
     if not data:
         return None
@@ -116,7 +118,9 @@ def sample(since_ts=None):
     else:
         state = wlan.get("state") or status.lower() or "unknown"
 
-    # netsh needs Location permission (or elevation) to reveal SSID/BSSID.
+    # netsh needs Location consent in this execution context to reveal
+    # SSID/BSSID; a background service can remain denied after the user
+    # enables Location for interactive apps.
     # Without it the field is simply absent, which would look exactly like a
     # disconnected adapter — so the blocker is recorded explicitly instead.
     raw = data.get("wlan") or ""
@@ -138,4 +142,17 @@ def sample(since_ts=None):
         "_wlanlog": aslist(data.get("wlanlog")),
         "_netprofile": aslist(data.get("netprofile")),
         "_adapters": adapters,
+        "_posture": _posture(data.get("posture")),
     }
+
+
+def _posture(raw):
+    """Normalise the posture block's PowerShell shapes (single items arrive
+    unwrapped). None when this sample did not include it."""
+    if not isinstance(raw, dict):
+        return None
+    p = dict(raw)
+    for key in ("direct", "vpn", "routes", "open_auto"):
+        p[key] = aslist(p.get(key))
+    p["at"] = now()
+    return p

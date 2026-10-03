@@ -5,6 +5,7 @@ import os
 import subprocess
 
 from jarvis.core.util import now
+from jarvis.platform import host
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
 
@@ -39,7 +40,7 @@ def _paths():
     resolved = bool(base)
     base = base or r"C:\Windows\Temp"
     p = base.replace("\\", "/")
-    wsl = "/mnt/" + p[0].lower() + p[2:] if len(p) > 2 and p[1] == ":" else "/tmp"
+    wsl = host.local_path(base) if len(p) > 2 and p[1] == ":" else "/tmp"
     wsl_dir = os.path.join(wsl, "Jarvis")
     try:
         os.makedirs(wsl_dir, exist_ok=True)
@@ -194,18 +195,25 @@ def start():
     # Fallback while the task cannot run (not yet registrable, or Task
     # Scheduler refused): launch it directly, but only through a socket that
     # reaches the desktop — a hook in session 0 heartbeats and sees nothing.
-    desktop = collect_windows.desktop_interop()
-    if not desktop:
-        return (f"{task_error}; and no WSL connection reaches the Windows desktop "
-                f"session, so the hook cannot be started where it can see input")
+    if host.native_windows():
+        desktop = ""
+        if not collect_windows.on_desktop():
+            return (f"{task_error}; and JARVIS is not running in the Windows desktop "
+                    f"session, so the hook cannot be started where it can see input")
+    else:
+        desktop = collect_windows.desktop_interop()
+        if not desktop:
+            return (f"{task_error}; and no WSL connection reaches the Windows desktop "
+                    f"session, so the hook cannot be started where it can see input")
     cmd = ("Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "
            "'-NoProfile','-NonInteractive','-WindowStyle','Hidden',"
            "'-ExecutionPolicy','Bypass','-File','"
            + script_win + "','-OutFile','" + win_out + "'")
     try:
         subprocess.run([collect_windows._PS, "-NoProfile", "-NonInteractive",
-                        "-Command", cmd], capture_output=True, timeout=90, cwd="/",
-                       env={**os.environ, "WSL_INTEROP": desktop})
+                        "-Command", cmd], capture_output=True, timeout=90,
+                       cwd=host.subprocess_cwd(), **host.spawn_options(),
+                       env={**os.environ, "WSL_INTEROP": desktop} if desktop else None)
     except (OSError, subprocess.SubprocessError) as exc:
         return f"{task_error}; direct start failed too: {exc}"
     return ""

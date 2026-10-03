@@ -4,9 +4,10 @@ import os
 import re
 import stat
 
+from jarvis.core import fsperm
 from jarvis.core.finding import finding as _finding
 
-from .exposure import _git_tracked, _other_humans, _world_readable
+from .exposure import _git_tracked, _other_humans, _private_project_env, _world_readable
 from .patterns import _mask, fingerprint, scan_file
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -75,6 +76,7 @@ CREDENTIAL_FILES = (
     ".npmrc", ".git-credentials", ".pypirc", ".netrc",
     ".aws/credentials", ".config/gh/hosts.yml", ".docker/config.json",
     ".kube/config", ".config/gcloud/credentials.db",
+    ".config/.wrangler/config/default.toml",
 )
 
 
@@ -138,19 +140,14 @@ def default_roots():
     return roots
 
 
-# Files that are worth reading individually even though scanning their parent
-# directory would be far too broad.
-# Files that exist to hold one tool's own login, relative to $HOME. A token
-# here is where that tool must keep it: WSL has no keyring daemon, and a
-# keyring would not stop malware running as this user anyway. Its remaining
-# risks are covered where they belong: other accounts and git are checked
-# below, and the unencrypted disk is its own posture finding. So a copy here
-# is at-rest inventory (medium, still scored). The same value anywhere else
-# is a leak and keeps its full severity.
+# Files that exist to hold one tool's own login, relative to $HOME. Their
+# owner-only, untracked copies are advisory inventory. A value copied outside
+# its tool store remains actionable, as do loose or shared files.
 DESIGNATED_STORES = {
     ".claude/.credentials.json": "Claude Code",
     ".config/gh/hosts.yml": "GitHub CLI",
     ".config/cursor/auth.json": "Cursor",
+    ".config/.wrangler/config/default.toml": "Wrangler",
     # The owner's own app keeps its API key in its XDG config (2026-09-23).
     ".config/archymedes/settings.json": "archymedes",
 }
@@ -167,7 +164,7 @@ def _designated_store(path, home):
         st = os.lstat(path)
     except OSError:
         return None
-    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+    if not stat.S_ISREG(st.st_mode) or not fsperm.owner_only(st):
         return None
     return tool
 
@@ -234,20 +231,26 @@ def audit(roots=None, hosts=("wsl",), deep=False):
             sev = "critical" if sev in ("critical", "high") else "high"
             extra = ("  the file is readable by other accounts on this system ("
                      + ", ".join(others[:3]) + ")")
-        stores = {_designated_store(p, home) for p, _ in paths}
-        store_tool = next(iter(stores)) if len(stores) == 1 else None
-        if cat == "present" and store_tool and not others:
-            sev = "medium" if sev in ("critical", "high") else sev
-            extra = (f"  Stored where {store_tool} keeps its login (owner-only file, "
-                     "no other accounts, not tracked by git). Any process running "
-                     "as you can still read it.")
+        locations = {
+            _designated_store(p, home)
+            or ("project environment file" if _private_project_env(p, home) else None)
+            for p, _ in paths
+        }
+        protected = next(iter(locations)) if len(locations) == 1 else None
+        if cat == "present" and protected and not others:
+            sev = "low"
+            extra = ("  Expected local software credential in an owner-only, "
+                     "untracked store. Any process running as you can still read "
+                     "it; review access and rotate if it was exposed elsewhere.")
 
         where = f"{first_path}:{first_line}"
         more = (f" (+{len(paths) - 1} more location"
                 f"{'s' if len(paths) > 2 else ''})" if len(paths) > 1 else "")
         description = "stored locally" if info['kind'].startswith("private key block") else "in plaintext"
-        if cat == "present" and store_tool and not others:
-            description = f"in {store_tool}'s credential store"
+        if cat == "present" and protected and not others:
+            description = ("in a private project environment file"
+                           if protected == "project environment file" else
+                           f"in {protected}'s credential store")
         context = "Volume encryption has not been verified for this file; credential validity and external exposure were not checked."
         if info['kind'] == "AWS access key id":
             context += " An access key ID alone cannot authenticate; the matching secret access key is required."

@@ -2,18 +2,22 @@
 
 import errno
 import os
+import time
 
+from jarvis.core import epochs
+from jarvis.core.observation import CONFIRMED, INCONCLUSIVE, TRANSIENT
 from jarvis.platform.linux import socket_table
 
 from .common import PROC
 
 
-def orphan_sockets():
-    """Socket inodes bound to a connection that no visible process holds an fd
-    for. Under-privileged scans see plenty of these (you cannot read another
-    user's fd table), so this is only reported when we are root."""
-    table = socket_table()
+def _unclaimed_socket_rows():
+    """Take one uncached socket/fd view, retaining inode identity for recheck."""
+    # The shared five-second socket cache can describe a connection that has
+    # already closed before the fd sweep starts. Attribution needs fresh views.
+    table = socket_table(fresh=True)
     claimed = set()
+    denied = 0
     for entry in os.listdir(PROC):
         if not entry.isdigit():
             continue
@@ -22,21 +26,58 @@ def orphan_sockets():
             for fd in os.listdir(fddir):
                 try:
                     target = os.readlink(f"{fddir}/{fd}")
-                except OSError:
+                except OSError as exc:
+                    if exc.errno in (errno.EACCES, errno.EPERM):
+                        denied += 1
                     continue
                 if target.startswith("socket:["):
                     claimed.add(int(target[8:-1]))
-        except OSError:
+        except OSError as exc:
+            if exc.errno in (errno.EACCES, errno.EPERM):
+                denied += 1
             continue
 
-    orphans = []
+    orphans = {}
     for inode, conn in table.items():
         if inode in claimed or inode == 0:
             continue
         if conn["state"] in ("TIME_WAIT", "CLOSE"):
             continue  # kernel-owned leftovers, no process behind them
-        orphans.append(conn)
-    return orphans
+        orphans[inode] = conn
+    return bool(table), orphans, denied
+
+
+def orphan_sockets():
+    """Return attributed observations and fd-visibility limitations.
+
+    Bounded coherent confirmation (core.observation): exactly one fresh
+    re-query. A socket closing between /proc/net and the fd walk has no owner
+    to find, so an unowned socket absent from the second view (or replaced by
+    a different connection under the same inode) is "transient"; it is still
+    returned so the first sighting stays on record, never scored as a
+    confirmed discrepancy. A failed second read, or a sleep/resume/clock step
+    between the views, is "inconclusive" and keeps the original severity.
+    Keep persistent discrepancies visible, including WSL sockets whose owners
+    may be outside this distro. This remains a root-only check at the caller.
+    """
+    before = epochs.sample()
+    first_valid, first, first_denied = _unclaimed_socket_rows()
+    if not first_valid:
+        raise RuntimeError("socket tables unreadable; owner attribution unavailable")
+    if not first:
+        return [], first_denied
+    time.sleep(0.35)
+    second_valid, second, second_denied = _unclaimed_socket_rows()
+    denied = first_denied + second_denied
+    visibility = "limited" if denied else "complete"
+    if not second_valid or not epochs.coherent(before, epochs.sample()):
+        # A failed second read must not turn a suspicious first view into a
+        # clean bill of health. A subsequent collector run can resolve it.
+        return [{**conn, "_verification": INCONCLUSIVE, "_fd_visibility": visibility}
+                for conn in first.values()], denied
+    return ([{**conn, "_verification": CONFIRMED if second.get(inode) == conn else TRANSIENT,
+              "_fd_visibility": visibility}
+             for inode, conn in first.items()], denied)
 
 
 def hidden_listeners(limit=10000):

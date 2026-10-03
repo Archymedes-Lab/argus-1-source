@@ -1168,7 +1168,7 @@ above it in this table (`tests/test_layers.py` enforces it). See
 | `scripts/harden/` | Linux and Windows hardening |
 | `scripts/repair/` | targeted repair and remediation scripts, repair-helper installer |
 | `scripts/maintenance/` | re-wrapping the installed Windows monitor tasks |
-| `wake-jarvis.ps1`, `deadman-jarvis.ps1`, `connectivity-jarvis.ps1` | Windows watchdog tasks; they stay at the root because installed copies sync from this path |
+| `jarvis-wake-watchdog.ps1`, `jarvis-health-monitor.ps1`, `jarvis-reviver.ps1`, `jarvis-connectivity-guard.ps1`, `jarvis-elevated-broker.ps1` | Windows supervisor tasks, each file named after the scheduled task it installs; they stay at the root because installed copies sync from this path ([naming and migration](docs/guides/WINDOWS-SUPERVISOR-NAMES.md)) |
 | `systemd/`, `sysmon/` | units, drop-ins, sudoers rules, Sysmon for Linux policy |
 | `docs/guides/`, `docs/reports/` | operating guides and dated investigation reports |
 
@@ -1182,7 +1182,7 @@ mount. `jarvis repair all` repairs unhealthy components; individual actions are
 `sudo bash scripts/repair/install-repair-helper.sh`. Its sudo rules permit only these fixed
 actions; Windows administrator operations still require Windows elevation.
 
-`deadman-jarvis.ps1` runs from `%LOCALAPPDATA%\Jarvis\Deadman` as a native
+`jarvis-health-monitor.ps1` runs from `%LOCALAPPDATA%\Jarvis\HealthMonitor` as a native
 Windows scheduled task, independent of WSL. It checks scheduler progress every
 minute, confirms outages across two probes, and sends toast/email notifications
 with one-time 1h/6h/24h escalation and recovery notification. Its `mail.json`

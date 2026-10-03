@@ -19,6 +19,26 @@ _PTH_SHIMS = (
 )
 
 
+def _record_owner(path):
+    """The distribution whose install RECORD lists this file with the same
+    SHA-256, or "". RECORD hashes are urlsafe base64 without padding."""
+    import base64
+    import hashlib
+    site, name = os.path.dirname(path), os.path.basename(path)
+    try:
+        with open(path, "rb") as fh:
+            digest = base64.urlsafe_b64encode(hashlib.sha256(fh.read()).digest())
+        digest = digest.rstrip(b"=").decode()
+    except OSError:
+        return ""
+    for record in glob.glob(os.path.join(site, "*.dist-info", "RECORD")):
+        for row in _read(record, 2_000_000).splitlines():
+            parts = row.rsplit(",", 2)
+            if len(parts) == 3 and parts[0] == name and parts[1] == f"sha256={digest}":
+                return os.path.basename(os.path.dirname(record)).rsplit(".dist-info", 1)[0]
+    return ""
+
+
 def check_git_hooks(hosts=("wsl", "win")):
     """Scripts `git` runs for you, and redirections of where it looks for them."""
     if "wsl" not in hosts:
@@ -178,10 +198,20 @@ def _check_pth_files():
                 if _is_packaging_shim(os.path.basename(path), s):
                     continue
                 key = (os.path.basename(path), s)
-                hits.setdefault(key, []).append(_short(path))
+                hits.setdefault(key, []).append(path)
 
-    for (fname, line), paths in hits.items():
+    for (fname, line), full_paths in hits.items():
+        paths = [_short(x) for x in full_paths]
         payload = bool(PAYLOAD_RE.search(line))
+        owners = [_record_owner(x) for x in full_paths]
+        if not payload and all(owners):
+            out.append(_finding(
+                "packages", "low", f"executable .pth line in {fname}",
+                f"`{line[:240]}` — shipped by {', '.join(sorted(set(owners)))}: "
+                f"the file's SHA-256 matches that package's install RECORD, so "
+                f"it is what the package installed, not a later edit.",
+                paths[0]))
+            continue
         extra = (f" Seen in {len(paths)} environments." if len(paths) > 1
                  else "")
         out.append(_finding(

@@ -13,6 +13,7 @@ from jarvis.core.finding import finding as _finding
 # their sub-techniques unless a sub-technique is listed on its own.
 COVERAGE = {
     "T1014":     "hidden / evasion — rootkit detection",
+    "T1542":     "preos — measured-boot replay against a pinned baseline",
     "T1055":     "hidden — process injection artefacts",
     "T1027":     "detect — obfuscated/encoded command lines",
     "T1036":     "detect — masquerading (name vs executable)",

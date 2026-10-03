@@ -4,6 +4,7 @@ import os
 import subprocess
 
 from jarvis.core.paths import load_win_script
+from jarvis.platform import host
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
 
@@ -17,7 +18,7 @@ def _win_temp():
         "(ConvertTo-Json @{t=$env:TEMP})))", timeout=60)
     win = (out or {}).get("t") or r"C:\Windows\Temp"
     p = win.replace("\\", "/")
-    wsl = "/mnt/" + p[0].lower() + p[2:] if len(p) > 2 and p[1] == ":" else "/tmp"
+    wsl = host.local_path(win) if len(p) > 2 and p[1] == ":" else "/tmp"
     return win, wsl
 
 
@@ -65,7 +66,8 @@ def elevated_data(timeout=300):
     try:
         subprocess.run([collect_windows._PS, "-NoProfile", "-NonInteractive",
                         "-Command", launcher],
-                       capture_output=True, timeout=timeout, cwd="/")
+                       capture_output=True, timeout=timeout,
+                       cwd=host.subprocess_cwd(), **host.spawn_options())
     except subprocess.TimeoutExpired:
         return None, "timed out waiting for the elevation prompt"
     except OSError as exc:

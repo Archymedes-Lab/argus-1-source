@@ -9,9 +9,13 @@ try {
       $x = [xml]$_.ToXml()
       $d = @{}
       $x.Event.EventData.Data | ForEach-Object { $d[$_.Name] = $_.'#text' }
-      [pscustomobject]@{ user = $d['TargetUserName']; ip = $d['IpAddress'] }
-    } | Group-Object { "$($_.user)|$($_.ip)" } |
-    Sort-Object Count -Descending | Select-Object -First 6 |
+      $proc = [string]$d['ProcessName']
+      if ($proc) { $proc = Split-Path -Leaf $proc }
+      [pscustomobject]@{ user = $d['TargetUserName']; ip = $d['IpAddress']
+                         status = ([string]$d['Status']).ToLower(); sub = ([string]$d['SubStatus']).ToLower()
+                         proc = $proc }
+    } | Group-Object { "$($_.user)|$($_.ip)|$($_.status)|$($_.sub)|$($_.proc)" } |
+    Sort-Object Count -Descending | Select-Object -First 40 |
     ForEach-Object { @{ key = $_.Name; n = $_.Count } }
 } catch {
   $m = "$($_.Exception.Message)"

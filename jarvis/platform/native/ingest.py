@@ -30,12 +30,20 @@ from pathlib import Path
 
 from jarvis.core import event as event_mod
 from jarvis.core.eventlog import EventLog
-from jarvis.platform import mounts
+from jarvis.platform import host, mounts
 
 from . import normalize
 from .store import MAX_BATCH_BYTES, BatchError, validate
 
-SPOOL = Path(os.environ.get("JARVIS_SENSOR_SPOOL", "/mnt/c/ProgramData/Jarvis/Sensor"))
+SPOOL = Path(os.environ.get("JARVIS_SENSOR_SPOOL")
+             or host.program_data("Jarvis", "Sensor") or "/nonexistent/Jarvis/Sensor")
+ISOLATED_CHANNELS = (
+    "Microsoft-Windows-Sysmon/Operational",
+    "Microsoft-Windows-Windows Defender/Operational",
+    "Microsoft-Windows-TaskScheduler/Operational",
+)
+ISOLATED_SERVICES = dict(zip(ISOLATED_CHANNELS, (
+    "JarvisSensorSysmon", "JarvisSensorDefender", "JarvisSensorTasks")))
 
 # Per run: 400 batches is up to 200,000 records, a few minutes of a busy
 # backlog. The rest waits for the next run with the cursor where it stopped.
@@ -50,8 +58,19 @@ QUARANTINE = "quarantine"
 
 
 def read_health(spool=SPOOL):
+    spool = Path(spool)
     try:
-        with open(Path(spool) / "health.json", "rb") as fh:
+        mode = json.loads((spool / "mode.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        mode = None
+    except (OSError, ValueError) as exc:
+        return {"status": "unreadable", "reason": f"mode receipt: {str(exc)[:160]}"}
+    if mode is not None:
+        if mode != {"mode": "isolated", "schema": 1}:
+            return {"status": "unreadable", "reason": "unknown native sensor mode receipt"}
+        return _isolated_health(spool)
+    try:
+        with open(spool / "health.json", "rb") as fh:
             health = json.loads(fh.read(1024 * 1024).decode("utf-8-sig"))
     except FileNotFoundError:
         return None
@@ -59,6 +78,56 @@ def read_health(spool=SPOOL):
         return {"status": "unreadable", "reason": str(exc)[:200]}
     health["age"] = _age(health.get("time"))
     return health
+
+
+def _isolated_health(spool):
+    """Compose independent receipts without letting one healthy channel mask another."""
+    states = {}
+    receipts = []
+    for channel in ISOLATED_CHANNELS:
+        name = hashlib.sha256(channel.encode("utf-8")).hexdigest()[:16]
+        try:
+            raw = (spool / name / "health.json").read_bytes()[:1024 * 1024]
+            receipt = json.loads(raw.decode("utf-8-sig"))
+            state = receipt["channels"][channel]
+            if (receipt.get("schema") != 2 or not isinstance(state, dict)
+                    or receipt.get("service") != ISOLATED_SERVICES[channel]):
+                raise ValueError("invalid channel receipt")
+            age = _age(receipt.get("time"))
+            if age is None or age < -60 or age > HEALTH_STALE:
+                state = {**state, "status": "unavailable", "reason": "channel heartbeat stale"}
+            states[channel] = state
+            receipts.append(receipt)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            states[channel] = {"status": "unavailable", "reason": f"channel receipt missing or invalid: {type(exc).__name__}"}
+    identities = {receipt.get("sensor_id") for receipt in receipts}
+    devices = {receipt.get("device_id") for receipt in receipts}
+    if len(identities) != 1 or None in identities or len(devices) != 1 or None in devices:
+        for state in states.values():
+            state["status"] = "unavailable"
+            state["reason"] = "channel identity disagreement or missing receipt"
+    ages = [_age(receipt.get("time")) for receipt in receipts]
+    valid_ages = [age for age in ages if age is not None]
+    try:
+        monitor = json.loads((spool / "monitor.json").read_text(encoding="utf-8"))
+        monitor["age"] = _age(monitor.get("time"))
+        if (monitor.get("schema") != 1 or not isinstance(monitor.get("services"), dict)
+                or monitor["age"] is None or monitor["age"] < -60
+                or monitor["age"] > HEALTH_STALE):
+            monitor = {"status": "unavailable", "reason": "monitor receipt stale or invalid"}
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        monitor = {"status": "unavailable", "reason": f"monitor receipt missing or invalid: {type(exc).__name__}"}
+    return {
+        "schema": 2, "mode": "isolated", "sensor_id": next(iter(identities)) if len(identities) == 1 else None,
+        "device_id": next(iter(devices)) if len(devices) == 1 else None,
+        "channels": states, "age": max(valid_ages) if valid_ages else None,
+        "status": "unavailable" if any(s["status"] == "unavailable" for s in states.values()) else "complete",
+        "reason": "; ".join(channel + ": " + str(state.get("reason", "unavailable"))
+                           for channel, state in states.items() if state["status"] == "unavailable")[:300],
+        "spool_bytes": sum(int(receipt.get("spool_bytes") or 0) for receipt in receipts),
+        "spool_capacity": sum(int(receipt.get("spool_capacity") or 0) for receipt in receipts),
+        "monitor": monitor,
+    }
 
 
 def _age(stamp):
@@ -130,10 +199,13 @@ def _event(record, batch):
             boot=batch.get("boot_id"), channel=batch["channel"],
             generation=batch["generation"], record=record["record_id"],
             source=normalize.SOURCES.get(batch["channel"], "windows-eventlog"),
-            source_event=record["event_id"], time=record["time"], received=record["time"],
+            source_event=record["event_id"], time=record["time"],
+            received=record.get("read_time") or record["time"],
             batch=batch["sequence"], category="unknown",
             action=f"event_{record['event_id']}",
-            attrs={"_normalize_error": str(exc)[:200]}, raw=record["xml"])
+            attrs={"_normalize_error": str(exc)[:200],
+                   "_received_basis": "sensor_read" if record.get("read_time")
+                                      else "event_time_fallback"}, raw=record["xml"])
 
 
 def _split_at_reuse(events):
@@ -382,6 +454,8 @@ def _manifest_channels(log, spool, health, max_batches):
     states = health.get("channels")
     sensor_id = health.get("sensor_id")
     if health.get("schema") != 2 or not isinstance(states, dict) or not sensor_id:
+        if health.get("mode") == "isolated":
+            return []  # fail closed on identity disagreement; never scan unknown publishers
         return None
     channels = []
     for channel, state in states.items():

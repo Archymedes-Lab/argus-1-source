@@ -2,7 +2,15 @@
 
 Pure data, so the scheduler, the coverage self-audit, the report cadence and the
 dashboard can all read the one table without importing each other.
+
+ALL_JOBS is every audit JARVIS has. JOBS is the part of it that applies to the
+machine this process runs on (platform/host.py): a native Windows install has
+no Linux domain to audit, a plain Linux one no Windows domain. A job outside
+JOBS is never scheduled, never expected and never scored - it is listed in
+NOT_APPLICABLE with the reason, so the absence is stated rather than silent.
 """
+
+from jarvis.platform import host
 
 # name -> (interval seconds, label, callable(hosts) -> list[finding])
 # Intervals have to fit through one worker. The scheduler runs jobs strictly
@@ -26,7 +34,7 @@ dashboard can all read the one table without importing each other.
 #
 # Sysmon earned its short interval by reading only what happened since the
 # last run instead of re-reading a day of log every time.
-JOBS = {
+ALL_JOBS = {
     "scan":     (60,    "Processes & network"),
     # Early in the dict so that on a cold start these two watchdogs run before
     # the long Windows audits, not after them. Both healthy paths are
@@ -50,10 +58,17 @@ JOBS = {
     "resources":(300,   "Resource pressure"),
     "internet": (120,   "Internet apps & incoming traffic"),
     "controls": (300,   "Brightness & control devices"),
+    "audio":    (300,   "Audio endpoints & routes"),
+    # Replays the TPM measured-boot logs (local file reads) and one bounded
+    # event-log query, about 3 s. Boots are rare; a baseline drift persists.
+    "preos":    (1800,  "Pre-OS boot integrity"),
     "deep_hidden": (86400, "Deep process cross-view scan"),
     "hidden":   (300,   "Hidden processes"),
     "firewall": (2400,  "Firewall & inbound"),
     "control":  (1800,  "Control surfaces"),
+    # One registry/environment read, about 1s: CLR profiler, startup-hook,
+    # AppDomainManager and runtime-ETW settings, and the AMSI providers.
+    "dotnet":   (1800,  ".NET runtime hijack points"),
     "asep":     (3600,  "Autostart points"),
     "spy":      (5400,  "Spyware & capabilities"),
     "pixel":    (3600,  "Screen capture & tracking pixels"),
@@ -120,6 +135,9 @@ JOBS = {
     # Device location & geofencing. One registry read when location is off;
     # one native-locator call when the user has consented.
     "geo":      (900,   "Device location & geofencing"),
+    # Docker container inventory: privilege flags, namespace sharing, socket
+    # and sensitive-mount exposure. `docker inspect` per container, read-only.
+    "containers": (900, "Container privilege and exposure inventory"),
     # Is the local Ollama endpoint actually there? One loopback GET (or one
     # bridge round trip), never a generation, never the model lock — so it is
     # cheap enough for its own cadence and a dead model becomes a known state.
@@ -136,3 +154,31 @@ JOBS = {
     # are hashed each run, every vaulted payload once a day.
     "evidence": (900,   "Evidence vault & anchors"),
 }
+
+# Audits of one execution domain only. Everything else either observes both
+# domains (and narrows itself to the `hosts` it is given) or describes JARVIS
+# itself. A collector belongs here only when it has nothing to observe without
+# that domain - never because it is failing.
+WINDOWS_ONLY = frozenset({
+    "bridge", "input_hook", "input", "native", "internet", "controls", "audio",
+    "preos", "dotnet", "asep", "evasion", "intrusion", "boot", "posture",
+    "memscan", "sysmon", "geo",
+})
+LINUX_ONLY = frozenset({"auditd", "sysmon_linux", "containers"})
+
+
+def applicable(windows, linux, jobs=None):
+    """(schedule, {job: reason}) for a machine with these execution domains."""
+    jobs = ALL_JOBS if jobs is None else jobs
+    keep, absent = {}, {}
+    for name, spec in jobs.items():
+        if name in WINDOWS_ONLY and not windows:
+            absent[name] = "this machine has no Windows domain to observe"
+        elif name in LINUX_ONLY and not linux:
+            absent[name] = "this machine has no Linux domain to observe"
+        else:
+            keep[name] = spec
+    return keep, absent
+
+
+JOBS, NOT_APPLICABLE = applicable(host.has_windows(), host.has_linux())

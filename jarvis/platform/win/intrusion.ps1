@@ -49,6 +49,8 @@ $o.threatNames = @(Get-MpThreat | Select-Object -First 40 |
                       ForEach-Object { $_.Substring(6) })
     [pscustomobject]@{
       name      = [string]$_.ThreatName
+      id        = [string]$_.ThreatID
+      executed  = [bool]$_.DidThreatExecute
       severity  = [string]$_.SeverityID
       resources = [string]($res -join ' | ')
       active    = [bool]$_.IsActive

@@ -3,7 +3,8 @@
 A detection JARVIS cannot judge (a sandbox account a tool created, an updater
 that injects a thread) stays in "Needs you — confirm" until someone decides.
 Acknowledging records that decision and suppresses repeated email attention.
-Accepted findings retain their Protection Health debt.
+The security score charges an accepted finding as low (owner decision
+2026-09-25); everything below is what keeps that from hiding a change.
 
 What an acknowledgement is not:
 

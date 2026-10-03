@@ -69,6 +69,61 @@ class InputForensicsTests(unittest.TestCase):
         with mock.patch.object(analysis, "ingest", lambda store: 0):
             return analysis.audit(self.store, hours=24, pids=[1], supervised=True)
 
+    def _injected(self):
+        return [f for f in self._audit() if f["title"].startswith(("1 injected", "2 injected"))]
+
+    def test_keyless_events_are_low_but_any_real_key_stays_high(self):
+        ms = (now() - 60) * 1000
+        none = dict(vk=255, vk_name="VK_NONE", scan=0, key_name="", chr="",
+                    lower_il=0, extra="0x4321DCBA")
+        self._drain([_key(ms, **none)])
+        self.assertEqual([f["severity"] for f in self._injected()], ["low"])
+        self._drain([_key(ms + 5, seq=1, lower_il=0)])     # a real 'q' joins the group
+        self.assertEqual([f["severity"] for f in self._injected()], ["high"])
+
+    def test_keyless_from_lower_integrity_stays_critical(self):
+        ms = (now() - 60) * 1000
+        self._drain([_key(ms, vk=255, vk_name="VK_NONE", scan=0, chr="")])
+        self.assertEqual([f["severity"] for f in self._injected()], ["critical"])
+
+    def test_exact_non_printable_media_key_is_not_charged_twice(self):
+        ms = (now() - 60) * 1000
+        key = _key(ms, vk=0xB3, vk_name="VK_0xB3", scan=0, chr="",
+                   key_name="", lower_il=0, fg="WindowsTerminal:1520")
+        control = {"ts": ms // 1000, "kind": "control-key",
+                   "control": "media-play-pause", "class": "media-play-pause",
+                   "injected": 1, "lower_il": 0, "fg": "WindowsTerminal:1520"}
+        self._drain([key, control])
+        findings = self._audit()
+        duplicate = next(f for f in findings if f["where"] == "input_events"
+                         and "media control" in f["title"])
+        self.assertEqual(duplicate["severity"], "low")
+        self.assertEqual(next(f for f in findings if f["title"] ==
+                              "media play/pause was injected by software")["severity"], "medium")
+        self.assertEqual(self.store.db.execute(
+            "SELECT COUNT(*) FROM input_events").fetchone()[0], 1)
+        self.assertEqual(self.store.db.execute(
+            "SELECT COUNT(*) FROM control_events").fetchone()[0], 1)
+
+    def test_unmatched_printable_and_lower_integrity_media_keys_stay_serious(self):
+        ms = (now() - 60) * 1000
+        control = {"ts": ms // 1000, "kind": "control-key",
+                   "control": "media-play-pause", "injected": 1,
+                   "lower_il": 0, "fg": "WindowsTerminal:1520"}
+        base = dict(vk=0xB3, vk_name="VK_0xB3", scan=0, chr="",
+                    key_name="", lower_il=0, fg="WindowsTerminal:1520")
+        for change, expected in (({"fg": "OtherWindow:1"}, "high"),
+                                 ({"chr": "x"}, "high"),
+                                 ({"lower_il": 1}, "critical")):
+            with self.subTest(change=change):
+                self.store.db.execute("DELETE FROM input_events")
+                self.store.db.execute("DELETE FROM control_events")
+                self._drain([_key(ms, **(base | change)), control])
+                key_findings = [f for f in self._audit()
+                                if f["where"] == "input_events" and
+                                f["title"].startswith("1 injected")]
+                self.assertEqual([f["severity"] for f in key_findings], [expected])
+
     def test_the_exact_injected_character_is_named_with_its_context(self):
         ms = (now() - 60) * 1000
         self._drain([_key(ms), _key(ms + 31, kind="key-up", seq=1), _burst(ms)])

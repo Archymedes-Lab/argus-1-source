@@ -1,15 +1,14 @@
 """Disable one suspicious Windows autostart entry and retain its undo data."""
 
-import base64
 import json
 
-from jarvis.platform.windows import ps_json
+from jarvis.platform.windows import ps_json, stdin_text
 
 from .base import AUTO, Action, register
 
 
-def _blob(target):
-    return base64.b64encode(json.dumps(target).encode("utf-8")).decode("ascii")
+def _payload(target):
+    return json.dumps(target)
 
 
 @register
@@ -46,14 +45,14 @@ class DisableAutostart(Action):
         return (f"Remove Run entry {target['name']} from {target['key']} after recording its "
                 "value. Reversible.")
 
-    def _run(self, script):
-        return ps_json(script, timeout=30)
+    def _run(self, script, payload):
+        return ps_json(script, timeout=30, payload=payload)
 
     def apply(self, target, case):
-        blob = _blob(target)
+        payload = _payload(target)
         script = (
             "$ErrorActionPreference='Stop';"
-            f"$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'))|ConvertFrom-Json;"
+            + stdin_text("t") + "$t=$t|ConvertFrom-Json;"
             "$ok=$false;$record=@{};$detail='';try{"
             "if($t.kind -eq 'task'){"
             "$x=Get-ScheduledTask -TaskPath $t.path -TaskName $t.name -ErrorAction Stop;"
@@ -73,7 +72,7 @@ class DisableAutostart(Action):
             "}}catch{$detail=[string]$_;$ok=$false};"
             "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
             "(@{ok=$ok;record=$record;detail=$detail}|ConvertTo-Json -Depth 5 -Compress)))")
-        result = self._run(script)
+        result = self._run(script, payload)
         if isinstance(result, dict) and result.get("ok"):
             return True, result.get("record") or {}, str(result.get("detail") or "disabled")
         return False, {}, str((result or {}).get("detail") or "autostart could not be disabled")
@@ -81,10 +80,10 @@ class DisableAutostart(Action):
     def undo(self, target, record):
         if not isinstance(record, dict) or record.get("kind") not in ("task", "runkey"):
             return False, "no valid undo record"
-        blob = _blob(record)
+        payload = _payload(record)
         script = (
             "$ErrorActionPreference='Stop';"
-            f"$r=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'))|ConvertFrom-Json;"
+            + stdin_text("r") + "$r=$r|ConvertFrom-Json;"
             "$ok=$false;$detail='';try{"
             "if($r.kind -eq 'task'){"
             "if($r.wasEnabled){Enable-ScheduledTask -TaskPath $r.path -TaskName $r.name|Out-Null};"
@@ -96,7 +95,7 @@ class DisableAutostart(Action):
             "}}catch{$detail=[string]$_;$ok=$false};"
             "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
             "(@{ok=$ok;detail=$detail}|ConvertTo-Json -Compress)))")
-        result = self._run(script)
+        result = self._run(script, payload)
         if isinstance(result, dict) and result.get("ok"):
             return True, str(result.get("detail") or "restored")
         return False, str((result or {}).get("detail") or "autostart could not be restored")
@@ -104,10 +103,10 @@ class DisableAutostart(Action):
     def recover(self, target, record):
         if not isinstance(target, dict) or target.get("kind") not in ("task", "runkey"):
             return "unknown", {}, "invalid autostart recovery target"
-        blob = _blob(target)
+        payload = _payload(target)
         script = (
             "$ErrorActionPreference='Stop';"
-            f"$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'))|ConvertFrom-Json;"
+            + stdin_text("t") + "$t=$t|ConvertFrom-Json;"
             "try{if($t.kind -eq 'task'){"
             "$x=Get-ScheduledTask -TaskPath $t.path -TaskName $t.name -ErrorAction Stop;"
             "$j=@{available=$true;disabled=($x.State -eq 'Disabled')}|ConvertTo-Json -Compress"
@@ -115,7 +114,7 @@ class DisableAutostart(Action):
             "$j=@{available=$true;disabled=($null -eq $item.GetValue($t.name,$null))}|ConvertTo-Json -Compress}}"
             "catch{$j=@{available=$false;disabled=$false}|ConvertTo-Json -Compress};"
             "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($j))")
-        result = self._run(script)
+        result = self._run(script, payload)
         if not isinstance(result, dict) or not result.get("available"):
             return "unavailable", {}, "Windows autostart state could not be read"
         if result.get("disabled"):

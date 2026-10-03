@@ -1,6 +1,6 @@
 """Guards for the out-of-WSL watchdog.
 
-wake-jarvis.ps1 is the only layer that can bring JARVIS back when WSL itself
+jarvis-wake-watchdog.ps1 is the only layer that can bring JARVIS back when WSL itself
 is down, and nothing else in this suite executes it. Two defects kept it dead
 for five days while Task Scheduler still reported the task Ready:
 
@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-WAKE = ROOT / "wake-jarvis.ps1"
+WAKE = ROOT / "jarvis-wake-watchdog.ps1"
 
 
 class WakeScriptTests(unittest.TestCase):

@@ -1,9 +1,47 @@
 """Storing every sample and raising timeline events for what changed, including
 entries folded in from the Windows WLAN logs."""
 
+import json
+
 from jarvis.core.util import now
 
 from .sample import _rank, sample
+
+POSTURE_META = "netwatch_posture"
+POSTURE_EVERY_S = 1800
+ROAM_PAIR_MAX_AGE_S = 900
+
+
+def confirmed_network_switch(prev, current):
+    """Both identified Wi-Fi networks differ; never infer this from missing IDs."""
+    return bool(prev["ssid"] and current["ssid"] and prev["bssid"]
+                and current["bssid"] and prev["ssid"] != current["ssid"]
+                and prev["bssid"] != current["bssid"])
+
+
+def coherent_unverified_roam(prev, current):
+    """Strong adjacent context supports roaming, never AP ownership."""
+    try:
+        age = int(current["ts"]) - int(prev["ts"])
+        auth = str(current["auth"] or "").strip().lower()
+        cipher = str(current["cipher"] or "").strip().lower()
+        return bool(
+            0 < age <= ROAM_PAIR_MAX_AGE_S
+            and prev["state"] == current["state"] == "connected"
+            and prev["iface"] == current["iface"]
+            and prev["ssid"] and prev["ssid"] == current["ssid"]
+            and prev["bssid"] and current["bssid"]
+            and prev["bssid"] != current["bssid"]
+            and auth == str(prev["auth"] or "").strip().lower()
+            and any(mode in auth for mode in ("wpa2-personal", "wpa2-enterprise",
+                                                   "wpa3-personal", "wpa3-enterprise", "wpa3-sae"))
+            and cipher == str(prev["cipher"] or "").strip().lower()
+            and any(mode in cipher for mode in ("ccmp", "gcmp", "aes"))
+            and all(prev[field] and prev[field] == current[field]
+                    for field in ("gateway", "gw_mac", "dns"))
+        )
+    except (KeyError, IndexError, TypeError, ValueError):
+        return False
 
 
 def _last_sample(store, iface):
@@ -31,7 +69,11 @@ def record(store, s=None):
             last = int(float(store.get_meta("netwatch_log_at", 0) or 0))
         except (TypeError, ValueError):
             last = 0
-        s = sample(since_ts=last or None)
+        try:
+            posture_at = float(json.loads(store.get_meta(POSTURE_META, "") or "{}").get("at") or 0)
+        except (TypeError, ValueError, AttributeError):
+            posture_at = 0.0
+        s = sample(since_ts=last or None, posture=now() - posture_at >= POSTURE_EVERY_S)
         if s:
             store.set_meta("netwatch_log_at", now())
     if not s:
@@ -68,38 +110,47 @@ def record(store, s=None):
                  prev["state"], s["state"])
 
         if s["state"] == "connected" and prev["state"] == "connected":
+            switched = confirmed_network_switch(prev, s)
+            if switched:
+                fire("network-switched", "low",
+                     "moved between two identified Wi-Fi networks; their DNS, "
+                     "gateway and encryption settings are separate baselines",
+                     prev["ssid"], s["ssid"])
             # -- access point swap -------------------------------------------
-            if prev["bssid"] and s["bssid"] and prev["bssid"] != s["bssid"]:
-                known = store.db.execute(
+            if not switched and prev["bssid"] and s["bssid"] and prev["bssid"] != s["bssid"]:
+                seen_before = store.db.execute(
                     "SELECT seen_count FROM known_aps WHERE ssid=? AND bssid=?",
                     (s["ssid"], s["bssid"])).fetchone()
-                if known:
-                    fire("ap-roam", "low",
-                         f"roamed to a known access point for {s['ssid']}",
-                         prev["bssid"], s["bssid"])
-                else:
-                    fire("ap-unknown", "high",
-                         f"{s['ssid']} is now served by hardware this machine "
-                         f"has never seen — the SSID is the same but the access "
-                         f"point is not, which is what an evil twin looks like",
-                         prev["bssid"], s["bssid"])
+                # known_aps is populated by every sample. A prior sighting is
+                # useful forensic context, but it cannot authenticate an AP.
+                # A replayed SSID/BSSID would pass an automatic known-AP test.
+                coherent = coherent_unverified_roam(prev, s)
+                fire("ap-repeat-unverified" if seen_before else "ap-unknown",
+                     "medium" if coherent else "high",
+                     (f"{s['ssid']} moved to an access point seen before" if seen_before
+                      else f"{s['ssid']} moved to a newly seen access point")
+                     + ("; recent strong Wi-Fi security and gateway/DNS context "
+                        "are unchanged, but AP ownership is unverified" if coherent else
+                        "; AP ownership or coherent network context is unverified"),
+                     prev["bssid"], s["bssid"])
 
             # -- encryption weakened -----------------------------------------
-            if _rank(s["auth"]) < _rank(prev["auth"]):
+            if not switched and _rank(s["auth"]) < _rank(prev["auth"]):
                 fire("crypto-downgrade", "critical",
                      f"encryption on {s['ssid']} weakened from "
                      f"{prev['auth']} to {s['auth']}",
                      prev["auth"], s["auth"])
 
             # -- gateway hardware changed -------------------------------------
-            if prev["gw_mac"] and s["gw_mac"] and prev["gw_mac"] != s["gw_mac"]:
+            if (not switched and prev["gw_mac"] and s["gw_mac"]
+                    and prev["gw_mac"] != s["gw_mac"]):
                 fire("gateway-changed", "high",
                      f"the default gateway {s['gateway']} is answering from a "
                      f"different MAC address — this is what ARP spoofing looks "
                      f"like", prev["gw_mac"], s["gw_mac"])
 
             # -- resolver changed ---------------------------------------------
-            if prev["dns"] and s["dns"] and prev["dns"] != s["dns"]:
+            if not switched and prev["dns"] and s["dns"] and prev["dns"] != s["dns"]:
                 fire("dns-changed", "high",
                      f"DNS servers for {iface} changed",
                      prev["dns"], s["dns"])
@@ -123,6 +174,8 @@ def record(store, s=None):
          s["gateway"], s["gw_mac"], s["dns"]))
 
     store.set_meta("netwatch_wlan_blocked", "1" if s.get("wlan_blocked") else "0")
+    if s.get("_posture"):
+        store.set_meta(POSTURE_META, json.dumps(s["_posture"]))
     _ingest_wlanlog(store, s.get("_wlanlog") or [], _WLAN_KIND)
     _ingest_wlanlog(store, s.get("_netprofile") or [], _PROFILE_KIND)
     store.commit()

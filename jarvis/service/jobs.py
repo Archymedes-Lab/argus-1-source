@@ -13,7 +13,11 @@ from contextlib import contextmanager
 
 from jarvis.collectors.host import (
     accelerator,
+    audiowatch,
+    bootintegrity,
+    containers,
     controlwatch,
+    dotnet_posture,
     geo,
     inputwatch,
     pixel,
@@ -39,17 +43,20 @@ from jarvis.collectors.telemetry import (
     sysmon_policy,
     sysmon_pressure,
 )
-from jarvis.core import collection, retention
+from jarvis.core import collection, historybook, retention
 from jarvis.core import mlworker as mlworker_mod
+from jarvis.core.eventlog import LogError
+from jarvis.core.finding import LOCAL_HOST
 from jarvis.core.store import Store
 from jarvis.intel import feeds, gaps, hunt
 from jarvis.intel import research as intel
 from jarvis.lab import audit as arena_audit
+from jarvis.platform import host
 from jarvis.platform import openvino as openvino_mod
-from jarvis.response import alert, llm
+from jarvis.response import alert, llm, memory_advice
 from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting.cadence import run as report_due
-from jarvis.service import attackmap, connectivity, deadman, selfcheck
+from jarvis.service import attackmap, connectivity, selfcheck, supervisors
 from jarvis.service import coverage as coverage_mod
 from jarvis.service.schedule import JOBS
 
@@ -76,6 +83,15 @@ def _scan(hosts, db_path):
     # its own store handle inside the worker thread.
     with _store(db_path) as store:
         res = monitor.scan(store, hosts=hosts)
+        history_error = None
+        try:
+            from pathlib import Path
+            historybook.record_snapshot(res.get("processes", []), hosts, res["ts"],
+                                        root=Path(db_path).absolute().parent / "eventlog")
+        except (LogError, OSError, ValueError) as exc:
+            history_error = type(exc).__name__
+            collection.failed("process-history", "process snapshot history not committed: "
+                              + history_error)
         policy = (sysmon_policy.audit() if "win" in hosts else
                   {"event1": "unknown", "detail": "Windows host not selected",
                    "source": "unavailable"})
@@ -110,6 +126,11 @@ def _scan(hosts, db_path):
         except Exception:
             pass
     out = []
+    if history_error:
+        out.append({"category": "visibility", "severity": "high", "host": LOCAL_HOST,
+                    "title": "Process history recording blocked",
+                    "detail": "Existing evidence retained; new sampled snapshot not committed: "
+                              + history_error, "where": "canonical event history"})
     for f in res["findings"]:
         remotes = ", ".join(
             f"{r['ip']}:{r['port']}" for r in f["remotes"][:3]
@@ -140,12 +161,21 @@ def _watchdogs(hosts, db_path):
     # Both halves of the supervision loop: the systemd timer that restarts
     # this daemon, and the Windows task that reports it missing when WSL
     # itself is down.
-    out = (deadman.audit() + deadman.audit_reviver() + deadman.audit_broker()
-           + connectivity.audit())
+    out = []
+    if host.has_windows():
+        # A machine with no Windows host has no Windows tasks to be watched by.
+        out += supervisors.audit_health_monitor()
+        out += (supervisors.audit_native_service() if host.native_windows()
+                else supervisors.audit_reviver())
+        out += supervisors.audit_broker() + connectivity.audit()
+    if host.native_windows():
+        # No systemd: the native service task above is the out-of-daemon
+        # watchdog, and its own task trigger is what restarts it.
+        return out
     active, enabled_state = selfcheck.timer_state()
     if not active:
         return out + [{
-            "category": "daemon", "severity": "high", "host": "wsl",
+            "category": "daemon", "severity": "high", "host": LOCAL_HOST,
             "title": "the out-of-daemon watchdog is not installed",
             "detail": "jarvis-selfcheck.timer is absent, so nothing outside "
                       "this process can restart it if it dies — and a dead "
@@ -155,7 +185,7 @@ def _watchdogs(hosts, db_path):
     err = selfcheck.ensure_timer()
     if err:
         return out + [{
-            "category": "daemon", "severity": "high", "host": "wsl",
+            "category": "daemon", "severity": "high", "host": LOCAL_HOST,
             "title": "the out-of-daemon watchdog has stopped",
             "detail": f"jarvis-selfcheck.timer is {active}/{enabled_state} "
                       f"and could not be re-armed: {err}",
@@ -164,14 +194,14 @@ def _watchdogs(hosts, db_path):
         # ensure_timer() fixed it. Say so — a watchdog that keeps needing
         # to be restarted is a finding, not a routine success.
         return out + [{
-            "category": "daemon", "severity": "medium", "host": "wsl",
+            "category": "daemon", "severity": "medium", "host": LOCAL_HOST,
             "title": "the out-of-daemon watchdog had stopped and was re-armed",
             "detail": f"jarvis-selfcheck.timer was {active}/{enabled_state}; "
                       f"it is running again. Repeated occurrences mean "
                       f"something is stopping it.",
             "where": "jarvis-selfcheck.timer"}]
     return out + [{
-        "category": "daemon", "severity": "ok", "host": "wsl",
+        "category": "daemon", "severity": "ok", "host": LOCAL_HOST,
         "title": "watchdogs supervise each other",
         "detail": f"jarvis-selfcheck.timer {active}/{enabled_state} — it "
                   f"restarts this daemon, this daemon re-arms it",
@@ -229,12 +259,12 @@ def _feeds(hosts, db_path):
         for r in results:
             if r.get("error"):
                 out.append({"category": "feed", "severity": "medium",
-                            "host": "wsl",
+                            "host": LOCAL_HOST,
                             "title": f"{r['name']} feed failed",
                             "detail": r["error"], "where": ""})
         kept = sum(r.get("kept", 0) for r in results if not r.get("error"))
         if kept:
-            out.append({"category": "feed", "severity": "low", "host": "wsl",
+            out.append({"category": "feed", "severity": "low", "host": LOCAL_HOST,
                         "title": f"{kept} indicators refreshed",
                         "detail": ", ".join(
                             r["name"] for r in results
@@ -246,7 +276,7 @@ def _feeds(hosts, db_path):
         removed = sum(r["rows"] for r in retention.apply(store))
         if removed:
             out.append({"category": "feed", "severity": "low",
-                        "host": "wsl",
+                        "host": LOCAL_HOST,
                         "title": f"{removed} aged rows removed",
                         "detail": "database retention policy; run "
                                   "`jarvis retention` to see what it keeps",
@@ -263,16 +293,16 @@ def _intel(hosts, db_path):
             # Not a failure: the brake worked. Say so quietly and keep the
             # previous findings on the dashboard.
             return [{"category": "intel", "severity": "low",
-                     "host": "wsl", "title": "intel refresh paused",
+                     "host": LOCAL_HOST, "title": "intel refresh paused",
                      "detail": str(exc), "where": ""}]
     out = []
     if stats["errors"]:
         out.append({
-            "category": "intel", "severity": "medium", "host": "wsl",
+            "category": "intel", "severity": "medium", "host": LOCAL_HOST,
             "title": "intel refresh had errors",
             "detail": "; ".join(stats["errors"])[:400], "where": ""})
     out.append({
-        "category": "intel", "severity": "low", "host": "wsl",
+        "category": "intel", "severity": "low", "host": LOCAL_HOST,
         "title": f"refreshed {', '.join(stats['topics'])}",
         "detail": f"{stats['docs']} documents, {stats['kept']} indicators "
                   f"kept of {stats['seen']} candidates, "
@@ -322,6 +352,7 @@ def _boot(hosts, db_path):
         snap = store.get_snapshots().get("control")
     if freshness(snap, JOBS["control"][0], time.time()) == "current":
         findings = startup.apply_verified_tasks(findings, snap.get("findings"))
+        findings = startup.apply_signed_tasks(findings, snap.get("findings"))
     return startup.sort_findings(findings)
 
 
@@ -355,12 +386,17 @@ RUNNERS = {
     "resources": _resources,
     "internet": _with_store(internetwatch.audit),
     "controls": _with_store(controlwatch.audit),
+    "audio": _with_store(audiowatch.audit),
+    "preos": _with_store(bootintegrity.audit),
     "deep_hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, deep=True)[0],
-    "hidden": lambda hosts, db_path: hidden.audit(hosts=hosts)[0],
+    "hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, db_path=db_path)[0],
     "firewall": _hosts_only(firewall.audit),
     "control": _hosts_only(control.audit),
+    "dotnet": _hosts_only(dotnet_posture.audit),
     "asep": _sorted(asep_mod),
-    "spy": _sorted(spyware),
+    # Both domains: it must be told which exist, or the Linux half runs on a
+    # machine that has no Linux side.
+    "spy": lambda hosts, db_path: spyware.sort_findings(spyware.audit(hosts=hosts)),
     "pixel": _hosts_only(pixel.audit),
     "identity": _with_store(impersonation.audit),
     "intrusion": _sorted(intrusion_mod),
@@ -379,7 +415,8 @@ RUNNERS = {
     "toolchain": _with_store(toolchain.audit),
     "ledger": _ledger,
     "input": _input(deep=True),
-    "memscan": _hosts_only(memscan.audit),
+    "memscan": lambda hosts, db_path: memscan.audit(hosts=hosts,
+                                                     advise=memory_advice.advisor()),
     "secrets": lambda hosts, db_path: secrets.audit(),
     "bruteforce": _hosts_only(bruteforce.audit),
     "sniffing": _hosts_only(sniffing.audit),
@@ -394,6 +431,7 @@ RUNNERS = {
     "evidence": _with_store(evidence.audit),
     "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
     "geo": _with_store(geo.audit),
+    "containers": _hosts_only(containers.audit),
     "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),
     "model": lambda hosts, db_path: [llm.status_findings(alert.load_conf())],
 }
@@ -404,4 +442,5 @@ def run_job(name, hosts, db_path):
     runner = RUNNERS.get(name)
     if runner is None:
         raise ValueError(name)
-    return runner(hosts, db_path)
+    from jarvis.collectors import verify_inventory
+    return verify_inventory.apply(name, runner(hosts, db_path))

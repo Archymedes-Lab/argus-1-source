@@ -1,4 +1,4 @@
-"""Results from the elevated collector broker (broker-jarvis.ps1).
+"""Results from the elevated collector broker (jarvis-elevated-broker.ps1).
 
 The broker is a Windows scheduled task that runs a fixed set of read-only
 collector scripts with the user's elevated token, from an administrator-only
@@ -17,8 +17,14 @@ import os
 import time
 
 from jarvis.core.paths import win_script
+from jarvis.platform import host
 
-ROOT = "/mnt/c/ProgramData/Jarvis/Broker"
+ROOT = host.program_data("Jarvis", "Broker")
+BROKER_SCRIPT = "jarvis-elevated-broker.ps1"
+# The name staged before the rename. A copy under it is trusted only while it
+# is byte-for-byte the pinned pre-rename release (persistence.LEGACY_LAYOUTS),
+# until `jarvis broker install` restages the broker under its new name.
+LEGACY_BROKER_SCRIPT = "broker-jarvis.ps1"
 OUT = os.path.join(ROOT, "out")
 SCRIPTS = {
     "posture": "posture.ps1",
@@ -27,6 +33,7 @@ SCRIPTS = {
     "sysmon_policy": "sysmon_policy.ps1",
     "sysmon_pressure": "sysmon_pressure.ps1",
     "vault": "vault.ps1",
+    "inputaudit": "inputaudit.ps1",
 }
 MAX_AGE = 45 * 60          # three missed 15-minute runs
 
@@ -41,7 +48,14 @@ def _norm_hash(path):
 
 
 def installed():
-    return os.path.exists(os.path.join(ROOT, "broker-jarvis.ps1"))
+    return any(os.path.exists(os.path.join(ROOT, name))
+               for name in (BROKER_SCRIPT, LEGACY_BROKER_SCRIPT))
+
+
+def _legacy_broker_verified():
+    from jarvis.platform.provenance.persistence import LEGACY_LAYOUTS
+    _script, _args, pinned = LEGACY_LAYOUTS["jarvis elevated broker"]
+    return _norm_hash(os.path.join(ROOT, LEGACY_BROKER_SCRIPT)) == pinned
 
 
 def status():
@@ -55,11 +69,17 @@ def status():
 
 def drifted():
     """Staged scripts that differ from this checkout (need -Install again)."""
-    names = ["broker-jarvis.ps1"] + list(SCRIPTS.values())
     out = []
+    if not os.path.exists(os.path.join(ROOT, BROKER_SCRIPT)) \
+            and os.path.exists(os.path.join(ROOT, LEGACY_BROKER_SCRIPT)):
+        if not _legacy_broker_verified():
+            out.append(LEGACY_BROKER_SCRIPT)
+        names = list(SCRIPTS.values())
+    else:
+        names = [BROKER_SCRIPT] + list(SCRIPTS.values())
     for name in names:
         repo = (os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), name)
-                if name == "broker-jarvis.ps1" else str(win_script(name)))
+                if name == BROKER_SCRIPT else str(win_script(name)))
         if _norm_hash(os.path.join(ROOT, name)) != _norm_hash(repo):
             out.append(name)
     return out

@@ -52,7 +52,8 @@ _MONITORING_CATEGORIES = {"visibility", "limits", "intel", "feed", "telemetry",
 # Files a tool manages as its own credential store. The right step is to keep
 # them private, not to "move the secret out" of the place the tool reads it.
 _TOOL_STORES = (".claude/.credentials.json", ".config/gh/hosts.yml",
-                ".config/cursor/auth.json", ".docker/config.json", ".fly/config.yml",
+                ".config/cursor/auth.json", ".config/.wrangler/config/default.toml",
+                ".config/archymedes/settings.json", ".docker/config.json", ".fly/config.yml",
                 ".config/gcloud/", ".aws/credentials", ".netrc", ".npmrc")
 
 # A suggested command that only reads (verify, list, inspect) is a way to
@@ -121,6 +122,11 @@ def _classify(finding, job):
         private = _owner_only(path)
         # Only a verified owner-only mode drops the step; unknown keeps it.
         tighten = f"chmod 600 {path}" if path and private is not True else ""
+        if f.get("severity") == "low" and "private project environment file" in title:
+            return _r(YOU_CONFIRM, "This is an expected local development credential "
+                      "in an owner-only project environment file. Keep it private and "
+                      "Git-ignored; rotate it if a copy was exposed, and remove it only "
+                      "when the project no longer needs it.", "")
         if "/.claude/paste-cache/" in path:
             return _r(YOU_DO, "A pasted copy of a secret sits in the Claude paste cache. "
                               "Delete the cached file; the original is unaffected.",

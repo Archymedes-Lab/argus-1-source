@@ -21,6 +21,20 @@ $o.taskRuns = @(Get-WinEvent -FilterHashtable @{
       cmd  = [string]$d['ActionName']
     } })
 
+# Event 200 records the action that actually started, unlike 100/129, which
+# only name the task/process. A full since-boot window is required before a
+# signer can explain a task run; a capped result cannot prove all actions.
+$actionEvents = @(Get-WinEvent -FilterHashtable @{
+        LogName='Microsoft-Windows-TaskScheduler/Operational'; Id=200;
+        StartTime=$boot } -MaxEvents 1000)
+$o.taskActionsComplete = $actionEvents.Count -gt 0 -and $actionEvents.Count -lt 1000
+$o.taskActions = @($actionEvents | ForEach-Object {
+    $x = [xml]$_.ToXml()
+    $d = @{}
+    $x.Event.EventData.Data | ForEach-Object { $d[$_.Name] = $_.'#text' }
+    [pscustomobject]@{ task=[string]$d['TaskName']; action=[string]$d['ActionName'] }
+  })
+
 # --- every autostart entry, with enough detail to tell if it shows a window ---
 # The executed image is captured separately from the full command line. What an
 # entry is allowed to run is decided by that image, not by any path that happens

@@ -1,10 +1,10 @@
 # Windows connectivity guard
 
-`connectivity-jarvis.ps1` runs every minute in Windows Task Scheduler, independently
+`jarvis-connectivity-guard.ps1` runs every minute in Windows Task Scheduler, independently
 of WSL and JARVIS. Install from Windows PowerShell with an existing trusted profile:
 
 ```powershell
-.\connectivity-jarvis.ps1 -Install -InterfaceName 'Wi-Fi' -ProfileName 'iPhone'
+.\jarvis-connectivity-guard.ps1 -Install -InterfaceName 'Wi-Fi' -ProfileName 'iPhone'
 ```
 
 Runtime files live in `%LOCALAPPDATA%\Jarvis\Connectivity`. The limited, interactive

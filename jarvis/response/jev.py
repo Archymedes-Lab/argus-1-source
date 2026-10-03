@@ -14,8 +14,12 @@ patch validation), but assessment is strictly advisory:
     arbitrary prose is a documented blind spot, so remote questions must
     never need exact content).
   * Tier 2 enrichment: no key, offline, or any failure -> {"unavailable"}
-    and the existing deterministic path runs unchanged. The scheduler and
-    HTTP paths never call here; only CLI flows do, bounded by TIMEOUT_S.
+    and the existing deterministic path runs unchanged. The HTTP paths never
+    call here. The one scheduler caller is the memory collector's advisory
+    note on an unrecognised in-memory image (judge_memory_image): at most
+    MEMORY_MAX_CALLS per scan, each bounded by MEMORY_TIMEOUT_S, sending only
+    fixed-list features, and never able to change a severity. Everything
+    else is CLI-only, bounded by TIMEOUT_S.
 
 Questions and thresholds live in this one file for review.
 """
@@ -64,6 +68,21 @@ Q_WORTH_CRITERIA = {
     "true": "A bounded investigation could produce useful review evidence",
     "false": "The metadata does not justify spending automated investigation effort",
 }
+# The memory collector's advisory note. The features are coarse facts and
+# fixed-list hits (assemblies.features); the answer is shown to the human
+# beside a deterministic severity it cannot change.
+MEMORY_TIMEOUT_S = 10
+MEMORY_MAX_CALLS = 3
+Q_MEMORY_IMAGE = ("An image copied into a process's memory with these features "
+                  "is more consistent with offensive tooling (injection, "
+                  "credential theft, keylogging, defence evasion or a "
+                  "post-exploitation framework) than with ordinary software "
+                  "behaviour. Treat the features as evidence, not proof")
+Q_MEMORY_CRITERIA = {
+    "true": "The features resemble offensive tooling loaded in memory",
+    "false": "The features resemble ordinary software that loads code in memory",
+}
+
 Q_PATCH_ADDRESSES = ("The patch draft metadata is consistent with the stated "
                      "diagnosis and declared file scope")
 Q_PATCH_CRITERIA = {
@@ -158,7 +177,7 @@ def _validate_answer(question_id, question, answer):
     raise JevError(f"unsupported {question_id} question type")
 
 
-def _call(state, questions):
+def _call(state, questions, timeout=TIMEOUT_S):
     """One bounded SystemOne request. Raises JevError on any failure."""
     key = _key()
     if not key:
@@ -170,7 +189,7 @@ def _call(state, questions):
         headers={"Authorization": "Bearer " + key,
                  "Content-Type": "application/json"})
     try:
-        with _open(req, TIMEOUT_S) as resp:
+        with _open(req, timeout) as resp:
             raw = resp.read(MAX_RESPONSE_BYTES + 1)
     except Exception as exc:
         raise JevError(f"request failed: {type(exc).__name__}") from exc
@@ -313,6 +332,34 @@ def validate_patch(entry):
             "usage": payload.get("usage")}, fallback)
     except JevError as exc:
         return _advisory("validation", {"unavailable": str(exc)[:200]},
+                         fallback)
+
+
+def judge_memory_image(features):
+    """Advisory: do in-memory image features look like offensive tooling?
+
+    `features` comes from assemblies.features: fixed-list hits and coarse
+    facts only. The caller shows the result next to a severity it never
+    changes; missing or malformed output is reported as unavailable.
+    """
+    fallback = {"offensive_probability": None,
+                "reason": "Jev unavailable; the severity is deterministic"}
+    state = {k: features.get(k) for k in (
+        "host_executable", "launch", "parent_executable", "managed",
+        "executable_memory", "private_memory", "size_bucket",
+        "sensitive_native_apis", "offensive_terms", "identifier_count",
+        "unexplained_identifier_count")}
+    try:
+        payload = _call(state, {
+            "offensive": {"type": "noul", "instructions": Q_MEMORY_IMAGE,
+                          "criteria": Q_MEMORY_CRITERIA},
+        }, timeout=MEMORY_TIMEOUT_S)
+        p = (payload["answers"].get("offensive") or {}).get("noul")
+        return _advisory("memory_image", {
+            "offensive_probability": p,
+            "model": payload.get("model")}, fallback)
+    except JevError as exc:
+        return _advisory("memory_image", {"unavailable": str(exc)[:200]},
                          fallback)
 
 

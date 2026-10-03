@@ -1,0 +1,124 @@
+# Attack-surface coverage plan
+
+Status 2026-10-02: 11 validated, 34 claimed, 141 blind of 186 ATT&CK techniques (Windows and
+Linux, parent techniques only). This plan raises the validated share. It follows the score-integrity
+rule: a number moves only through a real detector, a proven measurement bug, or an explicit owner
+decision. A technique is never promoted without a probe that makes the real detector fire.
+
+## Rules for every phase
+
+- **No claim without a probe.** New mappings land together with a probe in
+  `jarvis/service/attackmap.py`, so they enter as validated or not at all.
+- **A probe proves the rule, not the sensor.** Sensor liveness stays judged by collector freshness.
+  Arena scenarios (`jarvis/lab/`) add end-to-end proof for the highest-value techniques.
+- **Unobservable is said, not hidden.** Techniques this machine cannot observe are listed with a
+  reason and stay in the denominator unless the owner removes them.
+- **Each phase ships as a narrow release** with a written baseline and a live readback.
+
+## Phase 0: make the measurement correct
+
+Two defects were found on 2026-10-02. Both are measurement bugs, not coverage.
+
+1. `jarvis/intel/feeds.py` drops revoked techniques but keeps deprecated ones. Ten deprecated
+   techniques sit in the denominator as blind: T1026, T1034, T1043, T1051, T1061, T1062, T1064,
+   T1108, T1153, T1175. Fix: skip `x_mitre_deprecated`. Denominator 186 to about 176.
+2. ATT&CK split T1562 (Impair Defenses) into T1685 to T1690. The catalogue no longer has T1562,
+   so the existing claim counts for nothing and the successors read blind. Fix: a test that fails
+   when a `COVERAGE` key is absent from the catalogue, then remap each successor on its own
+   evidence.
+
+Also decide how sub-technique coverage counts. Today T1003, T1555 and T1195 read blind although
+T1003.001, T1555.003 and T1195.001 are mapped. Proposal: a `partial` level, shown separately and
+never added to validated.
+
+## Phase 1: map what existing collectors already detect
+
+Candidates, each to be confirmed against the collector's code and given a probe:
+
+| Technique | Existing collector |
+|---|---|
+| T1685 Disable or Modify Tools | control, posture |
+| T1686 Disable or Modify System Firewall | firewall |
+| T1688 Safe Mode Boot, T1689 Downgrade Attack | posture, preos (boot options) |
+| T1690 Prevent Command History Logging | evasion |
+| T1496 Resource Hijacking | resources |
+| T1611 Escape to Host | containers |
+| T1669 Wi-Fi Networks | netwatch |
+| T1200 Hardware Additions | controls, preos (option ROM code) |
+| T1037 Boot or Logon Initialization Scripts | startup, asep |
+| T1529 System Shutdown/Reboot | preos (unclean shutdowns) |
+
+Expected: 8 to 11 techniques from blind to validated.
+
+## Phase 2: prove the 34 claimed techniques
+
+12 probes exist. Write one for each remaining claimed technique, calling the real detector
+with synthetic evidence. A probe that cannot be made to fire is a finding: the claim is removed.
+Expected: most of 34 from claimed to validated. This is the largest honest gain for the least new code.
+
+## Phase 3: new detection, grouped by data source
+
+Ordered by techniques closed per unit of work. Sources A and B reuse event streams JARVIS already
+ingests (Sysmon, native sensor, Sysmon for Linux).
+
+**A. Command-line and process rules on existing streams (about 45 techniques)**
+- Discovery burst: many discovery commands from one process tree in a short window, one sequence
+  rule. T1007, T1012, T1016, T1018, T1033, T1046, T1049, T1057, T1069, T1083, T1087, T1120, T1124,
+  T1135, T1201, T1217, T1482, T1615, T1652, T1654, T1673, T1680. Single commands stay silent;
+  the burst is the signal.
+- Proxy execution: T1047, T1127, T1202, T1216, T1220, T1569, T1559, T1129.
+- Impact preparation: T1490 (shadow-copy and recovery deletion), T1489, T1485, T1531, T1561, T1222.
+- Credential tooling: T1003, T1558, T1649, T1134, T1550.
+- Collection and staging: T1560, T1074, T1119, T1140, T1005.
+
+**B. File-system canaries (impact)**
+Decoy files in user folders, watched for mass rename, rewrite or deletion: T1486, T1485, T1565,
+T1491. This closes most of the impact tactic, which is at zero today.
+
+**C. Network egress baselines (exfiltration and command-and-control)**
+Per-process upload volume and destination baselines from netwatch: T1041, T1048, T1567, T1020,
+T1029, T1030, T1011. DNS behaviour: T1568, T1572, T1071. Protocol shape: T1095, T1102, T1008,
+T1104. Volume: T1498, T1499.
+
+**D. Removable media and hardware**
+Device arrival and volume mount events: T1091, T1052, T1025, T1092, T1200.
+
+**E. Identity and credentials**
+T1555, T1539, T1606, T1621, T1111, T1187 (outbound authentication to untrusted hosts), T1185.
+
+**F. Initial access**
+Download provenance (mark-of-the-web lineage from browser to execution): T1566, T1189, T1204.
+Exposed services: T1190, T1210. Supply chain: T1195.
+
+## Phase 4: techniques this machine cannot observe
+
+For the owner to rule on, one by one. Proposed reasons:
+
+- No domain: T1207, T1482, T1484, T1615.
+- Happens off the machine or to the person: T1657, T1667, T1684, T1534, T1199.
+- Content of encrypted traffic: T1001, T1132, T1573, T1665. Only metadata is visible without
+  decrypting traffic, which JARVIS does not do.
+- Exploitation itself (only its effects are visible): T1068, T1203, T1211, T1212, T1687.
+
+These stay blind and listed with their reason unless the owner removes them from the denominator.
+
+## Expected numbers
+
+| After | Validated | Claimed | Blind | Of |
+|---|---|---|---|---|
+| Today | 11 | 34 | 141 | 186 |
+| Phase 0 | 11 | 34 | about 131 | about 176 |
+| Phases 1 and 2 | about 50 | under 5 | about 121 | about 176 |
+| Phase 3 A and B | about 95 | under 5 | about 76 | about 176 |
+| Phase 3 C to F | about 130 | under 5 | about 40 | about 176 |
+
+The figures after Phase 0 are estimates. A realistic ceiling is about 75% validated; the rest is
+Phase 4. The assurance register moves separately: a capability leaves `partial` only with a
+deployed receipt, a positive control and a soak.
+
+## What would change this plan
+
+- A probe in Phase 2 that cannot fire: the detector is fixed before any new work.
+- Rule noise in Phase 3 A on this machine's own developer activity: the burst thresholds are
+  measured against a week of real events before the rules are scored.
+- Resource cost: every new job states its measured CPU and time before it is scheduled.

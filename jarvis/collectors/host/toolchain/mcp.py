@@ -4,6 +4,8 @@ import glob
 import os
 import re
 
+from jarvis.platform import host as machine
+
 from .common import PAYLOAD_RE, _diff, _finding, _hash, _home, _json, _short, repos
 
 _M_MCP = "toolchain_mcp"
@@ -122,7 +124,7 @@ def _mcp_sources(hosts):
 
 
 def _windows_profiles():
-    """Real user profiles under /mnt/c/Users, skipping the template accounts."""
+    """Real Windows user profiles, skipping the template accounts."""
     from jarvis.platform import mounts as _mounts
     # One gate for the whole Windows-profile traversal: on a stale drive every
     # glob and stat below fails with EIO, so skip the walk instead of
@@ -131,7 +133,8 @@ def _windows_profiles():
     if _mounts.windows_drive() == _mounts.STALE:
         return []
     out = []
-    for path in sorted(glob.glob("/mnt/c/Users/*")):
+    users = machine.users_dir()
+    for path in sorted(glob.glob(os.path.join(users, "*"))) if users else ():
         name = os.path.basename(path)
         if name.lower() in ("public", "default", "default user", "all users"):
             continue

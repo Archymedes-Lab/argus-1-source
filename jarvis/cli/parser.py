@@ -14,6 +14,9 @@ from .commands import attack as attack_cli
 from .commands import brief as brief_cli
 from .commands import broker as broker_cli
 from .commands import (
+    cmd_audio,
+    cmd_preos,
+    cmd_containers,
     cmd_alert,
     cmd_approve,
     cmd_asep,
@@ -37,6 +40,7 @@ from .commands import (
     cmd_intrusion,
     cmd_investigate,
     cmd_memscan,
+    cmd_dotnet,
     cmd_netwatch,
     cmd_outstanding,
     cmd_peers,
@@ -59,13 +63,17 @@ from .commands import defend as defend_cli
 from .commands import evidence as evidence_cli
 from .commands import fix as fix_cli
 from .commands import geo as geo_cli
+from .commands import history as history_cli
+from .commands import mesh as mesh_cli
 from .commands import impersonation as impersonation_cli
 from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
 from .commands import pixel as pixel_cli
+from .commands import provenance as provenance_cli
 from .commands import repair as repair_cli
 from .commands import retention as retention_cli
 from .commands import sensor as sensor_cli
+from .commands import reason as reason_cli
 from .commands import timeline as timeline_cli
 from .commands import veil as veil_cli
 
@@ -93,6 +101,9 @@ def build_parser():
     sensor_cli.add_parser(sub)
     geo_cli.add_parser(sub)
     timeline_cli.add_parser(sub)
+    history_cli.add_parser(sub)
+    mesh_cli.add_parser(sub)
+    reason_cli.add_parser(sub)
     veil_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
@@ -136,6 +147,26 @@ def build_parser():
     sp.add_argument("-v", "--verbose", action="store_true")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_spy)
+
+    au = sub.add_parser("audio", help="Windows audio endpoints, routes and sessions")
+    au.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    au.add_argument("-v", "--verbose", action="store_true")
+    au.add_argument("--json", action="store_true")
+    au.set_defaults(fn=cmd_audio)
+
+    po = sub.add_parser("preos", help="pre-OS boot integrity: firmware, Secure Boot, TPM measured boot")
+    po.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    po.add_argument("-v", "--verbose", action="store_true")
+    po.add_argument("--json", action="store_true")
+    po.add_argument("--accept-baseline", action="store_true",
+                    help="pin the newest cold boot as the new baseline (owner decision)")
+    po.set_defaults(fn=cmd_preos)
+
+    co = sub.add_parser("containers", help="local Docker privilege and exposure inventory")
+    co.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    co.add_argument("-v", "--verbose", action="store_true")
+    co.add_argument("--json", action="store_true")
+    co.set_defaults(fn=cmd_containers)
 
     bo = sub.add_parser("boot",
                         help="what ran at startup, incl. windows that flash and close")
@@ -244,6 +275,12 @@ def build_parser():
     mem.add_argument("--json", action="store_true")
     mem.set_defaults(fn=cmd_memscan)
 
+    dn = sub.add_parser("dotnet", help=".NET runtime hijack and AMSI registration")
+    dn.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    dn.add_argument("-v", "--verbose", action="store_true")
+    dn.add_argument("--json", action="store_true")
+    dn.set_defaults(fn=cmd_dotnet)
+
     iw = sub.add_parser("inputwatch",
                         help="detect keystrokes and clicks no hardware produced")
     iw.add_argument("--start", action="store_true", help="start the hook helper")
@@ -299,6 +336,11 @@ def build_parser():
                     help="print the recorded event history instead")
     nw.add_argument("--no-sample", action="store_true",
                     help="report only; do not take a new sample")
+    nw.add_argument("--confirm-network", metavar="SSID",
+                    help="pin this SSID's recorded access points and gateway as your network")
+    nw.add_argument("--forget-network", metavar="SSID",
+                    help="remove a network confirmation")
+    nw.add_argument("--reason", help="why (required with --confirm-network)")
     nw.add_argument("--severity", choices=["critical", "high", "medium", "low"])
     nw.add_argument("-v", "--verbose", action="store_true")
     nw.add_argument("--json", action="store_true")
@@ -342,9 +384,13 @@ def build_parser():
     gp.add_argument("--json", action="store_true")
     gp.set_defaults(fn=cmd_gaps)
 
-    pr = sub.add_parser("procs", help="list fingerprints in the baseline")
+    pr = sub.add_parser("procs", help="list baseline fingerprints or every process in a live snapshot")
     pr.add_argument("--approved", type=int, choices=[0, 1])
-    pr.add_argument("--limit", type=int, default=60)
+    pr.add_argument("--live", action="store_true",
+                    help="take a fresh process snapshot; show all observed processes")
+    pr.add_argument("--json", action="store_true")
+    pr.add_argument("--limit", type=int, default=None,
+                    help="limit displayed rows (live mode shows all by default)")
     pr.set_defaults(fn=cmd_procs)
 
     pe = sub.add_parser("peers", help="list observed network peers")
@@ -419,11 +465,15 @@ def build_parser():
     pixel_cli.add_parser(sub)
     impersonation_cli.add_parser(sub)
     retention_cli.add_parser(sub)
+    provenance_cli.add_parser(sub)
     return p
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.cmd == 'mesh':
+        # Mesh owns its isolated store; never open the protected collector DB.
+        return args.fn(args, None)
     store = Store(args.db)
     try:
         args.fn(args, store)

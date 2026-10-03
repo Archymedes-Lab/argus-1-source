@@ -1,14 +1,19 @@
 """Correlating every view into findings."""
 
+import ipaddress
 import os
 import time
 
-from jarvis.platform import privilege
+from jarvis.core import epochs
+from jarvis.core.observation import TRANSIENT
+from jarvis.platform import privilege, topology
+from jarvis.platform.linux import signal_zero
 
 from .common import DEFAULT_SWEEP, PROC, _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 from .kernel import (
+    REPLACED_IDENTICAL,
     bpf_hidden_pins,
     bpf_programs,
     ftrace_hooks,
@@ -51,7 +56,7 @@ def confirmed_ghosts(ghosts, fresh_read, fresh_sig):
 def _still_alive(pid):
     """Does `pid` still answer kill(pid, 0)? EPERM counts: it exists."""
     try:
-        os.kill(pid, 0)
+        signal_zero(pid)
     except PermissionError:
         return True
     except OSError:
@@ -211,21 +216,21 @@ def audit_linux(deep=False):
     # -- injected / fileless code -----------------------------------------
     for hit in injected_processes():
         worst = max(("fileless" in r[0]) * 2 + ("deleted" in r[0]) for r in hit["reasons"])
+        benign = all(r[0] == REPLACED_IDENTICAL for r in hit["reasons"])
         out.append(_finding(
-            "critical" if worst else "high",
+            "low" if benign else "critical" if worst else "high",
             hit["reasons"][0][0],
             f"{hit['name']} [pid {hit['pid']}] — {hit['reasons'][0][1][:80]}",
             hit["cmdline"][:120]))
 
     if privilege.can_read_other_processes():
-        for conn in orphan_sockets():
-            out.append(_finding(
-                "high", "network connection with no owning process",
-                f"{conn['proto']} {conn['local_ip']}:{conn['local_port']} → "
-                f"{conn['remote_ip']}:{conn['remote_port']} ({conn['state']}) "
-                f"is not claimed by any visible process",
-                "/proc/net + fd sweep",
-            ))
+        wsl = _on_wsl()
+        unowned, denied = orphan_sockets()
+        try:
+            topo = topology.snapshot() if wsl else None
+        except Exception:
+            topo = None
+        out.extend(_orphan_findings(unowned, denied, wsl, topo))
 
     out.append(_finding("ok", "cross-view scan complete",
                         f"{len(readdir)} pids via readdir, "
@@ -237,8 +242,111 @@ def audit_linux(deep=False):
     return out
 
 
-def audit(hosts=("wsl", "win"), deep=False):
+def _on_wsl():
+    try:
+        with open("/proc/sys/kernel/osrelease", errors="replace") as fh:
+            return "microsoft" in fh.read().lower()
+    except OSError:
+        return False
+
+
+# WSL assigns this address to lo for its DNS tunnel; it is not routable.
+WSL_DNS_TUNNEL = "10.255.255.254"
+
+
+def _local_only_listener(conn):
+    """A bound socket with no peer on a loopback address: reachable only from
+    this machine. A connection with a peer, or anything on a routable
+    address, is not."""
+    try:
+        local = ipaddress.ip_address(str(conn.get("local_ip") or "").split("%")[0])
+        remote = ipaddress.ip_address(str(conn.get("remote_ip") or "").split("%")[0])
+    except ValueError:
+        return False
+    if local.version == 6 and local.ipv4_mapped:
+        local = local.ipv4_mapped
+    peerless = remote.is_unspecified and str(conn.get("remote_port")) in ("0", "")
+    return peerless and (local.is_loopback or str(local) == WSL_DNS_TUNNEL)
+
+
+def _orphan_finding(conn, wsl, topo=None):
+    """Classify exposure and evidence quality without inferring malice or acting."""
+    if conn.get("_verification") == TRANSIENT:
+        # The first sighting stays on record; one fresh view no longer held
+        # it, so it is evidence of a race, not a confirmed discrepancy.
+        return _finding(
+            "low", "unowned socket closed before confirmation",
+            f"{conn.get('proto')} {conn.get('local_ip')}:{conn.get('local_port')} → "
+            f"{conn.get('remote_ip')}:{conn.get('remote_port')} ({conn.get('state')}); "
+            "no visible process fd claimed it in the first view and a second, valid "
+            "view no longer showed it; kept as a first-observation record",
+            "/proc/net + two fd sweeps")
+    declared = topology.dns_tunnel_listener(conn, topo) if wsl else None
+    if declared:
+        return _finding(
+            "low", "WSL DNS tunnel listener is held outside this distro",
+            f"{conn['proto']} {conn['local_ip']}:{conn['local_port']} ({conn['state']}); "
+            f"{declared}; confirmed in two views with complete fd visibility; "
+            "its owner in the WSL VM is not observable from here",
+            "/etc/resolv.conf + /proc/net/fib_trie + two fd sweeps")
+    if wsl and _local_only_listener(conn):
+        severity, title = "medium", "local listener owner not visible in this distro"
+    else:
+        try:
+            local = ipaddress.ip_address(str(conn.get("local_ip") or "").split("%")[0])
+            remote = ipaddress.ip_address(str(conn.get("remote_ip") or "").split("%")[0])
+            if local.version == 6 and local.ipv4_mapped:
+                local = local.ipv4_mapped
+            if remote.version == 6 and remote.ipv4_mapped:
+                remote = remote.ipv4_mapped
+            peerless = remote.is_unspecified and str(conn.get("remote_port")) in ("0", "")
+            if peerless:
+                title = "network endpoint with no visible owner"
+            elif local.is_loopback and remote.is_loopback:
+                title = "local connection with no visible owner"
+            else:
+                title = "network connection with no visible owner"
+        except ValueError:
+            title = "socket scope unknown and owner not visible"
+        severity = "high"
+    verification = conn.get("_verification", "unknown")
+    visibility = conn.get("_fd_visibility", "unknown")
+    limitations = []
+    if verification != "confirmed":
+        limitations.append("the second socket-table view was inconclusive")
+    if visibility != "complete":
+        limitations.append("process fd visibility was limited")
+    limitations.append("WSL may have owners outside this distro" if wsl else
+                       "a missing visible fd is not proof of a hidden process")
+    detail = (f"{conn['proto']} {conn['local_ip']}:{conn['local_port']} → "
+              f"{conn['remote_ip']}:{conn['remote_port']} ({conn['state']}); "
+              f"no visible process fd claimed this socket; " + "; ".join(limitations))
+    return _finding(severity, title, detail, "/proc/net + two fd sweeps")
+
+
+def _orphan_findings(unowned, denied, wsl, topo=None):
+    """Keep scan limitations visible even when no candidate socket remains."""
+    out = []
+    if denied:
+        out.append(_finding(
+            "low", "socket owner visibility limited",
+            f"{denied} process fd reads were denied across the socket "
+            "attribution views; an owner may be unreadable in this distro",
+            "/proc/<pid>/fd"))
+    out.extend(_orphan_finding(conn, wsl, topo) for conn in unowned)
+    return out
+
+
+def audit(hosts=("wsl", "win"), deep=False, db_path=None):
     out, extra = [], {}
+    if db_path:
+        # The service passes its store; tests and CLI calls without one never
+        # write the protected user's store. A ledger failure never blocks
+        # the scan: at worst the next sample opens an extra epoch.
+        try:
+            epochs.record(db_path)
+        except Exception:
+            pass
     if "wsl" in hosts:
         out += audit_linux(deep=deep)
     if "win" in hosts:

@@ -116,7 +116,13 @@ def audit_windows():
             out.append(_finding("ok", f"{src_name} agrees with the process listings",
                                 f"{len(src)} pids, none of them concealed", ""))
 
-    out.append(_finding("ok", "cross-view scan complete",
+    out.append(_finding("low", "handle-table sweep has a finite PID range",
+                        "OpenProcess probes PIDs 4–65535. A process with a higher "
+                        "PID may appear in the other views but is not checked "
+                        "through this independent handle-table path; no claim "
+                        "of complete hidden-process coverage follows.",
+                        "OpenProcess sweep"))
+    out.append(_finding("ok", "sampled cross-view scan complete",
                         f"{len(wmi)} via WMI, {len(api)} via process API, "
                         f"{len(tl)} via tasklist, "
                         f"{data.get('openableTotal', 0)} via OpenProcess sweep, "

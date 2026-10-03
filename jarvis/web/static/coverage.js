@@ -13,6 +13,15 @@
 //                 collectors that feed none ring the core.
 //   pulses        a collector really ran: its stored timestamp advanced.
 //   core          this machine, where every collector reports.
+//
+// Two readings of the same scene, cross-faded and alternating on a timer
+// (or pinned with the buttons):
+//   coverage      what is proven, as above.
+//   uptime        is it watching right now. A tile is a gauge: its fill is the
+//                 share of the last 24 h in which at least one collector that
+//                 feeds it had fresh evidence. Nodes take the same colour and
+//                 their outer ring is their own 24 h uptime. Blind tiles have
+//                 no collector, so they stay empty: nothing can be up there.
 import * as THREE from '/static/vendor/three.module.min.js';
 
 const LEVELS = ['validated', 'regressed', 'claimed', 'blind'];
@@ -122,22 +131,23 @@ const fireTimes = new Float32Array(64).fill(-100);
 
 const tileMaterial = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-  uniforms: { uTime: { value: 0 } },
+  uniforms: { uTime: { value: 0 }, uMix: { value: 0 } },
   vertexShader: `
-    attribute vec3 aColor; attribute float aStyle; attribute vec2 aSize; attribute float aHi; attribute float aPulse;
+    attribute vec3 aColor; attribute float aStyle; attribute vec2 aSize; attribute float aHi; attribute float aPulse; attribute float aUp;
     varying vec2 vP; varying vec2 vHalf; varying vec3 vColor; varying float vStyle; varying float vFace;
-    varying float vHi; varying float vPulse;
+    varying float vHi; varying float vPulse; varying float vUp;
     void main(){
-      vP = position.xy * aSize; vHalf = aSize * .5; vColor = aColor; vStyle = aStyle; vHi = aHi; vPulse = aPulse;
+      vP = position.xy * aSize; vHalf = aSize * .5; vColor = aColor; vStyle = aStyle; vHi = aHi; vPulse = aPulse; vUp = aUp;
       vec4 mv = modelViewMatrix * instanceMatrix * vec4(position.xy * aSize, 0., 1.);
       vec3 n = normalize(normalMatrix * mat3(instanceMatrix) * vec3(0., 0., 1.));
       vFace = dot(n, normalize(-mv.xyz));
       gl_Position = projectionMatrix * mv;
     }`,
   fragmentShader: `
-    uniform float uTime;
+    uniform float uTime; uniform float uMix;
     varying vec2 vP; varying vec2 vHalf; varying vec3 vColor; varying float vStyle; varying float vFace;
-    varying float vHi; varying float vPulse;
+    varying float vHi; varying float vPulse; varying float vUp;
+    vec3 upColor(float f){ return f >= .98 ? vec3(.81, .89, 1.) : f >= .8 ? vec3(.95, .72, .29) : vec3(1., .36, .42); }
     float box(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q, 0.)) + min(max(q.x, q.y), 0.) - r; }
     void main(){
       vec2 b = vHalf * .74; float rad = min(b.x, b.y) * .34;
@@ -158,9 +168,21 @@ const tileMaterial = new THREE.ShaderMaterial({
         float dotm = smoothstep(.07 + w, .05, length(vP));
         a = edge * .5 + dotm * .7;
       }
+      // uptime reading: a gauge filled from the bottom; unfed tiles stay as blind ones do
+      float au;
+      if (vUp < 0.) {
+        float dotm = smoothstep(.07 + w, .05, length(vP));
+        au = edge * .4 + dotm * .6;
+      } else {
+        float level = (b.y - vP.y) / (2. * b.y);       // matches the way the instanced tiles are oriented on screen
+        float lit = smoothstep(vUp - .02, vUp + .02, level);
+        au = fill * (1. - lit) * .72 + fill * lit * .06 + edge * .85 + glow * (.12 + .2 * vUp);
+      }
+      vec3 base = mix(vColor, vUp < 0. ? vColor : upColor(vUp), uMix);
+      a = mix(a, au, uMix);
       float pulse = exp(-max(uTime - vPulse, 0.) * 1.6) * step(vPulse, uTime);
       a *= (vFace > 0. ? 1. : .22) * vHi * (1. + pulse * 1.6);
-      gl_FragColor = vec4(vColor * a, a);
+      gl_FragColor = vec4(base * a, a);
     }`,
 });
 
@@ -183,34 +205,42 @@ const beamMaterial = new THREE.ShaderMaterial({
 
 const nodeMaterial = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  uniforms: { uTime: { value: 0 }, uScale: { value: 1 } },
+  uniforms: { uTime: { value: 0 }, uScale: { value: 1 }, uMix: { value: 0 } },
   vertexShader: `
-    attribute float aState; attribute float aProg; attribute float aFire; attribute float aRun; attribute float aHi;
+    attribute float aState; attribute float aProg; attribute float aFire; attribute float aRun; attribute float aHi; attribute float aUp;
     uniform float uScale; uniform float uTime;
-    varying float vState; varying float vProg; varying float vFlash; varying float vRun; varying float vHi;
+    varying float vState; varying float vProg; varying float vFlash; varying float vRun; varying float vHi; varying float vUp;
     void main(){
-      vState = aState; vProg = aProg; vRun = aRun; vHi = aHi;
+      vState = aState; vProg = aProg; vRun = aRun; vHi = aHi; vUp = aUp;
       vFlash = exp(-max(uTime - aFire, 0.) * 1.3) * step(aFire, uTime);
       vec4 mv = modelViewMatrix * vec4(position, 1.);
       gl_Position = projectionMatrix * mv;
       gl_PointSize = (.6 + vFlash * .25) * uScale / -mv.z;
     }`,
   fragmentShader: `
-    uniform float uTime;
-    varying float vState; varying float vProg; varying float vFlash; varying float vRun; varying float vHi;
+    uniform float uTime; uniform float uMix;
+    varying float vState; varying float vProg; varying float vFlash; varying float vRun; varying float vHi; varying float vUp;
     void main(){
       vec2 p = (gl_PointCoord - .5) * 2.; p.y = -p.y;
       float r = length(p);
       vec3 col = vState < .5 ? vec3(.81, .89, 1.) : vState < 1.5 ? vec3(.95, .72, .29) : vec3(1., .36, .42);
+      vec3 ucol = vUp < 0. ? col : vUp >= .98 ? vec3(.81, .89, 1.) : vUp >= .8 ? vec3(.95, .72, .29) : vec3(1., .36, .42);
+      col = mix(col, ucol, uMix);
       float w = fwidth(r) + .01;
       float disc = smoothstep(.24 + w, .24 - w, r);
       float hollow = smoothstep(.05, .0, abs(r - .21));
       float body = vState > 2.5 ? hollow : disc;               // missing: an empty ring
       float ang = fract(atan(p.x, p.y) / 6.2831853 + (vRun > .5 ? uTime * .9 : 0.));
       float ring = smoothstep(.07, .0, abs(r - .56));
-      float arc = ring * (ang < (vRun > .5 ? .3 : vProg) ? 1. : .14);
+      float arc = ring * (ang < (vRun > .5 ? .3 : vProg) ? 1. : .14) * (1. - .75 * uMix);
       float halo = exp(-r * r * 7.) * (.16 + vFlash * .9);
-      float a = (body * .8 + arc * .9 + halo) * vHi * step(r, 1.);
+      float up = 0.;                                           // outer gauge: share of the last 24 h with fresh evidence
+      if (vUp >= 0.) {
+        float g = smoothstep(.05, .0, abs(r - .84));
+        float turn = fract(atan(p.x, p.y) / 6.2831853);
+        up = g * (turn < vUp ? .75 + .45 * uMix : .12 + .1 * uMix);
+      }
+      float a = (body * .8 + arc * .9 + halo + up) * vHi * step(r, 1.);
       gl_FragColor = vec4(col * a, a);
     }`,
 });
@@ -259,6 +289,7 @@ function build(d) {
   const col = new Float32Array(places.length * 3), style = new Float32Array(places.length);
   const size = new Float32Array(places.length * 2), hi = new Float32Array(places.length).fill(1);
   const pulse = new Float32Array(places.length).fill(-100);
+  const upt = new Float32Array(places.length).fill(-1);
   const m = new THREE.Matrix4(), c = new THREE.Color();
   for (const p of places) {
     m.makeBasis(p.b.east, p.b.north, p.n).setPosition(p.pos);
@@ -273,6 +304,7 @@ function build(d) {
   tiles.geometry.setAttribute('aSize', ia(size, 2));
   tiles.geometry.setAttribute('aHi', ia(hi, 1));
   tiles.geometry.setAttribute('aPulse', ia(pulse, 1));
+  tiles.geometry.setAttribute('aUp', ia(upt, 1));
   tiles.frustumCulled = false;
   group.add(tiles);
 
@@ -316,6 +348,7 @@ function build(d) {
   for (const name of ['aState', 'aProg', 'aRun']) ng.setAttribute(name, new THREE.Float32BufferAttribute(new Float32Array(nodes.length), 1));
   ng.setAttribute('aFire', new THREE.Float32BufferAttribute(new Float32Array(nodes.length).fill(-100), 1));
   ng.setAttribute('aHi', new THREE.Float32BufferAttribute(new Float32Array(nodes.length).fill(1), 1));
+  ng.setAttribute('aUp', new THREE.Float32BufferAttribute(new Float32Array(nodes.length).fill(-1), 1));
   const points = new THREE.Points(ng, nodeMaterial);
   points.frustumCulled = false;
   group.add(points);
@@ -375,9 +408,13 @@ function sync(d, first) {
     n.c = now;
     g.attributes.aState.array[n.index] = STATE[now.state] ?? 3;
     g.attributes.aRun.array[n.index] = now.running ? 1 : 0;
+    g.attributes.aUp.array[n.index] = now.uptime ? now.uptime.pct24 : -1;
     if (ran) fire(n, t);
   }
-  g.attributes.aState.needsUpdate = g.attributes.aRun.needsUpdate = true;
+  g.attributes.aState.needsUpdate = g.attributes.aRun.needsUpdate = g.attributes.aUp.needsUpdate = true;
+  const tu = world.tiles.geometry.attributes.aUp, by = Object.fromEntries(d.techniques.map((x) => [x.tid, x.uptime]));
+  for (const p of world.places) tu.array[p.index] = by[p.tech.tid] == null ? -1 : by[p.tech.tid];
+  tu.needsUpdate = true;
 }
 
 function fire(n, t) {
@@ -414,7 +451,30 @@ function hud() {
     `<span class="name">${esc(pretty(name))}</span><span class="count num">${s.validated} / ${s.total}</span>` +
     `<span class="tbar">${shown.filter((l) => s[l]).map((l) =>
       `<i style="flex:${s[l]};background:${css('--' + l)};opacity:${l === 'blind' ? 0.5 : 1}"></i>`).join('')}</span></button>`).join('');
+  uptimePanel();
   feed();
+}
+
+const upColor = (f) => (f >= 0.98 ? css('--node') : f >= 0.8 ? css('--claimed') : css('--regressed'));
+const pctText = (f) => `${(100 * f).toFixed(f >= 0.9995 ? 0 : 1)}%`;
+function strip(buckets) {
+  return `<span class="strip">${buckets.map((f, k) => {
+    const n = buckets.length - 1 - k, when = `${n}-${n + 1} h ago`;
+    return f == null ? `<i class="unk" title="${when}: no history yet"></i>`
+      : `<i style="background:${upColor(f)}" title="${when}: ${pctText(f)} fresh"></i>`;
+  }).join('')}</span>`;
+}
+
+function uptimePanel() {
+  const u = data.uptime;
+  $('upct').textContent = u ? pctText(u.pct24) : '–';
+  $('ustrip').innerHTML = u ? strip(u.buckets) : '';
+  const worst = data.collectors.filter((c) => c.uptime).sort((a, b) => a.uptime.pct24 - b.uptime.pct24).slice(0, 3);
+  $('uworst').innerHTML = worst.map((c) =>
+    `<li><span>${esc(c.label)}</span>${strip(c.uptime.buckets)}<b class="num">${pctText(c.uptime.pct24)}</b></li>`).join('');
+  $('unote').textContent = !u ? 'No collector receipts are stored yet.'
+    : u.partial_history ? `${u.partial_history} began reporting within the window; time before their first run is not counted. A node's outer ring is its own 24 h uptime.`
+      : "A node's outer ring is its own 24 h uptime.";
 }
 
 function feed() {
@@ -477,13 +537,18 @@ function describe(f) {
     return { kind: `Collector · ${c.state}${c.running ? ' · running now' : ''}`, title: c.label,
       text: `Last ran ${ago(c.ts)}, scheduled every ${every(c.interval)}. ` +
         `${open ? `Open findings: ${open}.` : 'No open findings.'} ` +
+        (c.uptime ? `Up ${pctText(c.uptime.pct24)} of the last 24 h` +
+          `${c.uptime.pct7d != null ? `, ${pctText(c.uptime.pct7d)} of 7 days` : ''}; longest silence ` +
+          `${every(Math.max(c.uptime.longest_gap_s, 1))}. ` : 'No run receipts stored yet. ') +
         (c.techniques.length ? `Feeds ${c.techniques.length} technique${c.techniques.length > 1 ? 's' : ''}.`
           : 'Supports the monitor itself; mapped to no technique.'),
+      strip: c.uptime ? c.uptime : null,
       chips: [c.job, c.area, ...c.techniques] };
   }
   const t = world.byTid[f.tid][0].tech;
   return { kind: `${t.tid} · ${LEVEL_TEXT[t.level][0]}`, title: t.name,
-    text: t.level === 'blind' ? 'No collector looks for this technique.' : t.evidence,
+    text: (t.level === 'blind' ? 'No collector looks for this technique.' : t.evidence) +
+      (t.uptime != null ? ` At least one of its collectors had fresh evidence ${pctText(t.uptime)} of the last 24 h.` : ''),
     chips: [...t.tactics.map(pretty), ...t.sources] };
 }
 function hover(x, y) {
@@ -504,7 +569,8 @@ function select(f) {
   if (!f) { $('detail').style.display = 'none'; return applyFocus(); }
   const d = describe(f);
   $('dbody').innerHTML = `<div class="k">${esc(d.kind)}</div><h3>${esc(d.title)}</h3><p>${esc(d.text)}</p>` +
-    `<div class="chips">${d.chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>`;
+    `<div class="chips">${d.chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>` +
+    (d.strip ? `${strip(d.strip.buckets)}<div class="axis"><span>24 h ago</span><span>now</span></div>` : '');
   $('detail').style.display = 'block';
   applyFocus();
 }
@@ -529,7 +595,13 @@ $('showtable').onclick = () => {
   const rows = [...data.techniques].sort((a, b) => LEVELS.indexOf(a.level) - LEVELS.indexOf(b.level) || a.tid.localeCompare(b.tid));
   $('tbody').innerHTML = '<table><thead><tr><th>Technique</th><th>Name</th><th>Level</th><th>Tactics</th><th>Collectors</th></tr></thead><tbody>' +
     rows.map((t) => `<tr><td class="num">${esc(t.tid)}</td><td>${esc(t.name)}</td><td>${LEVEL_TEXT[t.level][0]}</td>` +
-      `<td>${esc(t.tactics.map(pretty).join(', '))}</td><td>${esc(t.sources.join(', ') || '—')}</td></tr>`).join('') + '</tbody></table>';
+      `<td>${esc(t.tactics.map(pretty).join(', '))}</td><td>${esc(t.sources.join(', ') || '—')}</td></tr>`).join('') + '</tbody></table>' +
+    '<table><thead><tr><th>Collector</th><th>State</th><th>Last run</th><th>Up, 24 h</th><th>Up, 7 d</th><th>Longest silence, 24 h</th></tr></thead><tbody>' +
+    [...data.collectors].sort((a, b) => (a.uptime ? a.uptime.pct24 : -1) - (b.uptime ? b.uptime.pct24 : -1)).map((c) =>
+      `<tr><td>${esc(c.label)}</td><td>${esc(c.state)}</td><td>${ago(c.ts)}</td>` +
+      `<td class="num">${c.uptime ? pctText(c.uptime.pct24) : '—'}</td>` +
+      `<td class="num">${c.uptime && c.uptime.pct7d != null ? pctText(c.uptime.pct7d) : '—'}</td>` +
+      `<td class="num">${c.uptime ? every(Math.max(c.uptime.longest_gap_s, 1)) : '—'}</td></tr>`).join('') + '</tbody></table>';
   $('table').style.display = 'block';
 };
 $('tclose').onclick = () => { $('table').style.display = 'none'; };
@@ -569,6 +641,41 @@ setInterval(poll, POLL_MS);
 setInterval(feed, 1000);
 
 // ── frame ──────────────────────────────────────────────────────────────────
+// ── the two readings: coverage and uptime ──────────────────────────────────
+const MODE_MS = 14000, FADE_S = 1.6;
+const MODE_TEXT = {
+  coverage: ['What is proven', 'Tiles show how far each technique is proven. Nodes show when each collector last ran.'],
+  uptime: ['Is it watching right now', 'Each tile fills with the share of the last 24 h that a collector feeding it had fresh evidence. Empty tiles have no collector.'],
+};
+let modeSetting = calm ? 'coverage' : 'auto', shown = 'coverage', mix = 0, flipAt = performance.now() + MODE_MS, lastT = 0;
+function setMode(setting) {
+  modeSetting = setting;
+  if (setting !== 'auto') shown = setting;
+  flipAt = performance.now() + MODE_MS;
+  for (const b of document.querySelectorAll('#tools [data-mode]')) b.setAttribute('aria-pressed', b.dataset.mode === setting);
+  paintMode();
+}
+function paintMode() {
+  document.body.dataset.mode = shown;
+  $('modename').textContent = MODE_TEXT[shown][0];
+  $('modehint').textContent = MODE_TEXT[shown][1];
+}
+function stepMode(t) {
+  const dt = Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
+  const held = pinned || focus || document.hidden || $('table').style.display === 'block';
+  if (modeSetting === 'auto' && !held && performance.now() > flipAt) {
+    shown = shown === 'coverage' ? 'uptime' : 'coverage';
+    flipAt = performance.now() + MODE_MS;
+    paintMode();
+  }
+  const target = shown === 'uptime' ? 1 : 0;
+  mix = calm ? target : mix + (target - mix) * Math.min(1, dt / FADE_S * 3);
+  if (Math.abs(target - mix) < 0.002) mix = target;
+  tileMaterial.uniforms.uMix.value = nodeMaterial.uniforms.uMix.value = mix;
+}
+for (const b of document.querySelectorAll('#tools [data-mode]')) b.onclick = () => setMode(b.dataset.mode);
+{ const m = new URLSearchParams(location.hash.slice(1)).get('mode'); setMode(m in MODE_TEXT || m === 'auto' ? m : modeSetting); mix = shown === 'uptime' ? 1 : 0; }
+
 function frame() {
   const t = clock.getElapsedTime();
   if (spin && !drag && performance.now() - lastTouch > 2500) goal.theta += 0.0011;
@@ -579,6 +686,7 @@ function frame() {
   camera.position.set(view.dist * ce * Math.cos(view.theta), view.dist * Math.sin(view.el), view.dist * ce * Math.sin(view.theta));
   camera.lookAt(0, 0, 0);
 
+  stepMode(t);
   const scale = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
   tileMaterial.uniforms.uTime.value = beamMaterial.uniforms.uTime.value = nodeMaterial.uniforms.uTime.value = t;
   nodeMaterial.uniforms.uScale.value = scale;

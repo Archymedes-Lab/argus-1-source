@@ -1,10 +1,11 @@
 """Supervise the independent connectivity guard from its persisted observations."""
-import os
 import time
 
-from .deadman import read_state
+from jarvis.platform import host
 
-STATE = '/mnt/c/Users/%s/AppData/Local/Jarvis/Connectivity/state.json' % os.environ.get('WSL_USER', 'chris')
+from .supervisors import read_state
+
+STATE = host.local_appdata('Jarvis', 'Connectivity', 'state.json')
 
 
 def audit(path=STATE, now=None):

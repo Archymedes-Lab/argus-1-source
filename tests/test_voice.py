@@ -75,6 +75,15 @@ class AcceptanceTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertFalse(voice.acceptable(text, facts()))
 
+    def test_idiomatic_claims_of_remediation_are_rejected(self):
+        # Measured 2026-09-24 (live llama3.2:3b, widened cap): findings that
+        # were only listed, not fixed, described as "neatly filed away".
+        for text in ("The SSH server and guest account have been neatly filed away.",
+                     "Those two are tidied away for good.",
+                     "Consider it squared away."):
+            with self.subTest(text=text):
+                self.assertFalse(voice.acceptable(text, facts()))
+
     def test_trend_is_given_in_words(self):
         self.assertEqual(facts()["score_trend"], "down 2 points")
         self.assertEqual(voice._trend(1), "up 1 point")
@@ -86,6 +95,12 @@ class AcceptanceTests(unittest.TestCase):
 
     def test_overlong_text_is_rejected(self):
         self.assertFalse(voice.acceptable("word " * 80, facts()))
+
+    def test_widened_cap_still_has_a_boundary(self):
+        # 2026-09-24: MAX_WORDS/MAX_CHARS were raised for a richer voice; the
+        # gate must still reject text past the new line, not just the old one.
+        self.assertTrue(voice.acceptable("word " * voice.MAX_WORDS, facts()))
+        self.assertFalse(voice.acceptable("word " * (voice.MAX_WORDS + 1), facts()))
 
 
 class OpenerTests(unittest.TestCase):

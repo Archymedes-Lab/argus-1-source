@@ -19,8 +19,10 @@ from .kernel import (
 from .run import SEV_ORDER, audit, audit_linux
 from .sockets import _socket_table_safe, _visible_tcp_ports, hidden_listeners, orphan_sockets
 from .views import (
+                     SCHED_DEBUGFS,
                      is_thread,
                      pid_max,
+                     pid_namespace_nested,
                      view_getdents,
                      view_kill_probe,
                      view_readdir,
@@ -35,6 +37,6 @@ __all__ = [
     "bpf_hidden_pins", "bpf_programs", "ftrace_hooks", "hidden_modules",
     "injected_processes", "io_uring_state", "proc_overmounts",
     "hidden_listeners", "orphan_sockets", "_visible_tcp_ports",
-    "is_thread", "pid_max", "view_getdents", "view_kill_probe",
+    "SCHED_DEBUGFS", "is_thread", "pid_max", "pid_namespace_nested", "view_getdents", "view_kill_probe",
     "view_readdir", "view_sched_debug", "view_stat_sweep",
 ]

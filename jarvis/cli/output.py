@@ -5,6 +5,7 @@ import sys
 
 from jarvis.collectors.process import detect
 from jarvis.core.util import short
+from jarvis.platform import host
 from jarvis.response import fixit
 
 C = {
@@ -23,8 +24,14 @@ def is_tty():
 
 
 def selected_hosts(args):
+    """The domains to observe: all that exist here, or the one asked for."""
     if args.host == "all":
-        return ("wsl", "win")
+        return host.domains()
+    if args.host not in host.domains():
+        # Observing nothing would print "nothing found" for a domain that was
+        # never looked at.
+        raise SystemExit(f"--host {args.host}: this machine has no such domain "
+                         f"(available: {', '.join(host.domains())})")
     return (args.host,)
 
 

@@ -2,7 +2,7 @@
 
 import json
 
-from jarvis.collectors.host import inputwatch, intrusion, pixel, posture, spyware, toolchain
+from jarvis.collectors.host import audiowatch, bootintegrity, containers, dotnet_posture, inputwatch, intrusion, pixel, posture, spyware, toolchain
 from jarvis.collectors.identity import bruteforce, secrets
 from jarvis.collectors.network import firewall, netwatch, sniffing, webshell
 from jarvis.collectors.persistence import asep, backdoor, control, implant, startup
@@ -11,6 +11,7 @@ from jarvis.collectors.telemetry import auditd, sysmon, sysmon_linux
 from jarvis.core.util import iso, short
 from jarvis.intel import gaps, hunt
 from jarvis.intel import research as intel
+from jarvis.response import memory_advice
 from jarvis.service import coverage
 
 from ..output import (
@@ -74,9 +75,11 @@ def cmd_investigate(args, store):
         ("NETWORK & WIRELESS", lambda: netwatch.audit(store)),
         ("SECURITY POSTURE", lambda: posture.audit(hosts=hosts)),
         ("BACKDOORS & ACCESS GRANTS", lambda: backdoor.audit(hosts=hosts)),
+        ("CONTAINER EXPOSURE", lambda: containers.audit(hosts=hosts)),
         ("DEVELOPER TOOLCHAIN TRUST", lambda: toolchain.audit(store, hosts=hosts)),
         ("SYNTHETIC INPUT", lambda: inputwatch.audit(store)),
-        ("MEMORY & INSTRUCTION LEVEL", lambda: memscan.audit(hosts=hosts)),
+        ("MEMORY & INSTRUCTION LEVEL", lambda: memscan.audit(hosts=hosts,
+                                                               advise=memory_advice.advisor())),
         ("PLAINTEXT CREDENTIALS", lambda: secrets.audit()),
         ("SCREEN CAPTURE & TRACKING PIXELS", lambda: pixel.audit(hosts=hosts)),
         ("SYSMON TELEMETRY", lambda: sysmon.audit(store=store, hosts=hosts)),
@@ -250,13 +253,23 @@ def cmd_secrets(args, store):
 def cmd_memscan(args, store):
     """Executable memory with no file behind it, and patched syscall stubs."""
     print("Scanning process memory for unbacked code and hooked stubs…\n")
-    findings = memscan.audit(hosts=selected_hosts(args))
+    findings = memscan.audit(hosts=selected_hosts(args), advise=memory_advice.advisor())
     if args.json:
         print(json.dumps(findings, indent=2))
         return
     render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=memscan.SEV_ORDER, show_ok=True,
             empty="no unbacked executable memory or patched stubs found")
+
+
+def cmd_dotnet(args, store):
+    """Read .NET runtime injection settings and the AMSI provider chain."""
+    findings = dotnet_posture.audit(hosts=selected_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
+                    show_ok=True, empty="no .NET runtime hijack settings found")
 
 
 def cmd_inputwatch(args, store):
@@ -279,6 +292,25 @@ def cmd_inputwatch(args, store):
     render_findings(findings, verbose=args.verbose, severity=args.severity,
             sev_order=inputwatch.SEV_ORDER, show_ok=True,
             empty="no synthetic input recorded")
+
+
+def cmd_containers(args, store):
+    findings = containers.audit(hosts=selected_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
+                    show_ok=True, empty="no container metadata returned")
+
+
+def cmd_audio(args, store):
+    """Read current Windows audio routes and session metadata."""
+    findings = audiowatch.audit(store, hosts=selected_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
+                    show_ok=True, empty="no audio metadata returned")
 
 
 def cmd_backdoor(args, store):
@@ -326,6 +358,20 @@ def cmd_posture(args, store):
 def cmd_netwatch(args, store):
     """Sample network state, then report what the history shows."""
     t = is_tty()
+    if getattr(args, "confirm_network", None) or getattr(args, "forget_network", None):
+        from jarvis.collectors.network.netwatch import confirmed
+        if args.forget_network:
+            gone = confirmed.revoke(store, args.forget_network)
+            print(f"forgot {args.forget_network!r}" if gone else
+                  f"{args.forget_network!r} was not confirmed")
+            return
+        try:
+            entry = confirmed.confirm(store, args.confirm_network, args.reason)
+        except confirmed.ConfirmError as exc:
+            raise SystemExit(f"jarvis netwatch: {exc}") from None
+        print(f"confirmed {args.confirm_network!r}: {len(entry['bssids'])} access point(s) "
+              f"({', '.join(entry['bssids'])}) behind gateway {entry['gw_mac']}")
+        return
     if args.timeline:
         rows = netwatch.timeline(store, hours=args.hours)
         if not rows:
@@ -416,3 +462,20 @@ def cmd_gaps(args, store):
 cmd_sniffing = simple_command(sniffing, "no packet-capture state to report")
 cmd_webshell = simple_command(webshell, "no web server to audit")
 cmd_auditd = simple_command(auditd, "syscall-interception posture unavailable")
+
+
+def cmd_preos(args, store):
+    """Compare what ran before Windows with the pinned baseline."""
+    if args.accept_baseline:
+        accepted = bootintegrity.accept_baseline(store)
+        if not accepted:
+            raise SystemExit("jarvis preos: no readable cold-boot log to pin")
+        print(f"baseline pinned at boot {accepted['boot']}; earlier differences "
+              "are no longer reported")
+        return
+    findings = bootintegrity.audit(store, hosts=selected_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
+                    show_ok=True, empty="no pre-OS boot evidence returned")

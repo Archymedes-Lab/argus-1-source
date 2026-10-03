@@ -1,0 +1,14 @@
+{
+  "recorded_at": 1790786406.91338,
+  "checkout_tests": 1890,
+  "checkout_pass": true,
+  "stage_tests": 1709,
+  "stage_pass": true,
+  "stage_focused_tests": 61,
+  "stage_focused_pass": true,
+  "reviewed_files": 13,
+  "unexpected_stage_files": 0,
+  "jev": "unavailable HTTPError",
+  "deployed": false,
+  "administrator_path": "sudo requires password"
+}

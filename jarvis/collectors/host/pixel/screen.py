@@ -12,6 +12,7 @@ whether the ones that must stay open are at least protected.
 """
 
 import os
+import re
 
 from jarvis.core.finding import win_finding as finding
 from jarvis.core.paths import load_win_script
@@ -121,13 +122,21 @@ def rules_windows(data):
             continue
         caps = aslist(pkg.get("caps"))
         borderless = any("WithoutBorder" in str(c) for c in caps)
+        # Windows installs a package only when its signer matches the
+        # declared publisher, so an Ok package published by Microsoft is
+        # Windows' own capture (shell, Snipping Tool, Teams), not a stranger.
+        windows_own = (re.search(r"(^|,\s*)O=Microsoft Corporation(,|$)",
+                                 str(pkg.get("publisher") or ""))
+                       and pkg.get("status") == "Ok")
         out.append(finding(
-            "screen", "medium" if borderless else "low",
+            "screen", "medium" if borderless and not windows_own else "low",
             "an app may capture the screen%s"
             % (" without showing the capture border" if borderless else ""),
             "%s declares %s. %s"
             % (pkg.get("name", "?"), ", ".join(str(c) for c in caps),
-               "Nothing on screen will indicate that recording is happening."
+               ("Published by Microsoft (verified package): Windows' own "
+                "capture feature." if windows_own and borderless else
+                "Nothing on screen will indicate that recording is happening.")
                if borderless else
                "Windows shows a capture border while it records."),
             pkg.get("name", "")))

@@ -1,6 +1,7 @@
 """The intrusion audit: one PowerShell sample, turned into findings."""
 
 import re
+import time
 
 from jarvis.core.paths import load_win_script
 from jarvis.platform.windows import aslist, ps_json
@@ -27,6 +28,16 @@ BROAD_PERMS = re.compile(r"<all_urls>|\*://\*/\*|http://\*/\*|https://\*/\*|"
 
 
 PS_INTRUSION = load_win_script("intrusion.ps1")
+# A detection that is not active and never executed becomes history after this.
+DETECTION_HISTORY_S = 72 * 3600
+
+
+def _epoch(value):
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
 # SHA-256 of "# PowerShell test file to determine AppLocker lockdown mode ",
 # the entire body PowerShell writes to its policy-test files.
 PS_POLICY_TEST_SHA256 = "96ad1146eb96877eab5942ae0736b82d8b5e2039a80d3d6932665c1a4c87dcf7"
@@ -79,12 +90,23 @@ def audit():
     # whose file is still sitting on disk is a live risk waiting to be run
     # again; an inactive one whose file is gone is history, and reporting it
     # forever trains you to ignore the category.
+    last_seen = {}
+    for d in aslist(data.get("threats")):
+        stamp = _epoch(d.get("time"))
+        if stamp is not None and d.get("id"):
+            last_seen[str(d["id"])] = max(last_seen.get(str(d["id"]), 0), stamp)
     for t in aslist(data.get("threatNames")):
         active, on_disk = t.get("active"), t.get("onDisk")
+        seen = last_seen.get(str(t.get("id") or ""))
+        stale = (seen is not None and time.time() - seen > DETECTION_HISTORY_S
+                 and t.get("executed") is False)
         if active:
             sev, note = "critical", "still active"
         elif on_disk:
             sev, note = "high", "not active, but the file is still on disk"
+        elif on_disk is None and stale:
+            sev, note = "low", ("not active, never executed, last detected "
+                                f"{int((time.time() - seen) // 86400)} days ago — historical")
         elif on_disk is None:
             sev, note = "medium", "not active; names no file to verify"
         else:

@@ -45,6 +45,12 @@ def _needs(store):
 
 def _score(store, jobs):
     result = score.compute(store.get_snapshots(), jobs, acks=acknowledge.load(store))
+    shown = score.stable(store, jobs, acks=acknowledge.load(store), live=result)
+    if shown.get("state") == "verifying":
+        pg = shown.get("progress") or {}
+        return (f"Re-checking collectors after a gap ({pg.get('checked', 0)} of "
+                f"{pg.get('total', 0)} current). Last verified security score: "
+                f"{shown['score']}% ({shown['grade']}); I'll update it once they all report.")
     lines = [f"Security score: {result['score']}% ({result['grade']}); "
              f"monitoring coverage: {result['coverage']}%."]
     for item in result.get("next_steps", [])[:3]:
@@ -192,6 +198,21 @@ def greeting(store, jobs, now=None):
     result = score.compute(snapshots, jobs, now, acks)
     lines = [_salutation(now)]
 
+    shown = score.stable(store, jobs, now, acks=acks, live=result, snapshots=snapshots)
+    if shown.get("state") == "verifying":
+        # Waking or restarting: the collectors are being re-checked, so say that
+        # and give the last verified score, not a partial sweep's figure.
+        pg = shown.get("progress") or {}
+        at = time.strftime("%H:%M", time.localtime(shown.get("verified_at") or now))
+        lines.append(f"I'm {'waking up and ' if shown.get('phase') == 'waking' else ''}re-checking "
+                     f"my collectors ({pg.get('checked', 0)} of {pg.get('total', 0)} current). "
+                     f"The last fully verified score was {shown['score']}% at {at}; "
+                     f"I'll update it once every collector has reported.")
+        if pg.get("retrying"):
+            lines.append(f"{len(pg['retrying'])} failed since waking and are retrying: "
+                         f"{', '.join(pg['retrying'][:4])}{'…' if len(pg['retrying']) > 4 else ''}.")
+        return {"text": "\n".join(lines), "pending": None}
+
     blind = [b["job"] for area in result["areas"] for b in area["blind"]]
     if blind:
         lines.append(f"First, a quick heads-up: {len(blind)} of my collectors are not reporting "
@@ -308,12 +329,19 @@ def _ollama(store, question, conf, jobs=None):
         "Do not claim a fix, compromise, or clean state without evidence. Do not output or "
         "pretend to execute actions. If a change is warranted, name the existing JARVIS "
         "verification command or say that human approval is needed. Answer in at most "
-        "70 words and finish the final sentence."
+        "110 words and finish the final sentence."
     )
     from jarvis.response import guardrails as guardrails_mod
     system += guardrails_mod.PREAMBLE
     user = "<DATA>" + json.dumps(context) + "</DATA>\nQUESTION: " + question[:2000]
-    text, error = llm.chat(conf, system, user)
+    # Measured live 2026-09-24: the small dashboard default (llama3.2:1b) broke
+    # persona on open questions with thin context ("I'm not a JARVIS endpoint
+    # monitor, but..."), at both the old and new word budgets — not caused by
+    # the widened cap. `email_voice_model` (llama3.2:3b) stayed in character in
+    # the same test, matching why emails already prefer it over the 1B model.
+    model = (conf.get("ask_model") or conf.get("email_voice_model")
+            or llm.model_name(conf))
+    text, error = llm.chat(conf, system, user, model=model, num_predict=170)
     if error == llm.BUSY:
         return ("The local model is still answering another question. Try again shortly, "
                 "or ask what needs you, your score, or what changed."), "busy"

@@ -53,21 +53,24 @@ def locate():
 $ErrorActionPreference='SilentlyContinue'
 $o=[ordered]@{status='unavailable'}
 try {
+  # Windows PowerShell 5.1 does not project IAsyncOperation.Status, so a
+  # polling loop exits at once and never sees a fix; bridge through AsTask.
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
   [Windows.Devices.Geolocation.Geolocator,Windows.Devices.Geolocation,ContentType=WindowsRuntime] | Out-Null
+  $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and
+    $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' } | Select-Object -First 1
   $g = New-Object Windows.Devices.Geolocation.Geolocator
   $g.DesiredAccuracy = [Windows.Devices.Geolocation.PositionAccuracy]::Default
-  $op = $g.GetGeopositionAsync()
-  $t = [DateTime]::Now
-  while ($op.Status -eq [Windows.Foundation.AsyncStatus]::Started -and ([DateTime]::Now-$t).TotalSeconds -lt 12) {
-    Start-Sleep -Milliseconds 200
-  }
-  if ($op.Status -eq [Windows.Foundation.AsyncStatus]::Completed) {
-    $p = $op.GetResults().Coordinate
+  $task = $asTask.MakeGenericMethod([Windows.Devices.Geolocation.Geoposition]).Invoke($null, @($g.GetGeopositionAsync()))
+  if ($task.Wait(12000)) {
+    $p = $task.Result.Coordinate
     $o.status='ok'; $o.lat=[double]$p.Point.Position.Latitude
     $o.lon=[double]$p.Point.Position.Longitude
-    $o.accuracy_m=[double]$p.Accuracy; $o.source='windows-gnss'
-  } else { $o.reason='locator did not return a fix' }
-} catch { $o.reason=$_.Exception.Message }
+    $o.accuracy_m=[double]$p.Accuracy
+    $o.source='windows-' + ([string]$p.PositionSource).ToLower()
+  } else { $o.reason='locator did not return a fix within 12 seconds' }
+} catch { $o.reason=[string]$(if($_.Exception.InnerException){$_.Exception.InnerException.Message}else{$_.Exception.Message}) }
 $json=[pscustomobject]$o|ConvertTo-Json -Compress
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 """, timeout=30)
@@ -133,7 +136,7 @@ def clear_manual(store):
 def effective(store, native):
     """The location to reason about: a native fix wins; else what the user set.
 
-    Never invents a position — it only ever returns a real GNSS fix or a
+    Never invents a position — it only ever returns a native Windows fix or a
     location the user declared, each tagged with its source so the UI and the
     confidence fusion can tell them apart.
     """
@@ -175,7 +178,7 @@ def audit(store=None, hosts=("win",)):
         where = eff.get("label") or "a set location"
         out.append(_finding("geo", "ok", f"Location set to {where}"
                             + (f" ({eff['zone']})" if zones else ""),
-                            "user-declared location; native GPS is off, so this is not "
+                            "user-declared location; no native fix was available, so this is not "
                             "independently verified.", "geo"))
     elif eff.get("status") == "ok":
         collection.succeeded("geo")

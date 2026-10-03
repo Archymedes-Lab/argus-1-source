@@ -1,3 +1,4 @@
+import time
 import unittest
 from unittest import mock
 
@@ -37,10 +38,14 @@ class CheckPathsTest(unittest.TestCase):
 
 
 class CheckProcessesTest(unittest.TestCase):
+    def setUp(self):
+        self.seen = time.time()          # a process that ran just now
+
     def rows(self, *procs):
         store = mock.MagicMock()
         store.db.execute.return_value = [
-            {"name": n, "exe": e, "host": h, "cmdline": "", "last_seen": 0} for n, e, h in procs]
+            {"name": n, "exe": e, "host": h, "cmdline": "", "last_seen": self.seen}
+            for n, e, h in procs]
         return store
 
     def run_check(self, store, signed=()):
@@ -64,6 +69,15 @@ class CheckProcessesTest(unittest.TestCase):
         exe = r"C:\Users\me\AppData\Local\Microsoft\OneDrive\Update\OneDriveSetup.exe"
         out = self.run_check(self.rows(("OneDriveSetup.exe", exe, "win")))
         self.assertEqual([f["severity"] for f in out], ["medium"])
+
+    def test_a_match_last_seen_days_ago_is_history(self):
+        exe = r"C:\Users\me\AppData\Local\Microsoft\OneDrive\Update\OneDriveSetup.exe"
+        self.seen = time.time() - 5 * 86400
+        out = self.run_check(self.rows(("OneDriveSetup.exe", exe, "win")))
+        self.assertEqual([f["severity"] for f in out], ["low"])
+        dropped = r"C:\Users\me\AppData\Local\Temp\OneDriveSetup.exe"
+        out = self.run_check(self.rows(("OneDriveSetup.exe", dropped, "win")))
+        self.assertEqual([f["severity"] for f in out], ["high"])   # dropped copies never age
 
     def test_name_without_a_path_is_low(self):
         out = self.run_check(self.rows(("OneDriveSetup.exe", "", "win")))

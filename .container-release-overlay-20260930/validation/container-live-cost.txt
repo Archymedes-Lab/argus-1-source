@@ -1,0 +1,1 @@
+elapsed_s=0.79 max_rss_kib=28780 cpu_user_s=0.35 cpu_system_s=0.35

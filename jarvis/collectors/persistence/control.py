@@ -19,12 +19,18 @@ import os
 import re
 import subprocess
 
+try:
+    import pwd
+except ImportError:      # native Windows: no passwd database, and no caller there
+    pwd = None
 from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import short
-from jarvis.platform import broker
+from jarvis.platform import broker, host
+from jarvis.platform.provenance import persistence as managed_persistence
 from jarvis.platform.windows import aslist, ps_json
 
+from .backdoor import _sudo_lines, restricted_sudo
 from .trusted_tasks import verified_maintenance_task
 
 # PowerShell's -EncodedCommand, as a real flag rather than any string containing
@@ -111,8 +117,11 @@ def audit_linux():
                 out.append(_finding("persistence", "low", "systemd alias to a packaged unit",
                                     f"{os.path.basename(path)} -> {target}", path))
                 continue
-            out.append(_finding("persistence", "medium", "custom systemd service",
-                                os.path.basename(path), path))
+            proof = _verified_unit(path)
+            finding = _finding("persistence", "low" if proof else "medium",
+                               "custom systemd service", os.path.basename(path)
+                               + (f" — verified: {proof}" if proof else ""), path)
+            out.append(finding)
 
     # -- persistence: shell startup + rc hooks -----------------------------
     for rc in SHELL_RC:
@@ -177,12 +186,20 @@ def audit_linux():
                 body = fh.read()
         except OSError:
             continue
-        if "NOPASSWD" in body:
-            out.append(_finding("defense", "high", "passwordless sudo rule",
-                                short(body.strip().replace("\n", " "), 90), path))
+        rules = [line.strip() for line in _sudo_lines(body)
+                 if "NOPASSWD" in line.upper() and not line.strip().startswith("#")]
+        if not rules:
+            continue
+        # Every rule limited to fixed, root-owned, non-escaping commands
+        # cannot become a root shell; any other NOPASSWD rule can.
+        restricted = all(restricted_sudo(rule) for rule in rules)
+        out.append(_finding("defense", "low" if restricted else "high",
+                            "restricted passwordless sudo rule" if restricted
+                            else "passwordless sudo rule",
+                            short(" ".join(rules), 90), path))
 
     # -- defense: WSL is not the security boundary -------------------------
-    if os.path.exists("/mnt/c/Windows"):
+    if host.on_wsl() and os.path.exists("/mnt/c/Windows"):
         out.append(_finding("defense", "low", "Windows drive mounted in WSL",
                             "processes in WSL can read and write the Windows "
                             "filesystem at /mnt/c", "/mnt/c"))
@@ -208,6 +225,59 @@ def _task_action_text(task):
     )
 
 
+def _sha256(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _unit_show(name, user=False):
+    cmd = ["systemctl"] + (["--user"] if user else []) + [
+        "show", name, "--no-pager", "-p", "ExecStart,User"]
+    props = dict(line.split("=", 1) for line in _run(cmd).splitlines() if "=" in line)
+    argv = re.search(r"argv\[\]=([^;]*)", props.get("ExecStart", ""))
+    return (argv.group(1).split() if argv else []), props.get("User", "")
+
+
+def _verified_unit(path):
+    """Why a custom unit is known, or "" when it is not proven.
+
+    Three units exist here by design and each is checked on its content,
+    never its name: Microsoft's Sysmon for Linux (its /opt copy must be
+    byte-identical to the dpkg-owned binary, and dpkg must verify that),
+    JARVIS's self-check (identical to the repository template), and JARVIS
+    itself (it must run JARVIS, as the checkout owner)."""
+    from jarvis.core.paths import SOURCE_ROOT
+    name = os.path.basename(path)
+    try:
+        if name == "sysmon.service" and path.startswith("/etc/systemd/system/"):
+            argv, _user = _unit_show(name)
+            if argv and argv[0] == "/opt/sysmon/sysmon" \
+                    and _sha256(argv[0]) == _sha256("/usr/bin/sysmon") \
+                    and "/usr/bin/sysmon" not in _run(["dpkg", "-V", "sysmonforlinux"]) \
+                    and "sysmonforlinux" in _run(["dpkg", "-S", "/usr/bin/sysmon"]):
+                return "Sysmon for Linux, identical to the dpkg-verified /usr/bin/sysmon"
+        if name == "jarvis-selfcheck.service":
+            with open(SOURCE_ROOT / "systemd" / name, errors="replace") as fh:
+                template = fh.read().replace("@REPO_ROOT@", str(SOURCE_ROOT))
+            with open(path, errors="replace") as fh:
+                if fh.read() == template:
+                    return "identical to JARVIS's reviewed unit template"
+        if name == "jarvis.service" and path.startswith("/etc/systemd/system/"):
+            argv, user = _unit_show(name)
+            owner = pwd.getpwuid(os.stat(SOURCE_ROOT).st_uid).pw_name
+            runs_jarvis = argv[1:5] == ["-I", "/opt/jarvis/current/jarvis-release.py",
+                                        "serve", "--port"] or argv[1:4] == ["-m", "jarvis", "serve"]
+            if argv[:1] == ["/usr/bin/python3"] and runs_jarvis and user == owner:
+                return f"runs JARVIS as {owner}"
+    except (OSError, KeyError, ValueError, AttributeError):
+        return ""
+    return ""
+
+
 def audit_windows():
     data = ps_json(PS_CONTROL)
     if data is None:
@@ -227,11 +297,9 @@ def audit_windows():
         sev = "high" if REMOTE_AGENTS.search(action + (t.get("name") or "")) else "low"
         if OBFUSCATED.search(action):
             sev = "critical"
-        if (t.get("name") or "").casefold() in (
-                "jarvis wake watchdog", "jarvis independent health monitor", "jarvis reviver",
-                "jarvis elevated broker",
-                "wsl ide keepalive",
-                "wsl ide keepalive watchdog"):
+        # A declared JARVIS-managed task that fails verification is either
+        # modified or an impostor using the name: critical either way.
+        if (t.get("name") or "").casefold() in managed_persistence.CRITICAL_ON_MISMATCH:
             sev = "critical"
             action = f"{action} [verification failed: {trust_detail}]"
         finding = _finding("persistence", sev, "scheduled task",
@@ -239,6 +307,10 @@ def audit_windows():
                            (t.get("path") or "") + str(t.get("name")))
         finding["response_target"] = {"kind": "task", "name": t.get("name") or "",
                                       "path": t.get("path") or "\\"}
+        acts = [a for a in aslist(t.get("actions")) if isinstance(a, dict)]
+        if len(acts) == 1:
+            # untruncated; a COM-handler task runs its registered DLL
+            finding["program"] = str(acts[0].get("execute") or acts[0].get("handler") or "")
         out.append(finding)
 
     for k in aslist(data.get("runkeys")):
@@ -287,9 +359,16 @@ def audit_windows():
     if (remote.get("sshd") or "") == "Running":
         out.append(_finding("remote", "high", "OpenSSH server running",
                             "accepts inbound SSH", "Service: sshd"))
+    me = (data.get("currentUser") or "").casefold().rsplit("\\", 1)[-1]
     for line in aslist(remote.get("sessions")):
         if isinstance(line, str) and line.strip() and "USERNAME" not in line:
-            out.append(_finding("remote", "medium", "logon session",
+            # `query user`: [>]USERNAME SESSIONNAME ID STATE ... Your own
+            # console session is the machine being used; anything else
+            # (another account, an RDP session) keeps its severity.
+            cols = line.lstrip(" >").split()
+            own = (len(cols) >= 2 and me and cols[0].casefold() == me
+                   and cols[1].casefold() == "console")
+            out.append(_finding("remote", "low" if own else "medium", "logon session",
                                 short(line.strip(), 90), "query user"))
 
     d = data.get("defender") or {}

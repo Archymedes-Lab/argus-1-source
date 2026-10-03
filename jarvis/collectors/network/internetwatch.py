@@ -10,7 +10,7 @@ import re
 import time
 
 from jarvis.core.paths import load_win_script
-from jarvis.platform import broker
+from jarvis.platform import broker, firewall_state
 from jarvis.platform import linux as collect_linux
 from jarvis.platform.windows import ps_json
 
@@ -67,7 +67,7 @@ def firewall_summary(log):
     return totals
 
 
-def analyze(host, data):
+def analyze(host, data, firewall=None):
     out, records = [], []
     apps = {p['pid']: p for p in data.get('apps', [])}
     listeners = [c for c in data.get('connections', []) if c.get('state') == 'LISTEN']
@@ -83,7 +83,15 @@ def analyze(host, data):
         row['direction'] = 'likely inbound' if inbound else 'unknown'
         records.append(row)
         exposed = c.get('state') == 'LISTEN' and scope(c.get('local_ip', '')) not in ('loopback', 'unknown')
-        if exposed or (inbound and scope(c.get('remote_ip', '')) not in ('loopback', 'unknown')):
+        # A listener the firewall provably blocks on every profile is
+        # inventory; unproven reach keeps it medium (see firewall_state).
+        shut = firewall_state.blocked(c.get('proto'), c.get('local_port'), row['exe'], firewall) \
+            if exposed and not inbound and firewall else ''
+        if shut:
+            out.append(finding(host, 'low', 'application listening beyond loopback',
+                f"{row['name']} PID {c.get('pid')}: {c.get('local_ip')}:{c.get('local_port')}; "
+                f"not reachable from the network: {shut}", row['exe']))
+        elif exposed or (inbound and scope(c.get('remote_ip', '')) not in ('loopback', 'unknown')):
             out.append(finding(host, 'high' if inbound and scope(c['remote_ip']) == 'public' else 'medium',
                 'likely inbound connection' if inbound else 'application listening beyond loopback',
                 f"{row['name']} PID {c.get('pid')}: {c.get('local_ip')}:{c.get('local_port')}"
@@ -165,7 +173,8 @@ def audit(store, hosts=('wsl', 'win')):
                     p.get('cmdline', ''))))
                 data['apps'].append(dict(pid=p['pid'], name=p['name'], exe=p['exe'], flags=flags))
                 data['connections'].extend(dict(c, pid=p['pid']) for c in p['conns'])
-        findings, rows = analyze(host, data)
+        findings, rows = analyze(host, data,
+                                 firewall_state.state() if host == 'win' else None)
         out.extend(findings)
         errors = data.get('errors', [])
         status = 'partial' if errors else 'sampled'

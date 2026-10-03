@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "JARVIS",
+  "mainBinaryName": "jarvis-desktop",
+  "version": "1.0.0",
+  "identifier": "local.jarvis.desktop",
+  "build": {
+    "frontendDist": "fallback"
+  },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": false,
+    "security": {
+      "csp": "default-src 'none'; style-src 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "JARVIS",
+    "shortDescription": "JARVIS desktop",
+    "longDescription": "Window, tray and notifications for the local JARVIS daemon. The daemon does the monitoring; this app only shows it.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "windows": {
+      "webviewInstallMode": { "type": "skip" },
+      "nsis": { "installMode": "currentUser" }
+    }
+  }
+}

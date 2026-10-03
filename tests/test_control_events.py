@@ -52,6 +52,21 @@ class ControlActivationTests(unittest.TestCase):
 
         self.assertEqual(out["a control key was injected by software"], "high")
 
+    def test_media_only_without_lower_integrity_is_medium(self):
+        self._event("control-key", control="media-play-pause", injected=1)
+        out = self._titles(analysis._control_findings(self.store))
+        self.assertEqual(out["media play/pause was injected by software"], "medium")
+
+    def test_other_or_lower_integrity_controls_keep_high(self):
+        self._event("control-key", control="media-play-pause", injected=1)
+        self._event("control-key", control="launch-app1", injected=1)
+        out = self._titles(analysis._control_findings(self.store))
+        self.assertEqual(out["a control key was injected by software"], "high")
+        self.store.db.execute("DELETE FROM control_events")
+        self._event("control-key", control="media-play-pause", injected=1, lower_il=1)
+        out = self._titles(analysis._control_findings(self.store))
+        self.assertEqual(out["a control key was injected by software"], "high")
+
     def test_a_lower_integrity_injection_is_named_as_such(self):
         self._event("control-key", control="volume-mute", injected=1,
                     lower_il=1)

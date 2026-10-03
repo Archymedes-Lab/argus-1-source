@@ -158,8 +158,6 @@ if $want_seal; then
   sudo mkdir -p /etc/systemd/system/jarvis.service.d
   sudo cp "$HERE/systemd/hardening.conf" \
           /etc/systemd/system/jarvis.service.d/hardening.conf
-  sudo cp "$HERE/systemd/capabilities.conf" \
-          /etc/systemd/system/jarvis.service.d/capabilities.conf
   sudo systemctl daemon-reload
   sudo systemctl restart jarvis.service
   echo "  drop-in:  /etc/systemd/system/jarvis.service.d/hardening.conf"
@@ -195,31 +193,31 @@ if $want_seal; then
   if command -v powershell.exe >/dev/null 2>&1; then
     LOCAL_WAKE="/mnt/c/Users/$(powershell.exe -NoProfile -NonInteractive -Command '$env:USERNAME' 2>/dev/null | tr -d '\r')/AppData/Local/WSLKeepalive"
     mkdir -p "$LOCAL_WAKE" 2>/dev/null || true
-    if cp "$HERE/wake-jarvis.ps1" "$LOCAL_WAKE/" 2>/dev/null; then
+    if cp "$HERE/jarvis-wake-watchdog.ps1" "$LOCAL_WAKE/" 2>/dev/null; then
       # Run it from a local Windows path, not the \\wsl.localhost UNC share:
       # scripts on a network path are treated as remote-zone and refused by
       # any execution policy stricter than Bypass. -RepoRoot lets each run
       # reconcile that staged copy against this checkout, so a later `git pull`
       # reaches the task without re-running install.
       powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-        -File "$(wslpath -w "$LOCAL_WAKE/wake-jarvis.ps1")" -Install \
+        -File "$(wslpath -w "$LOCAL_WAKE/jarvis-wake-watchdog.ps1")" -Install \
         -RepoRoot "$HERE" 2>&1 \
         | tr -d '\r' | sed 's/^/  /'
     else
-      echo "  WARNING: could not stage wake-jarvis.ps1 to the Windows side"
+      echo "  WARNING: could not stage jarvis-wake-watchdog.ps1 to the Windows side"
     fi
     # The fast ring: a loop that checks every few seconds and re-runs a stale
     # protection source or restarts a dead daemon, instead of waiting five
-    # minutes for the wake task or a human for the dead-man's email.
+    # minutes for the wake task or a human for the health monitor's email.
     LOCAL_REVIVE="$(dirname "$LOCAL_WAKE")/Jarvis/Reviver"
     mkdir -p "$LOCAL_REVIVE" 2>/dev/null || true
-    if cp "$HERE/revive-jarvis.ps1" "$LOCAL_REVIVE/" 2>/dev/null; then
+    if cp "$HERE/jarvis-reviver.ps1" "$LOCAL_REVIVE/" 2>/dev/null; then
       powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
-        -File "$(wslpath -w "$LOCAL_REVIVE/revive-jarvis.ps1")" -Install \
+        -File "$(wslpath -w "$LOCAL_REVIVE/jarvis-reviver.ps1")" -Install \
         -RepoRoot "$HERE" 2>&1 \
         | tr -d '\r' | sed 's/^/  /'
     else
-      echo "  WARNING: could not stage revive-jarvis.ps1 to the Windows side"
+      echo "  WARNING: could not stage jarvis-reviver.ps1 to the Windows side"
     fi
   else
     echo "  skipped wake watchdog: powershell.exe unreachable from here"

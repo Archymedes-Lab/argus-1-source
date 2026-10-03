@@ -1,8 +1,8 @@
 import json
 import tempfile
 import time
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 from jarvis.core import assurance
@@ -41,6 +41,18 @@ class AssuranceTests(unittest.TestCase):
         self.assertEqual(sensor['live_telemetry'], 'current')
         self.assertIsNone(sensor['last_validation'])
         self.assertFalse(sensor['validated_containment'])
+
+    def test_assurance_gaps_separate_mapping_from_implementation(self):
+        observations = {source: {'status': 'complete'} for required in
+                        assurance.OBSERVATION_REQUIREMENTS.values() for source in required}
+        result = assurance.report(observations)
+        gaps = result['evidence_gaps']
+        self.assertEqual(gaps['implementation_unverified'], 4)
+        self.assertEqual(gaps['implementation_partial'], 20)
+        self.assertEqual(gaps['observation_mapping_missing'], 12)
+        self.assertEqual(gaps['containment_not_validated'], 24)
+        self.assertEqual(gaps['validation_date_missing'], 24)
+        self.assertFalse(result['complete'])
 
     def test_missing_or_stale_optional_sensor_is_explicit(self):
         self.assertEqual(assurance.report()['capabilities']['browser_privacy_veil']['live_telemetry'],

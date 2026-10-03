@@ -1,0 +1,196 @@
+{
+ "taken": "2026-10-01T23:48:38+0300",
+ "live_release": "sha256:387802244eed...",
+ "score_meta": "{\"score\": 54, \"grade\": \"needs work\", \"coverage\": 100, \"areas\": [{\"name\": \"Active threats\", \"score\": 9, \"open\": {\"medium\": 20, \"low\": 63, \"high\": 19}, \"jobs\": 12, \"observed\": 12, \"blind\": []}, {\"name\": \"OS hardening\", \"score\": 73, \"open\": {\"low\": 26, \"medium\": 3}, \"jobs\": 4, \"observed\": 4, \"blind\": []}, {\"name\": \"Persistence & access\", \"score\": 36, \"open\": {\"low\": 208, \"critical\": 1, \"high\": 1}, \"jobs\": 6, \"observed\": 6, \"blind\": []}, {\"name\": \"Data & privacy\", \"score\": 24, \"open\": {\"critical\": 2, \"high\": 1, \"medium\": 2, \"low\": 74}, \"jobs\": 5, \"observed\": 5, \"blind\": []}, {\"name\": \"Network\", \"score\": 57, \"open\": {\"low\": 27, \"high\": 1, \"medium\": 2}, \"jobs\": 2, \"observed\": 2, \"blind\": []}, {\"name\": \"Developer toolchain\", \"score\": 89, \"open\": {\"medium\": 1, \"low\": 5}, \"jobs\": 1, \"observed\": 1, \"blind\": []}, {\"name\": \"Monitoring\", \"score\": 89, \"open\": {\"low\": 5, \"medium\": 1}, \"jobs\": 7, \"observed\": 7, \"blind\": []}], \"next_steps\": [{\"area\": \"Data & privacy\", \"job\": \"secrets\", \"weight\": 20, \"severity\": \"critical\", \"title\": \"database URL with password in plaintext (+1 more location)\", \"where\": \"/home/chris/FEM-C-BS/server/.env:2\"}, {\"area\": \"Data & privacy\", \"job\": \"secrets\", \"weight\": 20, \"severity\": \"critical\", \"title\": \"database URL with password in plaintext (+2 more locations)\", \"where\": \"/home/chris/.claude/history.jsonl:2295\"}, {\"area\": \"Persistence & access\", \"job\": \"control\", \"weight\": 20, \"severity\": \"critical\", \"title\": \"scheduled task\", \"where\": \"\\\\JarvisCursorSpeed\"}, {\"area\": \"Active threats\", \"job\": \"input\", \"weight\": 8, \"severity\": \"high\", \"title\": \"1 injected character VK_0x00 (0x00) while WindowsTerminal:17952 had focus\", \"where\": \"input_events\"}, {\"area\": \"Active threats\", \"job\": \"intrusion\", \"weight\": 8, \"severity\": \"high\", \"title\": \"recently written unsigned executable\", \"where\": \"C:\\\\Users\\\\chris\\\\AppData\\\\Local\\\\Temp\\\\relay.js\"}, {\"area\": \"Active threats\", \"job\": \"intrusion\", \"weight\": 8, \"severity\": \"high\", \"title\": \"recently written unsigned executable\", \"where\": \"C:\\\\Users\\\\chris\\\\AppData\\\\Local\\\\Temp\\\\jarvis-adv-imitation.ps1\"}, {\"area\": \"Active threats\", \"job\": \"intrusion\", \"weight\": 8, \"severity\": \"high\", \"title\": \"recently written unsigned executable\", \"where\": \"C:\\\\Users\\\\chris\\\\AppData\\\\Local\\\\Temp\\\\jarvis-adv-attacker.ps1\"}, {\"area\": \"Active threats\", \"job\": \"intrusion\", \"weight\": 8, \"severity\": \"high\", \"title\": \"recently written unsigned executable\", \"where\": \"C:\\\\Users\\\\chris\\\\AppData\\\\Local\\\\Temp\\\\jarvis-native-stage-4b03e15c-28a6-4fa6-9ad5-31390c6bd805\\\\monitor-isolated.ps1\"}], \"acknowledged\": 10, \"at\": 1790887511}",
+ "snapshots": {
+  "scan": {
+   "ts": 1790887654,
+   "findings": 9
+  },
+  "hidden": {
+   "ts": 1790887405,
+   "findings": 18
+  },
+  "firewall": {
+   "ts": 1790885947,
+   "findings": 23
+  },
+  "control": {
+   "ts": 1790887711,
+   "findings": 129
+  },
+  "asep": {
+   "ts": 1790885948,
+   "findings": 20
+  },
+  "spy": {
+   "ts": 1790886157,
+   "findings": 47
+  },
+  "boot": {
+   "ts": 1790886185,
+   "findings": 57
+  },
+  "intrusion": {
+   "ts": 1790886082,
+   "findings": 41
+  },
+  "evasion": {
+   "ts": 1790887027,
+   "findings": 8
+  },
+  "coverage": {
+   "ts": 1790887357,
+   "findings": 8
+  },
+  "hunt": {
+   "ts": 1790887576,
+   "findings": 12
+  },
+  "gaps": {
+   "ts": 1790886202,
+   "findings": 224
+  },
+  "intel": {
+   "ts": 1790886202,
+   "findings": 2
+  },
+  "feeds": {
+   "ts": 1790886112,
+   "findings": 1
+  },
+  "implant": {
+   "ts": 1790885967,
+   "findings": 2
+  },
+  "netwatch": {
+   "ts": 1790887417,
+   "findings": 12
+  },
+  "posture": {
+   "ts": 1790886136,
+   "findings": 5
+  },
+  "backdoor": {
+   "ts": 1790885971,
+   "findings": 4
+  },
+  "input": {
+   "ts": 1790887418,
+   "findings": 16
+  },
+  "memscan": {
+   "ts": 1790886156,
+   "findings": 16
+  },
+  "secrets": {
+   "ts": 1790886298,
+   "findings": 31
+  },
+  "sysmon": {
+   "ts": 1790887593,
+   "findings": 7
+  },
+  "input_hook": {
+   "ts": 1790887699,
+   "findings": 4
+  },
+  "bruteforce": {
+   "ts": 1790886133,
+   "findings": 3
+  },
+  "sniffing": {
+   "ts": 1790887576,
+   "findings": 2
+  },
+  "webshell": {
+   "ts": 1790886204,
+   "findings": 2
+  },
+  "auditd": {
+   "ts": 1790886156,
+   "findings": 1
+  },
+  "sysmon_linux": {
+   "ts": 1790887593,
+   "findings": 21
+  },
+  "bridge": {
+   "ts": 1790887699,
+   "findings": 1
+  },
+  "watchdogs": {
+   "ts": 1790887691,
+   "findings": 5
+  },
+  "resources": {
+   "ts": 1790887425,
+   "findings": 3
+  },
+  "report": {
+   "ts": 1790887511,
+   "findings": 1
+  },
+  "internet": {
+   "ts": 1790887677,
+   "findings": 21
+  },
+  "controls": {
+   "ts": 1790887440,
+   "findings": 2
+  },
+  "deep_hidden": {
+   "ts": 1790886333,
+   "findings": 18
+  },
+  "toolchain": {
+   "ts": 1790886132,
+   "findings": 10
+  },
+  "ledger": {
+   "ts": 1790887576,
+   "findings": 19
+  },
+  "pixel": {
+   "ts": 1790885975,
+   "findings": 14
+  },
+  "identity": {
+   "ts": 1790887607,
+   "findings": 9
+  },
+  "attackmap": {
+   "ts": 1790886205,
+   "findings": 1
+  },
+  "native": {
+   "ts": 1790887696,
+   "findings": 1
+  },
+  "arena": {
+   "ts": 1790886136,
+   "findings": 1
+  },
+  "geo": {
+   "ts": 1790887683,
+   "findings": 1
+  },
+  "model": {
+   "ts": 1790887577,
+   "findings": 1
+  },
+  "rust_mirror": {
+   "ts": 1790887154,
+   "findings": 0
+  },
+  "evidence": {
+   "ts": 1790886904,
+   "findings": 0
+  }
+ },
+ "missing_in_live": [
+  "audio",
+  "containers",
+  "dotnet"
+ ]
+}

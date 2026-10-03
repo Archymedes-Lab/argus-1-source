@@ -65,6 +65,12 @@ CAP_LABEL = {
 }
 
 
+# Package families published by Microsoft: the suffix is a hash of the
+# publisher, and Windows installs a package only when its signer matches.
+# Past use of a capability by Windows' own apps (Snipping Tool) is a record.
+MICROSOFT_FAMILY = re.compile(r"_(8wekyb3d8bbwe|cw5n1h2txyewy)(\\|$)", re.I)
+
+
 def _recent(iso_ts, hours=24):
     """True when an ISO-8601 timestamp is within the last `hours`."""
     if not iso_ts:
@@ -114,7 +120,8 @@ def audit_windows(now_iso=None):
         else:
             if STALKERWARE.search(app):
                 sev = "high"
-            elif tier == "surveillance" and _recent(c.get("start"), hours=24):
+            elif tier == "surveillance" and _recent(c.get("start"), hours=24) \
+                    and not MICROSOFT_FAMILY.search(app):
                 sev = "medium"
             else:
                 sev = "low"

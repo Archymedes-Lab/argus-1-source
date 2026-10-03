@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '..\connectivity-jarvis.ps1') -LibraryOnly
+. (Join-Path $PSScriptRoot '..\jarvis-connectivity-guard.ps1') -LibraryOnly
 function Assert-Decision($expected, $status, $reachable, $failures, $first, $last, $now, $paused=$false) {
     $actual = Get-RecoveryDecision $status $reachable $failures $first $last $now $paused
     if ($actual -ne $expected) { throw "Expected $expected, got $actual" }

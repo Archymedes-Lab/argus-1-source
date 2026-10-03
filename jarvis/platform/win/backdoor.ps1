@@ -24,8 +24,24 @@ $o.ifeo = @('sethc.exe','utilman.exe','osk.exe','magnify.exe','narrator.exe',
 $o.hidden = @()
 $ul = 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList'
 if (Test-Path $ul) {
+  # Privilege decides what a hidden account can do. Groups are looked up by
+  # well-known SID (Administrators, Remote Desktop Users) so a localized
+  # group name cannot hide membership; a failed lookup reports $null.
+  $groups = @{}
+  foreach ($sid in 'S-1-5-32-544','S-1-5-32-555') {
+    try { $groups[$sid] = @(Get-LocalGroupMember -SID $sid -ErrorAction Stop |
+                            ForEach-Object { ([string]$_.Name).Split('\')[-1] }) }
+    catch { $groups[$sid] = $null }
+  }
   (Get-Item $ul).Property | ForEach-Object {
-    $o.hidden += [pscustomobject]@{ name=$_; val=[int](Get-ItemProperty $ul $_).$_ }
+    $name = $_
+    $user = Get-LocalUser -Name $name -ErrorAction SilentlyContinue
+    $o.hidden += [pscustomobject]@{
+      name=$name; val=[int](Get-ItemProperty $ul $name).$name
+      exists=[bool]$user; enabled=($user -and [bool]$user.Enabled)
+      admin=$(if ($null -eq $groups['S-1-5-32-544']) { $null } else { $groups['S-1-5-32-544'] -contains $name })
+      rdp=$(if ($null -eq $groups['S-1-5-32-555']) { $null } else { $groups['S-1-5-32-555'] -contains $name })
+    }
   }
 }
 

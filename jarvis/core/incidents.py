@@ -27,9 +27,13 @@ def coverage_status(findings, error="", reported="complete"):
     """
     if reported not in COVERAGE:
         raise ValueError("invalid collection coverage")
+    # A finding about another collector (the coverage audit reporting that
+    # `hidden` failed) is complete evidence about that collector; it counts
+    # against that collector's area, not as a blind spot in the reporter's.
     failed = error or any(
         f.get("coverage_status") in ("partial", "unavailable") or
-        (f.get("category") in ("visibility", "collectors") and f.get("severity") != "ok")
+        (f.get("category") in ("visibility", "collectors") and f.get("severity") != "ok"
+         and not f.get("about_collector"))
         for f in findings)
     if reported == "unavailable":
         return reported

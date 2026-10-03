@@ -1,5 +1,6 @@
 # Development tooling only. Jarvis has no runtime dependencies beyond the
-# Python 3.12 standard library, and nothing here changes that.
+# Python 3.12 standard library. Opt-in mesh commands additionally require
+# cryptography; importing or running core JARVIS does not require it.
 #
 #   uvx ruff check            lint (unused/undefined names, syntax)
 #   python3 -m unittest discover -s tests

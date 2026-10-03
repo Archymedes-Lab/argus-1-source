@@ -19,7 +19,7 @@ class BrokerResultTests(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp)
         os.makedirs(os.path.join(self.tmp, "out"))
-        shutil.copy(REPO_ROOT / "broker-jarvis.ps1", self.tmp)
+        shutil.copy(REPO_ROOT / "jarvis-elevated-broker.ps1", self.tmp)
         for name in broker.SCRIPTS.values():
             shutil.copy(win_script(name), self.tmp)
         for attr, value in (("ROOT", self.tmp), ("OUT", os.path.join(self.tmp, "out"))):
@@ -50,7 +50,7 @@ class BrokerResultTests(unittest.TestCase):
         self.assertIn("differs", why)
 
     def test_not_installed(self):
-        os.remove(os.path.join(self.tmp, "broker-jarvis.ps1"))
+        os.remove(os.path.join(self.tmp, "jarvis-elevated-broker.ps1"))
         self.assertIsNone(broker.result("memscan")[0])
 
     def test_failed_restage_cannot_pass_because_old_broker_exists(self):

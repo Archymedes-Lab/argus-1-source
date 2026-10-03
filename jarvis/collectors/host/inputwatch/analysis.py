@@ -1,11 +1,14 @@
 """Turning input telemetry into findings about synthetic input."""
 
+import json
 import statistics
+from collections import Counter
 
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
 from jarvis.platform.windows import ps_json
 
+from . import watchers
 from .forensics import explain
 from .helper import running
 from .ingest import ingest
@@ -21,6 +24,11 @@ BENIGN_INJECTORS = {
     "parsec", "moonlight", "sunshine", "obs64", "obs32",
 }
 
+# The hook emits media controls into both input_events and control_events.
+# Add a VK here only after checking the hook's ControlClass mapping and a
+# regression case; a VK name or foreground alone is never enough to dedupe.
+CONTROL_VK = {0xB3: "media-play-pause"}
+
 
 def audit(store, hours=24, pids=None, supervised=False):
     out = []
@@ -34,6 +42,12 @@ def audit(store, hours=24, pids=None, supervised=False):
 
     beat = store.db.execute(
         "SELECT * FROM input_beats ORDER BY ts DESC LIMIT 1").fetchone()
+
+    # Which processes hook the keyboard and mouse, from the elevated broker's
+    # Win32k audit trace. JARVIS's own hook is known by its supervised pids.
+    if pids is None and not supervised:
+        pids = running()
+    out.extend(watchers.audit(own_pids=pids or ()))
 
     # When the supervisor has already run it owns the liveness and latency
     # narrative; audit adds only what it alone produces — the injected-event
@@ -90,17 +104,32 @@ def audit(store, hours=24, pids=None, supervised=False):
                "process driving another's window" if r["lower_il"] else
                "no hardware produced this event")
         headline, evidence = "", []
+        paired_control = False
         if r["kind"] == "key":
             members = store.db.execute(
                 "SELECT * FROM input_events WHERE ts>=? AND kind='key' AND "
                 "fg IS ? AND class IS ? AND lower_il=? ORDER BY ts DESC, id DESC "
                 "LIMIT 50", (since, r["fg"], r["class"], r["lower_il"])).fetchall()
             headline, evidence = explain(store, members)
+            if (not benign and not r["lower_il"] and r["n"] <= len(members)
+                    and _keyless(members)):
+                sev = "low"
+                why = ("key events with no key in them (virtual key 0xFF, scan "
+                       "code 0, no character or modifier), which cannot type or "
+                       "trigger anything")
+            paired_control = (not r["lower_il"] and r["n"] <= len(members)
+                              and _represented_control_keys(store, members))
+            if paired_control:
+                sev = "low"
+                why = ("the same non-printable media control activations are "
+                       "recorded and assessed in control_events")
         finding = _finding(
             "input", sev,
-            f"{r['n']} injected {r['class'] or r['kind']}"
-            f"{'s' if r['n'] > 1 else ''}"
-            f"{' ' + headline if headline else ''} while "
+            (f"{r['n']} injected media control activation(s) also recorded"
+             if r["kind"] == "key" and paired_control else
+             f"{r['n']} injected {r['class'] or r['kind']}"
+             f"{'s' if r['n'] > 1 else ''}"
+             f"{' ' + headline if headline else ''}") + " while "
             f"{r['fg'] or 'an unknown window'} had focus",
             f"{why} — first {iso(r['first'])}, last {iso(r['last'])}",
             "input_events")
@@ -108,6 +137,53 @@ def audit(store, hours=24, pids=None, supervised=False):
             finding["forensics"] = evidence
         out.append(finding)
     return sort_findings(out)
+
+
+def _represented_control_keys(store, members):
+    """True only when every key-down is the same event in the control stream.
+
+    Both streams originate in the hook, but neither table is silently removed.
+    Matching the event's exact second, control class, foreground, integrity and
+    count avoids classifying a stray control near a real typed key as a pair.
+    """
+    if not members or len(members) > 50:
+        return False
+    expected = Counter()
+    for row in members:
+        try:
+            rec = json.loads(row["record"]) if row["record"] else {}
+        except (TypeError, ValueError):
+            return False
+        control = CONTROL_VK.get(rec.get("vk"))
+        if (not control or rec.get("chr") or rec.get("injected") != 1
+                or rec.get("lower_il") != row["lower_il"]):
+            return False
+        expected[(row["ts"], control, row["lower_il"], row["fg"] or "")] += 1
+    times = sorted({key[0] for key in expected})
+    marks = ",".join("?" * len(times))
+    observed = Counter()
+    for row in store.db.execute(
+            "SELECT ts, control, lower_il, fg FROM control_events WHERE "
+            f"kind='control-key' AND injected=1 AND ts IN ({marks})", times):
+        observed[(row["ts"], row["control"], row["lower_il"], row["fg"] or "")] += 1
+    return all(observed[key] >= count for key, count in expected.items())
+
+
+def _keyless(rows):
+    """True when every event carries no key at all: VK 0xFF, scan code 0, no
+    character, no modifier. Rows recorded before forensic capture cannot be
+    inspected, so they never qualify."""
+    if not rows:
+        return False
+    for r in rows:
+        try:
+            rec = json.loads(r["record"]) if r["record"] else None
+        except (ValueError, TypeError, KeyError, IndexError):
+            rec = None
+        if not isinstance(rec, dict) or rec.get("vk") != 255 or rec.get("scan") \
+                or rec.get("chr") or rec.get("mods"):
+            return False
+    return True
 
 
 def _latency_findings(store, beat, probe_registry=True):
@@ -124,7 +200,7 @@ def _latency_findings(store, beat, probe_registry=True):
     registry over the interop boundary, so `probe_registry=False` lets the
     frequent watchdog skip it and leave it to the full audit.
     """
-    out = []
+    out = _stall_findings(store)
     if not beat or not beat["lat_samples"]:
         return out
 
@@ -147,7 +223,8 @@ def _latency_findings(store, beat, probe_registry=True):
         out.append(_finding(
             "input", "ok", f"input latency is {avg} ms average, {mx} ms peak",
             f"{beat['lat_samples']} events sampled — nothing in the hook chain "
-            f"is adding perceptible delay", "input_beats"))
+            f"ahead of JARVIS is adding perceptible delay. {CHAIN_BLIND_SPOT}",
+            "input_beats"))
 
     if not probe_registry:
         return out
@@ -155,8 +232,12 @@ def _latency_findings(store, beat, probe_registry=True):
     d = ps_json(
         "$v = (Get-ItemProperty 'HKCU:\\Control Panel\\Desktop' "
         "-Name LowLevelHooksTimeout -EA SilentlyContinue).LowLevelHooksTimeout;"
+        "$m = Get-ItemProperty 'HKCU:\\Control Panel\\Mouse' -EA SilentlyContinue;"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
-        "(ConvertTo-Json @{t=$v})))", timeout=60)
+        "(ConvertTo-Json @{t=$v; sens=$m.MouseSensitivity; speed=$m.MouseSpeed;"
+        " th1=$m.MouseThreshold1; th2=$m.MouseThreshold2; trails=$m.MouseTrails})))",
+        timeout=60)
+    out += _pointer_findings(d)
     t = (d or {}).get("t")
     if t and int(t) > 300:
         out.append(_finding(
@@ -167,6 +248,93 @@ def _latency_findings(store, beat, probe_registry=True):
             "software rarely needs",
             r"HKCU\Control Panel\Desktop"))
     return out
+
+
+# What the latency figures cannot see. Windows calls the newest low-level hook
+# first, so the JARVIS hook measures only hooks installed after it; one that
+# was installed earlier runs after it and its delay never reaches this number.
+# Raw-input and key-state polling loggers add no delay at all.
+CHAIN_BLIND_SPOT = (
+    "This measures only hooks installed after the JARVIS hook: one installed "
+    "earlier runs after it and its delay is invisible here, and raw-input or "
+    "polling loggers add no delay at all, so a smooth cursor is not evidence "
+    "that nothing is watching input.")
+
+STALL_EVENTS = 3        # events over 50 ms within one heartbeat interval
+STALL_GAP_S = 180       # beats further apart than this span hook downtime
+STALL_INTERVALS_LOW = 3  # fewer stalled intervals than this are isolated hiccups
+
+
+def stall_minutes(rows):
+    """Heartbeat intervals in which input stalled, from cumulative beats.
+
+    Each beat carries counters that grow for the life of one helper session,
+    so a figure like "peak 250 ms" is the session's worst moment, not now.
+    Differencing consecutive beats recovers when it happened. A counter that
+    goes down marks a new session, and a long gap spans downtime; neither
+    pair is differenced. Pure: `rows` are (ts, lat_over50, lat_samples,
+    lat_max_ms) in time order.
+    """
+    out = []
+    for prev, cur in zip(rows, rows[1:]):
+        if cur[2] < prev[2] or cur[1] < prev[1] or cur[0] - prev[0] > STALL_GAP_S:
+            continue
+        slow = cur[1] - prev[1]
+        if slow >= STALL_EVENTS:
+            out.append({"ts": cur[0], "slow": slow, "events": cur[2] - prev[2],
+                        "peak_rose_to": cur[3] if cur[3] > prev[3] else None})
+    return out
+
+
+def _stall_findings(store, hours=24):
+    """The cursor that "sometimes feels heavy": when did input actually stall?"""
+    rows = store.db.execute(
+        "SELECT ts, lat_over50, lat_samples, lat_max_ms FROM input_beats "
+        "WHERE ts>=? ORDER BY ts", (now() - hours * 3600 - STALL_GAP_S,)).fetchall()
+    stalls = [s for s in stall_minutes([tuple(r) for r in rows])
+              if s["ts"] >= now() - hours * 3600]
+    if not stalls:
+        return []
+    worst = sorted(stalls, key=lambda s: -s["slow"])[:3]
+    return [_finding(
+        "input", ("medium" if len(stalls) >= 30 else
+                  "low" if len(stalls) >= STALL_INTERVALS_LOW else "ok"),
+        f"input stalled in {len(stalls)} heartbeat interval(s) in the last {hours} h",
+        "worst: " + "; ".join(
+            f"{iso(s['ts'])} — {s['slow']} of {s['events']} events over 50 ms"
+            + (f", peak {s['peak_rose_to']} ms" if s["peak_rose_to"] else "")
+            for s in worst)
+        + ". A stall is a symptom, not a verdict: a busy CPU, a GPU or driver "
+        "hiccup, or any program with an input hook can cause it. Compare the "
+        "times with what was running. " + CHAIN_BLIND_SPOT, "input_beats")]
+
+
+# Windows defaults for HKCU\Control Panel\Mouse. A change here alters how the
+# cursor feels without anything being wrong, so it is reported as an
+# explanation, never as a problem.
+POINTER_DEFAULTS = {"sens": ("10", "pointer speed", "10 of 20"),
+                    "speed": ("1", "enhance pointer precision", "on"),
+                    "trails": ("0", "pointer trails", "off")}
+
+
+def _pointer_findings(d):
+    if not isinstance(d, dict) or all(d.get(k) is None for k in POINTER_DEFAULTS):
+        return []
+    changed = []
+    for key, (default, label, shown) in POINTER_DEFAULTS.items():
+        value = d.get(key)
+        if value is not None and str(value) != default:
+            changed.append(f"{label} is {value} (default {shown})")
+    if not changed:
+        return [_finding("input", "ok", "pointer settings are the Windows defaults",
+                         "speed, acceleration and trails are unchanged, so they "
+                         "do not explain a change in how the cursor feels",
+                         r"HKCU\Control Panel\Mouse")]
+    return [_finding(
+        "input", "ok", "pointer settings differ from the Windows defaults",
+        "; ".join(changed) + ". These change how the cursor feels and are not "
+        "a sign of compromise; if you did not change them, note when the cursor "
+        "started feeling different.", r"HKCU\Control Panel\Mouse")]
 
 
 def _cadence_findings(beat):
@@ -304,10 +472,15 @@ def _control_findings(store, hours=24):
 
     if injected:
         first = injected[0]
+        media_only = all(r["control"] == "media-play-pause" and not r["lower_il"]
+                         for r in injected)
         out.append(_finding(
-            "input", "high", "a control key was injected by software",
+            "input", "medium" if media_only else "high",
+            "media play/pause was injected by software" if media_only else
+            "a control key was injected by software",
             "%d injected control activation(s) in %dh; most recent %s at %s"
-            "%s. A synthesised media key is software pressing it for you."
+            "%s. A synthesised control key is software pressing it for you; "
+            "the sender is not identified by this hook."
             % (len(injected), hours, first["control"], iso(first["ts"]),
                " (from a lower-integrity process)" if first["lower_il"] else ""),
             "control_events"))

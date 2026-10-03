@@ -6,19 +6,40 @@ can read their fd table.
 """
 
 import os
-import pwd
 import re
 
+try:
+    import pwd
+except ImportError:      # native Windows: no passwd database, and no caller there
+    pwd = None
+
 from jarvis.core.util import fingerprint
+from jarvis.platform.executable_identity import replaced_identically
 
 PROC = "/proc"
 HOST = "wsl"
+# At most 2 * 2 * 32 MiB read per process pass.
+MAX_REPLACEMENT_CHECKS = 2
 
 # Interpreters whose real identity is the script they were handed, not the binary.
 INTERPRETERS = re.compile(
     r"^(python[\d.]*|perl|ruby|node|bash|sh|dash|zsh|ksh|php|lua|Rscript|deno|bun)$"
 )
 SCRIPT_EXT = re.compile(r"\.(py|sh|pl|rb|js|mjs|cjs|ts|php|lua|R|bash|zsh)$", re.I)
+
+
+def signal_zero(pid):
+    """kill(pid, 0): ask the kernel whether a pid exists. Raises as os.kill does.
+
+    Signal 0 is a question only on POSIX. On Windows the same call is
+    os.kill(pid, CTRL_C_EVENT) - it interrupts a console process group instead
+    of asking anything - and any other signal number terminates the target.
+    There is no Linux pid to ask about there, so the answer is "no such
+    process" and nothing is sent.
+    """
+    if os.name == "nt":
+        raise ProcessLookupError(pid)
+    os.kill(pid, 0)
 
 
 def read_file(path, binary=False):
@@ -35,7 +56,7 @@ def read_file(path, binary=False):
 def _uid_name(uid):
     try:
         return pwd.getpwuid(uid).pw_name
-    except KeyError:
+    except (KeyError, AttributeError):
         return str(uid)
 
 
@@ -66,13 +87,16 @@ TCP_STATES = {
 }
 
 
-def socket_table():
+def socket_table(fresh=False):
     """inode -> connection detail, built from all four /proc/net socket tables.
 
     One authoritative read per interval: shared via jarvis.core.state so
     process, firewall and hidden-socket consumers do not each walk
-    /proc/net. Falls back to a direct read if the cache is unavailable.
+    /proc/net. Attribution checks can request a fresh view to compare with
+    the current fd tables. Falls back to a direct read if the cache fails.
     """
+    if fresh:
+        return _read_socket_table()
     try:
         from jarvis.core import state as _state
         return _state.get_socket_table(_read_socket_table)
@@ -143,6 +167,7 @@ def collect(with_sockets=True):
     """Return a list of process records for the Linux side."""
     table = socket_table() if with_sockets else {}
     procs = []
+    replacement_checks = 0
     self_pid = os.getpid()
     try:
         clock_ticks = os.sysconf("SC_CLK_TCK")
@@ -197,6 +222,21 @@ def collect(with_sockets=True):
             exe_hidden = True
         except OSError:
             pass
+        # The executable's file identity, taken with the link: a short-lived
+        # process (a udev worker) is often gone before it is assessed, and a
+        # later re-read would then fail closed on a process that was fine.
+        exe_ident = None
+        if exe:
+            try:
+                st = os.stat(f"{base}/exe")
+                exe_ident = (st.st_dev, st.st_ino, st.st_uid, st.st_mode)
+            except OSError:
+                pass
+
+        replaced_unchanged = False
+        if exe.endswith(" (deleted)") and replacement_checks < MAX_REPLACEMENT_CHECKS:
+            replacement_checks += 1
+            replaced_unchanged = replaced_identically(pid, exe, proc=PROC)
 
         cmdline = " ".join(argv) if argv else f"[{name}]"
         exe_base = os.path.basename(exe or name)
@@ -212,6 +252,8 @@ def collect(with_sockets=True):
             "name": name,
             "exe": exe,
             "exe_hidden": exe_hidden,
+            "exe_ident": exe_ident,
+            "deleted_replaced_identically": replaced_unchanged,
             "script": script,
             "cmdline": cmdline,
             "user": _uid_name(uid),

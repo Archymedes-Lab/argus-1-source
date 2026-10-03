@@ -13,11 +13,14 @@ report pointing at something that does not run.
 # job name -> the CLI command that audits the same ground
 JOB_COMMANDS = {
     "scan": "scan",
+    "containers": "containers",
     "hidden": "hidden",
     "deep_hidden": "hidden --deep",
     "firewall": "firewall",
     "control": "control",
     "controls": "control",
+    "audio": "audio",
+    "preos": "preos",
     "asep": "asep",
     "spy": "spy",
     "pixel": "pixel",
@@ -42,6 +45,7 @@ JOB_COMMANDS = {
     "input": "inputwatch",
     "input_hook": "inputwatch",
     "memscan": "memscan",
+    "dotnet": "dotnet",
     "secrets": "secrets",
     "bruteforce": "bruteforce",
     "sniffing": "sniffing",

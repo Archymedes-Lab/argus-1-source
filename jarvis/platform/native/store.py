@@ -5,6 +5,8 @@ readable by the user account, and a malformed or forged file must fail loudly
 rather than advance a cursor. Storage lives in `jarvis.core.eventlog`.
 """
 
+from datetime import datetime
+
 MAX_BATCH_BYTES = 16 * 1024 * 1024
 MAX_EVENTS = 500
 
@@ -50,6 +52,14 @@ def validate(batch):
         if type(event.get('event_id')) is not int or not 0 <= event['event_id'] <= 65535:
             raise BatchError('invalid event ID')
         _text(event.get('time'), 'event time')
+        if event.get('read_time') is not None:
+            stamp = _text(event['read_time'], 'sensor read time', 64)
+            try:
+                parsed = datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+            except ValueError as exc:
+                raise BatchError('invalid sensor read time') from exc
+            if parsed.tzinfo is None:
+                raise BatchError('sensor read time lacks timezone')
         _text(event.get('xml'), 'event XML', 1024 * 1024)
         if event.get('mono_ms') is not None and (type(event['mono_ms']) is not int
                                                  or event['mono_ms'] < 0):

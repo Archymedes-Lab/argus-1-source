@@ -9,14 +9,19 @@ import os
 import subprocess
 from pathlib import Path
 
+from jarvis.platform import host
+
 MAX_OUTPUT = 64 * 1024
 TIMEOUT_S = 30
 WORKER = Path(__file__).resolve().parent / "win" / "openvino_worker.py"
 
 
 def _python_candidates():
-    user = getpass.getuser()
-    base = Path("/mnt/c/Users") / user / "AppData/Local/Programs/Python"
+    if host.native_windows():
+        base = Path(host.local_appdata("Programs", "Python") or "/nonexistent")
+    else:
+        base = Path(host.users_dir() or "/nonexistent") / getpass.getuser() \
+            / "AppData/Local/Programs/Python"
     found = sorted(base.glob("Python*/python.exe"), reverse=True)
     configured = os.environ.get("JARVIS_OPENVINO_PYTHON", "")
     return ([Path(configured)] if configured else []) + found
@@ -33,14 +38,7 @@ def python_binary():
 
 
 def _windows_path(path):
-    try:
-        result = subprocess.run(
-            ["wslpath", "-w", str(path)], capture_output=True, text=True,
-            errors="replace", timeout=5, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    value = (result.stdout or "").strip()
-    return value if result.returncode == 0 and value else None
+    return host.windows_name(path) or None
 
 
 def infer(task, values, timeout=TIMEOUT_S):

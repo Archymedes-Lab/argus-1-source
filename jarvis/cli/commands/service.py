@@ -9,7 +9,7 @@ from jarvis.core.util import iso
 from jarvis.platform import windows as collect_windows
 from jarvis.response import acknowledge, alert, fixit
 from jarvis.response.reporting import score
-from jarvis.service import deadman, selfcheck
+from jarvis.service import selfcheck, supervisors
 from jarvis.service.schedule import JOBS
 
 from ..output import color, is_tty, print_process_finding, selected_hosts
@@ -147,7 +147,7 @@ def _print_windows_monitor(t):
     otherwise the report sends you to a command that cannot answer the
     question it was raised about.
     """
-    for f in deadman.audit():
+    for f in supervisors.audit_health_monitor():
         key = f["severity"] if f["severity"] != "ok" else "ok"
         print(color("  windows monitor", key, t) + f" — {f['detail']}")
 
@@ -200,8 +200,13 @@ def cmd_status(args, store):
     print(f"fingerprints  {total} known, {appr} approved")
     print(f"peers         {len(store.list_peers(limit=100000))} recorded")
     print(f"last event    {iso(ev[0]['ts']) if ev else '—'}")
-    health = score.compute(store.get_snapshots(), JOBS, acks=acknowledge.load(store))
+    health = score.stable(store, JOBS, acks=acknowledge.load(store))
     print(f"security      {score.bar(health['score'])} {health['score']}% "
           f"{health['grade']} (monitoring coverage {health['coverage']}%)")
+    if health.get("state") == "verifying":
+        live = health["live"]
+        print(f"              last verified {iso(int(health['verified_at']))}; "
+              f"re-checking after a gap, {live['observed']}/{live['jobs']} "
+              f"collectors current (partial sweep reads {live['score']}%)")
     print(f"windows side  "
           f"{'reachable' if collect_windows.available() else 'unavailable'}")

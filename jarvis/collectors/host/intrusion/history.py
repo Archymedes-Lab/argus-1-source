@@ -14,7 +14,12 @@ SUSPICIOUS_HISTORY = re.compile(
     r"set-mppreference\s+-disable|add-mppreference\s+-exclusionpath|"
     r"disable-windowsoptionalfeature|"
     r"new-object\s+system\.net\.webclient|"
-    r"bypass\s+-\w*\s*(file|command)|start-process\s+-verb\s+runas",
+    # ClickFix delivers its payload as pasted -Command text; -File runs a
+    # script that already exists on disk, so the flag says nothing about
+    # where that file came from and matches routinely (including JARVIS's
+    # own -ExecutionPolicy Bypass -File invocations of its reviewed repair
+    # scripts). Only -Command/-c is the actual paste-and-run vector.
+    r"bypass\s+-\w*\s*command|start-process\s+-verb\s+runas",
     re.I,
 )
 

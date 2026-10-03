@@ -19,6 +19,7 @@ So the rules are:
     it, not as a generic warning.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -26,9 +27,11 @@ import time
 
 from jarvis.collectors.process import hidden
 from jarvis.core.finding import finding as _finding
+from jarvis.core.paths import REPO_ROOT
 from jarvis.core.store import DEFAULT_DB, Store
+from jarvis.platform import host
 from jarvis.platform import windows as collect_windows
-from jarvis.service.schedule import JOBS
+from jarvis.service.schedule import JOBS, NOT_APPLICABLE
 
 
 def _cmd(args, timeout=10):
@@ -56,6 +59,7 @@ def job_health(db_path=DEFAULT_DB):
                          f"{exc} — nothing is being recorded", db_path)]
     try:
         snaps = store.get_snapshots()
+        retries = {name: store.get_meta("collector_retry_" + name, "") for name in JOBS}
     finally:
         store.close()
 
@@ -85,18 +89,34 @@ def job_health(db_path=DEFAULT_DB):
             "collectors", "critical", f"collector '{name}' has never produced a result",
             "there is no snapshot for it at all, so its entire subject area is "
             "unmonitored — this is not a clean result, it is no result",
-            "jarvis serve"))
+            "jarvis serve") | {"about_collector": name})
     for name, err in broken:
         out.append(_finding(
             "collectors", "high", f"collector '{name}' is failing",
             f"last run raised: {err.strip().splitlines()[-1][:160] if err.strip() else 'unknown error'}",
-            "jarvis serve"))
+            "jarvis serve") | {"about_collector": name})
     for name, age, interval in stale:
         out.append(_finding(
             "collectors", "high", f"collector '{name}' is stale",
             f"last result is {int(age // 60)} min old but it is supposed to run "
             f"every {interval // 60 or 1} min — you are reading history, not status",
-            "jarvis serve"))
+            "jarvis serve") | {"about_collector": name})
+    # Held retries: the scheduler kept a still-fresh good result after a
+    # failed run. Shown so the smoothing is visible, never silent.
+    for name, raw in sorted(retries.items()):
+        try:
+            note = json.loads(raw) if raw else None
+        except ValueError:
+            note = None
+        if not isinstance(note, dict) or now - float(note.get("at") or 0) > 900:
+            continue
+        age = int((now - float(note.get("last_good") or now)) // 60)
+        out.append(_finding(
+            "collectors", "low", f"collector '{name}' is retrying",
+            f"its last run failed ({str(note.get('error') or '?')[:120]}); the "
+            f"previous result, {age} min old and still within its freshness "
+            f"budget, stays in use until a retry succeeds",
+            "jarvis serve") | {"about_collector": name})
     if not (missing or broken or stale):
         out.append(_finding(
             "collectors", "ok", "all collectors are current",
@@ -108,6 +128,11 @@ def job_health(db_path=DEFAULT_DB):
 
 def daemon_health():
     """Is the 24/7 chain intact — service, linger, and the Windows logon task?"""
+    if host.native_windows():
+        # No systemd here: the native service task is what starts this daemon
+        # at logon and restarts it, and its state file is the evidence.
+        from jarvis.service import supervisors
+        return supervisors.audit_native_service()
     out = []
     if not shutil.which("systemctl"):
         return [_finding("daemon", "medium", "systemd not available",
@@ -200,10 +225,21 @@ def bridge_status():
     the min-severity filter and the persistence gate and mails immediately.
     """
     if collect_windows.available():
+        via = ("started directly (native Windows)" if host.native_windows()
+               else f"reachable via {os.environ.get('WSL_INTEROP', '?')}")
         return [_finding(
-            "collectors", "ok", "Windows bridge is up",
-            f"powershell.exe reachable via {os.environ.get('WSL_INTEROP', '?')}",
+            "collectors", "ok", "Windows bridge is up", f"powershell.exe {via}",
             collect_windows._PS or "", host="win")]
+    if host.native_windows():
+        # Same category and "is down" wording as below: alert.py pages on it.
+        return [_finding(
+            "collectors", "critical",
+            "the Windows side is blind — PowerShell is down",
+            "powershell.exe was not found in System32 or could not be started, "
+            "so every Windows collector reports nothing rather than reporting "
+            "a problem. Check that Windows PowerShell 5.1 is present and that "
+            "application control is not blocking it for this account.",
+            "powershell.exe", host="win")]
     return [_finding(
         "collectors", "critical",
         "the Windows side is blind — interop bridge is down",
@@ -235,9 +271,21 @@ def visibility():
                 "visibility", "medium", "Windows drive mount is stale",
                 _mounts.stale_detail() + " Windows-drive reads (sensor spool, "
                 "profiles, guard state files) wait until it answers again.",
-                "/mnt/c"))
+                _mounts.WINDOWS_DRIVE))
     except Exception:
         pass
+
+    # -- jobs with nothing to observe on this machine -----------------------
+    if NOT_APPLICABLE:
+        out.append(_finding(
+            "limits", "low", "audits not applicable on this machine",
+            f"{', '.join(sorted(NOT_APPLICABLE))}: "
+            + "; ".join(sorted(set(NOT_APPLICABLE.values()))) + ". They are not "
+            "scheduled, not scored and not counted as coverage.",
+            f"host kind: {host.kind()}", host=host.local_label()))
+    if not host.has_linux():
+        # Everything below reads the Linux kernel's own views.
+        return out
 
     # -- elevation ---------------------------------------------------------
     from jarvis.platform import privilege
@@ -248,9 +296,17 @@ def visibility():
             "invisible from here: other accounts' open files, memory maps and "
             "environment, root-only kernel tracing state, and kernel module "
             f"addresses (missing {', '.join(lacking)}).",
-            "sudo install -m 644 systemd/capabilities.conf "
-            "/etc/systemd/system/jarvis.service.d/ && sudo systemctl daemon-reload "
-            "&& sudo systemctl restart jarvis.service"))
+            "needs a root-owned install run with python3 -I; see "
+            "systemd/capabilities.conf before granting anything"))
+    elif privilege.code_tree_problems(str(REPO_ROOT), limit=1):
+        out.append(_finding(
+            "visibility", "high", "privileged monitor runs editable code",
+            "JARVIS holds visibility capabilities while running from code a "
+            "non-root account can change ("
+            + privilege.code_tree_problems(str(REPO_ROOT), limit=1)[0] + "), so "
+            "that account can take the capabilities by editing it. Deploy a "
+            "sealed release (scripts/deploy_root_runtime.py) or remove the grant.",
+            "/etc/systemd/system/jarvis.service.d/"))
     elif os.geteuid() != 0:
         out.append(_finding(
             "limits", "low", "least-privilege visibility",
@@ -267,14 +323,24 @@ def visibility():
             f"getdents64 cannot be called directly on {os.uname().machine}, so "
             f"an LD_PRELOAD rootkit hiding pids from libc would not be caught",
             "hidden.view_getdents"))
-    if hidden.view_sched_debug() is None:
+    if hidden.pid_namespace_nested():
+        # Not a failed read: the scheduler reports global pids and this
+        # distro's /proc numbers its own, so the two can never be compared.
+        out.append(_finding(
+            "limits", "low", "scheduler view not comparable here",
+            "this system runs in a child pid namespace (a WSL2 distro or a "
+            "container), where the kernel scheduler's task list uses global "
+            "pids that do not map to this /proc. That cross-view cannot run; "
+            "readdir, getdents64, the stat sweep and the signal path still do.",
+            "/proc/self/ns/pid"))
+    elif hidden.view_sched_debug() is None:
         out.append(_finding(
             "visibility", "low", "scheduler view unavailable",
-            "/proc/sched_debug is absent (kernel built without "
-            "CONFIG_SCHED_DEBUG), so a process hidden from /proc cannot be "
-            "cross-checked against the runqueues. The signal-path view still "
-            "covers this case.",
-            "/proc/sched_debug"))
+            "neither /proc/sched_debug nor " + hidden.SCHED_DEBUGFS + " is "
+            "readable (debugfs unmounted, or root or CAP_DAC_READ_SEARCH "
+            "missing), so a process hidden from /proc cannot be cross-checked "
+            "against the scheduler. The signal-path view still covers this case.",
+            hidden.SCHED_DEBUGFS))
 
     # -- io_uring ----------------------------------------------------------
     try:
@@ -309,12 +375,21 @@ def known_limits():
                  "kernel-integrity checks are built to make that lying visible, "
                  "not to make it impossible.",
                  "by design"),
+    ] + ([
         _finding("limits", "low", "WSL is not a security boundary",
                  "anything in WSL can read and write /mnt/c, and Windows can see "
                  "into WSL. Treat findings on either side as findings about one "
                  "machine.",
                  "by design"),
-    ]
+    ] if host.on_wsl() else []) + ([
+        _finding("limits", "low", "file privacy is not verified on NTFS",
+                 "Windows mode bits enforce nothing, and the access-control "
+                 "lists that do are not inspected. JARVIS therefore never "
+                 "treats a file here as private: credential findings are not "
+                 "downgraded, and an API key is read from the environment "
+                 "only, never from a key file.",
+                 "by design", host=host.local_label()),
+    ] if host.native_windows() else [])
 
 
 def audit(db_path=DEFAULT_DB, hosts=("wsl", "win")):

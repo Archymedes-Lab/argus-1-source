@@ -28,7 +28,8 @@ $o.capturePkgs = @(Get-AppxPackage | ForEach-Object {
                 @($x.Package.Capabilities.CustomCapability.Name)
         $hit = $caps | Where-Object { $_ -like '*graphicsCapture*' }
         if ($hit) {
-            [ordered]@{ name = $_.Name; caps = @($hit) }
+            [ordered]@{ name = $_.Name; caps = @($hit); publisher = [string]$_.Publisher
+                        kind = [string]$_.SignatureKind; status = [string]$_.Status }
         }
     }
 })

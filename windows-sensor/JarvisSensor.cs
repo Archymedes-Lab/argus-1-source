@@ -16,20 +16,32 @@ using Microsoft.Win32;
 namespace Jarvis.Native {
     public sealed class Sensor : ServiceBase {
         const string Version = "2";
-        static readonly string[] Channels = {
+        internal static readonly string[] Channels = {
             "Microsoft-Windows-Sysmon/Operational",
             "Microsoft-Windows-Windows Defender/Operational",
             "Microsoft-Windows-TaskScheduler/Operational"
         };
+        internal static readonly string[] ServiceNames = {
+            "JarvisSensorSysmon", "JarvisSensorDefender", "JarvisSensorTasks"
+        };
         readonly string root;
+        readonly string serviceName;
+        readonly string[] selectedChannels;
         readonly ManualResetEvent stop = new ManualResetEvent(false);
         Thread worker;
         const long Capacity = 512L * 1024 * 1024;
+        const long SysmonCapacity = 384L * 1024 * 1024;
+        const long OtherChannelCapacity = 64L * 1024 * 1024;
         const int BatchEvents = 500;
         // Batches per channel per pass. A backlog drains at up to 25,000
         // records a pass instead of 500 every two seconds, and one busy
         // channel still cannot starve the others for long.
         const int DrainBatches = 50;
+        // A busy Event Log service can miss a one-second EvtNext deadline.
+        // Keep the retry bounded; a persistent timeout must stay unavailable.
+        const int ReadTimeoutSeconds = 2;
+        const int ReadTimeoutRetries = 2;
+        const int EventLogTimeoutHResult = unchecked((int)0x800705B4);
         // Acknowledged batches stay in the protected spool for a day, so a
         // local copy survives even if the consumer's history is damaged.
         static readonly TimeSpan AckedRetention = TimeSpan.FromHours(24);
@@ -38,7 +50,24 @@ namespace Jarvis.Native {
 
         [DllImport("kernel32.dll")] static extern ulong GetTickCount64();
 
-        public Sensor(string directory) { root = directory; ServiceName = "JarvisNativeSensor"; }
+        public Sensor(string directory, string name = "JarvisNativeSensor", string channel = null) {
+            root = directory; serviceName = name; ServiceName = name;
+            selectedChannels = channel == null ? Channels : new [] { channel };
+        }
+        internal static int ChannelIndex(string service) {
+            for(int i=0;i<ServiceNames.Length;i++) if(ServiceNames[i]==service) return i;
+            return -1;
+        }
+        string ChannelDirectory(string channel) { return Path.Combine(root,Hash(channel).Substring(0,16)); }
+        long Budget() {
+            if(selectedChannels.Length!=1) return Capacity;
+            return selectedChannels[0]==Channels[0] ? SysmonCapacity : OtherChannelCapacity;
+        }
+        string HealthPath() {
+            return selectedChannels.Length==1
+                ? Path.Combine(ChannelDirectory(selectedChannels[0]),"health.json")
+                : Path.Combine(root,"health.json");
+        }
         protected override void OnStart(string[] args) {
             worker = new Thread(Run) { IsBackground = true, Name = "jarvis-events" };
             worker.Start();
@@ -66,15 +95,20 @@ namespace Jarvis.Native {
         }
         void Health(Dictionary<string,object> status) {
             status["schema"]=2; status["version"]=Version; status["time"]=DateTime.UtcNow.ToString("o");
-            status["spool_bytes"]=used; status["spool_capacity"]=Capacity;
-            string path=Path.Combine(root,"health.json");
+            status["spool_bytes"]=used;
+            status["spool_capacity"]=Budget();
+            status["service"]=serviceName;
+            string path=HealthPath();
             string next=path+"."+Guid.NewGuid().ToString("N")+".new";
             WriteNew(next,status);
             if(File.Exists(path)) File.Replace(next,path,null); else File.Move(next,path);
         }
         string Identity(string file,string key) {
             string path=Path.Combine(root,file);
-            if(!File.Exists(path)) WriteNew(path,new Dictionary<string,object> { {key,Guid.NewGuid().ToString("D")} });
+            if(!File.Exists(path)) {
+                try { WriteNew(path,new Dictionary<string,object> { {key,Guid.NewGuid().ToString("D")} }); }
+                catch(IOException) { if(!File.Exists(path)) throw; }
+            }
             return (string)Read(path)[key];
         }
         // Windows increments this on every boot. With the device identity it
@@ -87,23 +121,45 @@ namespace Jarvis.Native {
         }
         public void Pass() {
             Directory.CreateDirectory(root);
-            used=Directory.EnumerateFiles(root,"*",SearchOption.AllDirectories).Sum(p=>new FileInfo(p).Length);
+            bool isolatedMode=File.Exists(Path.Combine(root,"mode.json"));
+            if(selectedChannels.Length==1 && !isolatedMode)
+                throw new InvalidOperationException("Isolated mode receipt absent; channel publisher paused");
+            if(selectedChannels.Length!=1 && isolatedMode)
+                throw new InvalidOperationException("Isolated mode active; legacy publisher paused");
+            // Separate services have separate capacity budgets. A busy Sysmon
+            // stream cannot consume Defender's or Task Scheduler's allowance.
+            used=selectedChannels.Length==1
+                ? (Directory.Exists(ChannelDirectory(selectedChannels[0]))
+                   ? Directory.EnumerateFiles(ChannelDirectory(selectedChannels[0]),"*.json").Sum(p=>new FileInfo(p).Length) : 0)
+                : Directory.EnumerateFiles(root,"*",SearchOption.AllDirectories).Sum(p=>new FileInfo(p).Length);
             string sensor=Identity("identity.json","sensor_id");
             // The machine's identity, independent of its renameable hostname.
             string device=Identity("device.json","device_id");
             string boot=BootId();
             var states=new Dictionary<string,object>();
-            foreach(string channel in Channels) {
+            foreach(string channel in selectedChannels) {
                 if(stop.WaitOne(0)) break;
                 try {
                     Dictionary<string,object> state=null;
                     for(int i=0;i<DrainBatches && !stop.WaitOne(0);i++) {
                         state=Collect(sensor,device,boot,channel);
+                        if(selectedChannels.Length==1) {
+                            // Progress receipt during a long backlog drain;
+                            // the independent Windows monitor must not mistake
+                            // useful work for a hung reader.
+                            Health(new Dictionary<string,object> {
+                                {"sensor_id",sensor}, {"device_id",device}, {"boot_id",boot},
+                                {"host_id",Environment.MachineName},
+                                {"channels",new Dictionary<string,object>{{channel,state}}}
+                            });
+                        }
                         if(Convert.ToInt32(state["events"])<BatchEvents) break;
                     }
                     states[channel]=state;
                 }
-                catch(Exception e) { states[channel]=new Dictionary<string,object> { {"status","unavailable"}, {"reason",e.GetType().Name+": "+e.Message} }; }
+                catch(Exception e) { states[channel]=new Dictionary<string,object> {
+                    {"status","unavailable"}, {"reason",e.GetType().Name+": "+e.Message},
+                    {"last_sequence",LatestSequence(channel)} }; }
             }
             string compaction=null;
             try { Compact(); } catch(Exception e) { compaction=e.GetType().Name+": "+e.Message; }
@@ -111,13 +167,14 @@ namespace Jarvis.Native {
                 {"host_id",Environment.MachineName}, {"channels",states}, {"compaction_error",compaction} });
         }
         Dictionary<string,object> Collect(string sensor,string device,string boot,string channel) {
-            if(used >= Capacity) throw new IOException("Spool capacity reached; collection paused without deleting evidence");
+            if(used >= Budget())
+                throw new IOException("Spool capacity reached; collection paused without deleting evidence");
             using(var configuration=new EventLogConfiguration(channel)) {
                 if(!configuration.IsEnabled) throw new InvalidOperationException("Event channel is disabled");
             }
-            string directory=Path.Combine(root,Hash(channel).Substring(0,16));
+            string directory=ChannelDirectory(channel);
             Directory.CreateDirectory(directory);
-            string latest=Directory.EnumerateFiles(directory,"*.json").OrderByDescending(p=>p,StringComparer.Ordinal).FirstOrDefault();
+            string latest=LatestBatch(directory);
             long sequence=0;
             string generation=Guid.NewGuid().ToString("D"), bookmark="";
             if(latest != null) {
@@ -161,12 +218,25 @@ namespace Jarvis.Native {
             WriteNew(Path.Combine(directory,(sequence+1).ToString("D20")+".json"),batch);
             return new Dictionary<string,object> { {"status",status}, {"last_sequence",sequence+1}, {"events",events.Count}, {"observed_at",DateTime.UtcNow.ToString("o")} };
         }
+        long LatestSequence(string channel) {
+            string directory=ChannelDirectory(channel);
+            if(!Directory.Exists(directory)) return 0;
+            string latest=LatestBatch(directory);
+            long value;
+            return latest!=null && Int64.TryParse(Path.GetFileNameWithoutExtension(latest),out value) ? value : 0;
+        }
+        static string LatestBatch(string directory) {
+            return Directory.EnumerateFiles(directory,"*.json")
+                .Where(p=>Path.GetFileNameWithoutExtension(p).Length==20
+                    && Path.GetFileNameWithoutExtension(p).All(Char.IsDigit))
+                .OrderByDescending(p=>p,StringComparer.Ordinal).FirstOrDefault();
+        }
         static void ReadEvents(string channel,long after,List<object> events,ref string bookmark) {
             string xpath=after>0 ? "*[System[EventRecordID>"+after+"]]" : "*";
             var query=new EventLogQuery(channel,PathType.LogName,xpath) { ReverseDirection=false, TolerateQueryErrors=false };
             using(var reader=new EventLogReader(query)) {
                 while(events.Count<BatchEvents) {
-                    using(EventRecord record=reader.ReadEvent(TimeSpan.FromSeconds(1))) {
+                    using(EventRecord record=ReadEventWithRetry(reader)) {
                         if(record==null) break;
                         if(!record.RecordId.HasValue || !record.TimeCreated.HasValue) throw new InvalidDataException("Event identity/time missing");
                         string xml=record.ToXml();
@@ -174,12 +244,29 @@ namespace Jarvis.Native {
                         events.Add(new Dictionary<string,object> {
                             {"record_id",record.RecordId.Value}, {"event_id",record.Id},
                             {"time",record.TimeCreated.Value.ToUniversalTime().ToString("o")},
+                            // Preserve observation time separately from the
+                            // provider's event time so backlog and latency
+                            // remain measurable without rewriting history.
+                            {"read_time",DateTime.UtcNow.ToString("o")},
                             // Milliseconds since boot when read: orders records within a
                             // boot even if the wall clock is changed underneath.
                             {"mono_ms",(long)GetTickCount64()}, {"xml",xml}
                         });
                         bookmark="record:"+record.RecordId.Value;
                     }
+                }
+            }
+        }
+        static EventRecord ReadEventWithRetry(EventLogReader reader) {
+            return RetryEventLogTimeout(() => reader.ReadEvent(TimeSpan.FromSeconds(ReadTimeoutSeconds)));
+        }
+        internal static T RetryEventLogTimeout<T>(Func<T> read) {
+            for(int attempt=0;;attempt++) {
+                try { return read(); }
+                catch(EventLogException e) {
+                    // ERROR_TIMEOUT is not EOF. Keep the cursor and channel
+                    // unavailable if every bounded attempt fails.
+                    if(e.HResult!=EventLogTimeoutHResult || attempt>=ReadTimeoutRetries) throw;
                 }
             }
         }
@@ -190,10 +277,11 @@ namespace Jarvis.Native {
         void Compact() {
             string acks=Path.Combine(root,"acks");
             if(!Directory.Exists(acks)) return;
-            bool pressure=used >= Capacity/2;
+            bool pressure=used >= Budget()/2;
             foreach(string directory in Directory.EnumerateDirectories(root)) {
                 string name=Path.GetFileName(directory);
                 if(name.Length!=16) continue;
+                if(selectedChannels.Length==1 && directory!=ChannelDirectory(selectedChannels[0])) continue;
                 string ackPath=Path.Combine(acks,name+".json");
                 if(!File.Exists(ackPath)) continue;
                 var ack=Read(ackPath);
@@ -217,7 +305,11 @@ namespace Jarvis.Native {
         void Run() {
             // Exclusive process lock protects immutable sequence allocation.
             Directory.CreateDirectory(root);
-            using(var gate=new FileStream(Path.Combine(root,"sensor.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
+            string lockPath=selectedChannels.Length==1
+                ? Path.Combine(ChannelDirectory(selectedChannels[0]),"sensor.lock")
+                : Path.Combine(root,"sensor.lock");
+            if(selectedChannels.Length==1) Directory.CreateDirectory(ChannelDirectory(selectedChannels[0]));
+            using(var gate=new FileStream(lockPath,FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) {
                 do {
                     try { Pass(); }
                     catch(Exception e) { try { Health(new Dictionary<string,object>{{"status","unavailable"},{"reason",e.GetType().Name+": "+e.Message}}); } catch {} }
@@ -232,6 +324,12 @@ namespace Jarvis.Native {
                     Directory.CreateDirectory(sensor.root);
                     using(var gate=new FileStream(Path.Combine(sensor.root,"sensor.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None)) sensor.Pass();
                 }
+                return 0;
+            }
+            if(args.Length==2 && args[0]=="--service") {
+                int index=ChannelIndex(args[1]);
+                if(index<0) return 2;
+                ServiceBase.Run(new Sensor(directory,args[1],Channels[index]));
                 return 0;
             }
             if(args.Length!=0) return 2;

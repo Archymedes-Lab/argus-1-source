@@ -14,6 +14,7 @@ import os
 import re
 
 from jarvis.core.util import classify_ip
+from jarvis.platform import topology
 
 # Directories any user can write to, which is where dropped payloads land.
 SUSPECT_DIRS = (
@@ -74,8 +75,13 @@ def _lower_path(p: str) -> str:
     return (p or "").replace("\\", "/").lower().replace("/", "/")
 
 
-def traits(p: dict) -> list:
-    """Reason ids describing what looks wrong about this process, if anything."""
+def traits(p: dict, topo=None) -> list:
+    """Reason ids describing what looks wrong about this process, if anything.
+
+    `topo` (a correlate.topology.Topology) lets kernel-derived facts explain a
+    name that differs from the executable: the WSL /init runtime, a link to
+    the same file, a shebang script, a systemd helper. Without it, or when any
+    fact is unreadable, the mismatch stands."""
     found = []
     exe = p.get("exe") or ""
     script = p.get("script") or ""
@@ -88,7 +94,8 @@ def traits(p: dict) -> list:
         found.append("encoded-command")
     if PIPE_EXEC.search(cmd):
         found.append("remote-exec-pipe")
-    if exe.endswith(" (deleted)"):
+    if exe.endswith(" (deleted)") and not (
+            p.get("host") == "wsl" and p.get("deleted_replaced_identically") is True):
         found.append("deleted-binary")
 
     norm_dirs = [d.replace("\\", "/") for d in SUSPECT_DIRS]
@@ -111,7 +118,8 @@ def traits(p: dict) -> list:
         # directories (…/claude/versions/2.1.233) put the real name upstream in
         # the path, so check the whole path before calling it a mismatch.
         if (base[:15] != nm[:15] and nm not in base and base not in nm
-                and nm not in exe_l):
+                and nm not in exe_l
+                and not topology.name_explanation(p, topo)):
             found.append("name-mismatch")
 
     if HIDDEN_NAME.match(name):
@@ -140,11 +148,11 @@ def severity(score: int, unknown: bool) -> str:
     return "low"
 
 
-def assess(p: dict, known: set, approved: set) -> dict:
+def assess(p: dict, known: set, approved: set, topo=None) -> dict:
     """Full verdict for one process record."""
     fp = p["fp"]
     unknown = fp not in known
-    reasons = traits(p)
+    reasons = traits(p, topo)
 
     if unknown and (p.get("user") in ("root", "SYSTEM")):
         reasons.append("root-unknown")

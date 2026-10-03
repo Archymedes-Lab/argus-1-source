@@ -17,10 +17,14 @@ sudoers line, the appended command — rather than only naming the file.
 
 import glob
 import os
-import pwd
 import re
 import stat
+import subprocess
 
+try:
+    import pwd
+except ImportError:      # native Windows: no passwd database, and no caller there
+    pwd = None
 from jarvis.core.finding import finding as _finding
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import dpkg_owns
@@ -152,15 +156,134 @@ def check_ssh():
 
 # ── privilege ─────────────────────────────────────────────────────────────
 
+# Binaries that turn a fixed sudo grant into a shell or an arbitrary write
+# (GTFOBins-style): any of these in a grant keeps it reportable.
+SUDO_ESCAPES = frozenset({
+    "sh", "bash", "dash", "zsh", "ksh", "fish", "su", "sudo", "env", "nice",
+    "python", "python3", "perl", "ruby", "node", "lua", "php", "awk", "gawk",
+    "vi", "vim", "nano", "emacs", "less", "more", "man", "find", "tar", "zip",
+    "cp", "mv", "tee", "dd", "chmod", "chown", "install", "rsync", "sed",
+    "git", "docker", "crontab", "journalctl", "script", "xargs", "time",
+})
+# systemctl verbs that act on a named unit without a pager or unit editing.
+SYSTEMCTL_SAFE = frozenset({"restart", "start", "stop", "try-restart",
+                            "reload", "reset-failed", "is-active"})
+
+
+def _fixed_sudo_command(cmd):
+    """One command in a NOPASSWD list that cannot become a root shell: an
+    absolute root-owned binary nobody else can write, explicit arguments with
+    no wildcard (none at all would allow any), and no escape-capable tool."""
+    parts = cmd.split()
+    if len(parts) < 2 or not parts[0].startswith("/") or re.search(r"[*?\[\]]", cmd):
+        return False
+    binary = parts[0]
+    if os.path.basename(binary) in SUDO_ESCAPES:
+        return False
+    if os.path.basename(binary) == "systemctl" and (
+            parts[1] not in SYSTEMCTL_SAFE or len(parts) != 3):
+        return False
+    try:
+        for path in (binary, os.path.dirname(binary)):
+            st = os.stat(path)
+            if st.st_uid != 0 or st.st_mode & 0o022:
+                return False
+    except OSError:
+        return False
+    return True
+
+
+INTERPRETERS = re.compile(r"^(python[\d.]*|node|bun|deno|perl|ruby|bash|sh|dash|zsh)$")
+
+
+def _user_writable(path):
+    """True when a non-root account can change `path` or any directory above
+    it. Unreadable paths prove nothing and return False."""
+    path = os.path.abspath(path)
+    while True:
+        try:
+            st = os.stat(path)
+        except OSError:
+            return False
+        if st.st_uid != 0 or st.st_mode & 0o022:
+            return True
+        parent = os.path.dirname(path)
+        if parent == path:
+            return False
+        path = parent
+
+
+def _unit_code_paths(props):
+    """Files and directories whose contents decide what a unit executes."""
+    argv = re.search(r"argv\[\]=([^;]*)", props.get("ExecStart", ""))
+    args = argv.group(1).split() if argv else []
+    paths = [a for a in args if a.startswith("/")]
+    if args and INTERPRETERS.match(os.path.basename(args[0])) and "-I" not in args[1:]:
+        # Without isolation an interpreter imports from its working directory.
+        paths.append(props.get("WorkingDirectory") or "/")
+    return paths
+
+
+def check_service_code():
+    """A root or capability-holding unit that runs code a user can edit hands
+    that user the unit's privilege on its next (re)start."""
+    out = []
+    units = sorted(os.path.basename(p) for p in glob.glob("/etc/systemd/system/*.service")
+                   if not os.path.islink(p))
+    for unit in units:
+        try:
+            text = subprocess.run(
+                ["systemctl", "show", unit, "--no-pager", "-p",
+                 "User,AmbientCapabilities,ExecStart,WorkingDirectory"],
+                capture_output=True, text=True, errors="replace", timeout=10,
+                check=False).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        props = dict(l.split("=", 1) for l in text.splitlines() if "=" in l)
+        caps = props.get("AmbientCapabilities", "").strip()
+        if props.get("User", "") not in ("", "root") and not caps:
+            continue
+        writable = [p for p in _unit_code_paths(props) if _user_writable(p)]
+        if writable:
+            power = f"capabilities {caps}" if caps else "root"
+            out.append(_finding(
+                "privilege", "high",
+                f"privileged service runs user-editable code: {unit}",
+                f"runs with {power} but {', '.join(writable[:3])} can be changed "
+                f"by a non-root account, which then gets that privilege on the "
+                f"next restart", f"/etc/systemd/system/{unit}"))
+    return out
+
+
+def _sudo_lines(text):
+    """Logical sudoers lines: backslash continuations joined."""
+    return re.sub(r"\\\s*\n\s*", " ", text).splitlines()
+
+
+def restricted_sudo(line):
+    """Number of commands in a NOPASSWD rule when every one is a fixed,
+    non-escaping command (see _fixed_sudo_command); None otherwise."""
+    commands = [c.strip() for c in re.split(r"NOPASSWD\s*:", line, flags=re.I)[-1].split(",")]
+    return len(commands) if commands and all(_fixed_sudo_command(c) for c in commands) else None
+
+
 def check_privilege():
     out = []
     files = ["/etc/sudoers"] + sorted(glob.glob("/etc/sudoers.d/*"))
     for f in files:
-        for line in _read(f).splitlines():
+        for line in _sudo_lines(_read(f)):
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             if "NOPASSWD" in line.upper():
+                count = restricted_sudo(line)
+                if count:
+                    out.append(_finding(
+                        "privilege", "low", f"passwordless sudo: {line[:90]}",
+                        f"restricted to {count} fixed command(s): root-owned "
+                        f"binaries nobody else can write, explicit arguments, no "
+                        f"shell-escape tool. Inventory; a change is reported.", f))
+                    continue
                 sev = "high" if re.search(r"ALL\s*$", line) else "medium"
                 out.append(_finding(
                     "privilege", sev, f"passwordless sudo: {line[:90]}",
@@ -326,6 +449,21 @@ def check_persistence():
 PS_BACKDOOR = load_win_script("backdoor.ps1")
 
 
+def _hidden_account_severity(h):
+    """A hidden administrator or remote-desktop user is the classic backdoor.
+    A hidden standard account can still sign in with its password but holds
+    neither right. Unknown membership stays high."""
+    if h.get("exists") is False:
+        return "low", "no local account has this name"
+    if h.get("exists") and h.get("enabled") is False:
+        return "low", "the account is disabled"
+    if h.get("admin") is False and h.get("rdp") is False and h.get("enabled"):
+        return "medium", ("a standard account, not an administrator or "
+                          "Remote Desktop user, that can still sign in with "
+                          "its password")
+    return "high", ""
+
+
 def check_windows():
     d = ps_json(PS_BACKDOOR, timeout=180)
     if not d:
@@ -352,10 +490,12 @@ def check_windows():
             "IFEO", "win"))
     for h in aslist(d.get("hidden")):
         if h.get("val") == 0:
+            sev, why = _hidden_account_severity(h)
             out.append(_finding(
-                "accounts", "high",
+                "accounts", sev,
                 f"account hidden from the sign-in screen: {h.get('name')}",
-                "SpecialAccounts\\UserList hides it from view but not from use",
+                "SpecialAccounts\\UserList hides it from view but not from use"
+                + (f" — {why}" if why else ""),
                 "Winlogon", "win"))
     if str(d.get("sshsvc")).lower() in ("running", "4"):
         out.append(_finding(
@@ -367,7 +507,8 @@ def check_windows():
 def audit(hosts=("wsl", "win")):
     out = []
     if "wsl" in hosts:
-        for fn in (check_ssh, check_privilege, check_accounts, check_persistence):
+        for fn in (check_ssh, check_privilege, check_service_code, check_accounts,
+                   check_persistence):
             try:
                 out += fn()
             except Exception as exc:

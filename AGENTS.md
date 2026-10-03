@@ -12,6 +12,51 @@ Add executable regression checks for changed security invariants. Keep existing
 unrelated user work intact. Use `python3 -m unittest discover -s tests` for regression
 validation; isolate any adversarial scenario from the protected user's data.
 
+## Invariants, efficiency, and architecture
+
+For every non-trivial architecture or implementation change, write down the
+invariants it must preserve before editing: evidence continuity, sensor freshness,
+identity and cursor integrity, privacy, bounded resource use, recovery, rollback,
+and explicit authority where relevant. Add executable tests that exercise both
+success and failure paths, including interruption, stale evidence, and retry
+exhaustion. A test that only mirrors the implementation is insufficient. Verify
+the real service path and measured state before calling an invariant satisfied.
+
+Compare credible designs before choosing one. Seek the simplest design that meets
+the invariants with measured CPU, memory, disk, latency, availability, and operator
+costs. Optimize the actual bottleneck; do not trade away visibility, evidence,
+recovery, or user safety for a higher score or a faster happy path. Record why the
+selected design wins and what would cause reconsideration.
+
+Use the project Jev client for a bounded, metadata-only advisory comparison of
+non-trivial architectural alternatives and for review of their implementations.
+Ask narrow typed questions about the actual tradeoffs and validation gaps; treat
+uncertainty explicitly. Jev cannot select an unsafe design, replace invariant
+tests or runtime measurement, authorize a protected action, or overrule the human.
+
+## Live verification outside the sandbox
+
+Use the permitted host execution path for JARVIS checks that require the real
+service manager, loopback API, Windows bridge, sensor spool, filesystem ownership,
+or network. The restricted sandbox can return `EPERM`, `EROFS`, connection failure,
+or misleading ownership; do not diagnose the product from those results alone.
+Keep host actions bounded and auditable. Read live evidence first, use the least
+privilege needed, and preserve current snapshots and rollback artifacts. An
+outside-sandbox path does not grant permission to bypass Windows policy, change
+protected services, install software, disclose private data, or treat a successful
+command as verified protection. Recheck the real service and fresh collector
+receipts after any authorized change.
+
+For the next collector release, do not retry the failed direct
+`/opt/jarvis/current/scripts/deploy_root_runtime.py` invocation from the dirty
+checkout. Prepare a narrow release from the running sealed source, containing
+only reviewed files, and use an explicitly permitted administrator path to
+switch it with a rollback ready. A restart alone does not install new code;
+do not repurpose the repair helper or bypass release validation to deploy.
+Owner decision 2026-09-24: deploy with `--skip-tests` and validate on real results as
+described in [the deploy guide](docs/guides/DEPLOY.md). The unit suite still runs before
+staging; the live readback against a written baseline is the acceptance gate.
+
 ## TypeSafe/Jev review
 
 Jev is the default advisory review path for JARVIS implementation work. Start every
@@ -33,6 +78,13 @@ threshold constants centralized and reviewable. Interpret Noul values as yes/no
 probabilities; interpret Choice and Score confidence only as concentration over the
 defined alternatives. Validate thresholds on representative JARVIS cases rather
 than treating examples or model output as ground truth.
+
+Run Jev requests outside the restricted filesystem/network sandbox, using the
+permitted host-network execution path. Sandbox DNS cannot reliably resolve the
+TypeSafe endpoint; a sandbox `URLError` is not evidence that Jev itself is down.
+Keep the request bounded and metadata-only in that context. If host-network
+execution is unavailable or denied, report Jev as unavailable and continue with
+the deterministic safe fallback; never bypass the permission boundary.
 
 The API credential is loaded from `TYPESAFE_API_KEY` or the owner-only
 `~/.jarvis/typesafe.env`; never print it, copy it into the repository, place it in a

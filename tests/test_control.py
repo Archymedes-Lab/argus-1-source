@@ -93,10 +93,10 @@ class TrustedScheduledTaskTests(unittest.TestCase):
                     '-NoProfile -NonInteractive -WindowStyle Hidden '
                     '-ExecutionPolicy Bypass -File '
                     '"C:\\Users\\chris\\AppData\\Local\\WSLKeepalive\\'
-                    'wake-jarvis.ps1" -Distro "Ubuntu" '
+                    'jarvis-wake-watchdog.ps1" -Distro "Ubuntu" '
                     f'-RepoRoot "{root}" -RecoverInterop true'),
                 "targetHash": trusted_tasks.normalized_text_hash(
-                    os.path.join(root, "wake-jarvis.ps1")),
+                    os.path.join(root, "jarvis-wake-watchdog.ps1")),
             }],
         }
 
@@ -232,3 +232,81 @@ class BootTaskVerificationTests(unittest.TestCase):
                     stale = jobs._boot(("win",), db)
         self.assertEqual([f["severity"] for f in fresh if f["where"] == task], ["low"])
         self.assertEqual([f["severity"] for f in stale if f["where"] == task], ["high"])
+
+
+class HiddenAccountSeverityTests(unittest.TestCase):
+    def test_privilege_decides_severity_and_unknown_stays_high(self):
+        from jarvis.collectors.persistence.backdoor import _hidden_account_severity as sev
+        base = {"exists": True, "enabled": True, "admin": False, "rdp": False}
+        self.assertEqual(sev(base)[0], "medium")
+        self.assertEqual(sev(dict(base, admin=True))[0], "high")
+        self.assertEqual(sev(dict(base, rdp=True))[0], "high")
+        self.assertEqual(sev(dict(base, admin=None))[0], "high")     # lookup failed
+        self.assertEqual(sev({})[0], "high")                           # old script shape
+        self.assertEqual(sev(dict(base, enabled=False))[0], "low")
+        self.assertEqual(sev(dict(base, exists=False))[0], "low")
+
+
+class PrivilegedServiceCodeTests(unittest.TestCase):
+    SHOW = ("ExecStart={ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 %s-m app serve ; x }\n"
+            "WorkingDirectory=%s\nAmbientCapabilities=%s\nUser=%s\n")
+
+    def run_check(self, workdir, caps="", user="svc", isolated=False):
+        from unittest import mock
+
+        from jarvis.collectors.persistence import backdoor
+        out = self.SHOW % ("-I " if isolated else "", workdir, caps, user)
+        with mock.patch.object(backdoor.glob, "glob", return_value=["/etc/systemd/system/app.service"]), \
+             mock.patch.object(backdoor.os.path, "islink", return_value=False), \
+             mock.patch.object(backdoor.subprocess, "run",
+                               return_value=mock.Mock(stdout=out)):
+            return [f["severity"] for f in backdoor.check_service_code()]
+
+    def test_capabilities_or_root_on_user_writable_code_is_high(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as mine:      # owned by the test user
+            self.assertEqual(self.run_check(mine, caps="cap_sys_ptrace"), ["high"])
+            self.assertEqual(self.run_check(mine, user="root"), ["high"])
+            self.assertEqual(self.run_check(mine, user=""), ["high"])
+            self.assertEqual(self.run_check(mine), [])              # unprivileged
+            self.assertEqual(self.run_check(mine, user="root", isolated=True), [])
+
+    def test_root_owned_code_is_not_reported(self):
+        self.assertEqual(self.run_check("/usr/lib", user="root"), [])
+
+
+class RestrictedSudoTests(unittest.TestCase):
+    def test_only_fixed_root_owned_non_escape_commands_are_restricted(self):
+        from jarvis.collectors.persistence.backdoor import _fixed_sudo_command as fixed
+        from jarvis.collectors.persistence.backdoor import _sudo_lines
+        self.assertTrue(fixed("/usr/bin/systemctl restart jarvis.service"))
+        for cmd in ("/usr/bin/systemctl edit jarvis.service", "/usr/bin/systemctl status x",
+                    "/usr/bin/systemctl restart *", "/usr/bin/systemctl restart",
+                    "/usr/bin/vim /etc/hosts", "/usr/bin/find . -x", "systemctl restart x",
+                    "ALL", "/usr/bin/python3 -c x"):
+            self.assertFalse(fixed(cmd), cmd)
+        self.assertEqual(len(_sudo_lines("a NOPASSWD: /x y, \\\n   /z w\nb\n")), 2)
+
+
+class ControlSudoRuleTests(unittest.TestCase):
+    def test_restricted_rules_are_inventory_and_open_ones_stay_high(self):
+        import tempfile
+        from unittest import mock
+
+        from jarvis.collectors.persistence import control
+        with tempfile.TemporaryDirectory() as d:
+            safe, open_ = f"{d}/safe", f"{d}/open"
+            with open(safe, "w") as fh:
+                fh.write("# c\nchris ALL=(root) NOPASSWD: /usr/bin/systemctl restart jarvis.service, \\\n"
+                         "    /usr/bin/systemctl reset-failed jarvis.service\n")
+            with open(open_, "w") as fh:
+                fh.write("chris ALL=(ALL) NOPASSWD: ALL\n")
+
+            def fake_glob(pattern):
+                return [safe, open_] if pattern == "/etc/sudoers.d/*" else []
+
+            with mock.patch.object(control.glob, "glob", side_effect=fake_glob), \
+                 mock.patch.object(control, "_run", return_value=""):
+                out = {f["where"]: f for f in control.audit_linux() if f["where"] in (safe, open_)}
+        self.assertEqual(out[safe]["severity"], "low")
+        self.assertEqual(out[open_]["severity"], "high")

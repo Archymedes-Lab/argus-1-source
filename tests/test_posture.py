@@ -17,15 +17,17 @@ class PostureTests(unittest.TestCase):
         self.snaps = {"secrets": {"ts": 1000, "findings": [self.finding]},
                       "internet": {"ts": 1000, "findings": []}}
 
-    def test_acknowledgement_preserves_score_and_tracks_expiry(self):
+    def test_acceptance_lowers_score_but_stays_debt_and_blocks_readiness(self):
         fid = acknowledge.finding_id(self.finding, "secrets")
         acks = {fid: {"severity": "critical", "expires": 1100}}
         before = posture.build(self.snaps, self.jobs, now=1001)
         accepted = posture.build(self.snaps, self.jobs, now=1001, acks=acks)
-        self.assertEqual(before["score"], accepted["score"])
+        self.assertGreater(accepted["score"], before["score"])
         self.assertEqual(accepted["debt_counts"]["accepted"], 1)
+        self.assertFalse(accepted["readiness_gates"]["no_weighted_findings"])
         expired = posture.build(self.snaps, self.jobs, now=1100, acks=acks)
         self.assertEqual(expired["debt_counts"]["accepted"], 0)
+        self.assertEqual(expired["score"], before["score"])
 
     def test_collector_loss_never_improves_health(self):
         before = score.compute(self.snaps, self.jobs, 1001)["score"]
@@ -46,6 +48,41 @@ class PostureTests(unittest.TestCase):
         self.assertGreater(result["projected_after_verified_remediation"], result["score"])
         self.assertEqual(self.snaps, original)
         self.assertEqual(result["readiness"], "blocked")
+
+    def test_readiness_names_failed_gates_without_claiming_assurance(self):
+        result = posture.build(self.snaps, self.jobs, now=1001,
+                               repair_state={"status": "active", "failed": 1})
+        self.assertEqual(result["readiness"], "blocked")
+        self.assertFalse(result["readiness_gates"]["host_score_100"])
+        self.assertTrue(result["readiness_gates"]["collector_coverage_100"])
+        self.assertFalse(result["readiness_gates"]["no_weighted_findings"])
+        self.assertFalse(result["readiness_gates"]["automatic_remediation_ledger_clear"])
+        self.assertFalse(result["readiness_gates"]["sustained_health_100_15m"])
+        self.assertIn("assurance is separate", result["readiness_scope"])
+
+    def test_clean_snapshot_still_needs_sustained_proof(self):
+        clean = {name: {**snap, "findings": []} for name, snap in self.snaps.items()}
+        result = posture.build(clean, self.jobs, now=1001,
+                               repair_state={"status": "active", "failed": 0,
+                                             "blocked": 0, "actions": []})
+        self.assertEqual(result["score"], 100)
+        self.assertEqual(result["readiness"], "blocked")
+        self.assertFalse(result["readiness_gates"]["sustained_health_100_15m"])
+
+    def test_candidate_requires_all_host_gates_and_is_not_release_certification(self):
+        clean = {name: {**snap, "findings": []} for name, snap in self.snaps.items()}
+        samples = [{"at": at, "score": 100, "coverage": 100, "verified": True}
+                   for at in (1000, 1500, 2000)]
+        # Rebase snapshots to the latest sample so coverage is still fresh.
+        for snap in clean.values():
+            snap["ts"] = 2000
+        result = posture.build(clean, self.jobs, now=2000,
+                               sustained_samples=samples,
+                               repair_state={"status": "active", "failed": 0,
+                                             "blocked": 0, "actions": []})
+        self.assertEqual(result["readiness"], "candidate")
+        self.assertTrue(all(result["readiness_gates"].values()))
+        self.assertIn("host evidence gates only", result["readiness_scope"])
 
     def test_graph_rejects_cycle_and_secret_removal_requires_rotation(self):
         graph = protocols.RemediationGraph(protocols.BY_ID["plaintext-secrets"].remediation_edges)

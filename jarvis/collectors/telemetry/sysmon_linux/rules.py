@@ -1,14 +1,20 @@
 """Linux-shaped detection rules over parsed Sysmon events."""
 
+import ipaddress
 import os
 import re
+import subprocess
 
+try:
+    import pwd
+except ImportError:      # native Windows: no passwd database, and no caller there
+    pwd = None
 from jarvis.core import egress as egress_baseline
 from jarvis.core import vet, warninglist
 from jarvis.core.finding import finding as _finding
 
 from .harness import _payload
-from .journal import CHANNEL, _base, _clean
+from .journal import CHANNEL, _base, _clean, _event_utc
 
 WORLD_WRITABLE = ("/tmp/", "/dev/shm/", "/var/tmp/", "/run/user/", "/var/lib/php/")
 
@@ -30,11 +36,33 @@ RECON_BINS = {"whoami", "id", "uname", "hostname", "hostnamectl", "ifconfig",
 REVSHELL_BINS = {"nc", "ncat", "netcat", "socat", "telnet"}
 
 
-PERSIST_PATHS = re.compile(
-    r"/\.ssh/authorized_keys$|/etc/cron|/var/spool/cron|"
-    r"/etc/systemd/system/|/\.config/systemd/user/|/etc/init\.d/|"
-    r"/etc/ld\.so\.preload$|/etc/sudoers|/\.bashrc$|/\.bash_profile$|"
-    r"/\.profile$|/etc/profile\.d/|/etc/rc\.local$")
+# Only locations that are actually read: system paths anchored at /, and
+# per-user paths inside a real account's home. The same names under /tmp are
+# never loaded by systemd, cron or a login shell (JARVIS's own test suite
+# writes them there on every deploy).
+SYSTEM_PERSIST = re.compile(
+    r"^(/etc/cron|/var/spool/cron|/etc/systemd/system/|/etc/systemd/user/|"
+    r"/etc/init\.d/|/etc/ld\.so\.preload$|/etc/sudoers|/etc/profile\.d/|"
+    r"/etc/rc\.local$)")
+HOME_PERSIST = re.compile(
+    r"^(?P<home>/.+?)/(\.ssh/authorized_keys|\.config/systemd/user/.+|"
+    r"\.bashrc|\.bash_profile|\.profile)$")
+
+
+def _account_homes():
+    try:
+        return {os.path.normpath(p.pw_dir) for p in pwd.getpwall() if p.pw_dir}
+    except Exception:
+        return set()
+
+
+def persistence_location(path):
+    """True when `path` is somewhere a login, systemd or cron will read."""
+    path = os.path.normpath(path or "")
+    if SYSTEM_PERSIST.search(path):
+        return True
+    m = HOME_PERSIST.match(path)
+    return bool(m) and m.group("home") in _account_homes()
 
 
 # snapd rewrites its own revision-pinned units under /etc/systemd/system on
@@ -140,7 +168,100 @@ def _without_quoted_heredocs(cmd):
     return "".join(out)
 
 
-def _expected_log_maintenance(actor, target, parent_cmdline=""):
+_DMESG_WINDOWS = {}     # boot id -> [(start, end)] of dmesg.service runs
+
+
+def _dmesg_windows():
+    """(start, end) epoch pairs of this boot's dmesg.service runs, read once
+    per boot from systemd's journal. Ubuntu's unit runs `savelog -c 5` on
+    /var/log/dmesg, which removes the oldest generation."""
+    try:
+        with open("/proc/sys/kernel/random/boot_id", errors="replace") as fh:
+            boot = fh.read().strip()
+    except OSError:
+        return []
+    if boot in _DMESG_WINDOWS:
+        return _DMESG_WINDOWS[boot]
+    try:
+        text = subprocess.run(
+            ["journalctl", "-u", "dmesg.service", "-b", "-o", "short-unix", "--no-pager"],
+            capture_output=True, text=True, errors="replace", timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    windows, start = [], None
+    for line in text.splitlines():
+        try:
+            stamp = float(line.split(" ", 1)[0])
+        except ValueError:
+            continue
+        if "Starting dmesg.service" in line or ("Started dmesg.service" in line and start is None):
+            start = stamp if start is None else start
+        elif "dmesg.service: Deactivated" in line and start is not None:
+            windows.append((start, stamp))
+            start = None
+    if start is not None:
+        windows.append((start, start + 120))
+    if not windows:
+        windows = _dmesg_unit_window()
+    _DMESG_WINDOWS.clear()
+    _DMESG_WINDOWS[boot] = windows
+    return windows
+
+
+def _dmesg_unit_window():
+    """This boot's dmesg.service run from systemd's own unit timestamps.
+
+    The journal lines above rotate away within the hour when Sysmon is busy
+    (measured 2026-09-23: oldest entry ~40 min old), which turned every later
+    read of a legitimate rotation into "indicator removal". systemd keeps the
+    last run's activation and deactivation times for the whole boot."""
+    try:
+        text = subprocess.run(
+            ["systemctl", "show", "dmesg.service", "--timestamp=unix",
+             "-p", "InactiveExitTimestamp", "-p", "InactiveEnterTimestamp"],
+            capture_output=True, text=True, errors="replace", timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    stamps = {}
+    for line in text.splitlines():
+        key, _, value = line.partition("=")
+        try:
+            stamps[key] = float(value.lstrip("@"))
+        except ValueError:
+            continue
+    start, end = stamps.get("InactiveExitTimestamp"), stamps.get("InactiveEnterTimestamp")
+    if start and end and 0 <= end - start <= 600:
+        return [(start, end)]
+    return []
+
+
+def _dmesg_rotation(path, when):
+    """An unparented rm of a rotated /var/log/dmesg generation, inside a run
+    of dmesg.service in this boot (measured 2026-09-23: deletion 6s after the
+    unit started, 9s before it ended).
+
+    `when` is one event time or several readings of it. Sysmon's ingestion
+    time (TimeCreated) lags while it drains its boot backlog, and dmesg.service
+    runs in exactly that backlog (2026-09-24: the 17:13:51-17:13:59 run still
+    left `rm deleted /var/log//dmesg.4.gz` high); the kernel-side UtcTime is
+    accurate at boot but drifts after standby. Either reading inside the run
+    window is enough; the window itself is not widened."""
+    times = [t for t in (when if isinstance(when, (tuple, list)) else (when,))
+             if isinstance(t, (int, float))]
+    if not times or not re.match(r"^/var/log/dmesg\.\d+(\.gz)?$", path):
+        return False
+    return any(start - 5 <= t <= end + 5
+               for start, end in _dmesg_windows() for t in times)
+
+
+def _event_times(e):
+    """The event's ingestion time and its kernel-side time, when present."""
+    return tuple(t for t in (_event_utc({"SystemTime": e.get("SystemTime")}),
+                             _event_utc({"UtcTime": e.get("UtcTime")}))
+                 if t is not None)
+
+
+def _expected_log_maintenance(actor, target, parent_cmdline="", when=None):
     """True only for a logging daemon or the rotation tooling acting on files
     it owns.
 
@@ -166,6 +287,12 @@ def _expected_log_maintenance(actor, target, parent_cmdline=""):
         # Measured: `rm deleted /var/log/dmesg.4.gz` raised a high each WSL
         # start. Only rm's own process record naming savelog or logrotate as
         # its parent exempts it; an rm Sysmon cannot parent stays high.
+        # The run window alone is not enough: an rm with a visible parent that
+        # is not savelog/logrotate (a shell, a script) is not the unit's rm.
+        parent = parent_cmdline or ""
+        if (ROTATED_LOG.match(path) and _dmesg_rotation(path, when)
+                and (not parent or ROTATION_PARENT.search(parent))):
+            return True
         return bool(ROTATED_LOG.match(path)) and bool(ROTATION_PARENT.search(parent_cmdline or ""))
     return actor in LOG_ROTATORS and bool(ROTATED_LOG.match(path))
 
@@ -182,22 +309,16 @@ def _expected_persistence(actor, target):
 
 
 def _is_public_ip(ip):
-    if not ip:
-        return False
-    if ":" in ip:   # IPv6
-        return not ip.lower().startswith(("fe80", "::1", "fc", "fd", "::"))
-    parts = ip.split(".")
-    if len(parts) != 4:
-        return False
+    """Globally routable, judged after unmapping IPv4-mapped IPv6. Sysmon
+    writes the unspecified address as `0:0:0:0:0:0:0:0` and Docker peers as
+    `0:0:0:0:0:ffff:ac12:5` (172.18.0.5); prefix matching called both public."""
     try:
-        a, b = int(parts[0]), int(parts[1])
+        addr = ipaddress.ip_address(str(ip or "").strip("[]").split("%")[0])
     except ValueError:
         return False
-    if a in (10, 127, 0) or (a == 192 and b == 168) or (a == 172 and 16 <= b <= 31):
-        return False
-    if a == 169 and b == 254:
-        return False
-    return True
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    return addr.is_global
 
 
 def _is_jarvis(e):
@@ -298,7 +419,7 @@ def _rules(events, store=None):
 
         elif eid == 11:
             tgt = e.get("TargetFilename") or ""
-            if PERSIST_PATHS.search(tgt) and not _expected_persistence(base, tgt):
+            if persistence_location(tgt) and not _expected_persistence(base, tgt):
                 out.append(_finding(
                     "sysmon-linux", "high", PERSIST_WRITE_TITLE,
                     f"{base or '?'} created/modified {tgt}", CHANNEL))
@@ -308,7 +429,8 @@ def _rules(events, store=None):
             creator = processes.get(e.get("ProcessGuid"), {})
             if ((tgt.startswith("/var/log/") or "/.bash_history" in tgt)
                     and not _expected_log_maintenance(
-                        base, tgt, _clean(creator.get("ParentCommandLine")))):
+                        base, tgt, _clean(creator.get("ParentCommandLine")),
+                        _event_times(e))):
                 out.append(_finding(
                     "sysmon-linux", "high", LOG_DELETE_TITLE,
                     f"{base or '?'} deleted {tgt}{LOG_DELETE_SUFFIX}", CHANNEL))

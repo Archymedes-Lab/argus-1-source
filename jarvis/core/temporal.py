@@ -19,6 +19,11 @@ from collections import defaultdict
 # else is retained in the log but does not move the projection.
 PROCESS_START = ("process", "start")
 PROCESS_EXIT = ("process", "exit")
+THREAD_START = ("thread", "start")
+THREAD_EXIT = ("thread", "exit")
+IMAGE_UNLOAD = ("process", "image_unload")
+MEM_PROT = ("memory", "protection_changed")
+NET_END = ("network", "end")
 PROCESS_SIGNALS = {
     ("process", "access"), ("process", "remote_thread"),
     ("process", "tamper"), ("process", "image_load"),
@@ -27,7 +32,8 @@ PROCESS_SIGNALS = {
 NET_CONNECT = ("network", "connect")
 DNS_QUERY = ("network", "dns_query")
 FILE_SIGNALS = {
-    ("file", "create"), ("file", "delete"), ("file", "time_change"),
+    ("file", "create"), ("file", "write"), ("file", "rename"),
+    ("file", "delete"), ("file", "time_change"),
     ("file", "stream_create"), ("file", "raw_read"),
     ("file", "block_executable"), ("file", "block_shredding"),
     ("file", "executable_detected"),
@@ -56,6 +62,10 @@ TASK_SIGNALS = {
     ("task", "started"), ("task", "finished"),
     ("task", "action_started"), ("task", "action_finished"),
     ("task", "process_created"), ("task", "failed"),
+}
+SERVICE_SIGNALS = {
+    ("service", "created"), ("service", "changed"),
+    ("service", "started"), ("service", "stopped"),
 }
 SENSOR_SIGNALS = {
     ("sensor", "state"), ("sensor", "config_change"), ("sensor", "error"),
@@ -106,6 +116,15 @@ def reduce(events, limit=5000):
     task_activity = defaultdict(int)
     sensors = {"error": 0, "config_change": 0, "state": 0, "last_error": None}
     proc_signals = defaultdict(int)
+    # Change-level projections (additive): threads, services, connection
+    # ends, memory-protection changes. Snapshots remain consistency checks
+    # against this event-derived state.
+    threads_alive = {}
+    services = {}
+    service_activity = defaultdict(int)
+    connections_ended = 0
+    mem_protection_changes = 0
+    image_unloads = 0
     counts = defaultdict(int)
     first_seq = events[0].get("seq") if events else None
     last_seq = events[-1].get("seq") if events else None
@@ -122,6 +141,36 @@ def reduce(events, limit=5000):
             }
         elif key == PROCESS_EXIT:
             alive.pop(_proc_key(ev), None)
+            # Threads die with their process instance: drop its threads so
+            # a pid-reusing successor never inherits stale thread state.
+            threads_alive = {k: v for k, v in threads_alive.items()
+                             if v.get("proc") != _proc_key(ev)}
+        elif key == THREAD_START:
+            tid = (ev.get("target") or {}).get("tid",
+                                               (ev.get("process") or {}).get("tid"))
+            threads_alive[f"{_proc_key(ev)}:tid:{tid}"] = {
+                "proc": _proc_key(ev), "tid": tid, "started": ev.get("time"),
+                "seq": ev.get("seq"),
+            }
+        elif key == THREAD_EXIT:
+            tid = (ev.get("target") or {}).get("tid",
+                                               (ev.get("process") or {}).get("tid"))
+            threads_alive.pop(f"{_proc_key(ev)}:tid:{tid}", None)
+        elif key == IMAGE_UNLOAD:
+            image_unloads += 1
+        elif key == MEM_PROT:
+            mem_protection_changes += 1
+        elif key == NET_END:
+            connections_ended += 1
+        elif key in SERVICE_SIGNALS:
+            target = ev.get("target") or {}
+            name = str(target.get("name") or target.get("path") or "")
+            service_activity[key[1]] += 1
+            if name:
+                if key[1] == "stopped":
+                    services.pop(name, None)
+                else:
+                    services[name[:256]] = key[1]
         elif key in PROCESS_SIGNALS:
             proc_signals[f"{key[0]}:{key[1]}"] += 1
         elif key == NET_CONNECT:
@@ -194,6 +243,12 @@ def reduce(events, limit=5000):
         "protection": dict(protection),
         "tasks": tasks,
         "task_activity": dict(task_activity),
+        "services": services,
+        "service_activity": dict(service_activity),
+        "threads_alive": threads_alive,
+        "connections_ended": connections_ended,
+        "mem_protection_changes": mem_protection_changes,
+        "image_unloads": image_unloads,
         "sensors": dict(sensors),
         "proc_signals": dict(proc_signals),
         "counts": dict(counts),
@@ -240,6 +295,18 @@ def changes(before, after):
     mal_a = sum((after.get("malware") or {}).values())
     if mal_a > mal_b:
         out.append("malware telemetry increased")
+    for key in after.get("threads_alive", {}):
+        if key not in before.get("threads_alive", {}):
+            out.append(f"thread start: {key}")
+    for name, state in after.get("services", {}).items():
+        if before.get("services", {}).get(name) != state:
+            out.append(f"service {state}: {name}")
+    if (after.get("connections_ended", 0) or 0) > \
+            (before.get("connections_ended", 0) or 0):
+        out.append("connection ended")
+    if (after.get("mem_protection_changes", 0) or 0) > \
+            (before.get("mem_protection_changes", 0) or 0):
+        out.append("memory protection changed")
     return out
 
 

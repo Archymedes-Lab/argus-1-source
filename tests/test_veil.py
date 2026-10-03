@@ -1,7 +1,7 @@
-import unittest
 import io
 import json
 import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -24,12 +24,46 @@ def report(**overrides):
 
 
 class VeilContractTests(unittest.TestCase):
-    def test_behavioral_combination_with_export_is_high_without_raw_input(self):
-        findings = classify(report())
-        hit = next(f for f in findings if "behavioral interaction" in f["title"])
-        self.assertEqual(hit["severity"], "high")
+    def test_framework_listener_set_alone_is_only_low(self):
+        # React 17+ registers mousemove, pointermove, input and keydown on the
+        # root of every React page; listeners cannot tell it from a recorder.
+        findings = classify(report(listeners={
+            "mousemove": 1, "pointermove": 1, "input": 1, "keydown": 1}))
+        self.assertEqual([f["severity"] for f in findings], ["low"])
+        self.assertNotIn("private", findings[0]["where"])
+
+    def test_named_session_recorder_is_medium_without_raw_input(self):
+        findings = classify(report(script_origins=["https://static.hotjar.com"]))
+        hit = next(f for f in findings if "session recorder" in f["title"])
+        self.assertEqual(hit["severity"], "medium")
+        self.assertIn("Hotjar", hit["title"])
         self.assertNotIn("private", hit["where"])
         self.assertNotIn("(391,", hit["detail"])
+
+    def test_recorder_matches_on_domain_suffix_not_substring(self):
+        self.assertIn("Microsoft Clarity", classify(
+            report(egress_origins=["https://x.clarity.ms"]))[0]["title"])
+        titles = [f["title"] for f in classify(
+            report(egress_origins=["https://notclarity.ms.evil.example"]))]
+        self.assertFalse(any("session recorder" in t for t in titles))
+
+    def test_replay_capable_analytics_is_named_as_possibility_only(self):
+        findings = classify(report(script_origins=["https://us.i.posthog.com"]))
+        self.assertEqual(findings[0]["severity"], "low")
+        self.assertIn("can record", findings[0]["title"])
+
+    def test_tracking_pixel_is_low_and_origin_only(self):
+        findings = classify(report(listeners={}, transports={"pixel": 2},
+                                   pixel_origins=["https://www.facebook.com/tr?id=9"]))
+        hit = next(f for f in findings if "pixel" in f["title"])
+        self.assertEqual(hit["severity"], "low")
+        self.assertIn("https://www.facebook.com", hit["detail"])
+        self.assertNotIn("id=9", hit["detail"])
+
+    def test_new_origin_lists_are_bounded_and_optional(self):
+        self.assertEqual(validate_report(report())["script_origins"], [])
+        self.assertIsNone(validate_report(report(pixel_origins=["https://a.example"] * 17)))
+        self.assertIsNone(validate_report(report(script_origins="https://a.example")))
 
     def test_interaction_listeners_without_export_are_not_a_tracking_finding(self):
         self.assertEqual(classify(report(egress_origins=[], transports={})), [])

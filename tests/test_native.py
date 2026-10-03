@@ -8,7 +8,8 @@ from unittest import mock
 
 from jarvis.collectors.telemetry import native as native_job
 from jarvis.collectors.telemetry import sysmon
-from jarvis.core import collection, event as event_mod
+from jarvis.core import collection
+from jarvis.core import event as event_mod
 from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core.store import Store
 from jarvis.platform.native import ingest, normalize
@@ -73,6 +74,26 @@ class Fixture(unittest.TestCase):
 
 
 class BatchValidationTests(unittest.TestCase):
+    def test_optional_sensor_read_time_is_validated_and_preserved(self):
+        newer = record(1)
+        newer["read_time"] = "2026-09-18T12:00:01Z"
+        value = batch(events=[newer])
+        validate(value)
+        normalized = normalize.normalize(newer, value)
+        self.assertEqual(normalized["received"], newer["read_time"])
+        self.assertEqual(normalized["attrs"]["_received_basis"], "sensor_read")
+        for bad in ("invalid", "2026-09-18T12:00:01"):
+            newer["read_time"] = bad
+            with self.assertRaises(BatchError):
+                validate(value)
+
+    def test_legacy_event_time_fallback_is_explicit(self):
+        value = batch()
+        normalized = normalize.normalize(value["events"][0], value)
+        self.assertEqual(normalized["received"], value["events"][0]["time"])
+        self.assertEqual(normalized["attrs"]["_received_basis"],
+                         "event_time_fallback")
+
     def test_duplicate_record_inside_batch_is_rejected(self):
         with self.assertRaises(BatchError):
             validate(batch(events=[record(1), record(1)]))
@@ -255,17 +276,17 @@ class EventLogTests(Fixture):
         (self.logdir / "segments" / "000000000001.jseg").unlink()
         self.assertTrue(any("missing" in p for p in self.log.verify()["problems"]))
 
-    def test_pruning_is_known_absence_and_respects_holds(self):
+    def test_history_retention_never_deletes_even_without_holds(self):
         for s in range(1, 4):
             self.append(2, s)
             self.log.seal(force=True)
         self.log.hold(1, 2, "incident")
         removed = self.log.prune(budget=0)
-        self.assertEqual(removed, [2])          # 1 is held, 3 is the newest
+        self.assertEqual(removed, [])
         result = self.log.verify()
         self.assertTrue(result["ok"], result["problems"])
-        self.assertEqual(self.log.missing(), [(3, 4)])
-        self.assertEqual([e["seq"] for e in self.log.iter_events()], [1, 2, 5, 6])
+        self.assertEqual(self.log.missing(), [])
+        self.assertEqual([e["seq"] for e in self.log.iter_events()], [1, 2, 3, 4, 5, 6])
 
     def test_anchor_detects_a_rewritten_history(self):
         self.append()
@@ -346,6 +367,9 @@ class SysmonConsumerTests(Fixture):
     def setUp(self):
         super().setUp()
         self.store = Store(str(self.root / "j.db"))
+        # These fixtures exercise the ordinary incremental consumer with
+        # historical event timestamps. Rule-change replay has its own tests.
+        self.store.set_meta("sysmon_thread_rules", sysmon.THREAD_RULES)
 
     def tearDown(self):
         self.store.db.close()
@@ -370,6 +394,17 @@ class SysmonConsumerTests(Fixture):
         self.assertEqual(int(self.store.get_meta("sysmon_eventlog_seq")), 1)
         # The next run starts after the consumed offset.
         self.assertIn("delivered 0 events", " ".join(f["title"] for f in self.audit()))
+
+    def test_rule_replay_reads_only_remote_thread_events(self):
+        self.feed(record(1, 1), record(2, 8, sysmon_xml(
+            8, UtcTime="2026-09-18 12:00:00.000",
+            SourceImage=r"C:\Windows\System32\csrss.exe",
+            TargetImage=r"C:\x\example.exe",
+            StartAddress="0x00007FFB2EBF6400")))
+        since = 1_789_632_000  # 2026-09-17; fixed historical fixture window
+        result = sysmon._native(self.store, self.logdir, since=since, event_ids={8})
+        self.assertIsNotNone(result)
+        self.assertEqual([e["id"] for e in result[0]["events"]], [8])
 
     def test_driver_queue_drops_are_telemetry_loss(self):
         desc = ("Events dropped from driver queue:  ProcessCreate:87 RegistryEvent:53563. "

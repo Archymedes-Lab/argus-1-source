@@ -3,6 +3,8 @@
 import os
 import re
 
+from jarvis.platform.executable_identity import replaced_identically
+
 from .common import PROC, _finding, _read, _run_capture
 from .views import _describe
 
@@ -183,6 +185,19 @@ def ftrace_hooks():
     return []
 
 
+REPLACED_IDENTICAL = "executable replaced on disk by an identical copy"
+MAX_REPLACEMENT_CHECKS = 2
+
+
+def _replaced_identically(pid, mapped):
+    """A deleted main executable whose original bytes (still readable through
+    /proc/<pid>/exe) equal the file now at the same path: an in-place
+    reinstall such as `sysmon -i` or a package re-copy, so the running code
+    does have an honest file behind it. Anything unreadable or different
+    stays a deleted mapping."""
+    return replaced_identically(pid, mapped, proc=PROC)
+
+
 def injected_processes():
     """Processes running code with no honest file behind it.
 
@@ -192,6 +207,8 @@ def injected_processes():
       a memfd: executable mapping -- fileless execution, never touched the disk
     """
     hits = []
+    replacement_checks = 0
+    replacement_results = {}
     for entry in os.listdir(PROC):
         if not entry.isdigit():
             continue
@@ -208,6 +225,7 @@ def injected_processes():
                 reasons.append(("LD_PRELOAD set", val))
 
         maps = _read(f"{PROC}/{pid}/maps")
+        replaced = False
         for line in maps.splitlines():
             if len(line.split()) < 6:
                 continue
@@ -215,6 +233,18 @@ def injected_processes():
             if "x" not in perms:
                 continue
             if path.endswith("(deleted)"):
+                key = (pid, path)
+                if key not in replacement_results:
+                    if replacement_checks < MAX_REPLACEMENT_CHECKS:
+                        replacement_checks += 1
+                        replacement_results[key] = _replaced_identically(pid, path)
+                    else:
+                        replacement_results[key] = False
+                if replacement_results[key]:
+                    if not replaced:
+                        replaced = True
+                        reasons.append((REPLACED_IDENTICAL, path))
+                    continue
                 reasons.append(("executable mapping was deleted from disk", path))
                 break
             if path.startswith("/memfd:"):

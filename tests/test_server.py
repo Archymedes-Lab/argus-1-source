@@ -243,7 +243,9 @@ class DefenderHTTPTests(unittest.TestCase):
         self.handler.headers = {"Host": "localhost:8787", "X-JARVIS-Veil-Token": "paired-secret"}
         self.handler._json_body = Mock(return_value={
             "top_origin": "https://shop.example/private-path",
-            "egress_origins": ["https://tracker.example/private"],
+            # A named recorder, so the report yields a finding; the private
+            # path must still be reduced away before anything is stored.
+            "egress_origins": ["https://in.hotjar.com/private"],
             "listeners": {"input": 1, "keydown": 1},
             "surfaces": {}, "transports": {"fetch": 1},
         })
@@ -302,6 +304,16 @@ class SchedulerLaneTests(unittest.TestCase):
         # the main queue could be starved by a multi-minute audit again.
         self.assertTrue({"scan", "bridge"} <= set(self.mod.FAST))
 
+    def test_short_tier0_jobs_cannot_starve_behind_long_audits(self):
+        # native and watchdogs judge Monitoring; queued behind the post-boot
+        # sweep on 2026-09-23 they aged past their freshness budget.
+        self.assertTrue({"native", "watchdogs"} <= set(self.mod.FAST))
+        self.scheduler.next_run = {name: 9e9 for name in JOBS}
+        self.scheduler.next_run["native"] = 0.0
+        with patch("jarvis.service.scheduler.time.time", return_value=1_000.0):
+            self.assertEqual(self.scheduler._due("fast"), "native")
+            self.assertIsNone(self.scheduler._due("main"))
+
     def test_fast_lane_stays_fresh_while_the_main_lane_is_busy(self):
         import threading
         release = threading.Event()
@@ -330,3 +342,50 @@ class SchedulerLaneTests(unittest.TestCase):
             release.set()
         self.assertEqual(busy, "secrets")
         self.assertIn("bridge", ran)
+
+
+class ClientDisconnectTests(unittest.TestCase):
+    def test_a_client_that_hung_up_is_not_an_error(self):
+        handler = Handler.__new__(Handler)
+        handler.wfile = Mock(write=Mock(side_effect=BrokenPipeError()))
+        handler.send_response = handler.send_header = handler.end_headers = Mock()
+        handler.close_connection = False
+        handler._send(200, "{}")
+        self.assertTrue(handler.close_connection)
+
+
+class ForcedPriorityTests(unittest.TestCase):
+    def setUp(self):
+        self.scheduler = Scheduler(":memory:", ("wsl", "win"))
+        self.scheduler.cold_start_pending.clear()
+        self.now = 100_000.0
+
+    def test_run_all_does_not_starve_an_overdue_critical_collector(self):
+        # 2026-09-23: "run all" queued every job in dict order and sysmon,
+        # near the end, went stale behind two full sweeps.
+        self.scheduler.next_run = {name: self.now + 60 for name in JOBS}
+        self.scheduler.next_run["sysmon"] = self.now - 2 * JOBS["sysmon"][0]
+        for name in JOBS:
+            self.scheduler.force(name)
+        with patch("jarvis.service.scheduler.time.time", return_value=self.now), \
+             patch("jarvis.core.governor.live_pressure", return_value=(False, "")):
+            self.assertEqual(self.scheduler._due("main"), "sysmon")
+            self.assertNotIn("sysmon", self.scheduler.forced)  # one run satisfies both
+
+    def test_forced_job_runs_before_it_is_due(self):
+        self.scheduler.next_run = {name: self.now + 3600 for name in JOBS}
+        self.scheduler.force("secrets")
+        with patch("jarvis.service.scheduler.time.time", return_value=self.now), \
+             patch("jarvis.core.governor.live_pressure", return_value=(False, "")):
+            self.assertEqual(self.scheduler._due("main"), "secrets")
+            self.assertNotIn("secrets", self.scheduler.forced)
+
+    def test_governed_jobs_are_not_deferred_when_the_host_is_idle(self):
+        # `pressured` used to be overwritten with a job's score inside the
+        # loop, so an idle host still deferred every later governed job.
+        self.scheduler.next_run = {name: self.now + 3600 for name in JOBS}
+        self.scheduler.next_run["evasion"] = self.now - 10
+        self.scheduler.next_run["secrets"] = self.now - JOBS["secrets"][0]
+        with patch("jarvis.service.scheduler.time.time", return_value=self.now), \
+             patch("jarvis.core.governor.live_pressure", return_value=(False, "")):
+            self.assertEqual(self.scheduler._due("main"), "secrets")

@@ -80,6 +80,26 @@ class WindowsSysmonImpactTests(unittest.TestCase):
             finally:
                 store.close()
 
+    DROP = ("Events dropped from driver queue:  ProcessCreate:98 RegistryEvent:52195. "
+            "DriverQueueSize: 50000, 1 bytes.")
+
+    def drops(self, events):
+        return {f["title"]: f["severity"] for f in self.audit(events)
+                if f["category"] == "telemetry loss"}
+
+    def test_drop_reported_with_the_service_start_is_the_boot_backlog(self):
+        start = {"id": 4, "state": "Started", "time": "2026-09-23T05:19:45.403Z"}
+        drop = {"id": 255, "description": self.DROP, "time": "2026-09-23T05:19:45.407Z"}
+        for events in ([start, drop], [drop, start]):
+            self.assertEqual(self.drops(events),
+                             {sysmon.BOOT_DROP_TITLE: "medium"})
+
+    def test_drop_while_running_stays_high(self):
+        start = {"id": 4, "state": "Started", "time": "2026-09-23T05:19:45Z"}
+        late = {"id": 255, "description": self.DROP, "time": "2026-09-23T06:00:00Z"}
+        self.assertEqual(self.drops([start, late]),
+                         {"Sysmon dropped events before logging them": "high"})
+
     def test_unsigned_adjacent_dll_in_user_directory_is_sideload_signal(self):
         findings = self.audit([{
             "id": 7, "image": r"C:\Users\u\Downloads\host.exe",
@@ -147,3 +167,129 @@ class RememberTests(unittest.TestCase):
                 store.close()
         self.assertIn("Sysmon event coverage is partial", [f["title"] for f in first])
         self.assertEqual([f["title"] for f in later], ["evil.exe created a thread inside notepad.exe"])
+
+
+class CtrlRoutineAddressTests(unittest.TestCase):
+    CTRL = "0x00007FFB2EBF6400"
+
+    def test_address_proof_is_limited_to_the_same_burst(self):
+        rows = [(r"C:\Windows\System32\csrss.exe", "target.exe",
+                 "2026-09-23T09:48:50Z", "KERNELBASE.dll", "CtrlRoutine", self.CTRL)]
+        known = sysmon._ctrl_routine_addresses(rows)
+        self.assertTrue(sysmon._near_ctrl_routine(
+            self.CTRL, "2026-09-23T09:48:46Z", known))
+        self.assertFalse(sysmon._near_ctrl_routine(
+            self.CTRL, "2026-09-22T09:48:46Z", known))
+        self.assertFalse(sysmon._near_ctrl_routine(
+            self.CTRL, "2026-09-23T09:49:22Z", known))
+
+    def test_unresolved_csrss_start_at_a_known_ctrlroutine_address_is_routine(self):
+        v = sysmon.thread_verdict(r"C:\Windows\System32\csrss.exe", r"C:\x\llama-server.exe",
+                                  "-", "-", self.CTRL, {int(self.CTRL, 16)})
+        self.assertIsNone(v)
+
+    def test_unknown_address_or_other_source_stays_critical(self):
+        for image, addr in ((r"C:\Windows\System32\csrss.exe", "0x00007FFB2EBF6500"),
+                            (r"C:\t\evil.exe", self.CTRL)):
+            v = sysmon.thread_verdict(image, r"C:\x\llama-server.exe", "-", "-", addr,
+                                      {int(self.CTRL, 16)})
+            self.assertEqual(v[0], "critical", image)
+
+
+class InjectionReplayTests(unittest.TestCase):
+    def test_rule_change_replays_full_native_window_before_clearing_stored_hit(self):
+        import tempfile
+        from pathlib import Path
+
+        from jarvis.core.store import Store
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(str(Path(tmp) / "j.db"))
+            self.addCleanup(store.close)
+            store.set_meta("sysmon_thread_rules", "start-module-v1")
+            store.db.execute(
+                "INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_) "
+                "VALUES(strftime('%s','now'),'injection','critical',?,?,?)",
+                ("csrss.exe created a thread inside llama-server.exe", "old verdict",
+                 r"C:\Windows\System32\csrss.exe"))
+            store.db.execute(
+                "INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_) "
+                "VALUES(strftime('%s','now'),'injection','critical',?,?,?)",
+                ("unmatched injection", "underlying event unavailable", "unknown.exe"))
+            store.commit()
+            address = "0x00007FFB2EBF6400"
+            events = [
+                {"id": 8, "seq": i + 1,
+                 "image": r"C:\Windows\System32\csrss.exe",
+                 "target": rf"C:\x\routine{i}.exe", "time": "2026-09-23T09:48:46Z",
+                 "start_module": r"C:\Windows\System32\KERNELBASE.dll",
+                 "start_function": "CtrlRoutine", "start_address": address}
+                for i in range(40)
+            ]
+            # The previously critical event is after the ordinary 40-event
+            # display cap. The complete replay still has to rejudge it.
+            events.append({"id": 8, "seq": 41,
+                           "image": r"C:\Windows\System32\csrss.exe",
+                           "target": r"C:\x\llama-server.exe",
+                           "time": "2026-09-23T09:48:46Z", "start_module": "",
+                           "start_function": "", "start_address": address})
+            ordinary = ({"events": [], "complete": True, "rareComplete": True}, 42)
+            replay = ({"events": events, "complete": True, "rareComplete": True}, 42)
+            with mock.patch.object(sysmon, "_native", side_effect=[ordinary, replay]) as read:
+                out = sysmon.audit(store, incremental=True)
+            self.assertIsNone(read.call_args_list[0].kwargs["since"])
+            self.assertIsNotNone(read.call_args_list[1].kwargs["since"])
+            self.assertEqual(read.call_args_list[1].kwargs["event_ids"], {8})
+            self.assertNotIn("csrss.exe created a thread inside llama-server.exe",
+                             [f["title"] for f in out])
+            self.assertIn("unmatched injection", [f["title"] for f in out])
+            self.assertEqual(store.get_meta("sysmon_thread_rules"), sysmon.THREAD_RULES)
+
+    def test_incomplete_replay_preserves_prior_critical(self):
+        import tempfile
+        from pathlib import Path
+
+        from jarvis.core.store import Store
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(str(Path(tmp) / "j.db"))
+            self.addCleanup(store.close)
+            store.set_meta("sysmon_thread_rules", "start-module-v1")
+            store.db.execute(
+                "INSERT INTO sysmon_hits(ts,category,severity,title,detail,where_) "
+                "VALUES(strftime('%s','now'),'injection','critical',?,?,?)",
+                ("critical injection", "old verdict", "source.exe"))
+            store.commit()
+            ordinary = ({"events": [], "complete": True, "rareComplete": True}, 42)
+            replay = ({"events": [], "complete": False, "rareComplete": False}, 42)
+            with mock.patch.object(sysmon, "_native", side_effect=[ordinary, replay]):
+                out = sysmon.audit(store, incremental=True)
+            self.assertIn("critical injection", [f["title"] for f in out])
+            self.assertEqual(store.get_meta("sysmon_thread_rules"), "start-module-v1")
+
+
+class BrokerLsassTests(unittest.TestCase):
+    def test_only_a_reviewed_broker_script_is_recognised(self):
+        import sqlite3
+        from unittest import mock
+
+        from jarvis.platform import broker
+
+        class Log:
+            def __init__(self, cmd):
+                self.db = sqlite3.connect(":memory:")
+                self.db.execute("CREATE TABLE processes(guid TEXT, cmdline TEXT)")
+                self.db.execute("INSERT INTO processes VALUES('g', ?)", (cmd,))
+
+            def close(self):
+                pass
+
+        ok = ('"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile '
+              '-File C:\\ProgramData\\Jarvis\\Broker\\inputaudit.ps1 ')
+        for cmd, drift, want in ((ok, [], "inputaudit.ps1"),
+                                 (ok, ["inputaudit.ps1"], ""),
+                                 (ok.replace("ProgramData", "Users\\x"), [], ""),
+                                 (ok.replace("inputaudit", "evil"), [], "")):
+            with mock.patch.object(sysmon, "EventLog", return_value=Log(cmd)), \
+                 mock.patch.object(broker, "drifted", return_value=drift):
+                self.assertEqual(sysmon._broker_script("g"), want, cmd)

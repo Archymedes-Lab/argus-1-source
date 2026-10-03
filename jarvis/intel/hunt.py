@@ -19,23 +19,24 @@ is exact and a second local check runs before anything is reported:
 The ATT&CK side is different in kind and lives in gaps.py.
 """
 
-import base64
 import ipaddress
 import json
 import os
+import time
 
 from jarvis.collectors.process.detect import TRUSTED_PATHS
 from jarvis.core import vet, warninglist
 from jarvis.core.finding import finding as _finding
 from jarvis.core.util import dpkg_owns, now
-from jarvis.platform.windows import ps_json
+from jarvis.platform import host as machine
+from jarvis.platform.windows import ps_json, stdin_text
 
 
 def _win_to_wsl(path):
-    """C:\\Users\\x -> /mnt/c/Users/x so Windows paths are checkable from here."""
+    """C:\\Users\\x as this process names it, so Windows paths are checkable from here."""
     p = path.replace("\\", "/")
     if len(p) > 2 and p[1] == ":" and p[2] == "/":
-        return "/mnt/" + p[0].lower() + p[2:]
+        return machine.local_path(path) or None
     return None
 
 
@@ -204,7 +205,14 @@ _STOCK_UNREGISTERED = frozenset((
     "/etc/profile", "/etc/passwd", "/etc/shadow", "/etc/group", "/etc/gshadow",
     "/etc/hosts", "/etc/hostname", "/etc/resolv.conf", "/etc/fstab",
     "/etc/sudoers", "/etc/crontab", "/etc/environment", "/etc/ld.so.cache",
-    "/etc/machine-id", "/etc/shells", "/etc/os-release"))
+    "/etc/machine-id", "/etc/shells", "/etc/os-release",
+    # Copied from /etc/skel on every install; backdoor.check_persistence
+    # reads every home's shell profiles, root's included, for payloads.
+    "/root/.bashrc", "/root/.profile"))
+
+
+# How long a process-name match counts as current activity.
+NAMED_PROCESS_WINDOW_S = 72 * 3600
 
 
 def _win_norm(path):
@@ -219,22 +227,22 @@ def _microsoft_signed(paths):
 
     Writeups name stock binaries (rundll32, dllhost, explorer) that malware
     abuses, and the feed records them as attacker paths. The file existing is
-    then meaningless. Paths come from feeds, so they travel as base64 JSON and
+    then meaningless. Paths come from feeds, so they travel as JSON on stdin and
     are never interpolated into the script.
     """
     if not paths:
         return set()
-    blob = base64.b64encode(json.dumps(sorted(paths)).encode()).decode()
+    payload = json.dumps(sorted(paths))
     script = (
         "$ErrorActionPreference='SilentlyContinue';"
-        f"$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'))"
-        "|ConvertFrom-Json;"
+        + stdin_text("p") +
+        "$p=$p|ConvertFrom-Json;"
         "$ok=@(foreach($x in $p){$s=Get-AuthenticodeSignature -LiteralPath $x;"
         "if($s.Status -eq 'Valid' -and $s.SignerCertificate.Subject -match "
         "'O=Microsoft Corporation'){$x}});"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(ConvertTo-Json -InputObject $ok -Compress)))")
-    result = ps_json(script, timeout=60)
+    result = ps_json(script, timeout=60, payload=payload)
     if isinstance(result, str):
         result = [result]
     return set(result) if isinstance(result, list) else set()
@@ -334,6 +342,11 @@ def check_processes(store):
         # A copy in a temp or download folder is suspicious whatever the source.
         dropped = any(d in exe for d in ("/temp/", "/tmp/", "/downloads/"))
         sev = ("high" if dict(hit).get("confidence") == "high" or dropped else "medium") if exe else "low"
+        # The procs table is a history. A match last seen days ago stays
+        # listed, but as a record of what ran, not as current activity.
+        stale = time.time() - float(row["last_seen"] or 0) > NAMED_PROCESS_WINDOW_S
+        if stale and not dropped:
+            sev = "low"
         out.append(_finding(
             "named process", sev,
             f"a process matching a known malware name ran: {row['name']}",

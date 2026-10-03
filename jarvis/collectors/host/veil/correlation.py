@@ -43,6 +43,7 @@ def aggregate(reports):
     `worst` is the strongest single-report severity observed, kept as a
     label — the verdict's own confidence comes only from corroboration.
     """
+    from .analysis import REPLAY_VENDORS, _vendors
     from .analysis import classify as _classify
     verdicts = {}
     for report in reports or []:
@@ -53,7 +54,7 @@ def aggregate(reports):
         entry = verdicts.setdefault(top, {
             "sightings": 0, "exported_sightings": 0,
             "interaction_sightings": 0, "fingerprint_sightings": 0,
-            "worst": "ok",
+            "replay_sightings": 0, "worst": "ok",
         })
         entry["sightings"] += 1
         third_party = [o for o in clean["egress_origins"] if o != top]
@@ -66,6 +67,9 @@ def aggregate(reports):
             entry["interaction_sightings"] += 1
         if len(surfaces) >= 4:
             entry["fingerprint_sightings"] += 1
+        if _vendors([o for o in clean["script_origins"] + clean["egress_origins"]
+                     if o != top], REPLAY_VENDORS):
+            entry["replay_sightings"] += 1
         for finding in _classify(report):
             rank = {"low": 0, "medium": 1, "high": 2}
             if rank.get(finding.get("severity"), -1) > rank.get(entry["worst"], -1):
@@ -95,7 +99,8 @@ def findings(verdicts, min_sightings=2):
             f"repeated tracking-indicative behavior by {origin}",
             f"seen in {entry['sightings']} metadata-only reports "
             f"({entry['exported_sightings']} with cross-origin export, "
-            f"{entry['fingerprint_sightings']} with fingerprinting surfaces); "
+            f"{entry['fingerprint_sightings']} with fingerprinting surfaces, "
+            f"{entry['replay_sightings']} with a session recorder); "
             f"pattern confidence {entry['confidence']:.2f} — an indicator, "
             f"not a compromise verdict. No content was retained.",
             origin, host="browser"))

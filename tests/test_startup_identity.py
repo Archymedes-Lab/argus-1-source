@@ -60,6 +60,32 @@ class BootIdentityTests(unittest.TestCase):
         ids = {acknowledge.finding_id(f, "boot") for f in findings}
         self.assertEqual(len(ids), 2)
 
+    def test_complete_action_history_and_valid_signature_lower_run(self):
+        data = _sample("2026-09-20T14:46:47")
+        data["taskRuns"] = [{"task": "NT TASK\\VendorUpdater", "cmd": "", "path": ""}]
+        data["taskActionsComplete"] = True
+        data["taskActions"] = [{"task": "\\VendorUpdater",
+                                "action": "C:\\Program Files\\Vendor\\update.exe"}]
+        sig = {"C:\\Program Files\\Vendor\\update.exe":
+               {"status": "Valid", "signer": "CN=Vendor"}}
+        with mock.patch.object(startup, "ps_json", return_value=data), \
+             mock.patch("jarvis.platform.signatures.verify", return_value=sig):
+            self.assertEqual(_ran(startup.audit())[0]["severity"], "low")
+        data["taskActionsComplete"] = False
+        with mock.patch.object(startup, "ps_json", return_value=data):
+            self.assertEqual(_ran(startup.audit())[0]["severity"], "medium")
+
+    def test_script_and_writable_actions_remain_medium(self):
+        for action in ("C:\\Windows\\System32\\powershell.exe",
+                       "C:\\Users\\owner\\AppData\\Temp\\update.exe", "{COM-GUID}"):
+            data = _sample("2026-09-20T14:46:47")
+            data["taskRuns"] = [{"task": "\\Updater", "cmd": "", "path": ""}]
+            data["taskActionsComplete"] = True
+            data["taskActions"] = [{"task": "\\Updater", "action": action}]
+            with mock.patch.object(startup, "ps_json", return_value=data), \
+                 mock.patch("jarvis.platform.signatures.verify", return_value={}):
+                self.assertEqual(_ran(startup.audit())[0]["severity"], "medium")
+
 
 if __name__ == "__main__":
     unittest.main()

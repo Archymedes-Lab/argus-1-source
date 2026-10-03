@@ -458,3 +458,29 @@ class ZoneEditTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LocatorBridgeTests(unittest.TestCase):
+    """Windows PowerShell 5.1 does not project IAsyncOperation.Status: a
+    Status-polling loop exits at once and silently never returns a fix."""
+
+    def _script(self):
+        consent = {"consent": "Allow", "service": "Running"}
+        with mock.patch.object(geo, "ps_json", side_effect=[consent, {}]) as ps:
+            geo.locate()
+        return ps.call_args_list[1].args[0]
+
+    def test_locator_awaits_through_astask_not_status_polling(self):
+        script = self._script()
+        self.assertIn("WindowsRuntimeSystemExtensions", script)
+        self.assertIn(".Wait(12000)", script)
+        self.assertNotIn("$op.Status", script)
+
+    def test_fix_source_is_reported_not_assumed(self):
+        self.assertNotIn("windows-gnss", self._script())
+
+    def test_denied_consent_never_runs_the_locator(self):
+        with mock.patch.object(geo, "ps_json",
+                               return_value={"consent": "Deny"}) as ps:
+            self.assertEqual(geo.locate()["status"], "denied")
+        self.assertEqual(ps.call_count, 1)

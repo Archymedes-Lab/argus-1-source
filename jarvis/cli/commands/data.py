@@ -1,8 +1,10 @@
 """Subcommands that read and curate the stored baseline."""
 
 import json
+import time
 
 from jarvis.collectors.process import detect, monitor
+from jarvis.core import collection
 from jarvis.core.util import iso, now, short
 from jarvis.intel import feeds
 from jarvis.intel import research as intel
@@ -28,7 +30,48 @@ def cmd_baseline(args, store):
 
 
 def cmd_procs(args, store):
-    rows = store.list_procs(approved=args.approved, limit=args.limit)
+    if args.live:
+        from jarvis.platform import linux, windows
+        from ..output import selected_hosts
+
+        hosts = selected_hosts(args)
+        with collection.observe() as observation:
+            rows = []
+            if "wsl" in hosts:
+                rows.extend(linux.collect(with_sockets=False))
+            if "win" in hosts:
+                rows.extend(windows.collect())
+        # A failed source must not make a partial list look exhaustive.
+        counts = {host: sum(p.get("host") == host for p in rows) for host in hosts}
+        errors = list(observation.failures)
+        for host in hosts:
+            if counts[host] == 0:
+                errors.append(f"{host}: no process observations")
+        rows.sort(key=lambda p: (p.get("host", ""), int(p.get("pid") or 0),
+                                 p.get("started") or ""))
+        total = len(rows)
+        if args.limit is not None:
+            rows = rows[:max(0, args.limit)]
+        # This is local metadata only: no command lines, sockets or credentials.
+        items = [{"host": p.get("host"), "pid": p.get("pid"),
+                  "name": p.get("name"), "exe": p.get("exe"),
+                  "started": p.get("started"),
+                  "observed_at": p.get("observed_at")}
+                 for p in rows]
+        result = {"completed_at": int(time.time()), "sources": counts,
+                  "total": total, "shown": len(items), "errors": errors,
+                  "processes": items}
+        if args.json:
+            print(json.dumps(result, default=str))
+        else:
+            for p in items:
+                print(f"{p['host']:<4} {str(p['pid']):>7}  "
+                      f"{p['name'] or '?':<28} {p['started'] or '?'}  {p['exe'] or ''}")
+            print(f"{len(items)} of {total} observed processes; "
+                  + ("source errors: " + "; ".join(errors) if errors else "all requested sources returned rows"))
+        return 1 if errors else 0
+
+    rows = store.list_procs(approved=args.approved, limit=60 if args.limit is None else args.limit)
     print(f"{'FP':<18}{'HOST':<6}{'APPR':<6}{'SEEN':<6}{'LAST':<21}NAME / CMD")
     for r in rows:
         print(f"{r['fp']:<18}{r['host']:<6}{'yes' if r['approved'] else 'no':<6}"
@@ -242,4 +285,3 @@ def cmd_feeds(args, store):
               "(use --force to override)")
     else:
         print(f"\n  {total} indicators added or refreshed")
-

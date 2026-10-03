@@ -33,12 +33,29 @@ from jarvis.service.schedule import JOBS
 
 # The priority lane: short jobs that health and the watchdogs judge freshness
 # by. Each must stay well under a few seconds, or it starves its own lane.
-FAST = ("bridge", "input_hook", "scan")
+# native (the event-log ingest, ~1.5s, run in a deadline-bounded child) and
+# watchdogs (~0.2s) joined on 2026-09-23: behind the post-boot sweep of
+# multi-minute collectors they waited 7+ minutes and went stale, blanking
+# Monitoring while nothing was actually wrong. native is the only event-log
+# writer in the daemon; readers take no lock and see committed batches only.
+FAST = ("bridge", "input_hook", "scan", "native", "watchdogs")
 ISOLATED = {"native"}
 # Longest the cold-start gate may hold coverage and report back. One full
 # sweep takes a few minutes; past this the audits run and report honestly
 # on whatever has still not caught up.
 COLD_START_HOLD_S = 900
+# Wall-clock time that outran the monotonic clock by this much means the VM
+# was paused: Windows Modern Standby and sleep freeze the WSL guest, whose
+# monotonic clock stops while realtime is corrected on wake (measured
+# 2026-09-24: ~4.3 h of lag across one night). NTP slews are far smaller.
+RESUME_JUMP_S = 60.0
+# A failed run inside its freshness budget keeps the last good result and is
+# retried after RETRY_S, at most HOLD_MAX times in a row before it is recorded.
+RETRY_S = 60
+# How overdue (as a share of its cadence) a forced job counts as, at least.
+FORCED_FLOOR = 1.0
+HOLD_MAX = 3
+RETRY_META = "collector_retry_"
 
 
 def _isolated_job(name, hosts, db_path, timeout):
@@ -101,6 +118,7 @@ class Scheduler(threading.Thread):
         # and the coverage audit for 6h on 2026-09-22.
         self.cold_start_pending = self._cold_start_gate()
         self.forced = []
+        self.retry_soon = set()
         self.current = None
         # Bumped at the top of every loop iteration. The systemd watchdog pings
         # only while this keeps advancing, so a wedged scheduler — alive process,
@@ -113,6 +131,9 @@ class Scheduler(threading.Thread):
         self.fast_thread = None
         self.started_at = time.time()
         self.lock = threading.Lock()
+        self._clock = (time.time(), time.monotonic())
+        self.resumed_at = None
+        self.resume_count = 0
         # Collector Reliability Plane: explicit contracts, freshness budgets,
         # leases and supervised recovery. See reliability.py. The scheduler
         # owns execution; the watchdog loop at the bottom of this module owns
@@ -144,6 +165,53 @@ class Scheduler(threading.Thread):
                      JOBS[name][0] * 2, JOBS[name][0] + 300)}
         return pending - fresh
 
+    def _note_resume(self):
+        """Re-arm the cold-start hold after the host resumes from suspend.
+
+        A resume leaves every persisted result as old as the suspend, exactly
+        like a restart, but the process never restarted, so the cold-start
+        gate stayed open: coverage and report then ran mid catch-up sweep,
+        called waiting collectors stale, and recorded a collapsed score
+        (10 at 07:56 on 2026-09-24; Monitoring read 8 until coverage's next
+        run). Returns True when a resume was detected."""
+        wall, mono = time.time(), time.monotonic()
+        with self.lock:
+            prev_wall, prev_mono = self._clock
+            self._clock = (wall, mono)
+        if (wall - prev_wall) - (mono - prev_mono) < RESUME_JUMP_S:
+            return False
+        pending = self._cold_start_gate()
+        with self.lock:
+            self.cold_start_pending = pending
+            self.started_at = wall
+            self.resumed_at = wall
+            self.resume_count += 1
+        if pending:
+            self._open_wake_window(wall)
+        return True
+
+    def _open_wake_window(self, now):
+        """Show "waking up, re-checking" on the dashboard for this sweep
+        instead of a partial live score. Never raises."""
+        try:
+            from jarvis.response.reporting import score
+            store = Store(self.db_path)
+            try:
+                score.open_wake_window(store, now)
+            finally:
+                store.close()
+        except Exception:
+            pass
+
+    def wake_phase(self):
+        """The scheduler's side of a re-verification window, for the score."""
+        now = time.time()
+        with self.lock:
+            holding = sorted(self.cold_start_pending) if self._cold_start_holding(now) else []
+            return {"holding": holding, "resumed_at": self.resumed_at,
+                    "started_at": self.started_at,
+                    "current": [n for n in (self.current, self.fast_current) if n]}
+
     def _cold_start_holding(self, now):
         return bool(self.cold_start_pending) and \
             now - self.started_at < COLD_START_HOLD_S
@@ -156,33 +224,40 @@ class Scheduler(threading.Thread):
         return False
 
     def _due(self, lane=None):
-        """The job to run next. `lane` is "fast", "main", or None for either."""
+        """The job to run next. `lane` is "fast", "main", or None for either.
+
+        Forced jobs (the dashboard's run buttons, recovery, the reviver)
+        compete on the same priority as scheduled ones instead of jumping a
+        FIFO queue: one "run all" queued ~46 jobs ahead of an overdue
+        critical collector on 2026-09-23, and sysmon went stale behind two
+        full sweeps. A forced job counts as at least FORCED_FLOOR of its
+        cadence overdue, so it still runs promptly.
+        """
         member = (lambda n: True) if lane is None else (
             (lambda n: n in FAST) if lane == "fast" else (lambda n: n not in FAST))
-        with self.lock:
-            for i, name in enumerate(self.forced):
-                if member(name):
-                    return self.forced.pop(i)
         # Resource governor: under host pressure, deferrable Tier 1/2 jobs
         # yield to Tier 0 protection/ingestion. A governed job still runs
         # once it is 3x overdue, so deferral is a delay, never a drop, and
         # staleness accounting keeps working. Forced recovery bypasses this.
+        with self.lock:
+            forced = [n for n in self.forced if member(n)]
+            queue_depth = len(self.forced)
         try:
             from jarvis.core import governor as governor_mod
-            with self.lock:
-                queue_depth = len(self.forced)
-            pressured, _reason = governor_mod.live_pressure(
+            host_pressured, _reason = governor_mod.live_pressure(
                 queue_depth=queue_depth)
         except Exception:
-            pressured = False
+            host_pressured = False
         now = time.time()
-        most_overdue, score = None, None
+        best, best_score = None, None
         for name, t in self.next_run.items():
             if not member(name):
                 continue
-            if name in ("coverage", "report") and self._cold_start_holding(now):
+            is_forced = name in forced
+            if name in ("coverage", "report") and self._cold_start_holding(now) \
+                    and not is_forced:
                 continue
-            if t > now:
+            if t > now and not is_forced:
                 continue
             # Compare lateness as a fraction of each job's own cadence. An
             # absolute oldest-deadline policy starves the one-minute watchdogs
@@ -192,19 +267,25 @@ class Scheduler(threading.Thread):
             # The reliability plane weights that share by collector
             # criticality and failure pressure, so something approaching stale
             # naturally rises to the top without starving fast watchdogs.
-            overdue = (now - t) / max(1, JOBS[name][0])
-            if pressured and governor_mod.should_defer(name, True) and overdue < 3.0:
+            overdue = max(0.0, now - t) / max(1, JOBS[name][0])
+            if is_forced:
+                overdue = max(overdue, FORCED_FLOOR)
+            elif host_pressured and governor_mod.should_defer(name, True) \
+                    and overdue < 3.0:
                 continue
             spec = self.specs.get(name)
             weight = reliability.CRITICALITY_WEIGHT.get(
                 spec.criticality if spec else "medium", 1.0)
             failures = self.reliability.health[name].consecutive_failures \
                 if name in self.reliability.health else 0
-            pressured = overdue * weight * (
-                1.0 + min(3, max(0, failures)) * 0.25)
-            if score is None or pressured > score:
-                most_overdue, score = name, pressured
-        return most_overdue
+            score = overdue * weight * (1.0 + min(3, max(0, failures)) * 0.25)
+            if best_score is None or score > best_score:
+                best, best_score = name, score
+        if best is not None and best in forced:
+            with self.lock:
+                if best in self.forced:
+                    self.forced.remove(best)
+        return best
 
     def _next_worker(self, lane):
         with self.lock:
@@ -225,9 +306,14 @@ class Scheduler(threading.Thread):
                     snapshots = store.get_snapshots()
                 finally:
                     store.close()
+            with self.lock:
+                resume = {"count": self.resume_count, "last_at": self.resumed_at,
+                          "holding": sorted(self.cold_start_pending)
+                          if self._cold_start_holding(time.time()) else []}
             return {
                 "statuses": self.reliability.all_statuses(snapshots),
                 "summary": self.reliability.summary(snapshots),
+                "resume": resume,
             }
         except Exception:
             return {"statuses": {}, "summary": {"levels": {}, "stale_collectors": [],
@@ -313,8 +399,11 @@ class Scheduler(threading.Thread):
                     defense.reconcile(store)
                 except Exception:
                     pass
+                if self.cold_start_pending:
+                    self._open_wake_window(time.time())
             while True:
                 setattr(self, beat, time.time())
+                self._note_resume()
                 name = self._due(lane)
                 if name is None:
                     time.sleep(1)
@@ -324,7 +413,11 @@ class Scheduler(threading.Thread):
                     findings, err = self.run_once(store, name)
                 finally:
                     setattr(self, running, None)
-                    self.next_run[name] = time.time() + JOBS[name][0]
+                    with self.lock:
+                        soon = name in self.retry_soon
+                        self.retry_soon.discard(name)
+                    self.next_run[name] = time.time() + (
+                        min(RETRY_S, JOBS[name][0]) if soon else JOBS[name][0])
                     self.cold_start_pending.discard(name)
                 # Page out anything that warrants it — especially a collector
                 # that has stopped recording. Guarded so a mail failure can
@@ -390,7 +483,19 @@ class Scheduler(threading.Thread):
             except Exception:
                 err = (err + "; response failed: " + traceback.format_exc()[-500:]).strip("; ")
         duration_ms = max(0.0, time.time() - started) * 1000.0
-        store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
+        held = self._transient_hold(store, name, findings, err, health)
+        if held is None:
+            store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
+            if not err:
+                store.set_meta(RETRY_META + name, "")
+        else:
+            # Keep serving the last good result, which is still inside its
+            # freshness budget, and try again soon. The failure stays on
+            # record in the defender journal and in the retry note below.
+            store.set_meta(RETRY_META + name, json.dumps(
+                {"at": time.time(), "error": err[:300], "last_good": float(held["ts"])}))
+            with self.lock:
+                self.retry_soon.add(name)
         if health is not None and lease is not None:
             try:
                 # An execution that outruns its timeout succeeded late: keep
@@ -413,7 +518,43 @@ class Scheduler(threading.Thread):
                     health.next_retry_at = 0.0
             except Exception:
                 pass
+        if held is not None:
+            # Notifications see the result that is still on record, so a
+            # held retry neither pages an outage nor clears open findings.
+            return list(held.get("findings") or []), ""
         return findings, err
+
+    def _transient_hold(self, store, name, findings, err, health):
+        """The last good snapshot to keep instead of recording this failed
+        run, or None to record it.
+
+        Holds only while all of these are true: the previous result was clean
+        and is still inside the same freshness budget the score uses; this is
+        one of the first HOLD_MAX consecutive failures; and the failed run
+        reported nothing new at medium or above, so a finding is never hidden
+        behind an older, cleaner result."""
+        if not err or name in ("coverage", "report"):
+            return None
+        if health is not None and health.consecutive_failures >= HOLD_MAX:
+            return None
+        try:
+            prev = store.get_snapshots().get(name) or {}
+        except Exception:
+            return None
+        if not prev.get("ts") or prev.get("error"):
+            return None
+        interval = JOBS[name][0]
+        if time.time() - float(prev["ts"]) > max(interval * 2, interval + 300):
+            return None
+        known = {alert.finding_key(f) for f in prev.get("findings") or ()
+                 if isinstance(f, dict)}
+        for f in findings:
+            if (isinstance(f, dict)
+                    and f.get("severity") in ("medium", "high", "critical")
+                    and f.get("category") not in ("visibility", "collectors")
+                    and alert.finding_key(f) not in known):
+                return None
+        return prev
 
     def _collect(self, name, timeout):
         if name in ISOLATED:

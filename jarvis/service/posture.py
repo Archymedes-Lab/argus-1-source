@@ -58,18 +58,32 @@ def build(snapshots, jobs, *, acks=None, now=None, sustained_samples=None,
                            "verification_jobs": list(protocol.jobs),
                            "prerequisites": list(protocol.requires), "status": "proposed"})
     candidates.sort(key=lambda row: (row["priority"], -row["projected_recovery"], row["id"]))
+    repair = repair_state or {"status": "unverified", "actions": [], "verified": 0,
+                              "failed": 0, "blocked": 0}
+    sustained = score.sustained_health(sustained_samples or [], current["at"])
+    gates = {
+        "host_score_100": current["score"] == 100,
+        "collector_coverage_100": current["coverage"] == 100 and bool(jobs),
+        "no_weighted_findings": not any(row["kind"] != posture.COVERAGE for row in debt),
+        "automatic_remediation_ledger_clear": (
+            repair.get("status") == "active" and repair.get("failed") == 0
+            and repair.get("blocked") == 0
+            and all(action.get("status") == "verified"
+                    for action in repair.get("actions", []))),
+        "sustained_health_100_15m": sustained["status"] == "verified",
+    }
     return {"score": current["score"], "coverage_pct": current["coverage"],
             "debt": debt, "debt_counts": {kind: sum(row["kind"] == kind for row in debt)
                                            for kind in posture.DEBT_KINDS},
             "candidates": candidates, "projection_is_verified": False,
             "projected_after_verified_remediation": _project(snapshots, jobs, matched, current["at"]),
             "projection_note": "Conditional on fresh successful verification; individual gains overlap.",
-            "readiness": "blocked" if debt else "unknown",
-            "automatic_remediation": repair_state or {
-                "status": "unverified", "actions": [], "verified": 0,
-                "failed": 0, "blocked": 0},
-            "sustained_health": score.sustained_health(
-                sustained_samples or [], current["at"]),
+            "readiness": ("unknown" if not jobs else
+                          "candidate" if all(gates.values()) else "blocked"),
+            "readiness_scope": "host evidence gates only; JARVIS assurance is separate",
+            "readiness_gates": gates,
+            "automatic_remediation": repair,
+            "sustained_health": sustained,
             "at": current["at"]}
 
 

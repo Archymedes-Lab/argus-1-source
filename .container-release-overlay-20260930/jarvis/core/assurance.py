@@ -1,0 +1,125 @@
+"""Conservative assurance claims. Configuration and passing health are not proof."""
+POLICY_VERSION = '2026-09-19'
+
+# This register deliberately grants no deployment/containment validation from
+# source inspection. A future evidence importer must validate signed receipts.
+CAPABILITIES = {
+    'human_safety': ('partial', 'response actions and bounded repairs', 'No complete essential-service dependency model'),
+    'online_guardian': ('partial', 'internetwatch and threat intelligence', 'No synchronous browser credential/payment/OAuth interception'),
+    'browser_privacy_veil': ('partial', 'opt-in metadata-only browser sensor (surfaces counted on use, named session-replay vendors, cross-origin pixel origins) with deterministic Veil correlation, and opt-in declarativeNetRequest rulesets for session recorders and tracking pixels that ship disabled, cannot match pages or frames, and yield to per-site exceptions (rule and logic tests under Node stubs)', 'No installed/attested browser integration; blocking is unvalidated in a live browser; first-party/CNAME-cloaked or server-side trackers and recorders served from the site origin are neither named nor blocked; the main-world probe can be forged or evaded by the page'),
+    'input_surveillance': ('partial', 'injected-input hook with forensics, source-tested exact media-control/key-event reconciliation and proportionate media-only severity, hook-chain latency and per-interval stall episodes, pointer-setting and LowLevelHooksTimeout checks, keyboard/mouse class-filter and Scancode Map inventory, monitoring-tool process-name heuristics, screen-capture posture, and an elevated-broker Win32k AuditApiCalls trace inventorying low-level hook (1002) and background raw-input (1001) registrations by process, image and signature; the event fields and attribution were measured on 2026-09-23 with a positive control (WH_MOUSE_LL and a keyboard RIDEV_INPUTSINK both captured), and validated end to end through the scheduled broker the same day: an unelevated control that had already exited was identified from Sysmon history and reported (keyboard sink high, mouse hook medium)', 'GetAsyncKeyState polling is not logged on this build (1003 absent under the positive control), so polling loggers are invisible; the trace does not survive reboot, so watchers registered before its first broker run each boot are unseen; stalls are symptoms and never attributed to a process; the input hook does not identify which process injected a media control'),
+    'credential_guardian': ('partial', 'secret scanning and credential access collectors', 'No complete secret-egress prevention'),
+    'download_provenance': ('unverified', 'host collectors', 'Extraction-to-execution provenance not established'),
+    'system_state_graph': ('partial', 'ProcessGuid lineage, conservative snapshot/event reconciliation, source-tested bounded byte-and-identity checks for deleted Linux executables, deterministic posture debt and conditional remediation projections, bounded repair audit state, and repeated-sample sustained-health verification; source-tested host topology (WSL /init runtime proven by file identity, read-only mount and /init ancestry; argv0-link, shebang and systemd-helper name explanations with a system-binary collision guard; WSL-declared DNS tunnel listener), typed KNOWN_SAFE/KNOWN_UNSAFE/UNKNOWN observations with separate sensor health, and one bounded epoch-coherent re-query that keeps transient first sightings; source-tested WSL boundary snapshot (allowlisted wsl.conf/.wslconfig keys, DrvFs mounts, interop registration, Windows PATH entries, Docker socket presence) with an explicit-accept hash-chained checkpoint file that reports OFFLINE_STATE_DRIFT across a boot change, STATE_DRIFT within one, and EVIDENCE_LOST for unreadable sources; source-tested spyware and covert-process reasoning (jarvis reason): typed evidence, a deterministic hypothesis engine with exact-publisher category explanations, dual-use handling, per-mechanism blind spots and missing-evidence output, and a notes-only typed advisory; measured on a synthetic corpus of 8 spyware controls and 11 legitimate look-alikes (8 of 8 detected, 0 false positives) and on the live host with every source current; deployed live (release 686d4763a3a1); the deterministic engine additionally live-verified against real emulated mechanisms in a locked-down, non-root, no-network QEMU/KVM disposable guest (jarvis/lab/vmlab.py), 4 independent runs: 5 of 6 testable Linux positive controls detected with every expected fact present and correct latency, one honestly skipped for missing guest hardware, one clean-process guard stayed quiet every run, isolation verified each run (container removed, run directory removed, base image checksum unchanged); its own clean-guest baseline caught a real false positive on the legitimate systemd-logind daemon, fixed with a narrow path-anchored exception and confirmed clean on the next 2 runs', 'No privileged live proof yet for the deleted-executable reconciliation or the topology explanations (not deployed; the service view with CAP_SYS_PTRACE has not run them); Windows interop (/init-backed .exe processes) and container execution domains are not modelled; the WSL VM-root owner of loopback udp/323 is unobservable; no complete cross-layer causal graph, broad verified remediation orchestration, reboot-cycle sustained-health proof, or long-duration soak evidence; the WSL boundary checkpoint has no accepted live baseline, no scheduled comparison, no alert wiring, no cross-boundary process edges, and its local hash chain has no independent anchor; the reasoning workflow is not scheduled; the isolated positive-control lab is Linux-only so far and on-demand rather than scheduled, and its Windows counterpart is designed but blocked on the owner enabling Windows Sandbox (not installed on this host) - the safer design uses only existing signed tools (the AutoHotkey #UseHook directive, file copy/rename), never custom hook-registration code, after a safety classifier declined raw Win32 capture-API source; corpus results are synthetic and say nothing about mechanisms no sensor observes (polling keyloggers, BitBlt or DXGI capture, clipboard listeners, who called SendInput, local staging, beacon timing, kernel-level hiding); the advisory model did not separate controls from explained look-alikes on the corpus and has no authority over verdict or depth'),
+    'behavioral_physics': ('partial', 'resourcewatch', 'Hardware counters and robust multivariate validation incomplete'),
+    'sensor_integrity': ('partial', 'native sequence/digest replay checks, manifest-addressed spool reads, process-deadlined ingestion, continuous-coverage cursors, snapshot/event perception states, live-validated elevated Sysmon policy export (2026-09-22: running config hash equals windows-sysmon/jarvis-windows-baseline.xml, ProcessCreate unfiltered), the running Sysmon configuration hash continuously compared with the reviewed baseline, fresh Windows reconciliation and an EventLogReader boot-pressure probe (2s measured through the elevated broker on 2026-09-23 over 34002 events, was a 120s timeout via Get-WinEvent); receipts, freshness budgets, leases and supervised recovery watchdogs; source-tested on-demand WSL wall-clock stability probe (paired realtime/monotonic samples plus the journal step records; measured 2026-09-30 as unstable with -2.47 s steps about every 30 s)', 'Independent authenticated sensors and anti-replay remain incomplete; boot 94 still overflowed the driver queue 46s after boot, under the previous policy, dropping 82 ProcessCreate and 64784 RegistryEvent records; the revised baseline removes 95% of registry volume in a replay of this boot (37062 to 1927 events) but is not yet applied, and whether it prevents boot-time overflow is unmeasured until it is applied and the machine reboots; no export of the pre-change policy was preserved; the clock probe is not scheduled, cannot identify the cause of a step, and detectors that compare wall-clock windows are not yet monotonic-based'),
+    'continuous_attestation': ('unverified', 'security posture observations', 'No validated TPM quote/PCR trust chain'),
+    'component_isolation': ('partial', 'fixed response action registry; capability-aware visibility checks and a detector for privileged units running user-editable code; root-owned sealed release run under python3 -I with three visibility capabilities; source-tested execution identities (Ed25519 key readable only by the capability-holding daemon, binding observed via SO_PEERCRED/pidfd, CLOCK_BOOTTIME expiry, ancestry attribution) and agent/test capsules with private TMPDIR (docs/architecture/EVIDENCE-FABRIC.md); JARVIS-managed scheduled tasks verified against one declaration table (all 9 live tasks verified against the real checkout on 2026-09-24)', 'Observer and responder privilege separation incomplete; execution identities are not live until a deploy provisions the key (no measured issuance yet); capsule capabilities are declared, not enforced; agent actors are self-declared; Windows-side (interop) processes are not attributed; provenance is attribution only and lowers no finding'),
+    'forensic_storage': ('partial', 'authoritative Python hash-chained temporal event log plus an independently durable Rust gzip segment store with locked writers, atomic segment commits and full verification, fed by a governed bounded mirror job: events carry their authoritative source_seq, the store is its own cursor, ingest is all-or-nothing, budgeted pruning keeps the header chain and a store cursor behind the recorded one pauses mirroring as tampering evidence; an append-only Windows vault (Administrators/SYSTEM write, owner read) filled by the elevated broker and verified against the live chain (2026-09-23: 36 segments vaulted and payload-verified); OpenTimestamps anchors of the chain heads (only a 32-byte digest leaves the machine; first proof accepted by 4 calendars, Bitcoin confirmation pending); evidence cases and response intent records', 'An administrator can still alter or delete the vault; anchors expose a rewrite of anchored history only while an anchor record survives somewhere and only once its Bitcoin proof exists (hours), and new events between anchors (up to 6h) are unanchored; the vault is on this machine, not off-host, and is unencrypted; the Rust mirror is not tamper-independent; retention gaps before vaulting are counted, not recoverable'),
+    'temporal_correlation': ('partial', 'globally sequenced native events, multi-category temporal projection (process/network/file/registry/driver/ipc/wmi/malware/protection/task/sensor), event-consumed detectors, process lineage, incidents and snapshot reconciliation clamped to the current boot by its kernel-lifetime processes; source-tested observation epochs (boot id, wall-minus-monotonic step, kernel suspend delta, release change) with epoch-scoped monotonic ordering, recorded by the hidden job', 'Epochs are not yet consumed by Sysmon/native reconciliation, so cross-standby wall-clock comparisons there remain; Windows process reconciliation only; the sensor labels records with the boot current at read time, so the prior boot shutdown tail is excluded at reconciliation, not at ingest; kernel minimal processes (Registry, Memory Compression, vmmem) have no start event and stay unknown; attack-sequence and cross-layer coverage incomplete'),
+    'forge': ('partial', 'jarvis.lab scenarios', 'No full directive scenario/latency/containment validation'),
+    'performance': ('partial', 'per-subsystem scheduler duty cycle, process/RAM/database profiling, shared process/socket providers, optional Rust metrics/governance and durable-store bridge, plus hourly-validated OpenVINO GPU execution of bounded deterministic graphs (GPU.0, CPU-reference cross-checked)', 'No complete measured CPU/RAM/IO/battery/latency budget, authoritative Rust sensor-ingest integration or comparative CPU-vs-GPU throughput benchmark'),
+    'supply_chain': ('partial', 'standard-library Python runtime, exact-file hash check for one reviewed agent plugin version, a live service-verified exact-payload match to a Microsoft WHCP-signed Logitech DriverStore installer (2026-09-23), and a source-tested release controller: content-addressed release_id, single-writer deploy lock, --expect-base refusal of stale narrow releases, recorded installation checkout, and refusal of world-writable build sources', 'Signed reproducible releases, complete SBOM validation, and broader package provenance unverified; the release controller has not yet run as root on this machine (the live deploy script predates it)'),
+    'recovery': ('partial', 'action undo, fresh repair observations and read-only interrupted-action reconciliation', 'No full restart/power-loss recovery validation'),
+    'self_improvement': ('partial', 'human-gated fix proposals: deterministic daemon scan, bounded validated Ollama directives, OpenCode patch drafting, advisory Jev assessments (Tier-2, human-gated, offline-safe), separate investigation and exact-patch authorization, test-gated apply with revert', 'No autonomous code execution; model directives remain untrusted, application stays human-authorized, and email replies cannot approve'),
+    'container_inventory': ('unverified', 'Read-only local Docker privilege, namespace, mount, capability and published-port inventory; bounded commands and audit; source fixture regressions only', 'No isolated malicious-container measurement, scheduled service receipt or sustained coverage proof; Docker metadata is not independent attestation; snapshot races and transient containers remain; no containment'),
+}
+
+
+OBSERVATION_REQUIREMENTS = {
+    # These are liveness/visibility signals only.  They never upgrade a
+    # capability's implementation or containment validation claim.
+    'sensor_integrity': ('scan', 'bridge', 'sysmon', 'native'),
+    'system_state_graph': ('scan', 'sysmon'),
+    'temporal_correlation': ('sysmon', 'native'),
+    'online_guardian': ('internet',),
+    'browser_privacy_veil': ('veil',),
+    'credential_guardian': ('secrets',),
+    'behavioral_physics': ('resources',),
+    'container_inventory': ('containers',),
+}
+
+
+def _implementation_weight(status):
+    """Conservative evidence weight of an implementation claim."""
+    return {'partial': 0.5, 'unverified': 0.0}.get(status, 1.0)
+
+
+def _observation_factor(name, observations):
+    """Fraction of a capability's required sources currently observable.
+
+    Proportional, and conservative at the edges: a mapping gap scores the
+    same as blindness (it is, for assurance purposes), and a source that is
+    stale or partial earns nothing — only 'complete' observations count.
+    """
+    required = OBSERVATION_REQUIREMENTS.get(name)
+    if not required:
+        return 0.0
+    states = [observations.get(source, {}).get('status', 'not_reporting')
+              for source in required]
+    return sum(1.0 for state in states if state == 'complete') / len(required)
+
+
+def score(observations=None):
+    """Assurance 0-100: how much evidence supports trusting JARVIS itself.
+
+    Deliberately separate from the machine's protection-health score. A
+    machine can score 100 while JARVIS is missing release-critical
+    capabilities; this number says so instead of hiding it. Every capability
+    is weighted by its implementation claim and by how much of its telemetry
+    is observable right now; 100 is unreachable while the register holds
+    'partial' and 'unverified' entries, which is the point.
+    """
+    observations = observations or {}
+    weights = []
+    for name, (status, _basis, _gap) in CAPABILITIES.items():
+        weights.append(_implementation_weight(status)
+                       * _observation_factor(name, observations))
+    return round(100 * sum(weights) / len(weights)) if weights else 0
+
+
+def _telemetry(name, observations):
+    required = OBSERVATION_REQUIREMENTS.get(name)
+    if not required:
+        return 'unverified'
+    states = [observations.get(source, {}).get('status', 'not_reporting') for source in required]
+    if all(state == 'complete' for state in states):
+        return 'current'
+    if any(state in ('partial', 'stale', 'unavailable') for state in states):
+        return 'degraded'
+    return 'not_reporting'
+
+
+def report(observations=None):
+    observations = observations or {}
+    capabilities = {
+        name: {'implementation': status, 'basis': basis, 'blind_spot': gap,
+               'live_telemetry': _telemetry(name, observations), 'last_validation': None,
+               'detection_latency_ms': None, 'intervention_latency_ms': None,
+               'validated_containment': False}
+        for name, (status, basis, gap) in CAPABILITIES.items()
+    }
+    return {
+        'policy_version': POLICY_VERSION,
+        'scope': 'engineering register; not a live security or compromise verdict',
+        'complete': False,
+        'absence_of_alerts_proves_safety': False,
+        'score': score(observations),
+        'score_definition': 'weighted evidence of trust in JARVIS itself; '
+                            'not machine protection health',
+        'evidence_gaps': {
+            'implementation_partial': sum(c['implementation'] == 'partial'
+                                          for c in capabilities.values()),
+            'implementation_unverified': sum(c['implementation'] == 'unverified'
+                                             for c in capabilities.values()),
+            'observation_mapping_missing': sum(name not in OBSERVATION_REQUIREMENTS
+                                               for name in capabilities),
+            'live_telemetry_not_current': sum(c['live_telemetry'] != 'current'
+                                              for c in capabilities.values()),
+            'containment_not_validated': sum(not c['validated_containment']
+                                             for c in capabilities.values()),
+            'validation_date_missing': sum(c['last_validation'] is None
+                                           for c in capabilities.values()),
+        },
+        'capabilities': capabilities,
+    }

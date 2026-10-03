@@ -1,6 +1,9 @@
 """Subcommand implementations, grouped by what they act on."""
 
 from .audit import (
+    cmd_audio,
+    cmd_preos,
+    cmd_containers,
     cmd_asep,
     cmd_auditd,
     cmd_backdoor,
@@ -17,6 +20,7 @@ from .audit import (
     cmd_intrusion,
     cmd_investigate,
     cmd_memscan,
+    cmd_dotnet,
     cmd_netwatch,
     cmd_posture,
     cmd_scan,
@@ -41,6 +45,9 @@ from .data import (
 from .service import cmd_alert, cmd_control, cmd_selfcheck, cmd_serve, cmd_status, cmd_watch
 
 __all__ = [
+    "cmd_audio",
+    "cmd_preos",
+    "cmd_containers",
     "cmd_alert",
     "cmd_approve",
     "cmd_asep",
@@ -63,6 +70,7 @@ __all__ = [
     "cmd_intrusion",
     "cmd_investigate",
     "cmd_memscan",
+    "cmd_dotnet",
     "cmd_netwatch",
     "cmd_outstanding",
     "cmd_peers",

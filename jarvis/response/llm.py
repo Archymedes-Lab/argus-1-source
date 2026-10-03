@@ -9,14 +9,14 @@ The model is advisory by construction: this returns text, never a tool call,
 and callers decide what that text is allowed to become.
 """
 
-import base64
 import json
 import threading
 import time
 import urllib.error
 import urllib.request
 
-from jarvis.platform.windows import ps_json
+from jarvis.core.finding import LOCAL_HOST
+from jarvis.platform.windows import ps_json, stdin_text
 from jarvis.response.privacy import redact
 
 DEFAULT_MODEL = "llama3.2:1b"
@@ -115,17 +115,17 @@ def status_findings(conf, timeout=PING_TIMEOUT):
         detail = ("responding" if state == "model_loaded" else "service up; "
                   f"model {model_name(conf)} not resident — it loads on first use, "
                   "which makes the first question slow")
-        return {"category": "model", "severity": "ok", "host": "wsl",
+        return {"category": "model", "severity": "ok", "host": LOCAL_HOST,
                 "title": "the local model is available", "detail":
                 f"{detail} ({seconds:.2f}s).", "where": where}
     if state == "misconfigured":
-        return {"category": "model", "severity": "low", "host": "wsl",
+        return {"category": "model", "severity": "low", "host": LOCAL_HOST,
                 "title": "the model endpoint is misconfigured",
                 "detail": "ollama_url must be the local loopback endpoint "
                           "http://127.0.0.1:11434 — other origins are refused by policy, "
                           "so every model feature is silently off.", "where": where}
     label = "refused" if state == "refused" else "not responding"
-    return {"category": "model", "severity": "low", "host": "wsl",
+    return {"category": "model", "severity": "low", "host": LOCAL_HOST,
             "title": f"the local model is {label}",
             "detail": f"No answer from {where} after {seconds:.1f}s. The deterministic "
                       "assistant still answers operational questions; only the local-model "
@@ -141,16 +141,15 @@ def _bridge(body, timeout):
     listens only on Windows loopback, so cross that boundary through the
     existing PowerShell bridge instead of exposing Ollama to the LAN.
     """
-    blob = base64.b64encode(body).decode("ascii")
     script = (
         "$ErrorActionPreference='Stop';"
-        f"$b=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{blob}'));"
+        + stdin_text("b") +
         "try{$r=Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/chat' "
         f"-MaximumRedirection 0 -Method Post -ContentType 'application/json' -Body $b -TimeoutSec {int(timeout)};"
         "$j=$r|ConvertTo-Json -Depth 10 -Compress}"
         "catch{$j=@{_jarvis_error=[string]$_.Exception.Message}|ConvertTo-Json -Compress};"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($j))")
-    return ps_json(script, timeout=timeout + 10)
+    return ps_json(script, timeout=timeout + 10, payload=body)
 
 
 def _request(conf, body, timeout):

@@ -8,6 +8,7 @@ without touching another.
 
 import json
 import os
+import platform
 import time
 
 from . import sources
@@ -43,7 +44,7 @@ class Case:
             self.manifest.meta.update({
                 "case": self.name,
                 "opened": int(time.time()),
-                "host": os.uname().nodename,
+                "host": platform.node(),
             })
             self.manifest.save()
 

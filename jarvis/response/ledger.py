@@ -33,6 +33,7 @@ not a state that means the same thing after one hour and after one month.
 import json
 import time
 
+from jarvis.core.finding import LOCAL_HOST
 from jarvis.core.finding import finding as _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -202,7 +203,7 @@ def audit(store, job_ts=None, now_ts=None):
             f"not hold. That is a different problem from the original finding."
             + (f" Suggested fix on record: {row.get('fix')}"
                if row.get("fix") else ""),
-            row.get("locus") or "alert_ledger", row.get("host") or "wsl"))
+            row.get("locus") or "alert_ledger", row.get("host") or LOCAL_HOST))
 
     for row in states["outstanding"]:
         if not overdue(row, now_ts):
@@ -217,7 +218,7 @@ def audit(store, job_ts=None, now_ts=None):
             f"within {limit} days."
             + (f" Fix on record: {row.get('fix')}" if row.get("fix") else
                " No automatic remediation is on record for it."),
-            row.get("locus") or "alert_ledger", row.get("host") or "wsl"))
+            row.get("locus") or "alert_ledger", row.get("host") or LOCAL_HOST))
 
     for row in states["stale"]:
         out.append(_finding(
@@ -227,7 +228,7 @@ def audit(store, job_ts=None, now_ts=None):
             f"this was mailed {_phrase_age(row['quiet_days'])} ago, so it is "
             f"neither confirmed nor cleared — nobody has looked. Treat it as "
             f"open, not as fixed.",
-            row.get("locus") or "alert_ledger", row.get("host") or "wsl"))
+            row.get("locus") or "alert_ledger", row.get("host") or LOCAL_HOST))
 
     open_rows = states["recurring"] + states["outstanding"] + states["stale"]
     if not out:

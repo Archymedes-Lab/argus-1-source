@@ -22,6 +22,7 @@ INSTALL = "windows-sensor\\install.ps1 -Install (elevated PowerShell)"
 # a week so a lost stretch of history is not visible for a single minute.
 GAP_META = "native_gaps"
 GAP_KEEP = 7 * 86400
+GAP_CURRENT = 86400
 VERIFY_META = "eventlog_verified_at"
 VERIFY_EVERY = 86400
 
@@ -174,8 +175,12 @@ def audit(store, hosts=("win",), spool=None, root=None):
                     f"to grant this account write access to the acks folder.", str(spool)))
                 break
         for g in _gaps(store, fresh_gaps):
+            # A gap is news for a day; after that it stays listed for the week
+            # as a record of what could not be analysed, not a current loss.
+            recent = time.time() - g.get("at", 0) < GAP_CURRENT
             out.append(_finding(
-                "telemetry loss", "medium", f"Records missing from {_short(g['channel'])}",
+                "telemetry loss", "medium" if recent else "low",
+                f"Records missing from {_short(g['channel'])}",
                 f"{g['gap']} (recorded {time.strftime('%Y-%m-%d %H:%M', time.localtime(g['at']))}). "
                 f"Events that were never read cannot be analysed; a log that wraps "
                 f"faster than it is read needs a larger maximum size.", g["channel"]))
@@ -221,6 +226,18 @@ def _health(health):
         return [_finding("visibility", "high", "The native sensor's health file is unreadable",
                          health.get("reason", ""), "health.json")]
     out = []
+    if health.get("mode") == "isolated":
+        monitor = health.get("monitor") or {}
+        services = monitor.get("services") or {}
+        failing = [name for name, state in services.items()
+                   if isinstance(state, dict) and state.get("status") != "complete"]
+        if monitor.get("status") == "unavailable" or len(services) != 3 or failing:
+            collection.failed(SENSOR, "isolated monitor unavailable or channel recovery active")
+            detail = monitor.get("reason") or (
+                "Channel services requiring recovery: " + ", ".join(sorted(failing))
+                if failing else "monitor did not report all three services")
+            out.append(_finding("visibility", "high", "The native channel monitor is incomplete",
+                                str(detail)[:300], "JARVIS Native Sensor Monitor"))
     age = health.get("age")
     if age is None or age > ingest.HEALTH_STALE:
         collection.failed(SENSOR, "health stale")

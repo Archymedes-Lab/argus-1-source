@@ -14,6 +14,8 @@ import os
 import signal
 import time
 
+from jarvis.platform.linux import signal_zero
+
 from .base import AUTO, Action, register
 
 # Never suspend the tools the monitor and the system depend on.
@@ -23,7 +25,7 @@ PROTECTED = {"systemd", "init", "sshd", "bash", "sh", "zsh", "python3",
 
 def _alive(pid):
     try:
-        os.kill(pid, 0)
+        signal_zero(pid)
         return True
     except OSError:
         return False
@@ -88,6 +90,10 @@ class SuspendProcess(Action):
         return _alive(pid) and _started(pid) == target.get("started")
 
     def apply(self, target, case):
+        if os.name == "nt":
+            # No Linux process exists here, and os.kill would terminate a
+            # Windows one rather than pause it.
+            return False, {}, "suspending is implemented for Linux processes only"
         if not self._same(target):
             return False, {}, "the process has already exited"
         try:
@@ -98,6 +104,8 @@ class SuspendProcess(Action):
 
     def undo(self, target, record):
         pid = record.get("pid")
+        if os.name == "nt":
+            return False, "suspending is implemented for Linux processes only"
         if not _alive(pid):
             return False, "the process is gone"
         if _started(pid) != record.get("started"):

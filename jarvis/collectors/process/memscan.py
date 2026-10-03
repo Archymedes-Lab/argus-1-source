@@ -19,6 +19,12 @@ userland hooks work, whether the hooker is an EDR or an implant.
 **Are the exploit mitigations actually on?** CFG, ACG and CET/shadow-stack are
 what stand between a memory bug and an execution primitive.
 
+**Is a whole module in memory that no file backs?** A PE header copied into
+private or pagefile-backed memory is reflective loading, manual mapping or an
+in-memory .NET assembly. JIT output never looks like that, so this check is
+independent of the JIT excuse below; `assemblies.py` decides which of those
+images JARVIS's own Add-Type scripts produced.
+
 The honest caveat, and it is a large one: **just-in-time compilers legitimately
 produce exactly the artifact this looks for.** Browsers, Node, .NET, Java and
 every JS engine allocate private executable memory as their normal operation,
@@ -29,14 +35,20 @@ absence: a region can be allocated, executed and freed between two passes.
 """
 
 
+import os
+import re
+
+from jarvis.collectors.process import assemblies
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.paths import win_script
-from jarvis.platform import broker
+from jarvis.platform import broker, host
 from jarvis.platform.windows import aslist, ps_json
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 CAT_ORDER = {"injected code": 0, "hooked syscalls": 1, "mitigations": 2,
              "visibility": 3}
+# System mitigations Windows enables when left unset.
+SYSTEM_DEFAULT_ON = frozenset({"cfg"})
 
 SCAN_PS1 = str(win_script("memscan.ps1"))
 
@@ -108,7 +120,65 @@ def _human(n):
     return str(n)
 
 
-def audit(hosts=("win",)):
+# Markers of a .NET single-file executable: the host, the core library and
+# the JIT's own attach state are linked into the one image, so no separate
+# coreclr.dll/clrjit.dll module is loaded to explain its JIT memory.
+SINGLE_FILE_MARKERS = (b"singlefilehost", b"System.Private.CoreLib", b"CLRJitAttachState")
+SINGLE_FILE_RUNTIME = ".NET single-file host (JIT linked into the executable)"
+_EMBEDDED = {}      # (path, size, mtime) -> runtime label or ""
+
+
+def _has_markers(path, markers=SINGLE_FILE_MARKERS, chunk=8 << 20):
+    left, tail = set(markers), b""
+    overlap = max(len(m) for m in markers)
+    with open(path, "rb") as fh:
+        while left:
+            block = fh.read(chunk)
+            if not block:
+                break
+            window = tail + block
+            left = {m for m in left if m not in window}
+            tail = window[-overlap:]
+    return not left
+
+
+def _authenticode_valid(win_path):
+    script = ("$s=Get-AuthenticodeSignature -LiteralPath '" + win_path.replace("'", "''") +
+              "';[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
+              "(ConvertTo-Json -Compress @{status=[string]$s.Status})))")
+    result = ps_json(script, timeout=60)
+    return isinstance(result, dict) and result.get("status") == "Valid"
+
+
+def _wsl_path(win_path):
+    if not win_path or not re.match(r"^[A-Za-z]:\\", win_path):
+        return ""
+    return host.local_path(win_path)
+
+
+def _embedded_runtime(win_path):
+    """The JIT runtime linked into a validly signed .NET single-file
+    executable, or "". Unsigned or unverifiable images explain nothing: the
+    markers alone are just strings an implant could carry."""
+    wsl = _wsl_path(win_path)
+    if not wsl:
+        return ""
+    try:
+        st = os.stat(wsl)
+    except OSError:
+        return ""
+    key = (win_path.lower(), st.st_size, int(st.st_mtime))
+    if key not in _EMBEDDED:
+        try:
+            verdict = (SINGLE_FILE_RUNTIME if _has_markers(wsl)
+                       and _authenticode_valid(win_path) else "")
+        except OSError:
+            verdict = ""
+        _EMBEDDED[key] = verdict
+    return _EMBEDDED[key]
+
+
+def audit(hosts=("win",), advise=None):
     if "win" not in hosts:
         return []
     data, err = _run()
@@ -159,8 +229,9 @@ def audit(hosts=("win",)):
         g["regions"] += regions
         g["bytes"] += int(p.get("bytes") or 0)
         g["rwx"] += int(p.get("rwx") or 0)
-        if p.get("runtime"):
-            g["runtimes"].add(p["runtime"])
+        runtime = p.get("runtime") or _embedded_runtime(p.get("path"))
+        if runtime:
+            g["runtimes"].add(runtime)
         else:
             g["unexplained"] += 1
 
@@ -199,6 +270,11 @@ def audit(hosts=("win",)):
             f"{jit_total} JIT processes have private executable memory, as expected",
             "browsers, Node, .NET and Java compile code at run time — this is "
             "their normal operation, not a finding", "JIT allowlist"))
+
+    # -- whole images copied into memory -----------------------------------
+    rows = assemblies.classify(procs, aslist(data.get("hosts")),
+                               data.get("local_app_data") or "")
+    out.extend(assemblies.findings(rows, advise=advise))
 
     # -- hooked syscall stubs ----------------------------------------------
     hooked = [p for p in procs if (p.get("stubs") or "").strip()]
@@ -259,7 +335,13 @@ def audit(hosts=("win",)):
             ("aslr", "mandatory ASLR (ForceRelocateImages)",
              "images without relocation info load at predictable addresses")):
         val = str(sysm.get(key) or "").upper()
-        if val and ("OFF" in val or val == "NOTSET" or "FALSE" in val):
+        # NOTSET means "use the Windows default". CFG's system default is on
+        # (Windows Security: "Use default (On)"; a running CFG-built process
+        # reports it enabled with no setting), so only an explicit OFF weakens
+        # it. Mandatory ASLR and CET default to off, so NOTSET is off.
+        unset_is_off = key not in SYSTEM_DEFAULT_ON
+        if val and ("OFF" in val or "FALSE" in val
+                    or (val == "NOTSET" and unset_is_off)):
             out.append(_finding(
                 "mitigations", "medium",
                 f"system-wide {label} is not enforced", why,

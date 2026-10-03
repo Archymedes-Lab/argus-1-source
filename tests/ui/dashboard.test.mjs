@@ -8,7 +8,54 @@ import assert from "node:assert/strict";
 import { loadPage } from "./harness.mjs";
 
 const { html, page } = loadPage("jarvis/web/static/dashboard.html",
-  ["continuityHTML", "activityHTML", "esc"]);
+  ["continuityHTML", "activityHTML", "esc", "renderHealth", "scoreTrendHTML", "renderReviewQueue", "wakeHTML"]);
+
+describe("score card", () => {
+  const nodes = new Map();
+  const mount = () => {
+    nodes.clear();
+    document.getElementById = (id) => {
+      if (!nodes.has(id)) nodes.set(id, {innerHTML: "", textContent: ""});
+      return nodes.get(id);
+    };
+  };
+  const verifiedArea = {name: "Network", score: 100, open: {}, blind: []};
+  const liveArea = {name: "Network", score: 0, open: {}, blind: [{job: "netwatch", state: "stale"}]};
+  const waking = (extra = {}) => ({security: {
+    score: 66, grade: "needs work", coverage: 100, state: "verifying", phase: "waking",
+    verified_at: 1700000000, warmup_since: 1700014400, warmup_ends: 1700016200,
+    history: [[1700000000, 66]], areas: [verifiedArea], next_steps: [],
+    progress: {checked: 30, total: 53, pending: ["netwatch"], retrying: [], running: ["sysmon"], ...extra},
+    live: {score: 10, coverage: 57, observed: 30, jobs: 53, areas: [liveArea], next_steps: []},
+  }});
+
+  it("holds the last verified score while waking and shows progress, not the partial sweep", () => {
+    mount();
+    page.renderHealth(waking());
+    const card = nodes.get("health").innerHTML;
+    assert.match(card, />66<\/b><span>last verified/);
+    assert.doesNotMatch(card, />10<\/b>/);
+    assert.match(card, /Waking up/);
+    assert.match(card, /<b>30\/53<\/b> current/);
+    assert.match(card, /now running: sysmon/);
+    assert.match(card, /re-checking/);
+    assert.doesNotMatch(card, /steady over 24h/);
+    assert.match(nodes.get("wins").innerHTML, /Re-verifying collectors/);
+    assert.match(nodes.get("healthsub").textContent, /waking up/);
+  });
+
+  it("names collectors that failed since waking", () => {
+    mount();
+    page.renderHealth(waking({retrying: ["intrusion", "memscan"]}));
+    assert.match(nodes.get("health").innerHTML, /failed since waking, retrying: intrusion, memscan/);
+  });
+
+  it("escapes collector names in the progress panel", () => {
+    const out = page.wakeHTML(waking({running: ["<img src=x>"]}).security, 1700014500);
+    assert.doesNotMatch(out, /<img src=x>/);
+    assert.match(out, /live score applies in ≤29 min/);
+  });
+});
 
 describe("continuity card", () => {
   it("reports absence instead of a false green", () => {
@@ -87,5 +134,51 @@ describe("static wiring contract", () => {
   it("render() mounts both cards", () => {
     assert.ok(html.includes("renderContinuity(s)"));
     assert.ok(html.includes("renderActivity(s)"));
+  });
+});
+
+describe("score trend", () => {
+  const now = 1700086400;
+  it("waits for two in-window samples instead of drawing a false line", () => {
+    const t = page.scoreTrendHTML([[now - 90000, 40], [now - 60, 70]], now);
+    assert.equal(t.count, 1);
+    assert.match(t.html, /Not enough verified score samples/);
+  });
+  it("drops malformed and out-of-range samples and plots the rest in order", () => {
+    const t = page.scoreTrendHTML([[now - 60, 70], [now - 3600, 67], ["x", 5],
+      [now - 120, 140], [now + 600, 90]], now);
+    assert.equal(t.count, 2);
+    assert.equal(t.latest, 70);
+    assert.match(t.html, /from 67 to 70 percent/);
+  });
+});
+
+describe("load resilience", () => {
+  it("state polling is single-flight and time-bounded", () => {
+    assert.match(html, /if \(paused \|\| tickPending\) return;/);
+    assert.match(html, /signal: ctl\.signal/);
+    assert.match(html, /tickPending = false;/);
+    assert.ok(html.includes('id="loadnotice"'));
+  });
+  it("findings render in bounded batches and skip identical rebuilds", () => {
+    assert.match(html, /rows\.slice\(0, findingLimit\)/);
+    assert.match(html, /if \(html === lastFindingRender\) return;/);
+  });
+});
+
+describe("review queue", () => {
+  it("names waiting decisions in the collapsed header and flags it", () => {
+    const nodes = new Map(); let flagged = null;
+    document.getElementById = (id) => {
+      if (!nodes.has(id)) nodes.set(id, {innerHTML: "", textContent: "", open: false,
+        classList: {toggle: (c, on) => { if (c === "needs") flagged = on; }}});
+      return nodes.get(id);
+    };
+    page.renderReviewQueue({questions: [{}, {}], fix: [{}]});
+    assert.equal(nodes.get("reviewcount").textContent, "2 need your answer · 1 fix proposal");
+    assert.equal(flagged, true);
+    page.renderReviewQueue({questions: [], fix: []});
+    assert.match(nodes.get("reviewcount").textContent, /^no questions waiting/);
+    assert.equal(flagged, false);
   });
 });

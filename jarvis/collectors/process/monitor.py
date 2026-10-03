@@ -5,6 +5,7 @@ import json
 from jarvis.core import state as state_mod
 from jarvis.core.util import classify_ip, iso, now, reverse_dns
 from jarvis.platform import linux as collect_linux
+from jarvis.platform import topology
 from jarvis.platform import windows as collect_windows
 
 from . import detect
@@ -79,9 +80,14 @@ def scan(store, hosts=("wsl", "win"), enrich=False, learn=False, record=True):
 
     findings, new_peers = [], []
     ts = now()
+    # Read once per scan; an unreadable fact leaves every mismatch standing.
+    try:
+        topo = topology.snapshot() if "wsl" in hosts else None
+    except Exception:
+        topo = None
 
     for p in procs:
-        verdict = detect.assess(p, known, approved)
+        verdict = detect.assess(p, known, approved, topo)
         remotes = _remote_summary(p, enrich)
 
         store.upsert_proc(p, approved=1 if learn else 0)

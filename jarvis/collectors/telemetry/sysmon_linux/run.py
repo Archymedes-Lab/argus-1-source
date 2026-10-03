@@ -1,5 +1,7 @@
 """The audit: rules over new events, remembered hits, and capture-health checks."""
 
+import re
+
 from jarvis.core import egress as egress_baseline
 from jarvis.core.finding import finding as _finding
 from jarvis.core.util import now
@@ -15,8 +17,10 @@ from .rules import (
     RAW_UNRESOLVED_TITLE,
     _expected_log_maintenance,
     _expected_persistence,
+    _is_public_ip,
     _rules,
     _without_quoted_heredocs,
+    persistence_location,
 )
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -41,6 +45,18 @@ COVERAGE_FLOOR = 200
 
 def sort_findings(f):
     return sorted(f, key=lambda x: (SEV_ORDER.get(x["severity"], 9), x["title"]))
+
+
+def _no_public_destination(detail):
+    """True only when the stored detail lists all of its destinations and
+    none is public. A truncated list proves nothing and keeps the row."""
+    m = re.match(r"(\d+) public destination\(s\): (.*?) — ", detail)
+    if not m:
+        return False
+    peers = [p.strip() for p in m.group(2).split(",") if p.strip()]
+    if len(peers) != int(m.group(1)):
+        return False
+    return not any(_is_public_ip(p.rsplit(":", 1)[0]) for p in peers)
 
 
 def _remember(store, findings, hours):
@@ -96,7 +112,8 @@ def _remember(store, findings, hours):
             stale = _expected_log_maintenance(actor, target)
         elif row["title"] == PERSIST_WRITE_TITLE and " created/modified " in detail:
             actor, target = detail.split(" created/modified ", 1)
-            stale = _expected_persistence(actor, target)
+            stale = (_expected_persistence(actor, target)
+                     or not persistence_location(target))
         if stale:
             store.db.execute("DELETE FROM sysmon_hits WHERE id=?", (row["id"],))
 
@@ -107,12 +124,15 @@ def _remember(store, findings, hours):
         if not DOWNLOAD_RUN.search(_without_quoted_heredocs(command)):
             store.db.execute("DELETE FROM sysmon_hits WHERE id=?", (row["id"],))
 
-    # A program you have since confirmed stops being reported at once.
+    # A program you have since confirmed stops being reported at once, and so
+    # does a row whose every listed destination the current classifier finds
+    # non-public (the unspecified address, IPv4-mapped Docker peers).
     for row in store.db.execute(
-            "SELECT id, title FROM sysmon_hits WHERE category='sysmon-linux' AND title LIKE ?",
+            "SELECT id, title, detail FROM sysmon_hits WHERE category='sysmon-linux' AND title LIKE ?",
             (egress_baseline.TITLE + " %",)).fetchall():
         program = egress_baseline.program_of(row["title"])
-        if program and egress_baseline.decision(store, "wsl", program) == egress_baseline.EXPECTED:
+        if (program and egress_baseline.decision(store, "wsl", program) == egress_baseline.EXPECTED) \
+                or _no_public_destination(row["detail"] or ""):
             store.db.execute("DELETE FROM sysmon_hits WHERE id=?", (row["id"],))
 
     # Per-address egress rows came from the parent-name bug in rules.py and

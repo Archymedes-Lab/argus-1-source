@@ -181,7 +181,7 @@ class CoverageAndToolchainTests(unittest.TestCase):
             self.assertEqual(mcp._windows_profiles(), [])
 
 
-class DeadmanWordingTests(unittest.TestCase):
+class HealthMonitorWordingTests(unittest.TestCase):
     def setUp(self):
         mounts.reset()
         self.addCleanup(mounts.reset)
@@ -194,14 +194,14 @@ class DeadmanWordingTests(unittest.TestCase):
         return path
 
     def test_unreadable_state_names_mount_only_for_drive_paths(self):
-        from jarvis.service import deadman
+        from jarvis.service import supervisors
         plain = self._unreadable(os.path.join(self.tmp.name, "s.json"))
-        out = {f["title"]: f for f in deadman.audit(plain, now=1_800_000_000)}
+        out = {f["title"]: f for f in supervisors.audit_health_monitor(plain, now=1_800_000_000)}
         f = out["the independent Windows monitor's state is unreadable"]
         self.assertNotIn("wsl --shutdown", f["detail"])
         with mock.patch.object(mounts, "under_windows_drive", return_value=True), \
              mock.patch.object(mounts, "windows_drive", return_value=mounts.STALE):
-            out = {f["title"]: f for f in deadman.audit(plain, now=1_800_000_000)}
+            out = {f["title"]: f for f in supervisors.audit_health_monitor(plain, now=1_800_000_000)}
         f = out["the independent Windows monitor's state is unreadable"]
         self.assertIn("wsl --shutdown", f["detail"])
 

@@ -251,7 +251,8 @@ def normalize(record, batch):
     eid = int(record["event_id"])
     xml = record["xml"]
     system, data = parse(xml)
-    received = record["time"]
+    received = record.get("read_time") or record["time"]
+    received_basis = "sensor_read" if record.get("read_time") else "event_time_fallback"
     source = SOURCES.get(channel, "windows-eventlog")
     category, action = MAPS.get(channel, {}).get(eid, ("unknown", f"event_{eid}"))
     process = parent = target = None
@@ -279,5 +280,6 @@ def normalize(record, batch):
         received=received, mono=record.get("mono_ms"), batch=batch["sequence"],
         category=category, action=action, process=process, parent=parent, target=target,
         attrs=dict(data, _provider=(system.get("Provider") or {}).get("Name")
-                   if isinstance(system.get("Provider"), dict) else None),
+                   if isinstance(system.get("Provider"), dict) else None,
+                   _received_basis=received_basis),
         raw=xml)

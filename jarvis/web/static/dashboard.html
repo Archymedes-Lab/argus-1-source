@@ -167,6 +167,25 @@
   .question { margin:0 20px 10px; padding:12px 14px; background:var(--panel2);
               display:grid; gap:9px; font-size:13px; }
   .question-actions { display:flex; gap:7px; flex-wrap:wrap; }
+  .wake { font-size:12px; line-height:1.55; margin-top:4px; }
+  .wake .dim { color:var(--faint); }
+  .wakebar { height:4px; background:var(--line2); margin:4px 0 6px; overflow:hidden; }
+  .wakebar i { display:block; height:100%; background:var(--accent); transition:width .6s ease; }
+  .ring.held .fill { opacity:.55; }
+  .rechk { font:10px/1 var(--mono); color:var(--accent); margin-left:6px; letter-spacing:.04em; }
+  @media (prefers-reduced-motion: reduce) { .wakebar i { transition:none; } }
+  .reviewqueue > summary { cursor:pointer; padding:16px 20px; font:600 11px/1.3 var(--sans);
+                           letter-spacing:.16em; text-transform:uppercase; }
+  .reviewqueue > summary:hover { color:var(--accent); }
+  .reviewqueue[open] > summary { border-bottom:1px solid var(--line); margin-bottom:12px; }
+  .reviewqueue .cnt { color:var(--faint); margin-left:8px; }
+  .reviewqueue.needs > summary { border-left:3px solid var(--high); }
+  .reviewqueue.needs .cnt { color:var(--high); }
+  .loadnotice { margin:16px 28px 0; padding:11px 14px; border-left:3px solid var(--high);
+                background:var(--high-soft); color:var(--fg); font-size:12px; }
+  .loadnotice[hidden] { display:none; }
+  .loadnotice button { margin-left:12px; }
+  @media (max-width:640px) { .loadnotice { margin:12px 16px 0; } }
 
   /* gains */
   .wins { list-style:none; margin:0; padding:0; counter-reset:win; }
@@ -261,6 +280,9 @@
   .chart .col { flex:1; min-width:2px; height:100%; display:flex; flex-direction:column-reverse; gap:2px; }
   .chart .col:hover { background:var(--panel2); }
   .chart .col i { display:block; width:100%; }
+  .scoretrend { width:100%; height:140px; display:block; }
+  .trendmeta { display:flex; justify-content:space-between; gap:12px;
+               color:var(--faint); font:11px/1.4 var(--mono); margin-top:5px; }
   .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:10.5px; color:var(--dim);
             letter-spacing:.08em; text-transform:uppercase; align-items:center; }
   .legend i { display:inline-block; width:8px; height:8px; margin-right:6px; vertical-align:-1px; }
@@ -324,6 +346,10 @@
   <span class="meta" id="meta">connecting…</span>
 </header>
 
+<div id="loadnotice" class="loadnotice" role="status" hidden>
+  <span id="loadmessage"></span><button onclick="tick()">retry now</button>
+</div>
+
 <main>
   <section class="hero">
     <div class="card" id="healthcard">
@@ -351,8 +377,6 @@
       </form>
       <div style="padding:0 13px 10px"><button class="showmore" onclick="scoreCoach()"
         title="The deterministic plan: weakest area, each task's projected points, all from live data">how do I raise my score?</button></div>
-      <div id="jarvisquestions"></div>
-      <div id="fix"></div>
     </div>
 
     <div class="card" id="winscard">
@@ -361,6 +385,17 @@
       <div class="winsfoot" id="winsfoot"></div>
     </div>
   </section>
+
+  <div class="card" id="trendcard">
+    <h2>Verified host score · last 24 hours <span class="cnt" id="trendcnt"></span></h2>
+    <div class="body" id="trend"><div class="empty">waiting for verified samples…</div></div>
+  </div>
+
+  <details class="card reviewqueue" id="reviewqueue">
+    <summary>Review queue <span class="cnt" id="reviewcount">loading…</span></summary>
+    <div id="jarvisquestions"></div>
+    <div id="fix"></div>
+  </details>
 
   <div class="tiles" id="tiles"></div>
 
@@ -479,7 +514,9 @@
 const SEV = ["critical", "high", "medium", "low"];
 let state = null, sevFilter = null, jobFilter = "", hostFilter = "",
     query = "", grouped = false, paused = false, tab = "peers",
-    open = new Set(), timer = null, showHealthy = false, showAllQuestions = false;
+    open = new Set(), timer = null, showHealthy = false, showAllQuestions = false,
+    findingLimit = 80, lastFindingRender = "", tickPending = false;
+const FINDING_BATCH = 80;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g,
   c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -531,8 +568,10 @@ function render(s) {
     st.textContent = liveThreats + " live alert" + (liveThreats > 1 ? "s" : "");
     st.className = "status s-critical";
   } else if (s.security) {
-    const sc = s.security.score;
-    st.textContent = `${sc}% · ${s.security.grade}`;
+    const sc = s.security.score, pg = s.security.progress || {};
+    st.textContent = s.security.state === "verifying"
+      ? `${sc}% last verified · ${s.security.phase === "waking" ? "waking up" : "re-checking"} ${pg.checked ?? "?"}/${pg.total ?? "?"}`
+      : `${sc}% · ${s.security.grade}`;
     st.className = "status s-" + (sc >= 75 ? "ok" : sc >= 50 ? "medium" : "high");
   } else {
     st.textContent = s.worst === "ok" ? "all clear" : s.worst;
@@ -548,13 +587,14 @@ function render(s) {
   renderContinuity(s);
   renderActivity(s);
   renderJobs(s);
+  renderTrend(s);
   renderChart(s);
   renderCats(s);
   renderFilters(s);
   renderFindings();
   renderChecks(s);
   renderSide(s);
-  renderQuestions(s);
+  renderReviewQueue(s);
   renderAttack(s);
   voiceBrief(s, false);
   refreshGreeting(s);
@@ -573,7 +613,6 @@ function render(s) {
 function renderQuestions(s) {
   const el = document.getElementById("jarvisquestions");
   const qs = s.questions || [];
-  renderFix(s);
   if (!qs.length) { el.innerHTML = ""; return; }
   const shown = showAllQuestions ? qs : qs.slice(0, 2);
   el.innerHTML = shown.map(q => `<div class="question">
@@ -585,6 +624,22 @@ function renderQuestions(s) {
       <button class="showmore" onclick="showAllQuestions=!showAllQuestions;renderQuestions(state)">${
       showAllQuestions ? "show fewer questions" : `${qs.length - 2} more question${qs.length > 3 ? "s" : ""} JARVIS would like answered`}</button></div>` : "");
 }
+
+function renderReviewQueue(s) {
+  const questions = (s.questions || []).length;
+  const fixes = (s.fix || []).length;
+  // Collapsed must not mean unnoticed: waiting decisions are named and flagged.
+  document.getElementById("reviewcount").textContent = (questions
+    ? `${questions} need${questions === 1 ? "s" : ""} your answer`
+    : "no questions waiting") + ` · ${fixes} fix proposal${fixes === 1 ? "" : "s"}`;
+  document.getElementById("reviewqueue").classList.toggle("needs", questions > 0);
+  if (!document.getElementById("reviewqueue").open) return;
+  renderQuestions(s);
+  renderFix(s);
+}
+document.getElementById("reviewqueue").addEventListener("toggle", () => {
+  if (state) renderReviewQueue(state);
+});
 
 function renderFix(s) {
   const el = document.getElementById("fix");
@@ -640,30 +695,51 @@ function scoreColor(v) {
 const ICON = { critical: "◆", high: "▲", medium: "●", low: "○", ok: "✓" };
 const pill = sev => `<span class="pill ${esc(sev)}"><span aria-hidden="true">${ICON[sev] || ""}</span>${esc(sev)}</span>`;
 
+function wakeHTML(h, now = Date.now() / 1000) {
+  // While JARVIS re-checks after a wake or restart, the held figure is the last
+  // verified result, labelled as such; progress replaces the partial live score.
+  const pr = h.progress || {checked: (h.live || {}).observed || 0, total: (h.live || {}).jobs || 0,
+                            pending: [], retrying: [], running: []};
+  const pct = pr.total ? Math.round(pr.checked / pr.total * 100) : 0;
+  const at = h.verified_at ? new Date(h.verified_at * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "—";
+  const left = h.warmup_ends ? Math.max(0, Math.ceil((h.warmup_ends - now) / 60)) : null;
+  const names = xs => (xs || []).slice(0, 6).map(esc).join(", ") + ((xs || []).length > 6 ? ` +${xs.length - 6}` : "");
+  return `<div class="wake" role="status">
+      <div class="wakebar" aria-label="${pr.checked} of ${pr.total} collectors re-checked"><i style="width:${pct}%"></i></div>
+      <div>re-checking collectors · <b>${pr.checked}/${pr.total}</b> current</div>
+      ${(pr.running || []).length ? `<div>now running: ${names(pr.running)}</div>` : ""}
+      ${(pr.retrying || []).length ? `<div class="c-high">failed since waking, retrying: ${names(pr.retrying)}</div>` : ""}
+      <div class="dim">score held from last full verification at ${esc(at)}${left !== null ? ` · live score applies in ≤${left} min` : ""}</div>
+    </div>`;
+}
+
 function renderHealth(s) {
   const h = s.security;
   const el = document.getElementById("health");
   if (!h) { el.textContent = "no score yet"; return; }
+  const verifying = h.state === "verifying";
+  const waking = verifying && h.phase === "waking";
   const meter = (v, cls) =>
     `<div class="meter ${cls || ""}"><i style="width:${v ?? 0}%;background:${scoreColor(v)}"></i></div>`;
 
-  // Ring: the one hero figure on the page, filled by the score.
+  // Ring: the one hero figure on the page. While re-checking it holds the last
+  // verified score, never a partial sweep.
   const C = 2 * Math.PI * 52, off = C * (1 - Math.max(0, Math.min(100, h.score)) / 100);
-  const ring = `<div class="ring" role="img" aria-label="Security score ${h.score} percent">
+  const ring = `<div class="ring${verifying ? " held" : ""}" role="img" aria-label="${verifying ? "Last verified" : "Security"} score ${h.score} percent">
       <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="58" fill="none" stroke="var(--line2)" stroke-width="3"
         stroke-dasharray="0.6 ${(2 * Math.PI * 58 / 50 - 0.6).toFixed(3)}"/>
       <circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="3"/>
       <circle class="fill" cx="60" cy="60" r="52" fill="none" stroke-width="3"
         stroke="${scoreColor(h.score)}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg>
-      <div class="num"><b>${h.score}</b><span>security</span></div></div>`;
+      <div class="num"><b>${h.score}</b><span>${verifying ? "last verified" : "security"}</span></div></div>`;
 
   const pr = progress(s);
-  const chip = pr.score === null ? "" : pr.score > 0
+  const chip = verifying || pr.score === null ? "" : pr.score > 0
     ? `<span class="delta up">▲ ${pr.score} in 24h</span>`
     : pr.score < 0 ? `<span class="delta down">▼ ${-pr.score} in 24h</span>`
     : `<span class="delta flat">steady over 24h</span>`;
 
-  // Sparkline with a hover band per point; the chip already carries the number.
+  // Sparkline of verified history; warm-up points are never recorded there.
   const hist = (h.history || []).filter(p => p[0] >= Date.now() / 1000 - 86400);
   let spark = "";
   if (hist.length > 1) {
@@ -679,19 +755,25 @@ function renderHealth(s) {
       `</svg>`;
   }
 
-  const areas = h.areas.map(a => {
+  // Areas show their verified figures; an area still being re-checked says so.
+  const liveBlind = {};
+  for (const a of ((h.live || {}).areas || [])) liveBlind[a.name] = a.blind || [];
+  const areas = (h.areas || []).map(a => {
     const open = SEV.filter(k => k !== "low" && (a.open || {})[k])
       .map(k => `<span class="c-${k}">${a.open[k]}${k[0]}</span>`).join(" ");
     const pct = a.score === null ? "unverified" : `${a.score}%`;
-    const blind = a.blind && a.blind.length ? ` <span class="c-high" data-tip="not reporting: ${esc(a.blind.map(b => b.job + " " + b.state).join(", "))}">⚠</span>` : "";
-    return `<span class="nm">${esc(a.name)}${blind}</span>${meter(a.score, "sm")}<span class="pc">${pct} ${open}</span>`;
+    const pending = verifying ? liveBlind[a.name] || [] : a.blind || [];
+    const mark = !pending.length ? ""
+      : verifying ? ` <span class="rechk" data-tip="re-checking: ${esc(pending.map(b => b.job).join(", "))}">re-checking</span>`
+      : ` <span class="c-high" data-tip="not reporting: ${esc(pending.map(b => b.job + " " + b.state).join(", "))}">⚠</span>`;
+    return `<span class="nm">${esc(a.name)}${mark}</span>${meter(a.score, "sm")}<span class="pc">${pct} ${open}</span>`;
   }).join("");
 
   el.innerHTML =
     `<div class="scorebox">${ring}<div class="scoremeta">
-       <div class="grade" style="color:${scoreColor(h.score)}">${esc(h.grade)}</div>
+       <div class="grade" style="color:${scoreColor(h.score)}">${waking ? "Waking up" : verifying ? "Re-verifying" : esc(h.grade)}</div>
        <div>${chip}</div>
-       <div class="cov">monitoring coverage ${h.coverage}%${h.acknowledged ? ` · ${h.acknowledged} confirmed as expected` : ""}</div>
+       ${verifying ? wakeHTML(h) : `<div class="cov">monitoring coverage ${h.coverage}%${h.acknowledged ? ` · ${h.acknowledged} confirmed as expected` : ""}</div>`}
        ${spark}
      </div></div>
      <div class="areas">${areas}</div>`;
@@ -712,10 +794,12 @@ function renderHealth(s) {
 
   const top = (h.next_steps || [])[0];
   document.getElementById("healthsub").textContent =
-    pr.score > 0 ? "climbing, nicely done"
+    waking ? "JARVIS is waking up and re-checking every collector"
+    : verifying ? "re-checking collectors before updating the score"
+    : pr.score > 0 ? "climbing, nicely done"
     : h.score >= 90 ? "in fine shape"
     : top ? "each gain fills the ring" : "";
-  renderWins(h);
+  renderWins(verifying ? {next_steps: [], verifying: true} : h);
 }
 
 function renderWins(h) {
@@ -731,6 +815,8 @@ function renderWins(h) {
           <span class="rank">${i + 1}</span>
           <span class="t">${pill(g.severity)} ${esc(g.title)}${g.count > 1 ? ` <span class="loc">× ${g.count} places</span>` : ""}</span>
           <span class="a">${esc(g.area)} · ${esc(g.job)}</span></li>`).join("")
+    : h.verifying ? `<li style="cursor:default"><span class="rank">…</span><span class="t">Re-verifying collectors.</span>
+         <span class="a">Next steps will return with fresh evidence.</span></li>`
     : `<li style="cursor:default"><span class="rank">✓</span><span class="t">Nothing left to gain here.</span>
          <span class="a">Splendid. JARVIS keeps watching.</span></li>`;
   document.getElementById("winsfoot").textContent = steps.length
@@ -763,7 +849,7 @@ function renderAttack(s) {
 
 function findTitle(title) {
   const q = document.getElementById("q");
-  q.value = title; query = title; sevFilter = null; open.clear();
+  q.value = title; query = title; sevFilter = null; open.clear(); findingLimit = FINDING_BATCH;
   if (state) render(state);
   document.getElementById("findings").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -916,6 +1002,43 @@ function renderActivity(s) {
   document.getElementById("activity").innerHTML = activityHTML(chains);
 }
 
+function scoreTrendHTML(history, currentTime = Date.now() / 1000) {
+  const points = (history || []).filter(p => Array.isArray(p) &&
+    Number.isFinite(p[0]) && Number.isFinite(p[1]) && p[1] >= 0 && p[1] <= 100 &&
+    p[0] >= currentTime - 86400 && p[0] <= currentTime).sort((a, b) => a[0] - b[0]);
+  if (points.length < 2) return {count: points.length,
+    html: `<div class="empty">Not enough verified score samples for a 24-hour trend.</div>`};
+  const first = points[0][0], last = points[points.length - 1][0];
+  const x = p => 32 + (p[0] - first) / Math.max(1, last - first) * 554;
+  const y = p => 112 - p[1];
+  const line = points.map(p => `${x(p).toFixed(1)},${y(p).toFixed(1)}`).join(" ");
+  const tip = points.map(p => `<circle cx="${x(p).toFixed(1)}" cy="${y(p).toFixed(1)}"
+    r="7" fill="transparent"><title>${esc(new Date(p[0] * 1000).toLocaleString())} · verified score ${p[1]}%</title></circle>`).join("");
+  return {count: points.length, latest: points[points.length - 1][1], html:
+    `<svg class="scoretrend" viewBox="0 0 600 140" preserveAspectRatio="none" role="img"
+      aria-label="Verified host score from ${points[0][1]} to ${points[points.length - 1][1]} percent over the last 24 hours">
+      <line x1="32" y1="12" x2="586" y2="12" stroke="var(--line)"/>
+      <line x1="32" y1="62" x2="586" y2="62" stroke="var(--line)"/>
+      <line x1="32" y1="112" x2="586" y2="112" stroke="var(--line)"/>
+      <text x="0" y="15" fill="var(--faint)" font-size="10">100</text>
+      <text x="6" y="65" fill="var(--faint)" font-size="10">50</text>
+      <text x="12" y="115" fill="var(--faint)" font-size="10">0</text>
+      <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5"
+        vector-effect="non-scaling-stroke"/>
+      <circle cx="${x(points[points.length - 1]).toFixed(1)}" cy="${y(points[points.length - 1]).toFixed(1)}"
+        r="4" fill="var(--accent)"/>${tip}</svg>
+    <div class="trendmeta"><span>${esc(new Date(first * 1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}))}</span>
+      <span>Verified score history · current protection is shown above</span>
+      <span>${esc(new Date(last * 1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}))}</span></div>`};
+}
+
+function renderTrend(s) {
+  const trend = scoreTrendHTML((s.security || {}).history);
+  document.getElementById("trendcnt").textContent = trend.count < 2
+    ? "waiting for samples" : `${trend.count} samples · latest ${trend.latest}%`;
+  document.getElementById("trend").innerHTML = trend.html;
+}
+
 function renderChart(s) {
   const h = s.history || [];
   const max = Math.max(1, ...h.map(p => p.critical + p.high + p.medium + p.low));
@@ -1001,19 +1124,32 @@ function renderFindings() {
       `<div class="empty">nothing matches these filters</div>`;
     return;
   }
+  // Render a bounded batch: hundreds of rows rebuilt every refresh can stall slower engines.
+  const shown = rows.slice(0, findingLimit);
   let html;
   if (grouped) {
     const by = {};
-    rows.forEach((f, i) => (by[f.job] = by[f.job] || []).push([f, i]));
+    shown.forEach((f, i) => (by[f.job] = by[f.job] || []).push([f, i]));
     html = Object.keys(by).sort().map(job =>
       head + `<tr><td colspan="4" style="background:var(--panel2);font-weight:700">
         ${esc(job)} <span class="cnt" style="color:var(--faint)">${by[job].length}</span>
         </td></tr>` +
       by[job].map(([f, i]) => findingRow(f, i)).join("") + `</tbody></table>`).join("");
   } else {
-    html = head + rows.map((f, i) => findingRow(f, i)).join("") + `</tbody></table>`;
+    html = head + shown.map((f, i) => findingRow(f, i)).join("") + `</tbody></table>`;
   }
+  if (rows.length > shown.length) {
+    const more = Math.min(FINDING_BATCH, rows.length - shown.length);
+    html += `<div class="empty"><button onclick="showMoreFindings()">show ${more} more · ${rows.length - shown.length} hidden</button></div>`;
+  }
+  if (html === lastFindingRender) return;
+  lastFindingRender = html;
   document.getElementById("findings").innerHTML = html;
+}
+
+function showMoreFindings() {
+  findingLimit += FINDING_BATCH;
+  renderFindings();
 }
 
 function renderChecks(s) {
@@ -1148,15 +1284,15 @@ function renderSide(s) {
 })();
 
 /* ---------- interaction ---------- */
-function setSev(k) { sevFilter = k; open.clear(); if (state) render(state); }
-function setHost(h) { hostFilter = hostFilter === h ? "" : h; open.clear(); if (state) render(state); }
+function setSev(k) { sevFilter = k; open.clear(); findingLimit = FINDING_BATCH; if (state) render(state); }
+function setHost(h) { hostFilter = hostFilter === h ? "" : h; open.clear(); findingLimit = FINDING_BATCH; if (state) render(state); }
 function onFilter() {
   jobFilter = document.getElementById("jobsel").value;
-  hostFilter = document.getElementById("hostsel").value;
+  hostFilter = document.getElementById("hostsel").value; findingLimit = FINDING_BATCH;
   open.clear(); if (state) render(state);
 }
 function onSearch() {
-  query = document.getElementById("q").value; open.clear();
+  query = document.getElementById("q").value; open.clear(); findingLimit = FINDING_BATCH;
   if (state) { renderFindings(); }
 }
 function toggleGroup() { grouped = !grouped; open.clear(); if (state) render(state); }
@@ -1225,7 +1361,7 @@ function renderOps() {
         </tr>`).join("")}</tbody></table>`).join("");
 }
 function clearAll() {
-  sevFilter = null; jobFilter = ""; hostFilter = ""; query = "";
+  sevFilter = null; jobFilter = ""; hostFilter = ""; query = ""; findingLimit = FINDING_BATCH;
   document.getElementById("q").value = ""; open.clear();
   if (state) render(state);
 }
@@ -1656,22 +1792,65 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") clearAll();
 });
 
+const STATE_TIMEOUT_MS = 15000;
+function loadNotice(message) {
+  const el = document.getElementById("loadnotice");
+  document.getElementById("loadmessage").textContent = message || "";
+  el.hidden = !message;
+}
+
 async function tick() {
-  if (paused) return;
+  // One request at a time, each bounded: a stalled connection must surface, not spin forever.
+  if (paused || tickPending) return;
+  tickPending = true;
+  const ctl = new AbortController(), guard = setTimeout(() => ctl.abort(), STATE_TIMEOUT_MS);
   try {
-    const r = await fetch("/api/state", { cache: "no-store" });
+    const r = await fetch("/api/state", { cache: "no-store", signal: ctl.signal });
     if (!r.ok) throw new Error(r.status);
     render(await r.json());
+    loadNotice("");
     if (lostConn) { lostConn = false; announce("Reconnected to the JARVIS daemon. Back on watch.", "good"); }
   } catch (e) {
+    loadNotice(e && e.name === "AbortError"
+      ? `JARVIS did not answer within ${STATE_TIMEOUT_MS / 1000} seconds. Retrying automatically.`
+      : "Could not load JARVIS state. Retrying automatically.");
     document.getElementById("meta").textContent = "daemon unreachable — retrying";
     document.getElementById("beat").className = "beat off";
     if (!lostConn) { lostConn = true; announce("Lost connection to the JARVIS daemon. Retrying.", "warn"); }
+  } finally {
+    clearTimeout(guard);
+    tickPending = false;
   }
 }
 tick();
 greet();
 timer = setInterval(tick, 5000);
+
+// Live pulse (/api/stream, web/stream.py): refresh the moment the daemon's
+// summary changes, and relax the poll while the stream is up. Polling stays
+// as the floor: a dropped or refused stream (503 once every slot is taken)
+// must never leave the page frozen on old state.
+const POLL_MS = 5000, POLL_STREAMING_MS = 30000, STREAM_RETRY_MS = 60000;
+let pulseVersion = null, streamUp = false;
+function setPoll(ms) { clearInterval(timer); timer = setInterval(tick, ms); }
+function startStream() {
+  if (typeof EventSource === "undefined") return null;
+  const es = new EventSource("/api/stream");
+  es.addEventListener("pulse", e => {
+    let p;
+    try { p = JSON.parse(e.data); } catch (_) { return; }
+    if (!streamUp) { streamUp = true; setPoll(POLL_STREAMING_MS); }
+    const first = pulseVersion === null;
+    if (p.version !== pulseVersion) { pulseVersion = p.version; if (!first) tick(); }
+  });
+  es.onerror = () => {
+    if (streamUp) { streamUp = false; setPoll(POLL_MS); tick(); }
+    // EventSource reconnects by itself after a drop; after a refusal it closes.
+    if (es.readyState === 2) setTimeout(startStream, STREAM_RETRY_MS);
+  };
+  return es;
+}
+startStream();
 </script>
 </body>
 </html>

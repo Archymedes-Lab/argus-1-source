@@ -12,6 +12,34 @@ Install (elevated PowerShell, from this folder):
 .\install.ps1 -Install -EnableTaskLog -SysmonLogMB 256
 ```
 
+To cut over an existing installation to three isolated SCM services, stage the
+reviewed `JarvisSensor.cs`, `monitor-isolated.ps1`, `install-isolated.ps1`, and
+`SHA256SUMS.json`
+under the administrator-controlled `C:\Program Files\Jarvis\SensorStage`, then
+run `install-isolated.ps1 -Install` there from an elevated PowerShell after
+recording a live ingestion baseline. The installer refuses a user-writable
+checkout as its source and verifies each staged file against the reviewed hash
+manifest. It saves the legacy executable,
+identity and health receipts, plus a spool ACL backup under the protected binary
+directory. The old publisher is stopped and changed to manual startup before
+the isolated services begin; its binary is replaced with a mode-aware build so
+an accidental manual start cannot publish concurrently. The existing spool,
+channel identities, sequences and acknowledgements stay in place. On failure,
+the installer restores the old publisher. Explicit rollback is
+`install-isolated.ps1 -Rollback` from the same protected stage.
+
+The isolated services are `JarvisSensorSysmon`, `JarvisSensorDefender`, and
+`JarvisSensorTasks`. Each has its own process, virtual account, channel spool
+budget (Sysmon 384 MiB; Defender and Task Scheduler 64 MiB each), lock and
+health receipt. A protected SYSTEM scheduled task checks
+their state and heartbeat each minute, restarts only after two failed checks,
+and stops after two attempts per hour. It records the attempts in `monitor.json`.
+The installer adds an exact-path Defender ASR-only exclusion for its protected
+unsigned executable if required; rollback removes only an exclusion it added.
+The new services still require Windows integration and soak validation before
+they can be called live protection. This architecture does not eliminate WSL
+interop dependence for the separate PowerShell-backed collectors.
+
 `-EnableTaskLog` turns on the Task Scheduler operational channel, which is
 disabled by default on Windows, so scheduled-task persistence is otherwise
 unlogged. `-SysmonLogMB` enlarges the Sysmon log, which wraps at 64 MB.
@@ -33,7 +61,10 @@ reports them as a gap.
   clears at about 25,000 records a pass rather than 500.
 - **Identity.** `sensor_id` (this installation), `device_id` (the machine,
   independent of its hostname), `boot_id` (Windows' boot counter), and per
-  record `mono_ms` (milliseconds since boot at read time).
+  record `mono_ms` (milliseconds since boot at read time). New source builds
+  also emit `read_time` separately from the provider's event `time`, allowing
+  the ingester to measure read delay. Old batches retain an explicit
+  event-time fallback; neither timestamp proves that no event was dropped.
 - **Capacity.** At 512 MiB the sensor stops collecting and reports it. It never
   deletes unacknowledged evidence.
 - **Acknowledgement.** After committing a batch to its event log, JARVIS writes
@@ -70,6 +101,7 @@ jarvis timeline status          # cursors, sensor health, event mix
 jarvis timeline search --sha256 <hash>   # has this ever executed?
 jarvis timeline tree '<ProcessGuid>'     # ancestry and children
 jarvis timeline verify          # hash chain; keep the printed head off-machine
+jarvis timeline changes --seconds 120 --json  # bounded observed type counts
 ```
 
 For an isolated single pass without installing:

@@ -1,12 +1,7 @@
 // This runs in the isolated extension world. It only forwards a bounded summary
-// emitted by probe.js; it never reads page text, form values, cookies, pointer
-// positions, keystroke timing, resource paths, query strings, or request bodies.
-const probe = document.createElement("script");
-probe.src = chrome.runtime.getURL("probe.js");
-probe.dataset.jarvisVeil = "1";
-(document.head || document.documentElement).appendChild(probe);
-probe.remove();
-
+// emitted by probe.js (a MAIN-world content script); it never reads page text,
+// form values, cookies, pointer positions, keystroke timing, resource paths,
+// query strings, or request bodies.
 let last = 0;
 window.addEventListener("message", (event) => {
   if (event.source !== window || !event.data || event.data.channel !== "jarvis-veil") return;

@@ -2,8 +2,11 @@
 and whether git would publish it."""
 
 import os
+import re
 import stat
 import subprocess
+
+from jarvis.core import fsperm
 
 
 def _other_humans():
@@ -16,7 +19,12 @@ def _other_humans():
     log in, permissions are not the control that matters; the unencrypted
     disk is.
     """
-    import pwd
+    try:
+        import pwd
+    except ImportError:
+        # Native Windows: no passwd database, and mode bits decide nothing
+        # there, so "readable by another account" cannot be argued from them.
+        return []
     me = os.getuid()
     try:
         return [p.pw_name for p in pwd.getpwall()
@@ -73,3 +81,35 @@ def _git_tracked(path):
         return (r.returncode == 0), remote
     except (OSError, subprocess.SubprocessError):
         return False, ""
+
+
+def _private_project_env(path, home):
+    """A private development env in an ignored repo or a local app without Git."""
+    if not re.fullmatch(r"\.env(?:\.[a-z0-9_-]+)?", os.path.basename(path), re.I):
+        return False
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode) or not fsperm.owner_only(st):
+            return False
+        root, _remote = _repo_of(os.path.dirname(path))
+        if not root:
+            project = os.path.dirname(path)
+            if os.path.realpath(os.path.dirname(project)) != os.path.realpath(home):
+                return False
+            marker = os.path.join(project, ".git")
+            if os.path.lexists(marker):
+                if not os.path.isdir(marker) or os.listdir(marker):
+                    return False
+            return any(os.path.isfile(os.path.join(project, name)) for name in
+                       ("package.json", "pyproject.toml", "requirements.txt"))
+        if os.path.realpath(root) == os.path.realpath(home):
+            return False
+        rel = os.path.relpath(os.path.realpath(path), os.path.realpath(root))
+        if rel.startswith(("../", ".git/")) or rel in ("..", ".git"):
+            return False
+        result = subprocess.run(
+            ["git", "-C", root, "check-ignore", "--quiet", "--", path],
+            capture_output=True, timeout=8)
+        return result.returncode == 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False

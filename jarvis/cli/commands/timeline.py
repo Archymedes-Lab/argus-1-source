@@ -3,6 +3,7 @@
 import json
 
 from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
+from jarvis.platform import host
 from jarvis.platform.native import ingest
 
 
@@ -24,8 +25,116 @@ def _open(root):
         return None
 
 
+def _wsl_boundary(args):
+    import os
+    from pathlib import Path
+
+    from jarvis.core.execution import wsl_drift
+    from jarvis.platform import wsl_boundary
+    path = Path(args.checkpoint or Path.home() / ".jarvis" / "wsl-checkpoints.jsonl")
+    entries, read_error = [], None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            entries = [json.loads(line) for line in fh.read().splitlines()
+                       [-wsl_drift.MAX_ENTRIES:] if line.strip()]
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError) as exc:
+        read_error = type(exc).__name__
+    wslconfig = args.wslconfig
+    if not wslconfig:
+        user = os.environ.get("USER") or ""
+        candidate = Path(host.users_dir() or "/nonexistent") / user / ".wslconfig"
+        wslconfig = str(candidate) if user and candidate.exists() else None
+    snap = wsl_boundary.snapshot(windows_config=wslconfig)
+    result = ({"status": "checkpoint_invalid", "reason": read_error, "findings": []}
+              if read_error else wsl_drift.compare(entries, snap))
+    result["sources"] = {k: v["status"] for k, v in snap["sources"].items()}
+    if args.accept:
+        if result["status"] == "checkpoint_invalid":
+            result["accepted"] = False
+        else:
+            try:
+                entry = wsl_drift.make_entry(snap, entries[-1] if entries else None)
+                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+                with os.fdopen(fd, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(entry, sort_keys=True) + "\n")
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                result["accepted"] = True
+                result["accepted_seq"] = entry["seq"]
+            except (OSError, ValueError) as exc:
+                result["accepted"] = False
+                result["accept_error"] = str(exc)[:120]
+    if args.json:
+        print(json.dumps(result, default=str))
+    else:
+        print(f"WSL boundary: {result['status']}"
+              + (f" ({result['reason']})" if result.get("reason") else ""))
+        for f in result["findings"][:max(0, args.limit)]:
+            print(f"  [{f['kind']}{' critical' if f['critical'] else ''}] "
+                  f"{f['fact']}: {f['change']} {f['before']!r} -> {f['after']!r}")
+        print("sources: " + ", ".join(f"{k}={v}" for k, v in result["sources"].items()))
+        if "accepted" in result:
+            print("checkpoint " + ("recorded" if result["accepted"] else "NOT recorded"))
+    return 1 if result["status"] in ("checkpoint_invalid",) else 0
+
+
+def _clock(args):
+    from jarvis.core.execution import clock_integrity
+    from jarvis.platform import clock
+    samples = clock.collect(args.watch)
+    result = clock_integrity.analyze(
+        samples, journal_backward=clock.journal_backward_count())
+    if args.json:
+        print(json.dumps(result))
+    else:
+        print(f"wall clock: {result['status']} over {result['window_s']}s; "
+              f"{result['backward_steps']} backward step(s) sampled, "
+              f"journald reports {result['journal_backward']} in the last hour")
+        for step in result["steps"][:max(0, args.limit)]:
+            print(f"  step {step['step_s']:+.2f}s ({step['direction']})")
+        for effect in result["effects"]:
+            print(f"  effect: {effect}")
+    return 1 if result["status"] == "unstable" else 0
+
+
 def cmd_timeline(args, store):
     action = args.action
+    if action == "clock":
+        return _clock(args)
+    if action == "wsl-boundary":
+        return _wsl_boundary(args)
+    if action == "linux-truth":
+        from jarvis.core.execution.linux_truth import reconcile
+        from jarvis.platform.linux_truth import executable_mappings, snapshot
+        current = snapshot()
+        result = {"snapshot": current, "reconciliation": reconcile(current)}
+        if args.deep_pid:
+            row = next((p for p in current.get("processes", [])
+                        if p["pid"] == args.deep_pid), None)
+            result["deep_mappings"] = (
+                executable_mappings(args.deep_pid,
+                                    expected_start_ticks=row["start_ticks"])
+                if row else {"status": "unavailable", "reason": "process not observed",
+                             "mappings": []})
+        if args.json:
+            print(json.dumps(result, default=str))
+        else:
+            c = result["reconciliation"]["counts"]
+            print(f"Linux /proc snapshot: {c['represented']} process instances, "
+                  f"{current.get('represented_threads', 0)} threads; "
+                  f"lifecycle source {result['reconciliation']['lifecycle_source']}")
+            for row in current.get("processes", [])[:max(0, args.limit)]:
+                print(f"  {row['pid']:>7} {row['entity_type']:<23} "
+                      f"{row['name']:<20} {row['key']}")
+            print("visibility: " + "; ".join(result["reconciliation"]["limitations"]))
+            if args.deep_pid:
+                deep = result["deep_mappings"]
+                print(f"executable mappings for {args.deep_pid}: "
+                      f"{len(deep['mappings'])} sampled, status {deep['status']}")
+        return 1 if current["status"] == "unavailable" else 0
     if action == "ingest":
         try:
             log = EventLog(args.log or DEFAULT_ROOT, writer=True)
@@ -42,6 +151,24 @@ def cmd_timeline(args, store):
     if log is None:
         return 1
     with log:
+        if action == "changes":
+            from jarvis.core.change_query import summarize
+            try:
+                result = summarize(log, seconds=args.seconds,
+                                   scan_limit=args.scan_limit)
+            except ValueError as exc:
+                print(f"invalid change query: {exc}")
+                return 2
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print(f"observed {result['observed_total']} changes in the "
+                      f"source-time window of {result['window_seconds']}s "
+                      f"(through committed event #{result['last_committed_seq']})")
+                for kind, count in result["observed_changes"].items():
+                    print(f"  {count:>6}  {kind}")
+                print("coverage: partial; " + "; ".join(result["limitations"]))
+            return 0
         if action == "status":
             stats = log.stats()
             stats["health"] = ingest.read_health(args.spool or ingest.SPOOL)
@@ -157,7 +284,7 @@ def cmd_timeline(args, store):
 
 def add_parser(sub):
     p = sub.add_parser("timeline", help="the recorded event history: search, lineage, integrity")
-    p.add_argument("action", choices=["status", "ingest", "verify", "search", "tree", "show", "tail",
+    p.add_argument("action", choices=["status", "ingest", "verify", "search", "tree", "show", "tail", "changes", "linux-truth", "wsl-boundary", "clock",
                                       "state", "detect"])
     p.add_argument("guid", nargs="?", help="tree: a process GUID")
     p.add_argument("--sha256"); p.add_argument("--dns"); p.add_argument("--ip")
@@ -165,6 +292,18 @@ def add_parser(sub):
     p.add_argument("--seq", type=int, help="show: event sequence number")
     p.add_argument("--category", help="tail: only this category")
     p.add_argument("--limit", type=int, default=40)
+    p.add_argument("--seconds", type=int, default=10,
+                   help="changes: source-time window in seconds (1..3600)")
+    p.add_argument("--scan-limit", type=int, default=5000,
+                   help="changes: maximum recent events to inspect (1..20000)")
+    p.add_argument("--deep-pid", type=int,
+                   help="linux-truth: inspect executable mappings for this observed PID")
+    p.add_argument("--watch", type=int, default=5,
+                   help="clock: seconds to sample (0..120); use 65 to span two 30 s sync cycles")
+    p.add_argument("--checkpoint", help="wsl-boundary: checkpoint chain file (default ~/.jarvis/wsl-checkpoints.jsonl)")
+    p.add_argument("--wslconfig", help="wsl-boundary: path to the Windows .wslconfig (default: current user's)")
+    p.add_argument("--accept", action="store_true",
+                   help="wsl-boundary: explicitly append the current state as the new checkpoint")
     p.add_argument("--raw", action="store_true", help="show: include the source record")
     p.add_argument("--anchor", help="verify: a previously exported head, as JSON")
     p.add_argument("--spool", help="sensor spool directory (default: ProgramData)")

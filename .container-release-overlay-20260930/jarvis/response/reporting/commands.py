@@ -1,0 +1,102 @@
+"""How to inspect each part of the system by hand.
+
+A report that names a problem but not the command that shows it makes the
+reader go looking. Every scheduled job here maps to the CLI command that runs
+the same collector interactively, so a line in the email is directly
+actionable.
+
+The map is validated against the real argument parser by the test suite: a job
+that gains a command, or a command that gets renamed, cannot silently leave a
+report pointing at something that does not run.
+"""
+
+# job name -> the CLI command that audits the same ground
+JOB_COMMANDS = {
+    "scan": "scan",
+    "containers": "containers",
+    "hidden": "hidden",
+    "deep_hidden": "hidden --deep",
+    "firewall": "firewall",
+    "control": "control",
+    "controls": "control",
+    "asep": "asep",
+    "spy": "spy",
+    "pixel": "pixel",
+    "identity": "impersonation",
+    "intrusion": "intrusion",
+    "evasion": "evasion",
+    "coverage": "coverage",
+    "bridge": "coverage",
+    "boot": "boot",
+    "hunt": "hunt",
+    "gaps": "gaps",
+    "attackmap": "attack",
+    "intel": "intel",
+    "feeds": "feeds",
+    "implant": "implant",
+    "netwatch": "netwatch",
+    "internet": "netwatch",
+    "posture": "posture",
+    "backdoor": "backdoor",
+    "toolchain": "toolchain",
+    "ledger": "outstanding",
+    "input": "inputwatch",
+    "input_hook": "inputwatch",
+    "memscan": "memscan",
+    "secrets": "secrets",
+    "bruteforce": "bruteforce",
+    "sniffing": "sniffing",
+    "webshell": "webshell",
+    "auditd": "auditd",
+    "sysmon_linux": "sysmon-linux",
+    "sysmon": "sysmon",
+    "native": "timeline status",
+    "rust_mirror": "status",
+    "evidence": "broker status",
+    "arena": "arena suite",
+    "geo": "geo status",
+    "watchdogs": "selfcheck",
+    "resources": "status",
+    "report": "alert",
+    # The model job answers "is Ollama there?"; `ask model status` runs the
+    # same ping on demand through the assistant's deterministic intent.
+    "model": "ask model status",
+}
+
+# Commands worth running whatever the findings say, in the order a person
+# would actually work through them.
+OVERVIEW = (
+    ("jarvis status", "one-line health of every collector and the daemon"),
+    ("jarvis outstanding", "what was reported and never resolved"),
+    ("jarvis investigate", "every collector in one pass, worst first"),
+    ("jarvis coverage", "what JARVIS currently cannot see"),
+    ("jarvis selfcheck", "is the monitor actually monitoring?"),
+    ("jarvis retention", "database size and what ages out"),
+    ("jarvis evidence list", "collected investigation material"),
+)
+
+
+def command_for(job):
+    """The full command line for a job, or "" when it has no interactive form."""
+    sub = JOB_COMMANDS.get(job)
+    return "jarvis %s" % sub if sub else ""
+
+
+def commands_for_findings(findings):
+    """Ordered, de-duplicated commands covering the jobs that reported.
+
+    Ordered by the worst severity each job produced, so the first command in
+    the list is the one worth running first.
+    """
+    rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
+    worst = {}
+    for f in findings:
+        job = f.get("job") or ""
+        cmd = command_for(job)
+        if not cmd:
+            continue
+        r = rank.get(f.get("severity"), 9)
+        if r < worst.get(cmd, (9, ""))[0]:
+            worst[cmd] = (r, f.get("severity", "?"))
+    return [(cmd, sev) for cmd, (r, sev) in
+            sorted(worst.items(), key=lambda kv: (kv[1][0], kv[0]))]

@@ -15,6 +15,34 @@ from pathlib import Path
 PACKAGE_DIR = Path(os.path.abspath(__file__)).parent.parent   # jarvis/core/ -> jarvis/
 REPO_ROOT = PACKAGE_DIR.parent
 
+# A root-owned release (scripts/deploy_root_runtime.py) carries RELEASE.json
+# naming the editable checkout it belongs to. Code runs from the release;
+# anything that must act on that checkout (fix drafting, Windows tasks and the
+# selfcheck unit installed from it) uses SOURCE_ROOT.
+#
+# "checkout" is preferred over "source": a narrow release is built from a
+# temporary clone, and treating that clone as the checkout made JARVIS's own
+# watchdog tasks (installed with -RepoRoot <checkout>) fail verification and
+# read as critical persistence (2026-09-24, /tmp/jarvis-netwatch-narrow-*).
+RELEASE_MANIFEST = REPO_ROOT / "RELEASE.json"
+
+
+def _source_root():
+    try:
+        import json
+        with open(RELEASE_MANIFEST, encoding="utf-8", errors="replace") as fh:
+            manifest = json.load(fh)
+        for key in ("checkout", "source"):
+            value = manifest.get(key)
+            if isinstance(value, str) and os.path.isabs(value):
+                return Path(value)
+    except (OSError, ValueError, AttributeError):
+        pass
+    return REPO_ROOT
+
+
+SOURCE_ROOT = _source_root()
+
 # PowerShell payloads run through the Windows bridge.
 WIN_SCRIPTS_DIR = PACKAGE_DIR / "platform" / "win"
 # The dashboard page and its assets.

@@ -138,11 +138,22 @@ class DesignatedStoreTests(unittest.TestCase):
         os.chmod(path, mode)
         return path
 
-    def test_owner_only_tool_store_is_medium_and_named(self):
+    def test_owner_only_tool_store_is_advisory_and_named(self):
         with tempfile.TemporaryDirectory() as home:
             out = self.run_audit(home, [self.store(home)])
         self.assertEqual([(f["severity"], f["title"]) for f in out],
-                         [("medium", "GitHub token in GitHub CLI's credential store")])
+                         [("low", "GitHub token in GitHub CLI's credential store")])
+
+    def test_wrangler_oauth_file_is_a_tool_store(self):
+        with tempfile.TemporaryDirectory() as home:
+            path = os.path.join(home, ".config", ".wrangler", "config", "default.toml")
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as handle:
+                handle.write("x")
+            os.chmod(path, 0o600)
+            out = self.run_audit(home, [path])
+        self.assertEqual([(f["severity"], f["title"]) for f in out],
+                         [("low", "GitHub token in Wrangler's credential store")])
 
     def test_copy_outside_the_store_stays_critical(self):
         with tempfile.TemporaryDirectory() as home:
@@ -158,3 +169,100 @@ class DesignatedStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             out = self.run_audit(home, [self.store(home)], others=["guest"])
             self.assertEqual([f["severity"] for f in out], ["critical"])
+
+
+class ProjectEnvironmentTests(unittest.TestCase):
+    def audit_file(self, path, home):
+        with patch("jarvis.collectors.identity.secrets.run.walk", return_value=[path]), \
+             patch("jarvis.collectors.identity.secrets.run.scan_file",
+                   return_value=[("generic secret assignment", "synthetic-secret", 1,
+                                  "medium")]), \
+             patch("jarvis.collectors.identity.secrets.run._other_humans", return_value=[]), \
+             patch("jarvis.collectors.identity.secrets.run.os.path.expanduser",
+                   return_value=home):
+            return next(f for f in audit(roots=[home], deep=True)
+                        if f["title"].startswith("generic secret assignment"))
+
+    def repo(self, home, ignored=True, mode=0o600):
+        import subprocess
+        root = os.path.join(home, "app")
+        os.mkdir(root)
+        subprocess.run(["git", "-C", root, "init", "-q"], check=True)
+        if ignored:
+            with open(os.path.join(root, ".gitignore"), "w") as handle:
+                handle.write(".env*\n")
+        path = os.path.join(root, ".env.local")
+        with open(path, "w") as handle:
+            handle.write("x")
+        os.chmod(path, mode)
+        return root, path
+
+    def test_private_git_ignored_project_env_is_advisory(self):
+        with tempfile.TemporaryDirectory() as home:
+            _root, path = self.repo(home)
+            finding = self.audit_file(path, home)
+        self.assertEqual(finding["severity"], "low")
+        self.assertIn("private project environment file", finding["title"])
+        self.assertNotIn("synthetic-secret", finding["detail"])
+
+    def test_unignored_or_loose_project_env_remains_actionable(self):
+        for ignored, mode in ((False, 0o600), (True, 0o644)):
+            with self.subTest(ignored=ignored, mode=oct(mode)):
+                with tempfile.TemporaryDirectory() as home:
+                    _root, path = self.repo(home, ignored=ignored, mode=mode)
+                    finding = self.audit_file(path, home)
+                self.assertEqual(finding["severity"], "medium")
+
+    def test_private_local_app_without_git_is_advisory(self):
+        with tempfile.TemporaryDirectory() as home:
+            project = os.path.join(home, "app")
+            os.mkdir(project)
+            open(os.path.join(project, "requirements.txt"), "w").close()
+            os.mkdir(os.path.join(project, ".git"))  # copied app; not a repo
+            path = os.path.join(project, ".env")
+            with open(path, "w") as handle:
+                handle.write("x")
+            os.chmod(path, 0o600)
+            finding = self.audit_file(path, home)
+        self.assertEqual(finding["severity"], "low")
+
+    def test_broken_git_metadata_cannot_use_local_app_fallback(self):
+        with tempfile.TemporaryDirectory() as home:
+            project = os.path.join(home, "app")
+            os.mkdir(project)
+            open(os.path.join(project, "package.json"), "w").close()
+            os.mkdir(os.path.join(project, ".git"))
+            open(os.path.join(project, ".git", "HEAD"), "w").close()
+            path = os.path.join(project, ".env")
+            with open(path, "w") as handle:
+                handle.write("x")
+            os.chmod(path, 0o600)
+            finding = self.audit_file(path, home)
+        self.assertEqual(finding["severity"], "medium")
+
+    def test_tracked_env_is_critical_even_with_ignore_rule(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as home:
+            root, path = self.repo(home)
+            subprocess.run(["git", "-C", root, "add", "-f", "--", path], check=True)
+            finding = self.audit_file(path, home)
+        self.assertEqual(finding["severity"], "critical")
+
+    def test_copy_outside_project_prevents_advisory_classification(self):
+        with tempfile.TemporaryDirectory() as home:
+            _root, path = self.repo(home)
+            copy = os.path.join(home, "loose.txt")
+            with open(copy, "w") as handle:
+                handle.write("x")
+            with patch("jarvis.collectors.identity.secrets.run.walk",
+                       return_value=[path, copy]), \
+                 patch("jarvis.collectors.identity.secrets.run.scan_file",
+                       return_value=[("generic secret assignment", "same-secret", 1,
+                                      "medium")]), \
+                 patch("jarvis.collectors.identity.secrets.run._other_humans",
+                       return_value=[]), \
+                 patch("jarvis.collectors.identity.secrets.run.os.path.expanduser",
+                       return_value=home):
+                finding = next(f for f in audit(roots=[home], deep=True)
+                               if f["title"].startswith("generic secret assignment"))
+        self.assertEqual(finding["severity"], "medium")

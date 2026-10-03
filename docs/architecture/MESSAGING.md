@@ -150,7 +150,7 @@ unacceptable.
 | urgent change (new critical, monitoring outage) | immediately | immediately if no device has read it within 10 minutes |
 | change digest | immediately | on its existing hourly cadence |
 | daily health | summary line | full report, as today |
-| JARVIS itself unreachable | — | the dead-man path, unchanged |
+| JARVIS itself unreachable | — | the independent health monitor path, unchanged |
 
 The existing queue, escalation tiers and caps in `notifications.py` stay the
 single source of truth for *whether* something is sent. Messaging only adds

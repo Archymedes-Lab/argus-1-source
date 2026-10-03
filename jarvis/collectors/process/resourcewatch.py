@@ -6,6 +6,9 @@ import os
 import shutil
 import time
 
+from jarvis.core.finding import LOCAL_HOST
+from jarvis.platform import host as machine
+
 from . import monitor
 
 _META = "resourcewatch_sample_v1"
@@ -46,7 +49,7 @@ def _database_profile(store):
     return result
 
 
-def _finding(severity, title, detail, where="", host="wsl"):
+def _finding(severity, title, detail, where="", host=LOCAL_HOST):
     return {"category": "resource", "severity": severity, "title": title,
             "detail": detail, "where": where, "host": host}
 
@@ -143,7 +146,8 @@ def audit(store, hosts=("wsl", "win")):
                 f"only {available / 1024**3:.1f} GiB ({pct:.1f}%) remains available",
                 "/proc/meminfo"))
 
-    for path in ("/", "/mnt/c"):
+    for path in dict.fromkeys(p for p in (
+            "/" if machine.has_linux() else "", machine.windows_root()) if p):
         if not os.path.exists(path):
             continue
         try:
