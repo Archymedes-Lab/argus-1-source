@@ -35,6 +35,7 @@ import os
 import re
 from datetime import datetime, timezone
 
+from jarvis.collectors.telemetry import techniques
 from jarvis.core import collection, warninglist
 from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core.finding import win_finding as _finding
@@ -485,9 +486,17 @@ def _query_blocked():
     return []
 
 
-def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None):
+def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None,
+          events=None):
+    """`events` replays the given reduced rows (the shape rows_from_events
+    returns) through every rule below instead of reading the machine. A replay
+    never touches the store: it cannot record a hit or move a cursor. The
+    coverage map's probes use it so they test this function, not a copy."""
     if "win" not in hosts:
         return []
+    probing = events is not None
+    if probing:
+        store = None
 
     # The native sensor, when it is delivering, replaces the PowerShell query:
     # every record in order, no cap, no window arithmetic. The query below is
@@ -510,7 +519,10 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 replay_data = replay[0]
     query_started = now()
     minutes = None
-    if native is not None:
+    if probing:
+        through = None
+        data = {"events": list(events), "complete": True, "rareComplete": True}
+    elif native is not None:
         data, through = native
     else:
         through = None
@@ -556,13 +568,15 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                                 'The query cap was reached or completeness was not established. '
                                 'The cursor is retained; install the native sensor '
                                 '(windows-sensor/install.ps1) to drain the backlog.', CHANNEL))
-    window = ("the native sensor's full review window" if native is not None and replay_complete
+    window = ("a replay" if probing
+              else "the native sensor's full review window" if native is not None and replay_complete
               else "the native sensor since the last run" if native is not None and incremental
               else f"the last {minutes} minutes" if minutes else f"the last {hours}h")
 
     lsass_hits, remote_threads, tampering = [], [], []
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
+    technique_hits, discovery_seen = {}, []
     dropped, drop_times = {}, []
     boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
 
@@ -611,6 +625,13 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             cmdline = e.get("cmdline") or ""
             if RANSOM_RECOVERY.search(cmdline):
                 recovery_tamper.append((image, cmdline, e.get("time")))
+            for rule, span in techniques.match(image, cmdline, techniques.WIN):
+                hit = technique_hits.setdefault((rule, image), [0, span, e.get("time")])
+                hit[0] += 1
+                hit[2] = e.get("time") or hit[2]
+            for tid in techniques.discovery(image, cmdline, techniques.WIN):
+                discovery_seen.append((e.get("parent_guid") or "", _base(e.get("parent")) or "?",
+                                       _epoch(e.get("time")), tid, base))
         elif eid == 4:
             if str(e.get("state") or "").lower() == "started":
                 service_starts.append(_epoch(e.get("time")))
@@ -715,6 +736,23 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             f"{iso_of(when)} — {cmdline[:240]}. Destroying shadow copies or recovery "
             f"configuration commonly precedes ransomware encryption; confirm whether an "
             f"administrator or backup tool initiated it.", image))
+
+    # -- techniques recognisable from one process start ----------------------
+    for (rule, image), (count, span, when) in technique_hits.items():
+        f = _finding(
+            "technique", rule.severity, techniques.finding_title(rule),
+            f"{_base(image)} at {iso_of(when)}"
+            + (f", {count} times" if count > 1 else "")
+            + (f": {span}" if span else " (command line withheld: it may carry a secret)")
+            + ". The action is what is reported; whether it was authorised is for "
+              "you to confirm.", image)
+        f["techniques"] = list(rule.tids)
+        out.append(f)
+    for parent, tids, commands in techniques.bursts(discovery_seen):
+        f = _finding("technique", "medium", techniques.burst_title(parent),
+                     techniques.burst_detail(tids, commands), parent)
+        f["techniques"] = sorted(tids)
+        out.append(f)
 
     # -- the sensor's own losses ---------------------------------------------
     verdict = drop_verdict(" ".join(f"{k}:{v}" for k, v in dropped.items()))

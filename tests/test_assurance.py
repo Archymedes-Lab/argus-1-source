@@ -47,11 +47,11 @@ class AssuranceTests(unittest.TestCase):
                         assurance.OBSERVATION_REQUIREMENTS.values() for source in required}
         result = assurance.report(observations)
         gaps = result['evidence_gaps']
-        self.assertEqual(gaps['implementation_unverified'], 4)
+        self.assertEqual(gaps['implementation_unverified'], 5)
         self.assertEqual(gaps['implementation_partial'], 20)
         self.assertEqual(gaps['observation_mapping_missing'], 12)
-        self.assertEqual(gaps['containment_not_validated'], 24)
-        self.assertEqual(gaps['validation_date_missing'], 24)
+        self.assertEqual(gaps['containment_not_validated'], 25)
+        self.assertEqual(gaps['validation_date_missing'], 25)
         self.assertFalse(result['complete'])
 
     def test_missing_or_stale_optional_sensor_is_explicit(self):

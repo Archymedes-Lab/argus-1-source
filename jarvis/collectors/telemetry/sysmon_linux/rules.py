@@ -9,6 +9,7 @@ try:
     import pwd
 except ImportError:      # native Windows: no passwd database, and no caller there
     pwd = None
+from jarvis.collectors.telemetry import techniques
 from jarvis.core import egress as egress_baseline
 from jarvis.core import vet, warninglist
 from jarvis.core.finding import finding as _finding
@@ -117,6 +118,11 @@ DEV_PKG_PATH = re.compile(
 DEV_PARENTS = ("node", "npm", "npx", "pnpm", "yarn", "bun", "deno", "tsx",
                "python", "python3", "pip", "pip3", "cargo", "go", "make")
 
+
+# Container and build tooling legitimately runs a lot of enumeration commands.
+BUILD_PARENTS = {"runc", "containerd", "containerd-shim", "dockerd",
+                 "docker", "buildkitd", "bun", "node", "npm", "yarn",
+                 "make", "cmake", "cargo", "go", "bazel", "ansible-playbook"}
 
 LOG_DELETE_TITLE = "a log or history file was deleted"
 
@@ -333,6 +339,7 @@ def _is_jarvis(e):
 def _rules(events, store=None):
     out = []
     recon, egress = {}, {}
+    technique_hits, discovery_seen = {}, []
     dns_names, dests = set(), set()
     # A PID can be reused. Only a matching Sysmon ProcessGuid can supply the
     # command line for an event that doesn't contain one of its own.
@@ -389,6 +396,18 @@ def _rules(events, store=None):
                     pcmd[:160], CHANNEL))
             if base in RECON_BINS and not mine:
                 recon.setdefault(pbase or "?", set()).add(base)
+            # A shell's command line is judged as the operator typed it, with
+            # the harness wrapper and quoted heredocs (file contents) removed.
+            tcmd = _without_quoted_heredocs(pcmd) if base in techniques.SHELLS else cmd
+            for rule, span in techniques.match(img, tcmd, techniques.LINUX):
+                hit = technique_hits.setdefault(rule, [0, span, base])
+                hit[0] += 1
+            if not mine and pbase not in BUILD_PARENTS:
+                guid = _clean(e.get("ParentProcessGuid"))
+                if guid and guid != "{00000000-0000-0000-0000-000000000000}":
+                    when = next(iter(_event_times(e)), None)
+                    for tid in techniques.discovery(img, cmd, techniques.LINUX):
+                        discovery_seen.append((guid, pbase or "?", when, tid, base))
 
         elif eid == 3:
             dst = e.get("DestinationIp") or ""
@@ -480,14 +499,25 @@ def _rules(events, store=None):
                 f"name the process, so this is a visibility gap, not a detection",
                 CHANNEL))
 
-    # Container and build tooling legitimately runs a lot of these.
-    build_parents = {"runc", "containerd", "containerd-shim", "dockerd",
-                     "docker", "buildkitd", "bun", "node", "npm", "yarn",
-                     "make", "cmake", "cargo", "go", "bazel", "ansible-playbook"}
+    for rule, (count, span, base) in technique_hits.items():
+        f = _finding(
+            "sysmon-linux", rule.severity, techniques.finding_title(rule),
+            f"{base}" + (f", {count} times" if count > 1 else "")
+            + (f": {span}" if span else " (command line withheld: it may carry a secret)")
+            + " — the action is what is reported; whether it was authorised is for "
+              "you to confirm", CHANNEL)
+        f["techniques"] = list(rule.tids)
+        out.append(f)
+    for parent, tids, commands in techniques.bursts(discovery_seen):
+        f = _finding("sysmon-linux", "medium", techniques.burst_title(parent),
+                     techniques.burst_detail(tids, commands), CHANNEL)
+        f["techniques"] = sorted(tids)
+        out.append(f)
+
     for pbase, bins in recon.items():
         # An unresolved parent means unattributable — and that bucket is
         # dominated by short-lived system and monitoring processes.
-        if pbase and pbase != "?" and pbase not in build_parents and len(bins) >= 5:
+        if pbase and pbase != "?" and pbase not in BUILD_PARENTS and len(bins) >= 5:
             out.append(_finding(
                 "sysmon-linux", "medium",
                 f"host reconnaissance burst under {pbase}",

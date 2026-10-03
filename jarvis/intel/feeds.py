@@ -285,7 +285,10 @@ def _attack(raw, store):
     data = json.loads(raw.decode("utf-8", "replace"))
     rows, ts = [], now()
     for obj in data.get("objects", []):
-        if obj.get("type") != "attack-pattern" or obj.get("revoked"):
+        # Revoked and deprecated entries are techniques MITRE has retired or
+        # folded into others; nothing can cover them and they are not counted.
+        if (obj.get("type") != "attack-pattern" or obj.get("revoked")
+                or obj.get("x_mitre_deprecated")):
             continue
         tid = ""
         for ref in obj.get("external_references", []):
@@ -304,8 +307,17 @@ def _attack(raw, store):
            ON CONFLICT(tid) DO UPDATE SET name=excluded.name,
                tactics=excluded.tactics, platforms=excluded.platforms,
                updated=excluded.updated""", rows)
+    if len(rows) >= ATTACK_MIN_ROWS:
+        # Rows this load did not refresh were retired upstream. Only a load
+        # large enough to be the whole catalogue may remove anything: a
+        # truncated download must not empty the table.
+        store.db.execute("DELETE FROM attack_techniques WHERE updated < ?", (ts,))
     store.commit()
     return len(rows)
+
+
+# The enterprise catalogue has about 700 live techniques and sub-techniques.
+ATTACK_MIN_ROWS = 400
 
 
 ATTACK_URL = ("https://raw.githubusercontent.com/mitre/cti/master/"

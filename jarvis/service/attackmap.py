@@ -6,7 +6,10 @@ that lists which collector "covers" a technique says nothing about whether the
 detection still fires. So each technique here gets one of four levels:
 
   validated   a probe fed a realistic event to the real detector and it fired,
-              and a collector that feeds that detector is currently reporting
+              and a collector that feeds that detector is currently reporting.
+              That proves one procedure of the technique is caught, not every
+              way of doing it: `vssadmin delete shadows` fires, a ransomware
+              that deletes shadow copies through COM does not
   claimed     a collector is mapped to the technique, but nothing proves it
   regressed   a probe that should fire did not — a detector broke silently
   blind       nothing here looks for it
@@ -156,6 +159,146 @@ def probe_popular_domain_not_flagged():
     return m is None, "Windows telemetry host not matched by a writeup's azure.com"
 
 
+# ── probes built from the technique rule table ──────────────────────────────
+# collectors/telemetry/techniques.py carries, for every rule, a command line
+# that must fire it. Each is replayed through the real detector entry point
+# (sysmon.audit / sysmon_linux._rules), so the probe exercises the rule table,
+# the event plumbing around it and the finding it produces - not a copy.
+
+_WHEN = "2026-01-01T00:00:00.000Z"
+_PARENT_GUID = "{11111111-1111-1111-1111-111111111111}"
+
+
+def _replay(platform, pairs, parent=""):
+    """Findings the real detector produces for these (image, command line) starts."""
+    from jarvis.collectors.telemetry import sysmon, sysmon_linux, techniques
+    if platform == techniques.WIN:
+        return sysmon.audit(events=[
+            {"id": 1, "image": image, "cmdline": cmd, "time": _WHEN,
+             "parent": parent or r"C:\Windows\System32\cmd.exe", "parent_guid": _PARENT_GUID}
+            for image, cmd in pairs])
+    return sysmon_linux._rules([
+        {"id": 1, "Image": image, "CommandLine": cmd, "ParentImage": parent or "/usr/bin/bash",
+         "ParentProcessGuid": _PARENT_GUID} for image, cmd in pairs])
+
+
+def _reports(findings, tid):
+    return any(tid in (f.get("techniques") or ()) and f.get("severity") != "ok"
+               for f in findings)
+
+
+def _technique_probe(tid):
+    """Probe for one technique: every platform that has a rule for it must fire."""
+    from jarvis.collectors.telemetry import techniques
+
+    def probe():
+        checked, fired = [], True
+        for platform in (techniques.WIN, techniques.LINUX):
+            rules = [r for r in techniques.RULES if tid in r.tids and r.platform == platform]
+            # The strongest rule represents the technique on this platform.
+            rules.sort(key=lambda r: ("critical", "high", "medium", "low").index(r.severity))
+            if rules:
+                rule = rules[0]
+                fired &= _reports(_replay(platform, [rule.sample]), tid)
+                checked.append(f"{platform}: {rule.title}")
+            elif tid in techniques.DISCOVERY_SAMPLES[platform]:
+                samples = techniques.DISCOVERY_SAMPLES[platform]
+                others = [v for k, v in samples.items() if k != tid]
+                burst = [samples[tid]] + others[:techniques.BURST_TECHNIQUES - 1]
+                fired &= _reports(_replay(platform, burst), tid)
+                # Alone it is ordinary, and must stay unreported.
+                fired &= not _replay_reports_any(platform, [samples[tid]])
+                checked.append(f"{platform}: counted in a discovery burst, silent alone")
+        return fired and bool(checked), "; ".join(checked)
+    return probe
+
+
+def _replay_reports_any(platform, pairs):
+    return any(f.get("techniques") for f in _replay(platform, pairs))
+
+
+def _technique_jobs(tid):
+    from jarvis.collectors.telemetry import techniques
+    platforms = {r.platform for r in techniques.RULES if tid in r.tids}
+    platforms |= {p for p, samples in techniques.DISCOVERY_SAMPLES.items() if tid in samples}
+    return tuple(job for platform, job in ((techniques.WIN, "sysmon"),
+                                           (techniques.LINUX, "sysmon_linux"))
+                 if platform in platforms)
+
+
+def probe_lsass_read():
+    from jarvis.collectors.telemetry import sysmon
+    out = sysmon.audit(events=[{"id": 10, "image": r"C:\Users\x\AppData\Local\Temp\a.exe",
+                                "target": r"C:\Windows\System32\lsass.exe",
+                                "granted": "0x1010", "time": _WHEN}])
+    opened = any(f["category"] == "credential access" and f["severity"] == "critical"
+                 for f in out)
+    rule, what = _technique_probe("T1003")()
+    return opened and rule, "LSASS opened with PROCESS_VM_READ; " + what
+
+
+def probe_recovery_tamper():
+    out = _replay("win", [(r"C:\Windows\System32\vssadmin.exe",
+                           "vssadmin delete shadows /all /quiet")])
+    return any(f["category"] == "impact" and f["severity"] == "critical" for f in out), \
+        "vssadmin delete shadows"
+
+
+def probe_sideload():
+    from jarvis.collectors.telemetry import sysmon
+    out = sysmon.audit(events=[{"id": 7, "image": r"C:\Users\x\AppData\Local\App\app.exe",
+                                "loaded": r"C:\Users\x\AppData\Local\App\version.dll",
+                                "signed": "false", "time": _WHEN}])
+    return any("side-loading" in f["title"] and f["severity"] == "high" for f in out), \
+        "unsigned DLL loaded beside its host in a user-writable directory"
+
+
+def probe_raw_device():
+    out = _linux_rules({"id": 9, "Image": "/usr/bin/dd", "Device": "/dev/sda",
+                        "ProcessId": "4242", "UtcTime": "2026-01-01 00:00:00.000"})
+    return "raw device read" in _titles(out), "block device opened by dd"
+
+
+def probe_boot_drift():
+    from jarvis.collectors.host import bootintegrity
+    base = {"firmware": "1.0", "option_roms": [], "boot_apps": ["a" * 64], "authorities": [],
+            "variables": {"SecureBoot": "01", "PK": "p" * 16, "KEK": "k" * 16},
+            "pcrs": {"0": "0" * 64, "7": "7" * 64}}
+    now = dict(base, variables=dict(base["variables"], SecureBoot="00"),
+               option_roms=["f" * 64], pcrs=dict(base["pcrs"], **{"0": "e" * 64}))
+    out = bootintegrity.drift(base, now, "probe")
+    titles = " | ".join(f["title"] for f in out if f["severity"] == "high")
+    return ("Secure Boot variable SecureBoot changed" in titles and "option ROM" in titles), \
+        "Secure Boot turned off, a new option ROM and changed firmware code measured before the OS"
+
+
+def probe_reflective_image():
+    from jarvis.collectors.process import assemblies
+    row = {"verdict": "native", "name": "notepad.exe", "pid": 4242, "script": "", "unexplained": [],
+           "sensitive": ["VirtualAllocEx", "WriteProcessMemory"], "offensive": [],
+           "image": {"size": 262144, "exec": True, "private": True},
+           "host": {"exe": r"C:\Windows\System32\notepad.exe", "launch": "explorer"}}
+    out = assemblies.findings([row])
+    return any(f["severity"] == "high" and "copied into this process" in f["detail"]
+               for f in out), "executable PE image in private memory with no backing file"
+
+
+def probe_technique_lookalikes():
+    """No benign look-alike in the rule table may fire through the detectors."""
+    from jarvis.collectors.telemetry import techniques
+    wrong = [rule.title for rule in techniques.RULES for pair in rule.benign
+             if any(set(rule.tids) & set(f.get("techniques") or ())
+                    for f in _replay(rule.platform, [pair]))]
+    return not wrong, (f"{sum(len(r.benign) for r in techniques.RULES)} benign look-alikes"
+                       + (f"; fired: {', '.join(sorted(set(wrong))[:4])}" if wrong else ""))
+
+
+def _table_probes():
+    from jarvis.collectors.telemetry import techniques
+    return {tid: (_technique_probe(tid), _technique_jobs(tid))
+            for tid in sorted(techniques.technique_ids())}
+
+
 # tid -> (probe, feeding collector jobs)
 PROBES = {
     "T1055": (probe_injection, ("sysmon", "memscan")),
@@ -169,9 +312,36 @@ PROBES = {
     "T1071": (probe_c2_domain, ("sysmon", "hunt")),
     "T1014": (probe_hidden_process, ("hidden", "deep_hidden")),
     "T1219": (probe_reverse_shell, ("sysmon_linux",)),
+    "T1003": (probe_lsass_read, ("sysmon",)),
+    "T1490": (probe_recovery_tamper, ("sysmon",)),
+    "T1574": (probe_sideload, ("sysmon",)),
+    "T1006": (probe_raw_device, ("sysmon_linux",)),
+    "T1542": (probe_boot_drift, ("preos",)),
+    "T1620": (probe_reflective_image, ("memscan",)),
 }
+# Techniques whose only detection is contextual: a discovery command is
+# reported inside a burst and deliberately not alone, so a single `whoami` by
+# an intruder goes unreported. Their probes still run (a broken burst rule is a
+# regression), but they stay "claimed": the technique by itself is not caught.
+
+
+def _context_only():
+    from jarvis.collectors.telemetry import techniques
+    acted = {tid for rule in techniques.RULES for tid in rule.tids}
+    return frozenset(entry[0] for entry in techniques.DISCOVERY) - acted
+
+
+# The hand-written probes above keep their technique; the rule table supplies
+# the rest. A broken rule module costs its own techniques, not the map.
+CONTEXT_ONLY = frozenset()
+try:
+    CONTEXT_ONLY = _context_only() - set(PROBES)
+    PROBES = {**_table_probes(), **PROBES}
+except Exception:       # pragma: no cover - surfaced by the map's own totals
+    pass
 # Precision probes guard against false-positive regressions; not a technique.
-PRECISION = {"popular-domain filter": probe_popular_domain_not_flagged}
+PRECISION = {"popular-domain filter": probe_popular_domain_not_flagged,
+             "technique rule look-alikes": probe_technique_lookalikes}
 
 
 def _live(store, jobs):
@@ -222,6 +392,10 @@ def measure(store):
             fired, what, live, jobs = results[tid]
             if not fired:
                 level, evidence = "regressed", what
+            elif tid in CONTEXT_ONLY:
+                level, evidence = "claimed", (
+                    f"{what}; reported only as part of a burst of discovery commands, "
+                    f"never by itself" + ("" if live else f"; {', '.join(jobs)} not reporting"))
             elif live:
                 level, evidence = "validated", f"{what}; live via {', '.join(live)}"
             else:

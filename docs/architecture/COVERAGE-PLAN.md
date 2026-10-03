@@ -5,6 +5,46 @@ Linux, parent techniques only). This plan raises the validated share. It follows
 rule: a number moves only through a real detector, a proven measurement bug, or an explicit owner
 decision. A technique is never promoted without a probe that makes the real detector fire.
 
+## Status 2026-10-03: Phase 0 item 1 and Phase 3 A built, not deployed
+
+Projected from a copy of the live catalogue and collector freshness: **73 validated, 32 claimed,
+71 blind of 176** (41%). The live map does not change until the release is deployed and read back.
+
+What landed:
+
+- **Phase 0, item 1.** `feeds._attack` skips deprecated techniques and removes rows a full
+  catalogue load no longer refreshes (never on a truncated load). 186 to 176.
+- **Phase 3 A.** `jarvis/collectors/telemetry/techniques.py`: about 120 rules, each keyed on the
+  image of the process that ran the tool plus its own arguments, wired into `sysmon.audit` and
+  `sysmon_linux._rules`. The coverage map builds one probe per technique from the rule table and
+  replays it through those two functions (`sysmon.audit(events=...)` is the new replay entry; it
+  cannot write to the store).
+- **Already detected, never mapped.** Probes for LSASS memory access (T1003), recovery destruction
+  (T1490), DLL side-loading (T1574), raw device opens (T1006), measured-boot drift (T1542) and
+  file-less images in memory (T1620).
+
+Decisions that differ from the plan below:
+
+- **Discovery bursts stay claimed.** The plan counted the 23 burst-only discovery techniques as
+  validated. A single discovery command is deliberately silent, so the technique by itself is not
+  caught; they are shown as claimed with that reason. Their probes still run, so a broken burst
+  rule is reported as a regression.
+- **Phase 1 was done through process rules**, not by mapping the posture collectors: T1685, T1686,
+  T1688, T1690, T1496, T1611, T1037 and T1529 are validated by the command that does it. The
+  collectors' own state checks are still unprobed.
+
+Noise measured before scoring, as this plan requires: 256,397 Windows and 35,583 Linux retained
+process starts replayed read-only. First pass: 1,281 Windows hits, almost all JARVIS's own
+collectors (an inline script naming `root\subscription`, `cmdkey /list` from the identity
+collector). After keying rules on creation verbs and dropping the `cmdkey` rule: under ten
+findings, all real owner actions (sensor install, a task created by `schtasks`, a power-setting
+change), and no discovery burst.
+
+Still open from this plan: Phase 0 item 2 (a test that fails when a `COVERAGE` key such as T1562
+is absent from the catalogue) and the `partial` level for sub-techniques; the remaining claimed
+techniques of Phase 2 (T1056, T1078, T1110, T1133, T1204, T1497, T1556, T1557, T1571); Phase 3
+B to F; and Arena emulation for any of it.
+
 ## Rules for every phase
 
 - **No claim without a probe.** New mappings land together with a probe in

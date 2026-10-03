@@ -6,7 +6,7 @@ the tool itself. coverage.py asks whether jarvis is running; gaps() asks
 whether it is looking at the right things.
 """
 
-from jarvis.collectors.telemetry import auditd, sysmon_linux
+from jarvis.collectors.telemetry import auditd, sysmon_linux, techniques
 from jarvis.core.finding import finding as _finding
 
 # Which jarvis audit covers which ATT&CK technique. Parent technique ids cover
@@ -79,6 +79,17 @@ COVERAGE = {
     "T1059.006": "toolchain / sysmon_linux — Python execution, including "
                  "site-triggered startup code",
 }
+
+# Techniques recognised from single process-creation events by the shared rule
+# table. Listed here so the gap report stops calling them unchecked; whether
+# each rule still fires is the coverage map's job (service/attackmap.py).
+COVERAGE.update({
+    "T1490": "sysmon — shadow-copy and recovery destruction commands",
+    "T1006": "sysmon_linux — raw block-device opens",
+    "T1003": "sysmon — LSASS memory access and credential-dump commands",
+})
+for _tid in sorted(techniques.technique_ids()):
+    COVERAGE.setdefault(_tid, "sysmon / sysmon_linux — process-creation technique rules")
 
 # Techniques worth naming explicitly as uncovered when intel raises them, with
 # the reason they are hard rather than merely missing.

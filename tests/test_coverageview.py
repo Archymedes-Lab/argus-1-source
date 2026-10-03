@@ -22,9 +22,9 @@ class SourcesTests(unittest.TestCase):
         self.assertEqual(coveragemap.sources("T1055", "anything — else"), ["sysmon", "memscan"])
 
     def test_mapped_words_resolve_to_real_jobs_only(self):
-        self.assertEqual(coveragemap.sources("T1547", "control / startup — boot and logon autostart"),
+        self.assertEqual(coveragemap.sources("T1078", "control / startup — boot and logon autostart"),
                          ["control", "boot"])
-        self.assertEqual(coveragemap.sources("T1027", "detect — obfuscated command lines"), ["scan"])
+        self.assertEqual(coveragemap.sources("T1497", "detect — obfuscated command lines"), ["scan"])
         self.assertEqual(coveragemap.sources("T9999", "nonsense / words — nothing"), [])
         for job in coveragemap.sources("T1014", "hidden / evasion — rootkit detection"):
             self.assertIn(job, JOBS)

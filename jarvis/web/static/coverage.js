@@ -26,7 +26,7 @@ import * as THREE from '/static/vendor/three.module.min.js';
 
 const LEVELS = ['validated', 'regressed', 'claimed', 'blind'];
 const LEVEL_TEXT = {
-  validated: ['Validated', 'a probe made the real detector fire'],
+  validated: ['Validated', 'a probe made the real detector fire for at least one way of doing it'],
   claimed: ['Claimed', 'a collector is mapped, nothing proves it'],
   blind: ['Blind', 'no collector looks for it'],
   regressed: ['Regressed', 'a detector that should fire did not'],
