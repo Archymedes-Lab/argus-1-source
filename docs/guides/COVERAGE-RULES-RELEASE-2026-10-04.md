@@ -41,6 +41,34 @@ live release; T1620 stays claimed.
 Roll back if the service does not come back `ready`, if `sysmon` or `sysmon_linux` errors or goes
 stale, if any existing finding disappears outside item 3, or if the map reports a regression.
 
-## Outcome
+## Outcome (measured 2026-10-04, 00:41 to 00:50 EEST)
 
-To be filled in from the live readback.
+Deployed by the owner as release `20261003T214117Z-5343e88b5230` (`sha256:5343e88b5230…`).
+
+| Check | Baseline (00:37) | After deploy |
+|---|---|---|
+| Service | active, healthy, ready | active, 0 restarts, healthy, ready, protection healthy; no traceback in the journal |
+| Security score | 58 | 58, every area unchanged |
+| Coverage map | 11 validated, 34 claimed, 141 blind of 186 | 72 validated, 33 claimed, 81 blind of 186, 0 regressed |
+| `sysmon` findings | 5 | 5, none new, none gone, no error |
+| `sysmon_linux` findings | 16 | 16, none new, none gone, no error |
+| `gaps` findings | 222 | 195: 27 gone, every one a technique id now in the rule table |
+| Collectors current | 50 of 50 | 50 of 50 |
+
+Level moves: 39 blind to validated, 22 claimed to validated, 21 blind to claimed. Nothing left
+validated. The total stays 186 until the `feeds` job reloads the catalogue.
+
+Live positive control (00:49): seven read-only discovery commands were run from one shell. The
+next `sysmon_linux` run reported one medium finding, `discovery burst under bash`, naming exactly
+those seven techniques. This is the first rule from the table seen firing on a real event. No
+Windows rule has fired on a live event yet.
+
+The /coverage page was rendered in headless Edge in both readings and compared with
+`/api/coverage`: 39%, 72 of 186, 72 / 33 / 81, the thirteen per-tactic counts, score 58% with its
+age, and 50 of 50 collectors current all matched.
+
+Collector uptime read 31.3% for the last 24 h. That is real, not a display fault: the `scan`
+collector has no receipts at all for about 18 consecutive hours of that window, then resumes.
+The WSL guest was not running the collectors for that time.
+
+Known cosmetic fault: two tactic labels on the shell overlap at some camera angles.
