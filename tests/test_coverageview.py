@@ -67,6 +67,54 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(data["totals"]["total"], 3)
         self.assertEqual(data["running"], [])
 
+    def probed_map(self, **row):
+        store = Store(self.db)
+        tech = {"tid": "T1059", "name": "Interpreter", "tactics": ["execution"],
+                "level": "validated", "evidence": "powershell -enc; live via scan",
+                "fired": True, "what": "powershell -enc", **row}
+        store.set_meta(attackmap.META, json.dumps({
+            "at": 100, "totals": {"validated": 1, "claimed": 0, "blind": 0, "regressed": 0, "total": 1},
+            "tactics": {"execution": {"validated": 1, "claimed": 0, "blind": 0, "regressed": 0, "total": 1}},
+            "techniques": [tech]}))
+        store.commit()
+        store.close()
+
+    def test_a_validated_tile_follows_its_collector_between_map_measurements(self):
+        self.probed_map()
+        fresh = coveragemap.build(self.db)
+        self.assertEqual(fresh["techniques"][0]["level"], "validated")
+        self.assertEqual(fresh["totals"]["validated"], 1)
+        later = time.time() + JOBS["scan"][0] * 10 + 600          # the collector went quiet
+        stale = coveragemap.build(self.db, now=later)
+        tech = stale["techniques"][0]
+        self.assertEqual(tech["level"], "claimed")
+        self.assertIn("not reporting now", tech["evidence"])
+        self.assertEqual((stale["totals"]["validated"], stale["totals"]["claimed"]), (0, 1))
+        self.assertEqual(stale["tactics"]["execution"]["validated"], 0)   # numbers match the tiles
+        self.assertEqual(stale["totals"]["total"], 1)
+
+    def test_a_probe_that_fired_becomes_validated_once_its_collector_reports(self):
+        self.probed_map(level="claimed", evidence="powershell -enc fires, but scan not reporting")
+        self.assertEqual(coveragemap.build(self.db)["techniques"][0]["level"], "validated")
+
+    def test_liveness_never_promotes_what_the_probe_did_not_prove(self):
+        for row in ({"level": "regressed", "fired": False},
+                    {"level": "claimed", "fired": None, "what": None},      # mapped, no probe
+                    {"level": "claimed", "fired": False}):
+            self.probed_map(**row)
+            self.assertEqual(coveragemap.build(self.db)["techniques"][0]["level"], row["level"], row)
+        burst = sorted(attackmap.CONTEXT_ONLY)[0]
+        self.probed_map(tid=burst, level="claimed")
+        self.assertEqual(coveragemap.build(self.db)["techniques"][0]["level"], "claimed")
+
+    def test_a_map_stored_before_probe_results_keeps_its_levels(self):
+        later = time.time() + JOBS["scan"][0] * 10 + 600
+        data = coveragemap.build(self.db, now=later)            # setUp's rows carry no "fired"
+        self.assertEqual({t["tid"]: t["level"] for t in data["techniques"]},
+                         {"T1059": "validated", "T1204": "claimed", "T1106": "blind"})
+        self.assertEqual(data["totals"], {"validated": 1, "claimed": 1, "blind": 1,
+                                          "regressed": 0, "total": 3})
+
     def test_stale_collector_is_reported_stale_and_running_comes_from_the_scheduler(self):
         scheduler = mock.Mock()
         scheduler.wake_phase.return_value = {"current": ["scan"]}

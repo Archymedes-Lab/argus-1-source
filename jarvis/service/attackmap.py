@@ -408,7 +408,13 @@ def measure(store):
         for t in tacs:
             tactics[t][level] += 1
             tactics[t]["total"] += 1
-        rows.append({"tid": tid, "name": r["name"], "tactics": tacs, "level": level, "evidence": evidence})
+        row = {"tid": tid, "name": r["name"], "tactics": tacs, "level": level, "evidence": evidence}
+        if tid in results:
+            # What the probe proved, apart from whether a collector was
+            # reporting at that moment: readers that know the collectors'
+            # state now (coveragemap) re-derive the level from these.
+            row["fired"], row["what"] = bool(results[tid][0]), results[tid][1]
+        rows.append(row)
 
     totals = {k: sum(1 for x in rows if x["level"] == k) for k in ("validated", "claimed", "regressed", "blind")}
     totals["total"] = len(rows)

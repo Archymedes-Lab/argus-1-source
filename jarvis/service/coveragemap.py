@@ -8,6 +8,11 @@ Nothing here is computed to look better than the sources. A technique's level
 is attackmap's, a collector's state is the score's own freshness rule, and a
 collector with no stored snapshot is "missing", never quiet.
 
+The map is measured every few hours, but a collector can die in between. A
+technique whose probe fired is therefore shown as validated only while a
+collector that feeds it is current *now*; otherwise it is claimed, with the
+reason. The probe result itself is never re-derived here, only its liveness.
+
 Uptime is read from the collector receipts (defender_runs). A collector is up
 while its newest complete receipt is no older than the score's own staleness
 limit; partial and unavailable runs do not keep it up. Time before a collector's
@@ -162,6 +167,40 @@ def _collect(store, now):
     return per, fleet, segs
 
 
+def live_level(row, jobs, snaps, now):
+    """(level, evidence) for a technique right now.
+
+    Only a row whose probe fired can move, and only between validated and
+    claimed. Regressed, blind, mapped-without-a-probe and burst-only rows keep
+    the level the map gave them, as do rows from a map stored before probe
+    results were recorded.
+    """
+    level, evidence = row["level"], row.get("evidence") or ""
+    if (not row.get("fired") or level not in ("validated", "claimed")
+            or row["tid"] in attackmap.CONTEXT_ONLY):
+        return level, evidence
+    live = [j for j in jobs if score.freshness(snaps.get(j), JOBS[j][0], now) == "current"]
+    what = row.get("what") or evidence
+    if live:
+        return "validated", f"{what}; live via {', '.join(live)}"
+    return "claimed", (f"{what} fires, but {', '.join(jobs) or 'no collector here'} "
+                       f"{'is' if len(jobs) == 1 else 'are'} not reporting now")
+
+
+def _tally(techniques, tactic_names):
+    """Totals and per-tactic counts for the levels actually shown."""
+    blank = lambda: dict.fromkeys(("validated", "claimed", "blind", "regressed", "total"), 0)  # noqa: E731
+    totals, tactics = blank(), {name: blank() for name in tactic_names}
+    for tech in techniques:
+        totals[tech["level"]] += 1
+        totals["total"] += 1
+        for name in tech["tactics"]:
+            if name in tactics:
+                tactics[name][tech["level"]] += 1
+                tactics[name]["total"] += 1
+    return totals, tactics
+
+
 def build(db_path, scheduler=None, now=None):
     now = time.time() if now is None else now
     store = Store(db_path)
@@ -189,9 +228,11 @@ def build(db_path, scheduler=None, now=None):
         jobs = [] if row["level"] == "blind" else sources(row["tid"], row.get("evidence"))
         for job in jobs:
             feeds.setdefault(job, []).append(row["tid"])
+        level, evidence = live_level(row, jobs, snaps, now)
         techniques.append({"tid": row["tid"], "name": row["name"], "tactics": row["tactics"],
-                           "level": row["level"], "evidence": row.get("evidence") or "",
+                           "level": level, "evidence": evidence,
                            "sources": jobs, "uptime": _technique_uptime(jobs, segs, now)})
+    totals, tactics = _tally(techniques, (attack or {}).get("tactics") or {})
 
     collectors = []
     for job, (interval, label) in JOBS.items():
@@ -211,8 +252,8 @@ def build(db_path, scheduler=None, now=None):
     return {
         "at": int(now),
         "map_at": (attack or {}).get("at"),
-        "totals": (attack or {}).get("totals") or {},
-        "tactics": (attack or {}).get("tactics") or {},
+        "totals": totals if attack else {},
+        "tactics": tactics,
         "techniques": techniques,
         "collectors": collectors,
         "running": running,

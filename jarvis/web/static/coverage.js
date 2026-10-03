@@ -127,7 +127,8 @@ scene.add(core);
 // ── data-driven objects ────────────────────────────────────────────────────
 let data = null, world = null, focus = null, pinned = null, signature = '';
 const clock = new THREE.Clock();
-const fireTimes = new Float32Array(64).fill(-100);
+const MAX_NODES = 64;       // size of the beam shader's uFire array
+const fireTimes = new Float32Array(MAX_NODES).fill(-100);
 
 const tileMaterial = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
@@ -418,7 +419,7 @@ function sync(d, first) {
 }
 
 function fire(n, t) {
-  fireTimes[n.index] = t;
+  if (n.index < MAX_NODES) fireTimes[n.index] = t;      // beyond it the node still flashes
   world.points.geometry.attributes.aFire.array[n.index] = t;
   world.points.geometry.attributes.aFire.needsUpdate = true;
   const pulse = world.tiles.geometry.attributes.aPulse;
@@ -444,7 +445,9 @@ function hud() {
   $('legend').innerHTML = shown.map((l) =>
     `<span class="glyph ${l}"></span><span class="l">${LEVEL_TEXT[l][0]}<small>${LEVEL_TEXT[l][1]}</small></span>` +
     `<span class="n num">${t[l] || 0}</span>`).join('');
+  // The score is the last one that observed every scored collector; say when.
   $('score').textContent = data.score ? `${data.score.score}%` : '–';
+  $('scoreage').textContent = data.score && data.score.at ? `verified ${ago(data.score.at)}` : '';
   $('mapage').textContent = data.map_at ? `map measured ${ago(data.map_at)}` : 'map not measured yet';
   $('tlist').innerHTML = Object.entries(data.tactics).map(([name, s]) =>
     `<button class="tactic${focus && focus.tactic === name ? ' on' : ''}" data-tactic="${esc(name)}">` +
