@@ -1,0 +1,413 @@
+{
+ "taken": "2026-10-04T17:44:19+0300",
+ "release": "/opt/jarvis/releases/20261004T002941Z-4cc6288f6dd0",
+ "health": {
+  "healthy": true,
+  "ready": true,
+  "protection_healthy": true,
+  "live": true
+ },
+ "score": {
+  "score": 57,
+  "coverage": 100,
+  "at": 1791124949,
+  "areas": [
+   [
+    "Active threats",
+    32,
+    {
+     "low": 63,
+     "medium": 21,
+     "high": 2
+    }
+   ],
+   [
+    "OS hardening",
+    73,
+    {
+     "low": 26,
+     "medium": 3
+    }
+   ],
+   [
+    "Persistence & access",
+    36,
+    {
+     "low": 198,
+     "critical": 1,
+     "medium": 4
+    }
+   ],
+   [
+    "Data & privacy",
+    15,
+    {
+     "critical": 3,
+     "high": 3,
+     "medium": 4,
+     "low": 74
+    }
+   ],
+   [
+    "Network",
+    67,
+    {
+     "low": 34,
+     "high": 1
+    }
+   ],
+   [
+    "Developer toolchain",
+    89,
+    {
+     "medium": 1,
+     "low": 5
+    }
+   ],
+   [
+    "Monitoring",
+    89,
+    {
+     "low": 5,
+     "medium": 1
+    }
+   ]
+  ]
+ },
+ "snapshots": {
+  "attack": null,
+  "gaps": {
+   "ts": 1791119778,
+   "age_s": 5281,
+   "duration": 0.0668790340423584,
+   "error": "",
+   "severities": {
+    "high": 20,
+    "medium": 13,
+    "low": 160
+   },
+   "serious": [
+    [
+     "high",
+     "T1001 Data Obfuscation"
+    ],
+    [
+     "high",
+     "T1008 Fallback Channels"
+    ],
+    [
+     "high",
+     "T1043 Commonly Used Port"
+    ],
+    [
+     "high",
+     "T1064 Scripting"
+    ],
+    [
+     "high",
+     "T1095 Non-Application Layer Protocol"
+    ],
+    [
+     "high",
+     "T1132 Data Encoding"
+    ],
+    [
+     "high",
+     "T1132.002 Non-Standard Encoding"
+    ],
+    [
+     "high",
+     "T1212 Exploitation for Credential Access"
+    ],
+    [
+     "high",
+     "T1221 Template Injection"
+    ],
+    [
+     "high",
+     "T1480 Execution Guardrails"
+    ],
+    [
+     "high",
+     "T1484 Domain or Tenant Policy Modification"
+    ],
+    [
+     "high",
+     "T1497 Virtualization/Sandbox Evasion"
+    ],
+    [
+     "high",
+     "T1497.001 System Checks"
+    ],
+    [
+     "high",
+     "T1497.002 User Activity Based Checks"
+    ],
+    [
+     "high",
+     "T1497.003 Time Based Checks"
+    ],
+    [
+     "high",
+     "T1571 Non-Standard Port"
+    ],
+    [
+     "high",
+     "T1573 Encrypted Channel"
+    ],
+    [
+     "high",
+     "T1578 Modify Cloud Compute Infrastructure"
+    ],
+    [
+     "high",
+     "T1606 Forge Web Credentials"
+    ],
+    [
+     "high",
+     "T1622 Debugger Evasion"
+    ],
+    [
+     "medium",
+     "T1001.001 Junk Data"
+    ],
+    [
+     "medium",
+     "T1026 Multiband Communication"
+    ],
+    [
+     "medium",
+     "T1062 Hypervisor"
+    ],
+    [
+     "medium",
+     "T1092 Communication Through Removable Media"
+    ],
+    [
+     "medium",
+     "T1108 Redundant Access"
+    ],
+    [
+     "medium",
+     "T1205 Traffic Signaling"
+    ],
+    [
+     "medium",
+     "T1525 Implant Internal Image"
+    ],
+    [
+     "medium",
+     "T1528 Steal Application Access Token"
+    ],
+    [
+     "medium",
+     "T1535 Unused/Unsupported Cloud Regions"
+    ],
+    [
+     "medium",
+     "T1573.001 Symmetric Cryptography"
+    ],
+    [
+     "medium",
+     "T1599 Network Boundary Bridging"
+    ],
+    [
+     "medium",
+     "T1601 Modify System Image"
+    ],
+    [
+     "medium",
+     "T1612 Build Image on Host"
+    ]
+   ]
+  },
+  "toolchain": {
+   "ts": 1791123350,
+   "age_s": 1709,
+   "duration": 23.887213468551636,
+   "error": "",
+   "severities": {
+    "medium": 1,
+    "low": 5,
+    "ok": 4
+   },
+   "serious": [
+    [
+     "medium",
+     "1 agent plugin(s) installed"
+    ]
+   ]
+  },
+  "sysmon": {
+   "ts": 1791124756,
+   "age_s": 303,
+   "duration": 0.37699246406555176,
+   "error": "",
+   "severities": {
+    "low": 5,
+    "medium": 1,
+    "ok": 1
+   },
+   "serious": [
+    [
+     "medium",
+     "discovery burst under cmd.exe"
+    ]
+   ]
+  },
+  "sysmon_linux": {
+   "ts": 1791124952,
+   "age_s": 107,
+   "duration": 2.359463930130005,
+   "error": "",
+   "severities": {
+    "high": 2,
+    "medium": 17,
+    "low": 1,
+    "ok": 1
+   },
+   "serious": [
+    [
+     "high",
+     "a log or history file was deleted"
+    ],
+    [
+     "high",
+     "write to a persistence or trust location"
+    ],
+    [
+     "medium",
+     "Sysmon raw-access event has an unresolved device"
+    ],
+    [
+     "medium",
+     "discovery burst under bash"
+    ],
+    [
+     "medium",
+     "outbound connections from 2.1.288"
+    ],
+    [
+     "medium",
+     "outbound connections from 2.1.289"
+    ],
+    [
+     "medium",
+     "outbound connections from api"
+    ],
+    [
+     "medium",
+     "outbound connections from chrome-headless-shell"
+    ],
+    [
+     "medium",
+     "outbound connections from cloudflared"
+    ],
+    [
+     "medium",
+     "outbound connections from docker-buildx"
+    ],
+    [
+     "medium",
+     "outbound connections from dragonfly"
+    ],
+    [
+     "medium",
+     "outbound connections from env"
+    ],
+    [
+     "medium",
+     "outbound connections from nohup"
+    ],
+    [
+     "medium",
+     "outbound connections from python3.12"
+    ],
+    [
+     "medium",
+     "outbound connections from python3.13"
+    ],
+    [
+     "medium",
+     "outbound connections from python3.14"
+    ],
+    [
+     "medium",
+     "outbound connections from snapfuse"
+    ],
+    [
+     "medium",
+     "outbound connections from systemd-executor"
+    ],
+    [
+     "medium",
+     "outbound connections from udevadm"
+    ]
+   ]
+  },
+  "input": {
+   "ts": 1791124931,
+   "age_s": 128,
+   "duration": 0.9653863906860352,
+   "error": "",
+   "severities": {
+    "low": 1,
+    "ok": 9,
+    "medium": 1
+   },
+   "serious": [
+    [
+     "medium",
+     "the volume changed with no key press behind it"
+    ]
+   ]
+  },
+  "preos": {
+   "ts": 1791124866,
+   "age_s": 193,
+   "duration": 2.340615749359131,
+   "error": "",
+   "severities": {
+    "medium": 1,
+    "low": 1,
+    "ok": 1
+   },
+   "serious": [
+    [
+     "medium",
+     "the Secure Boot revocation list failed to update"
+    ]
+   ]
+  }
+ },
+ "coverage_api": {
+  "totals": {
+   "validated": 89,
+   "claimed": 25,
+   "blind": 72,
+   "regressed": 0,
+   "total": 186
+  },
+  "with_ways": 0,
+  "levels": {
+   "T1189": "blind",
+   "T1207": "blind",
+   "T1484": "blind",
+   "T1495": "blind",
+   "T1550": "validated",
+   "T1563": "blind",
+   "T1566": "blind",
+   "T1606": "blind",
+   "T1674": "blind"
+  }
+ },
+ "extension_baseline": {
+  "entries": 47,
+  "by_root": {
+   "wsl:.antigravity-server": 24,
+   "win:.cursor": 2,
+   "win:.antigravity": 21
+  }
+ },
+ "registry_recorded_meta": false
+}
