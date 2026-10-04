@@ -649,6 +649,154 @@ RULES += (
 )
 
 
+# Where a mail client or an archive tool unpacks something the user opened.
+_OPENED_FROM = (r"(\\Content\.Outlook\\|\\Temp\\(Temp\d*_[^\\\"]+\.zip|7z[0-9A-Za-z]{4,}|Rar\$[^\\\"]+"
+                r"|[^\\\"]+\.zip\.[0-9a-f]{3})\\)[^\"]*\.")
+_SCRIPT_TYPES = r"(js|jse|vbs|vbe|wsf|wsh|hta|lnk|scr|pif|bat|cmd|ps1|iso|img|dll)\b"
+
+RULES += (
+    # The visible end of a phishing lure: something run straight out of an
+    # attachment cache or an archive. Reported as that effect; the message
+    # that delivered it is never seen.
+    Rule(("T1566", "T1204"), WIN, ANY, _OPENED_FROM + _SCRIPT_TYPES, "high",
+         "script or shortcut run from a mail attachment or an archive (the effect of a lure)",
+         (S32 + "wscript.exe",
+          r'wscript.exe "C:\Users\u\AppData\Local\Temp\Temp1_invoice.zip\invoice.js"'),
+         ((S32 + "wscript.exe", r'wscript.exe "C:\Users\u\Documents\tools\build.js"'),
+          (S32 + "notepad.exe", r'notepad.exe "C:\Users\u\AppData\Local\Temp\Temp1_notes.zip\readme.txt"'))),
+    Rule(("T1566", "T1204"), WIN, ANY, _OPENED_FROM + r"(exe|msi|com)\b", "medium",
+         "program run from a mail attachment or an archive (the effect of a lure)",
+         (r"C:\Users\u\AppData\Local\Temp\Temp1_update.zip\update.exe",
+          r'"C:\Users\u\AppData\Local\Temp\Temp1_update.zip\update.exe"'),
+         ((r"C:\Users\u\Downloads\setup.exe", r'"C:\Users\u\Downloads\setup.exe" /S'),)),
+    Rule(("T1189",), WIN, ("powershell", "pwsh", "mshta", "wscript", "cscript", "regsvr32",
+                           "certutil", "bitsadmin"), r"\S", "high",
+         "a web browser started a script host (a possible effect of a drive-by)",
+         (PS, "powershell -nop -w hidden -c iex $x"),
+         ((PS, "powershell -c Get-Date"),),       # same child, ordinary parent
+         parents=BROWSERS, sample_parent=r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+    _w("T1563", "tscon", r"\d+\s+/dest:", "high", "one desktop session connected to another with tscon",
+       (S32 + "tscon.exe", "tscon 2 /dest:rdp-tcp#0"),
+       [(S32 + "tscon.exe", "tscon /?")]),
+    _w("T1484", "powershell pwsh",
+       r"\b(New-GPO|Set-GPRegistryValue|New-GPLink|Set-GPLink|Set-GPPermission|Import-GPO)\s", "medium",
+       "Group Policy object created, linked or changed from PowerShell",
+       (PS, "powershell -c New-GPLink -Name Updates -Target 'dc=corp,dc=local'"),
+       [(PS, "powershell -c Get-GPO -All")]),
+    Rule(("T1207",), WIN, ANY, r"\blsadump::dcshadow\b", "critical",
+         "Mimikatz DCShadow syntax",
+         (r"C:\t\m.exe", 'm.exe "lsadump::dcshadow /object:u /attribute:primaryGroupID /value:512"')),
+    Rule(("T1606",), WIN, ANY,
+         r"\b(New-AADIntSAMLToken|Export-AADIntADFSSigningCertificate|Open-AADIntOffice365Portal"
+         r"|ADFSDump(\.exe)?)\b", "critical", "token-forging tool syntax",
+         (PS, "powershell -c New-AADIntSAMLToken -ImmutableID x -Issuer y -PfxFileName z"), quiet=True),
+)
+
+
+# ── registry writes (Sysmon event 13) ───────────────────────────────────────
+# The same change whatever made it: reg.exe, PowerShell, an installer or an API
+# call from an implant. A machine only reports these for the keys its Sysmon
+# policy records, so a rule here is silent where the policy is not.
+@dataclass(frozen=True, eq=False)
+class RegRule:
+    tids: tuple
+    key: str                # regex over the registry key
+    details: str            # regex over the value written
+    severity: str
+    title: str
+    sample: tuple           # (image, key, details) that must fire
+    benign: tuple = ()
+    family: str = ""        # regex for the wider key family; a write under it shows the policy records it
+
+    def matches(self, key, details):
+        return bool(_compiled(self.key).search(key or "")
+                    and _compiled(self.details).search(details or ""))
+
+
+_ZERO, _ONE, _FOUR = r"^DWORD \(0x0+\)$", r"^DWORD \(0x0*1\)$", r"^DWORD \(0x0*4\)$"
+# Not ProgramData: its vendor folders are administrator-only, and both Defender's
+# own platform path and installer package caches live there (measured: the two
+# hits in 752k recorded events were exactly those).
+_WRITABLE = r"\\(Users\\|Windows\\Temp\\|Temp\\)"
+_SVC = r"HKLM\System\CurrentControlSet\Services" + "\\"
+SVCHOST = S32 + "svchost.exe"
+
+REG_RULES = (
+    RegRule(("T1686",), r"\\FirewallPolicy\\(Standard|Domain|Public)Profile\\EnableFirewall$", _ZERO,
+            "critical", "Windows Firewall profile turned off in the registry",
+            (SVCHOST, _SVC + r"SharedAccess\Parameters\FirewallPolicy\StandardProfile\EnableFirewall",
+             "DWORD (0x00000000)"),
+            ((SVCHOST, _SVC + r"SharedAccess\Parameters\FirewallPolicy\StandardProfile\EnableFirewall",
+              "DWORD (0x00000001)"),
+             (SVCHOST, _SVC + r"SharedAccess\Parameters\FirewallPolicy\FirewallRules\{1}", "v2.33|Action=Allow")),
+            family=r"\\Parameters\\FirewallPolicy\\"),
+    RegRule(("T1685", "T1489"),
+            r"\\Services\\(WinDefend|Sense|WdNisSvc|wscsvc|SecurityHealthService|mpssvc|Sysmon(64)?"
+            r"|EventLog|JarvisNativeSensor)\\Start$", _FOUR,
+            "critical", "security service set to disabled in the registry",
+            (S32 + "services.exe", _SVC + r"WinDefend\Start", "DWORD (0x00000004)"),
+            ((S32 + "services.exe", _SVC + r"WinDefend\Start", "DWORD (0x00000002)"),
+             (S32 + "services.exe", _SVC + r"Spooler\Start", "DWORD (0x00000004)")),
+            family=r"\\Services\\[^\\]+\\Start$"),
+    RegRule(("T1543",), r"\\Services\\[^\\]+\\ImagePath$", _WRITABLE,
+            "high", "service program set to a path any user can write",
+            (S32 + "services.exe", _SVC + r"Updater\ImagePath", r"C:\Users\Public\u.exe -k svc"),
+            ((S32 + "services.exe", _SVC + r"App\ImagePath",
+              r'"C:\Program Files\WindowsApps\Vendor.App_1.0_x64\svc.exe"'),
+             (S32 + "services.exe", _SVC + r"WinDefend\ImagePath",
+              r'"C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.1-0\MsMpEng.exe"')),
+            family=r"\\Services\\[^\\]+\\ImagePath$"),
+    RegRule(("T1547", "T1112"), r"\\CurrentVersion\\Run(Once)?\\[^\\]+$",
+            r"\b(powershell|pwsh|mshta|wscript|cscript|rundll32|regsvr32)(\.exe)?\b"
+            r"|\\(Windows\\Temp|AppData\\Local\\Temp|Users\\Public)\\",
+            "high", "autostart Run value set to a script host or a staging path",
+            (r"C:\Users\u\AppData\Local\Temp\a.exe",
+             r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\Run\Updater",
+             r"powershell -w hidden -f C:\Users\Public\u.ps1"),
+            ((r"C:\Program Files\App\setup.exe",
+              r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\RunOnce\Uninstall 1.0",
+              r'C:\WINDOWS\system32\cmd.exe /q /c rmdir /s /q "C:\Users\u\AppData\Local\App\1.0"'),
+             (r"C:\Users\u\Downloads\vc_redist.x64.exe",
+              r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce\{0e3bb569}",
+              r'"C:\ProgramData\Package Cache\{0e3bb569}\VC_redist.x64.exe" /burn.runonce'),
+             (r"C:\Program Files\App\app.exe",
+              r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\Run\App",
+              r'"C:\Program Files\App\app.exe" --background')),
+            family=r"\\CurrentVersion\\Run(Once)?\\"),
+    RegRule(("T1546", "T1112"), r"\\Image File Execution Options\\[^\\]+\\Debugger$", r"\S",
+            "critical", "Image File Execution Options debugger set in the registry",
+            (S32 + "reg.exe",
+             r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe\Debugger",
+             "cmd.exe"),
+            ((r"C:\ProgramData\Microsoft\Windows Defender\Platform\MsMpEng.exe",
+              r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\x.exe\MitigationOptions",
+              "QWORD (0x00501010-0x00000000)"),),
+            family=r"\\Image File Execution Options\\"),
+    RegRule(("T1003", "T1112"), r"\\WDigest\\UseLogonCredential$", _ONE,
+            "critical", "WDigest plaintext credential caching enabled in the registry",
+            (S32 + "reg.exe", r"HKLM\System\CurrentControlSet\Control\SecurityProviders\WDigest\UseLogonCredential",
+             "DWORD (0x00000001)"),
+            ((S32 + "reg.exe", r"HKLM\System\CurrentControlSet\Control\SecurityProviders\WDigest\UseLogonCredential",
+              "DWORD (0x00000000)"),),
+            family=r"\\SecurityProviders\\WDigest\\"),
+)
+
+
+def registry(key, details):
+    """Registry rules one value write is evidence of."""
+    key, details = (key or "")[:1024], (details or "")[:MAX_CMDLINE]
+    return [rule for rule in REG_RULES if rule.matches(key, details)]
+
+
+def registry_families(key):
+    """Titles of the registry rules whose key family this write falls under.
+
+    Seeing any write in a family shows this machine's event policy records it;
+    without that, the rule can never fire here and proves nothing here."""
+    key = (key or "")[:1024]
+    return [rule.title for rule in REG_RULES if rule.family and _compiled(rule.family).search(key)]
+
+
 # ── discovery ───────────────────────────────────────────────────────────────
 # (technique, platform, images, argument pattern). Ordinary one at a time;
 # reported only as a burst of distinct techniques under one parent.
@@ -821,7 +969,9 @@ def match(image, cmdline, platform, parent=""):
             continue
         m = rule.regex().search(cmd)
         if m:
-            span = "" if rule.quiet else (m.group(0) or cmd).strip()[:MAX_SPAN]
+            # a pattern that only asks "is there a command" quotes the command, not one letter
+            found = m.group(0).strip()
+            span = "" if rule.quiet else (found if len(found) >= 4 else cmd.strip())[:MAX_SPAN]
             out.append((rule, span))
     return out
 
@@ -841,8 +991,16 @@ def discovery(image, cmdline, platform):
 
 def technique_ids():
     """Every technique any rule or discovery entry can report."""
-    return ({tid for rule in RULES for tid in rule.tids}
+    return ({tid for rule in RULES + REG_RULES for tid in rule.tids}
             | {entry[0] for entry in DISCOVERY})
+
+
+def ways(tid, recorded=()):
+    """How many separate rules report this technique: distinct procedures, each
+    with its own sample that the coverage map replays. A registry rule counts
+    only when its title is in `recorded`: the keys this machine is known to log."""
+    return (sum(1 for rule in RULES if tid in rule.tids)
+            + sum(1 for rule in REG_RULES if tid in rule.tids and rule.title in recorded))
 
 
 def finding_title(rule):

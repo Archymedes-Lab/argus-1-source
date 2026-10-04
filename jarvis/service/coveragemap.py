@@ -239,7 +239,7 @@ def build(db_path, scheduler=None, now=None):
             feeds.setdefault(job, []).append(row["tid"])
         level, evidence = live_level(row, jobs, snaps, now)
         techniques.append({"tid": row["tid"], "name": row["name"], "tactics": row["tactics"],
-                           "level": level, "evidence": evidence,
+                           "level": level, "evidence": evidence, "ways": row.get("ways"),
                            "sources": jobs, "uptime": _technique_uptime(jobs, segs, now)})
     totals, tactics = _tally(techniques, (attack or {}).get("tactics") or {})
 

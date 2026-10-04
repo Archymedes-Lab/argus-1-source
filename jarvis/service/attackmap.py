@@ -187,20 +187,29 @@ def _reports(findings, tid):
                for f in findings)
 
 
+def _replay_registry(sample):
+    from jarvis.collectors.telemetry import sysmon
+    image, key, details = sample
+    return sysmon.audit(events=[{"id": 13, "image": image, "reg_key": key,
+                                 "reg_details": details, "time": _WHEN}])
+
+
 def _technique_probe(tid):
-    """Probe for one technique: every platform that has a rule for it must fire."""
+    """Probe for one technique: every rule that reports it must fire, so the
+    number of ways it is said to be caught (`techniques.ways`) is a tested one."""
     from jarvis.collectors.telemetry import techniques
 
     def probe():
         checked, fired = [], True
         for platform in (techniques.WIN, techniques.LINUX):
             rules = [r for r in techniques.RULES if tid in r.tids and r.platform == platform]
-            # The strongest rule represents the technique on this platform.
+            # The strongest rule names the technique on this platform; all are replayed.
             rules.sort(key=lambda r: ("critical", "high", "medium", "low").index(r.severity))
-            if rules:
-                rule = rules[0]
+            for rule in rules:
                 fired &= _reports(_replay(platform, [rule.sample], rule.sample_parent), tid)
-                checked.append(f"{platform}: {rule.title}")
+            if rules:
+                checked.append(f"{platform}: {rules[0].title}"
+                               + (f" and {len(rules) - 1} more" if len(rules) > 1 else ""))
             elif tid in techniques.DISCOVERY_SAMPLES[platform]:
                 samples = techniques.DISCOVERY_SAMPLES[platform]
                 others = [v for k, v in samples.items() if k != tid]
@@ -209,6 +218,12 @@ def _technique_probe(tid):
                 # Alone it is ordinary, and must stay unreported.
                 fired &= not _replay_reports_any(platform, [samples[tid]])
                 checked.append(f"{platform}: counted in a discovery burst, silent alone")
+        written = [r for r in techniques.REG_RULES if tid in r.tids]
+        for rule in written:
+            fired &= _reports(_replay_registry(rule.sample), tid)
+        if written:
+            checked.append(f"registry: {written[0].title}"
+                           + (f" and {len(written) - 1} more" if len(written) > 1 else ""))
         return fired and bool(checked), "; ".join(checked)
     return probe
 
@@ -220,6 +235,8 @@ def _replay_reports_any(platform, pairs):
 def _technique_jobs(tid):
     from jarvis.collectors.telemetry import techniques
     platforms = {r.platform for r in techniques.RULES if tid in r.tids}
+    if any(tid in r.tids for r in techniques.REG_RULES):
+        platforms.add(techniques.WIN)
     platforms |= {p for p, samples in techniques.DISCOVERY_SAMPLES.items() if tid in samples}
     return tuple(job for platform, job in ((techniques.WIN, "sysmon"),
                                            (techniques.LINUX, "sysmon_linux"))
@@ -478,13 +495,50 @@ def probe_hardware_addition():
         "code from a newly attached card or device ran before the operating system"
 
 
+def probe_injected_input():
+    import importlib
+
+    from jarvis.core.store import Store
+    analysis = importlib.import_module("jarvis.collectors.host.inputwatch.analysis")
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Store(os.path.join(tmp, "probe.db"))
+        try:
+            none = analysis.injected_findings(store, 0)
+            store.db.execute("INSERT INTO input_events(ts, kind, lower_il, class, fg) "
+                             "VALUES(1767225600, 'key', 1, 'key', 'notepad.exe')")
+            store.commit()
+            out = analysis.injected_findings(store, 0)
+        finally:
+            store.close()
+    return (not none and len(out) == 1 and out[0]["severity"] == "critical"
+            and "injected" in out[0]["title"]), \
+        "a keystroke no hardware produced, injected from a lower integrity level; nothing stored, no finding"
+
+
+def probe_firmware_change():
+    from jarvis.collectors.host import bootintegrity
+    base = {"firmware": "1.0", "option_roms": [], "boot_apps": [], "authorities": [],
+            "variables": {}, "pcrs": {"0": "0" * 64}}
+    same = bootintegrity.drift(base, dict(base), "probe")
+    changed = bootintegrity.drift(base, dict(base, pcrs={"0": "f" * 64}), "probe")
+    updated = bootintegrity.drift(base, dict(base, firmware="1.1", pcrs={"0": "f" * 64}), "probe")
+    return (not same and any("firmware code measured differently" in f["title"]
+                             and f["severity"] == "high" for f in changed)
+            and all(f["severity"] != "high" for f in updated)), \
+        ("firmware code measured differently with no version change (the effect is seen, not the "
+         "write); a version change with it is graded lower")
+
+
 def probe_technique_lookalikes():
     """No benign look-alike in the rule table may fire through the detectors."""
     from jarvis.collectors.telemetry import techniques
     wrong = [rule.title for rule in techniques.RULES for pair in rule.benign
              if any(set(rule.tids) & set(f.get("techniques") or ())
                     for f in _replay(rule.platform, [pair]))]
-    return not wrong, (f"{sum(len(r.benign) for r in techniques.RULES)} benign look-alikes"
+    wrong += [rule.title for rule in techniques.REG_RULES for sample in rule.benign
+              if any(f.get("techniques") for f in _replay_registry(sample))]
+    total = sum(len(r.benign) for r in techniques.RULES + techniques.REG_RULES)
+    return not wrong, (f"{total} benign look-alikes"
                        + (f"; fired: {', '.join(sorted(set(wrong))[:4])}" if wrong else ""))
 
 
@@ -555,6 +609,10 @@ _optional("T1078", probe_remote_logon, ("firewall",),
           lambda: "data" in _params("jarvis.collectors.network.firewall", "audit_windows"))
 _optional("T1133", probe_external_rdp, ("firewall",),
           lambda: "data" in _params("jarvis.collectors.network.firewall", "audit_windows"))
+_optional("T1674", probe_injected_input, ("input",),
+          lambda: _has("jarvis.collectors.host.inputwatch.analysis", "injected_findings"))
+_optional("T1495", probe_firmware_change, ("preos",),
+          lambda: _has("jarvis.collectors.host.bootintegrity", "drift"))
 _optional("T1187", probe_forced_authentication, ("sysmon",),
           lambda: _has("jarvis.collectors.telemetry.techniques", "outbound_smb"))
 _optional("T1568", probe_generated_domains, ("sysmon",),
@@ -587,10 +645,27 @@ def _context_only():
 
 # The hand-written probes above keep their technique; the rule table supplies
 # the rest. A broken rule module costs its own techniques, not the map.
+HAND_PROBES = frozenset(PROBES)     # probes of a detector other than the rule table
+
+
+def _both(first, second):
+    """A technique proven two ways is only as good as both: either one failing is a regression."""
+    def probe():
+        a_ok, a_what = first()
+        b_ok, b_what = second()
+        return a_ok and b_ok, a_what if b_what in a_what else f"{a_what}; {b_what}"
+    return probe
+
+
 CONTEXT_ONLY = frozenset()
 try:
     CONTEXT_ONLY = _context_only() - set(PROBES)
-    PROBES = {**_table_probes(), **PROBES}
+    for _tid, (_probe, _jobs) in _table_probes().items():
+        if _tid in PROBES:
+            _hand, _hand_jobs = PROBES[_tid]
+            PROBES[_tid] = (_both(_hand, _probe), tuple(dict.fromkeys(_hand_jobs + _jobs)))
+        else:
+            PROBES[_tid] = (_probe, _jobs)
 except Exception:       # pragma: no cover - surfaced by the map's own totals
     pass
 
@@ -603,6 +678,19 @@ HELD = {tid: "reported only as part of a burst of discovery commands, never by i
 # abuse is not.
 HELD["T1078"] = ("every successful remote logon is reported, but a stolen credential "
                  "looks the same as the owner's")
+# Recognised only by the command syntax of one named attack tool. A renamed
+# build, or a different tool doing the same thing, is not seen.
+for _tid in ("T1550", "T1207", "T1606"):
+    HELD[_tid] = "recognised only by the command syntax of named attack tools; another tool is not seen"
+# A real command or after-effect is reported, but nothing has shown that the
+# technique itself is caught (Jev-guided: scripts/reviews/coverage_next_advisory.py).
+HELD["T1189"] = ("a browser starting a script host is reported; a compromise that stays "
+                 "inside the browser is not seen")
+HELD["T1563"] = "the tscon command is reported; no emulation has shown a hijack being caught"
+HELD["T1484"] = ("Group Policy cmdlets are reported; this machine is in no domain, so nothing "
+                 "has exercised it")
+# Only techniques that have a probe are held; the rest keep whatever the map gives them.
+HELD = {tid: why for tid, why in HELD.items() if tid in PROBES or tid in _context_only()}
 CONTEXT_ONLY = frozenset(HELD)
 # Precision probes guard against false-positive regressions; not a technique.
 PRECISION = {"popular-domain filter": probe_popular_domain_not_flagged,
@@ -618,6 +706,27 @@ def _live(store, jobs):
             and score.freshness(snaps.get(j), JOBS[j][0], now) == "current"]
 
 
+def _recorded_registry(store):
+    """Registry rules whose keys this machine has been seen to log recently."""
+    try:
+        from jarvis.collectors.telemetry import sysmon
+        known = json.loads(store.get_meta(sysmon.REGISTRY_RECORDED_META, "") or "{}")
+        fresh = time.time() - sysmon.REGISTRY_RECORDED_FOR_S
+        return frozenset(title for title, seen in known.items()
+                         if isinstance(seen, (int, float)) and seen >= fresh)
+    except Exception:
+        return frozenset()
+
+
+def _ways(tid, recorded=()):
+    try:
+        from jarvis.collectors.telemetry import techniques
+        table = techniques.ways(tid, recorded)
+    except Exception:
+        table = 0
+    return table + (1 if tid in HAND_PROBES else 0) or 1
+
+
 def measure(store):
     """Build the coverage map. -> (findings, map)."""
     from jarvis.intel.gaps import COVERAGE
@@ -627,6 +736,7 @@ def measure(store):
     techniques = [r for r in catalogue if "." not in r["tid"]
                   and any(p in (r["platforms"] or "") for p in ("Windows", "Linux"))]
 
+    recorded = _recorded_registry(store)
     results, out = {}, []
     for tid, (probe, jobs) in PROBES.items():
         try:
@@ -690,6 +800,9 @@ def measure(store):
             # reporting at that moment: readers that know the collectors'
             # state now (coveragemap) re-derive the level from these.
             row["fired"], row["what"] = bool(results[tid][0]), results[tid][1]
+            # Separate procedures proven for it: the rules that report it, plus a
+            # hand-written probe of another detector where there is one.
+            row["ways"] = _ways(tid, recorded)
         rows.append(row)
 
     totals = {k: sum(1 for x in rows if x["level"] == k) for k in ("validated", "claimed", "regressed", "blind")}

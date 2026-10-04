@@ -113,13 +113,49 @@ def _save_baseline(store, key, data):
         pass
 
 
-def _diff(store, meta_key, seen, category, noun, why, changed_sev="critical"):
-    """Added / changed / removed against the stored baseline."""
+UNREAD_RUNS_MEDIUM = 3      # consecutive runs a source may stay unread before it is more than a note
+
+
+def _unread_runs(store, meta_key, incomplete):
+    """Consecutive runs on which part of this inventory could not be read."""
+    key = meta_key + "_unread_runs"
+    try:
+        runs = int(store.get_meta(key, "0") or 0) + 1 if incomplete else 0
+        store.set_meta(key, str(runs))
+    except Exception:
+        runs = 1 if incomplete else 0
+    return runs
+
+
+def _diff(store, meta_key, seen, category, noun, why, changed_sev="critical", unread=()):
+    """Added / changed / removed against the stored baseline.
+
+    `unread` holds key prefixes whose source could not be looked at on this run
+    (a Windows drive that is not answering after standby, a directory that
+    returned an error). What was recorded under them is kept: a source that
+    went dark is not an uninstall, and forgetting it would report everything
+    under it as new on the next good run (measured 2026-10-04: 23 extensions
+    installed months earlier reported as new after one such run).
+    """
     prev = _baseline(store, meta_key)
     out = []
     if prev is None:
         return out                     # no store: inventory only, no history
+    unread = tuple(unread)
+    # One dark run after standby is routine; a source that stays dark is lost
+    # visibility and is graded as such (Jev was split between low and medium).
+    runs = _unread_runs(store, meta_key, bool(unread))
+    gap_sev = "medium" if runs >= UNREAD_RUNS_MEDIUM else "low"
     if not prev:
+        if unread:
+            # Recording half an inventory as the baseline would make the other
+            # half "new" later. Wait for a run that can read all of it.
+            out.append(_finding(
+                category, gap_sev, f"{noun} baseline not established yet",
+                f"part of the inventory could not be read on this run "
+                f"({', '.join(sorted(unread))}; {runs} run(s) in a row); the baseline "
+                f"is recorded on the first run that can read all of it", "baseline"))
+            return out
         _save_baseline(store, meta_key, seen)
         if seen:
             out.append(_finding(
@@ -131,7 +167,9 @@ def _diff(store, meta_key, seen, category, noun, why, changed_sev="critical"):
 
     added = [k for k in seen if k not in prev]
     changed = [k for k in seen if k in prev and prev[k] != seen[k]]
-    removed = [k for k in prev if k not in seen]
+    held = {k: v for k, v in prev.items()
+            if k not in seen and unread and k.startswith(unread)}
+    removed = [k for k in prev if k not in seen and k not in held]
 
     for k in changed:
         out.append(_finding(
@@ -149,7 +187,14 @@ def _diff(store, meta_key, seen, category, noun, why, changed_sev="critical"):
             category, "low", f"{noun} removed: {k}",
             "no longer present; recorded so the inventory stays honest",
             k.split("::")[0]))
-    _save_baseline(store, meta_key, seen)
+    if held:
+        out.append(_finding(
+            category, gap_sev, f"{noun} inventory incomplete: {len(held)} not re-read",
+            f"their source could not be read on this run ({', '.join(sorted(unread))}; "
+            f"{runs} run(s) in a row), so they were not checked for change. What was recorded for them is "
+            f"kept and compared again on the next run that can read them; nothing "
+            f"is reported as removed or new on their account.", "baseline"))
+    _save_baseline(store, meta_key, {**held, **seen})
     return out
 
 

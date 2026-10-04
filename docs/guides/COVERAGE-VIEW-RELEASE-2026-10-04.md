@@ -75,4 +75,22 @@ itself as the entries age out.
 
 ## Outcome
 
-To be filled in from the live readback.
+Read back 2026-10-04 after the owner deployed (release `20261004T002941Z-4cc6288f6dd0`).
+
+| Expectation | Measured |
+|---|---|
+| release active, daemon healthy | yes |
+| gap list loses the 16 superseded and newly mapped entries, gains none | 207 to 191; exactly T1102, T1102.003, T1187, T1562 and 7 sub-techniques, T1568 and 3 sub-techniques, T1689 gone; nothing new |
+| `/api/coverage/live` small and fast | 2,137 bytes, 2 to 5 ms, 50 collectors |
+| stream delivers pulses and beats | 1 pulse and 2 beats in 13 s |
+| map unchanged | 89 validated, 25 claimed, 72 blind of 186 |
+| page renders from the live daemon | captured with headless Edge: panes, labels, neurons, live badge, 50 of 50 current |
+
+Right after the machine woke (WSL started 15:56:33) the page showed 27 current, 19 failing and
+4 stale collectors and 83 validated; it returned to 50 current and 89 validated as the
+collectors caught up. That is the view telling the truth about a monitor that was catching up.
+
+The security score read 56 at the first readback and 46 later the same afternoon. The drop was
+not this release: 23 editor extensions installed between February and May were reported as new
+(a baseline bug in the extension inventory after standby, fixed in the next release), plus one
+real Wi-Fi key-exchange failure event.

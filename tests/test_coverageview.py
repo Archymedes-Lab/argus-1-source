@@ -55,7 +55,7 @@ class BuildTests(unittest.TestCase):
         data = coveragemap.build(self.db)
         by_tid = {t["tid"]: t for t in data["techniques"]}
         self.assertEqual(by_tid["T1059"]["sources"], ["scan"])
-        self.assertEqual(by_tid["T1204"]["sources"], ["intrusion"])
+        self.assertEqual(by_tid["T1204"]["sources"][0], "intrusion")        # its own collector first
         self.assertEqual(by_tid["T1106"]["sources"], [])          # blind is never drawn as fed
         by_job = {c["job"]: c for c in data["collectors"]}
         self.assertEqual(set(by_job), set(JOBS))

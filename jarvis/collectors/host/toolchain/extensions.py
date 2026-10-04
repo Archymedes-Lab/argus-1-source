@@ -1,5 +1,6 @@
 """Editor and browser extensions."""
 
+import errno
 import os
 import time
 
@@ -16,21 +17,45 @@ EXT_ROOTS = (
 )
 
 
-def _extension_dirs(hosts):
-    out = []
+WIN_EXT_ROOTS = (".vscode/extensions", ".cursor/extensions", ".vscode-insiders/extensions",
+                 ".windsurf/extensions", ".antigravity/extensions")
+_ABSENT = (errno.ENOENT, errno.ENOTDIR)
+
+
+def _candidates(hosts):
     if "wsl" in hosts:
         for root in EXT_ROOTS:
-            path = os.path.expanduser(root)
-            if os.path.isdir(path):
-                out.append((path, "wsl"))
+            yield os.path.expanduser(root), "wsl"
     if "win" in hosts:
         for udir in _windows_profiles():
-            for rel in (".vscode/extensions", ".cursor/extensions",
-                        ".vscode-insiders/extensions",
-                        ".windsurf/extensions", ".antigravity/extensions"):
-                path = os.path.join(udir, rel.replace("/", os.sep))
-                if os.path.isdir(path):
-                    out.append((path, "win"))
+            for rel in WIN_EXT_ROOTS:
+                yield os.path.join(udir, rel.replace("/", os.sep)), "win"
+
+
+def _extension_dirs(hosts):
+    return [(path, host) for path, host in _candidates(hosts) if os.path.isdir(path)]
+
+
+def _prefix(root, host):
+    """What every identity found under this extension directory starts with."""
+    return f"{host}:{os.path.basename(os.path.dirname(root))}:"
+
+
+def _unread(hosts):
+    """Identity prefixes whose directory could not be looked at on this run.
+
+    Absent is an answer (the editor is not installed); an error is not. With no
+    Windows profile listed at all, the drive is stale or not mounted yet and
+    nothing under it was looked at."""
+    out = set()
+    if "win" in hosts and not _windows_profiles():
+        out.add("win:")
+    for path, host in _candidates(hosts):
+        try:
+            os.stat(path)
+        except OSError as exc:
+            if exc.errno not in _ABSENT:
+                out.add(_prefix(path, host))
     return out
 
 
@@ -45,7 +70,8 @@ def check_extensions(store=None, hosts=("wsl", "win")):
     """
     out, seen = [], {}
     roots = _extension_dirs(hosts)
-    if not roots:
+    unread = _unread(hosts)
+    if not roots and not unread:
         return [_finding(
             "editor", "ok", "no editor extensions installed",
             "no VS Code, Cursor, Windsurf or Antigravity extension directory "
@@ -58,11 +84,20 @@ def check_extensions(store=None, hosts=("wsl", "win")):
         try:
             entries = sorted(os.scandir(root), key=lambda e: e.name)
         except OSError:
+            unread.add(_prefix(root, host))
             continue
         for e in entries:
-            if not e.name or e.name.startswith(".") or not e.is_dir():
+            if not e.name or e.name.startswith("."):
                 continue
             manifest = os.path.join(e.path, "package.json")
+            try:
+                if not e.is_dir():
+                    continue
+                os.stat(manifest)
+            except OSError as exc:
+                if exc.errno not in _ABSENT:
+                    unread.add(_prefix(root, host))     # answered with an error, not "no"
+                continue
             doc = _json(manifest)
             if not isinstance(doc, dict):
                 continue
@@ -115,8 +150,8 @@ def check_extensions(store=None, hosts=("wsl", "win")):
                      "arrives, the package being trusted already and only its "
                      "contents being new. Confirm the update was one you or "
                      "the marketplace initiated.",
-                     changed_sev="high"))
-    if total and not any(f["severity"] in ("critical", "high") for f in out):
+                     changed_sev="high", unread=sorted(unread)))
+    if total and not unread and not any(f["severity"] in ("critical", "high") for f in out):
         out.append(_finding(
             "editor", "ok", f"{total} editor extensions inventoried",
             f"across {len(roots)} extension directories; contents match the "

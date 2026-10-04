@@ -104,6 +104,8 @@ COVERAGE.update({
     "T1200": "preos — option ROM code not in the measured-boot baseline",
     "T1568": "sysmon — bursts of lookups for names that do not exist",
     "T1689": "netwatch — Wi-Fi encryption weakened on a known network",
+    "T1674": "input — events Windows marks as injected by software rather than typed",
+    "T1495": "preos — firmware code measured differently with no version change",
 })
 
 # Ids ATT&CK retired by splitting them. Writeups keep citing the old id for

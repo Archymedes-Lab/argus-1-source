@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from jarvis.collectors.host import toolchain as tc
 from jarvis.collectors.host.toolchain import agents as tc_agents
@@ -308,6 +309,113 @@ class ExtensionKeyTests(unittest.TestCase):
         self.assertEqual(len(hit), 1)
         self.assertEqual(hit[0]["severity"], "high")
         self.assertIn("backdoored release", hit[0]["detail"])
+
+
+class ExtensionOutageTests(unittest.TestCase):
+    """A directory that cannot be read is not an uninstall, and its return is not an install."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmp.close()
+        self.store = Store(self.tmp.name)
+        self.dir = tempfile.TemporaryDirectory()
+        self.profile = os.path.join(self.dir.name, "Users", "u")
+        self.add(".cursor", "acme", "tool")
+        self.add(".antigravity", "acme", "lint")
+        self.profiles = [self.profile]
+        patcher = mock.patch.object(tc_extensions, "_windows_profiles", lambda: list(self.profiles))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        self.store.close()
+        os.unlink(self.tmp.name)
+        self.dir.cleanup()
+
+    def add(self, editor, publisher, name, version="1.0.0"):
+        _write(os.path.join(self.profile, editor, "extensions", f"{publisher}.{name}-{version}",
+                            "package.json"),
+               json.dumps({"publisher": publisher, "name": name, "version": version}))
+
+    def run_once(self):
+        return [f for f in tc.check_extensions(self.store, ("win",))
+                if "activate on every startup" not in f["title"]]
+
+    def baseline(self):
+        return json.loads(self.store.get_meta(tc_extensions._M_EXT, "") or "{}")
+
+    def test_a_drive_that_goes_dark_for_a_run_reports_neither_removals_nor_new_extensions(self):
+        self.run_once()
+        before = self.baseline()
+        self.assertEqual(sorted(before), ["win:.antigravity:acme.lint", "win:.cursor:acme.tool"])
+        self.profiles = []                                   # the Windows drive is not answering
+        dark = self.run_once()
+        self.assertEqual([(f["severity"], f["title"]) for f in dark],
+                         [("low", "extension inventory incomplete: 2 not re-read")])
+        self.assertEqual(self.baseline(), before)            # what was recorded is kept
+        self.profiles = [self.profile]
+        back = self.run_once()
+        self.assertEqual([f["severity"] for f in back], ["ok"])          # nothing "appeared"
+
+    def test_a_real_install_during_the_outage_is_still_reported_when_the_drive_returns(self):
+        self.run_once()
+        self.profiles = []
+        self.run_once()
+        self.add(".cursor", "evil", "stealer")
+        self.add(".cursor", "acme", "tool", "1.0.1")                     # and a version bump
+        self.profiles = [self.profile]
+        titles = sorted(f["title"] for f in self.run_once() if f["severity"] == "high")
+        self.assertEqual(titles, ["extension changed: win:.cursor:acme.tool",
+                                  "new extension: win:.cursor:evil.stealer"])
+
+    def test_a_readable_directory_that_lost_an_extension_still_reports_the_removal(self):
+        self.run_once()
+        import shutil
+        shutil.rmtree(os.path.join(self.profile, ".antigravity"))        # the editor was uninstalled
+        out = self.run_once()
+        self.assertIn(("low", "extension removed: win:.antigravity:acme.lint"),
+                      [(f["severity"], f["title"]) for f in out])
+        self.assertEqual(sorted(self.baseline()), ["win:.cursor:acme.tool"])
+
+    def test_one_directory_answering_with_an_error_is_held_while_the_other_is_still_compared(self):
+        self.run_once()
+        self.add(".cursor", "evil", "stealer")
+        sick = os.path.join(self.profile, ".antigravity", "extensions")
+        real = os.scandir
+
+        def scandir(path):
+            if os.path.normpath(path) == os.path.normpath(sick):
+                raise OSError(5, "Input/output error")
+            return real(path)
+        with mock.patch.object(tc_extensions.os, "scandir", scandir):
+            out = self.run_once()
+        self.assertEqual(sorted((f["severity"], f["title"]) for f in out),
+                         [("high", "new extension: win:.cursor:evil.stealer"),
+                          ("low", "extension inventory incomplete: 1 not re-read")])
+        self.assertIn("win:.antigravity:acme.lint", self.baseline())
+
+    def test_a_source_that_stays_dark_is_graded_up_and_a_good_run_resets_it(self):
+        self.run_once()
+        before = self.baseline()
+        self.profiles = []
+        grades = [self.run_once()[0]["severity"] for _ in range(4)]
+        self.assertEqual(grades, ["low", "low", "medium", "medium"])
+        self.assertEqual(self.baseline(), before)               # still nothing forgotten
+        self.profiles = [self.profile]
+        self.assertEqual([f["severity"] for f in self.run_once()], ["ok"])
+        self.profiles = []
+        self.assertEqual(self.run_once()[0]["severity"], "low")  # the count started again
+
+    def test_a_first_run_that_cannot_read_everything_records_no_baseline(self):
+        self.profiles = []
+        first = self.run_once()
+        self.assertEqual([(f["severity"], f["title"]) for f in first],
+                         [("low", "extension baseline not established yet")])
+        self.assertEqual(self.baseline(), {})
+        self.profiles = [self.profile]
+        self.assertEqual([f["title"] for f in self.run_once() if f["severity"] != "ok"], [])
+        self.assertEqual(len(self.baseline()), 2)
+        self.assertEqual([f["severity"] for f in self.run_once()], ["ok"])
 
 
 class RepoCacheTests(unittest.TestCase):

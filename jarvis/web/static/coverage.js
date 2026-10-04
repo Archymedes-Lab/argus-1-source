@@ -986,6 +986,8 @@ function describe(f) {
   const t = world.byTid[f.tid][0].tech;
   return { kind: `${t.tid} · ${LEVEL_TEXT[t.level][0]}`, title: t.name,
     text: (t.level === 'blind' ? 'No collector looks for this technique.' : t.evidence) +
+      // Said here and nowhere larger: a count of procedures is not a measure of completeness.
+      (t.level === 'validated' && t.ways ? ` Proven ${t.ways === 1 ? 'one way' : `${t.ways} separate ways`}.` : '') +
       (t.uptime != null ? ` At least one of its collectors had fresh evidence ${pctText(t.uptime)} of the last 24 h.` : ''),
     chips: [...t.tactics.map(pretty), ...t.sources] };
 }

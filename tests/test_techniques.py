@@ -109,8 +109,16 @@ class ParentAndNetworkTests(unittest.TestCase):
         word = r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"
         hit = tagged(win([(self.PS, "powershell -c calc")], parent=word))
         self.assertEqual([f["techniques"] for f in hit], [["T1203"]])
-        for parent in (r"C:\Windows\explorer.exe", r"C:\Program Files\Google\Chrome\chrome.exe", ""):
+        for parent in (r"C:\Windows\explorer.exe", r"C:\Windows\System32\cmd.exe", ""):
             self.assertEqual(tagged(win([(self.PS, "powershell -c calc")], parent=parent)), [], parent)
+        # A browser is a different parent with its own rule, and it is not a document application.
+        chrome = tagged(win([(self.PS, "powershell -c calc")],
+                            parent=r"C:\Program Files\Google\Chrome\chrome.exe"))
+        self.assertEqual([f["techniques"] for f in chrome], [["T1189"]])
+        self.assertIn("powershell -c calc", chrome[0]["detail"])        # the command, not one letter
+        # Browsers start cmd.exe for their own helpers all day; that is not reported.
+        self.assertEqual(tagged(win([(r"C:\Windows\System32\cmd.exe", "cmd /d /c helper.bat")],
+                                    parent=r"C:\Program Files\Google\Chrome\chrome.exe")), [])
         # A document application starting an ordinary program is not it either.
         self.assertEqual(tagged(win([(r"C:\Windows\System32\splwow64.exe", "splwow64 8192")],
                                     parent=word)), [])
@@ -152,6 +160,70 @@ class ParentAndNetworkTests(unittest.TestCase):
         self.assertEqual(tagged(sysmon.audit(events=same)), [])
         split = self.lookups(n // 2, guid="{1}") + self.lookups(n // 2, guid="{2}")
         self.assertEqual(tagged(sysmon.audit(events=split)), [])
+
+
+class RegistryRuleTests(unittest.TestCase):
+    def write(self, image, key, details):
+        return tagged(sysmon.audit(events=[{"id": 13, "image": image, "reg_key": key,
+                                            "reg_details": details, "time": WHEN}]))
+
+    def test_every_registry_sample_fires_and_no_lookalike_does(self):
+        for rule in techniques.REG_RULES:
+            out = self.write(*rule.sample)
+            self.assertTrue(any(set(rule.tids) <= set(f["techniques"]) for f in out), rule.title)
+            for sample in rule.benign:
+                self.assertEqual(self.write(*sample), [], f"{rule.title}: {sample[2]}")
+
+    def test_the_write_is_reported_whatever_program_made_it(self):
+        key = (r"HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy"
+               r"\PublicProfile\EnableFirewall")
+        for image in (r"C:\Windows\System32\reg.exe", r"C:\Users\x\AppData\Local\Temp\a.exe", ""):
+            out = self.write(image, key, "DWORD (0x00000000)")
+            self.assertEqual([f["severity"] for f in out], ["critical"], image)
+            self.assertEqual(out[0]["techniques"], ["T1686"])
+
+    def test_a_write_of_the_safe_value_or_an_unrelated_key_is_quiet(self):
+        base = r"HKLM\System\CurrentControlSet\Services"
+        for key, details in (
+                (base + r"\SharedAccess\Parameters\FirewallPolicy\PublicProfile\EnableFirewall", "DWORD (0x00000001)"),
+                (base + r"\WinDefend\Start", "DWORD (0x00000002)"),
+                (base + r"\Tcpip\Parameters\Interfaces\{1}\DhcpIPAddress", "192.0.2.4"),
+                ("", ""), (None, None)):
+            self.assertEqual(self.write("svchost.exe", key, details), [], key)
+
+    def test_a_registry_rule_is_a_proven_way_only_where_the_key_is_seen_to_be_recorded(self):
+        firewall = techniques.REG_RULES[0]
+        self.assertEqual(techniques.ways("T1686", {firewall.title}), techniques.ways("T1686") + 1)
+        row = {"id": 13, "image": "svchost.exe", "time": WHEN, "reg_details": "v2.33|Action=Allow",
+               "reg_key": r"HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters"
+                          r"\FirewallPolicy\FirewallRules\{1}"}
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "r.db"))
+            try:
+                self.assertEqual(attackmap._recorded_registry(store), frozenset())
+                sysmon.audit(store=store, events=[row])                 # a replay records nothing
+                self.assertEqual(attackmap._recorded_registry(store), frozenset())
+                data = {"events": [row], "complete": True, "rareComplete": True}
+                with mock.patch.object(sysmon, "_native", return_value=(data, 7)):
+                    sysmon.audit(store=store, incremental=True)        # a real run does
+                self.assertEqual(attackmap._recorded_registry(store), frozenset({firewall.title}))
+                self.assertEqual(attackmap._ways("T1686", attackmap._recorded_registry(store)),
+                                 attackmap._ways("T1686") + 1)
+                # ... and only while it is recent: an old sighting stops counting.
+                store.set_meta(sysmon.REGISTRY_RECORDED_META, json.dumps({firewall.title: 5}))
+                self.assertEqual(attackmap._recorded_registry(store), frozenset())
+                store.set_meta(sysmon.REGISTRY_RECORDED_META, "not json")
+                self.assertEqual(attackmap._recorded_registry(store), frozenset())
+            finally:
+                store.close()
+
+    def test_ways_counts_separate_rules_and_a_probe_replays_all_of_them(self):
+        self.assertGreaterEqual(techniques.ways("T1686"), 3)       # commands and the registry write
+        self.assertEqual(techniques.ways("T9999"), 0)
+        broken = list(techniques.REG_RULES)
+        with mock.patch.object(techniques, "registry", return_value=[]):
+            self.assertFalse(attackmap.PROBES["T1686"][0]()[0])   # the registry way alone failing is a regression
+        self.assertEqual(broken, list(techniques.REG_RULES))
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -371,6 +443,45 @@ class CollectorSeamTests(unittest.TestCase):
             text = load_win_script(script)
             for field in fields:
                 self.assertRegex(text, r"\b%s\b" % field, f"{script} no longer emits {field}")
+
+    def test_single_tool_and_untested_rules_are_held_not_validated(self):
+        for tid in ("T1550", "T1207", "T1606", "T1189", "T1563", "T1484"):
+            self.assertIn(tid, attackmap.CONTEXT_ONLY, tid)
+            self.assertTrue(attackmap.PROBES[tid][0]()[0], tid)        # the rule itself still fires
+            self.assertTrue(attackmap.HELD[tid])
+        for tid in ("T1674", "T1495", "T1566"):
+            self.assertNotIn(tid, attackmap.CONTEXT_ONLY, tid)
+
+    def test_a_technique_proven_two_ways_regresses_when_either_fails(self):
+        self.assertIn("T1543", attackmap.HAND_PROBES)
+        self.assertTrue(attackmap.PROBES["T1543"][0]()[0])
+        with mock.patch.object(techniques, "match", return_value=[]):      # the rule table goes quiet
+            self.assertFalse(attackmap.PROBES["T1543"][0]()[0])
+        self.assertEqual(attackmap._ways("T1543"), 2)                     # a command rule and the Linux detector
+        image_path = next(r.title for r in techniques.REG_RULES if "T1543" in r.tids)
+        self.assertEqual(attackmap._ways("T1543", {image_path}), 3)       # plus the registry write, once seen recorded
+        self.assertEqual(attackmap._ways("T1674"), 1)
+
+    def test_injected_input_is_judged_from_the_store_alone(self):
+        import importlib
+        analysis = importlib.import_module("jarvis.collectors.host.inputwatch.analysis")
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "i.db"))
+            try:
+                with mock.patch.object(analysis, "ingest") as ingest, \
+                        mock.patch.object(analysis, "running") as running:
+                    self.assertEqual(analysis.injected_findings(store, 0), [])
+                    store.db.execute("INSERT INTO input_events(ts, kind, lower_il, class, fg) "
+                                     "VALUES(100, 'move', 0, 'move', 'game.exe')")
+                    store.db.execute("INSERT INTO input_events(ts, kind, lower_il, class, fg) "
+                                     "VALUES(100, 'punct-key', 0, 'key', 'notepad.exe')")
+                    store.commit()
+                    out = analysis.injected_findings(store, 0)
+                    ingest.assert_not_called()          # the hook's own file is never read
+                    running.assert_not_called()
+            finally:
+                store.close()
+        self.assertEqual([f["severity"] for f in out], ["medium"])        # real typing is not "injected"
 
     def test_valid_accounts_is_held_at_claimed_with_its_reason(self):
         self.assertIn("T1078", attackmap.CONTEXT_ONLY)

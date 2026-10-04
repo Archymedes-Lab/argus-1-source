@@ -81,6 +81,16 @@ def audit(store, hours=24, pids=None, supervised=False):
         out += _latency_findings(store, beat)
         out += _typing_findings(store, beat)
 
+    out.extend(injected_findings(store, since))
+    return sort_findings(out)
+
+
+def injected_findings(store, since):
+    """Findings for input that no hardware produced, from the stored hook events.
+
+    Reads the store only, so it can be judged on its own (the coverage map's
+    probe gives it a store of its own with one synthetic event)."""
+    out = []
     # Only injected kinds. input_events also holds the timestamps of real
     # punctuation and digit presses (punct-key, digit-key) and injected key-ups;
     # grouping those in reported your own typing as "injected" input.
@@ -136,7 +146,7 @@ def audit(store, hours=24, pids=None, supervised=False):
         if evidence:
             finding["forensics"] = evidence
         out.append(finding)
-    return sort_findings(out)
+    return out
 
 
 def _represented_control_keys(store, members):

@@ -31,6 +31,7 @@ cannot be read produces exactly the same silence as a machine with nothing
 wrong.
 """
 
+import json
 import os
 import re
 from datetime import datetime, timezone
@@ -48,6 +49,8 @@ CAT_ORDER = {"impact": 0, "credential access": 1, "injection": 2,
              "visibility": 7}
 
 CHANNEL = "Microsoft-Windows-Sysmon/Operational"
+REGISTRY_RECORDED_META = "sysmon_registry_recorded_v1"      # {registry rule title: last seen}
+REGISTRY_RECORDED_FOR_S = 30 * 86400
 
 # Access masks that include reading another process's memory. 0x0010 is
 # PROCESS_VM_READ and 0x0400 is PROCESS_QUERY_INFORMATION; the classic
@@ -240,6 +243,7 @@ def rows_from_events(events):
             "signed": t.get("signed") or "", "sigstat": t.get("signature_status") or "",
             "dest": t.get("ip") or "", "dport": str(t.get("port") or ""),
             "initiated": t.get("initiated"), "dns_status": str(t.get("status") or ""),
+            "reg_key": t.get("key") or "", "reg_details": str(t.get("details") or ""),
             "cmdline": p.get("cmdline") or "", "type": t.get("tamper") or "",
             "start_module": t.get("start_module") or "",
             "start_function": t.get("start_function") or "",
@@ -578,7 +582,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
     technique_hits, discovery_seen = {}, []
-    smb_out, failed_lookups = {}, []
+    smb_out, failed_lookups, registry_hits, registry_seen = {}, [], {}, set()
     dropped, drop_times = {}, []
     boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
 
@@ -622,6 +626,12 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 dns_names.setdefault(q, set()).add(base)
                 failed_lookups.append((e.get("process_guid") or image, base, _epoch(e.get("time")),
                                        q, e.get("dns_status") or ""))
+        elif eid == 13:
+            registry_seen.update(techniques.registry_families(e.get("reg_key")))
+            for rule in techniques.registry(e.get("reg_key"), e.get("reg_details")):
+                hit = registry_hits.setdefault((rule, image), [0, e.get("reg_key") or "", e.get("time")])
+                hit[0] += 1
+                hit[2] = e.get("time") or hit[2]
         elif eid == 3:
             if techniques.outbound_smb(e.get("dest"), e.get("dport"), e.get("initiated")):
                 seen = smb_out.setdefault(image, [set(), e.get("time")])
@@ -763,6 +773,14 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                      techniques.burst_detail(tids, commands), parent)
         f["techniques"] = sorted(tids)
         out.append(f)
+    for (rule, image), (count, key, when) in registry_hits.items():
+        f = _finding(
+            "technique", rule.severity, f"{rule.title} ({', '.join(rule.tids)})",
+            f"{_base(image) or 'a process'} at {iso_of(when)}"
+            + (f", {count} times" if count > 1 else "")
+            + f": {key[-120:]}. Seen as the registry write itself, whatever tool made it.", image)
+        f["techniques"] = list(rule.tids)
+        out.append(f)
     for image, (dests, when) in smb_out.items():
         f = _finding(
             "technique", "high", f"{_base(image)} opened a file-share connection to the internet (T1187)",
@@ -808,6 +826,16 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     # -- correlation with the intelligence corpus --------------------------
     if store is not None:
         out += _correlate(store, dns_names, proc_hashes)
+
+    # Which registry key families this machine's policy has been seen to record:
+    # the coverage map counts a registry rule as proof only for those.
+    if store is not None and registry_seen:
+        try:
+            known = json.loads(store.get_meta(REGISTRY_RECORDED_META, "") or "{}")
+        except (TypeError, ValueError):
+            known = {}
+        known.update(dict.fromkeys(registry_seen, now()))
+        store.set_meta(REGISTRY_RECORDED_META, json.dumps(known))
 
     # Persist and re-surface. Reading incrementally means each run sees only
     # new events, so anything worth reporting has to outlive its own snapshot.

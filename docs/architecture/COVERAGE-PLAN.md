@@ -83,8 +83,57 @@ A probe is registered only where its detector exists (`attackmap._optional`), so
 that lacks a module keeps that technique's mapped level instead of reporting a regression.
 A contract test ties the fields the probes build to the fields the collection scripts emit.
 
-Still open: `partial` level for sub-techniques; T1674 input injection (the detector exists, no
-probe yet); Phase 3 B file canaries, the rest of C, D, E and F; Arena emulation.
+Still open after that round: `partial` level for sub-techniques; T1674 input injection; Phase 3 B
+file canaries, the rest of C, D, E and F; Arena emulation.
+
+## Status 2026-10-04 (later): depth, three more techniques, and stricter holds
+
+Live before this round: 89 validated, 25 claimed, 72 blind of 186. This round projects
+**91 validated, 31 claimed, 64 blind of 186** in the narrow release (52% of 176 once the
+catalogue reloads). The number moves little on purpose; most of the round is about how well
+the validated ones are proven.
+
+- **New, validated.** T1674 input injection: the input monitor's injected-event rule, now a
+  function that reads the store alone (`inputwatch.analysis.injected_findings`), probed with a
+  store of its own. T1495 firmware corruption, as an effect: firmware code measured differently
+  (PCR 0) with no version change. T1566 phishing, as an effect: a script, shortcut or program
+  run straight out of a mail attachment cache or an archive. The message itself is never seen,
+  and the finding says so.
+- **New, held at claimed.** T1189 (a browser starting a script host; `cmd.exe` is excluded
+  because browsers start it for their own helpers all day), T1563 (`tscon`), T1484 (Group Policy
+  cmdlets; this machine is in no domain), T1207 and T1606 (one attack tool's syntax each).
+- **Demoted.** T1550 was counted as validated on Mimikatz syntax alone. The same rule that holds
+  T1207 and T1606 now holds it. Jev judged the demotion consistent (0.89).
+- **Registry-write rules (`techniques.REG_RULES`).** The same change whatever made it: reg.exe,
+  PowerShell, an installer or an API call. Firewall profile off (T1686), a security service set
+  to disabled (T1685), a service program in a user-writable path (T1543), a Run value naming a
+  script host or a staging path (T1547), an Image File Execution Options debugger (T1546),
+  WDigest plaintext caching (T1003). They add depth to techniques already validated; none
+  validates a technique on its own account.
+- **Ways proven.** Each row carries how many separate procedures are proven for it. A probe now
+  replays every rule for its technique, and a technique with a hand probe and table rules needs
+  both. A registry rule counts only where its key family has been seen recorded in the last 30
+  days (`sysmon_registry_recorded_v1`, written by real runs, never by a replay): Jev put 0.11 on
+  letting a silent rule count. The number is shown only in a technique's detail text (Jev 0.87
+  for that over a headline count), because a count of procedures is not completeness.
+- **Not buildable with current data, measured.** Mass file deletion or rewrite (T1486) and
+  system-binary replacement on Linux (T1554): the Sysmon policy records file deletes only for
+  `.ps1` in Temp and almost no file creation. They need a policy change or decoy files, both
+  owner decisions.
+
+Noise, measured before scoring: 752,569 retained events replayed with
+`python3 -m scripts.dev.replay_techniques`. Two registry rules fired on real history, both
+false: Defender's own service path under `ProgramData`, and an installer's `RunOnce` from the
+package cache. `ProgramData` was removed from both patterns and both cases are now look-alikes
+in the rule table. After that the new rules report nothing on this machine's history.
+
+Also fixed, found while reading the score: the editor-extension inventory forgot everything
+under a directory it could not read for one run, then reported all of it as new on the next
+(23 false highs after a standby). See `COVERAGE-DEPTH-RELEASE-2026-10-04.md`.
+
+Still open: `partial` level for sub-techniques; file canaries and a wider Sysmon file policy
+(owner decisions); the rest of Phase 3 C, D, E and F; Arena emulation; a live positive control
+for a single-action rule.
 
 ## Rules for every phase
 
