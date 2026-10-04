@@ -182,9 +182,16 @@ def peer_closed(sock):
         return True
 
 
+BEAT = b"event: beat\ndata: {}\n\n"
+
+
 def run_stream(hub, write, *, gone=None, stop=None, clock=time.monotonic, sleep=None,
-               lifetime=MAX_LIFETIME_S, keepalive=KEEPALIVE_S):
+               lifetime=MAX_LIFETIME_S, keepalive=KEEPALIVE_S, beat=False):
     """Write pulses to one client until it leaves or the lifetime ends.
+
+    With `beat`, the line sent when nothing has changed is an event the page
+    can see rather than a comment only the socket sees: a page that shows live
+    state has to tell "nothing changed" from "nothing is arriving".
 
     `write(bytes)` raises OSError when the client is gone; `gone()`, checked on
     every tick, notices sooner. Returns the number of pulse events sent.
@@ -204,7 +211,7 @@ def run_stream(hub, write, *, gone=None, stop=None, clock=time.monotonic, sleep=
             write(frame(pulse))
             last_version, last_io, sent = pulse.get("version"), now, sent + 1
         elif now - last_io >= keepalive:
-            write(b": keepalive\n\n")
+            write(BEAT if beat else b": keepalive\n\n")
             last_io = now
         if now - start >= lifetime:
             break

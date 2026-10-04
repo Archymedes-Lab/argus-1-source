@@ -17,9 +17,18 @@ Uptime is read from the collector receipts (defender_runs). A collector is up
 while its newest complete receipt is no older than the score's own staleness
 limit; partial and unavailable runs do not keep it up. Time before a collector's
 first receipt is unknown and left out, never counted as up or down.
+
+The page does not poll that whole summary to stay live. `live()` is a compact
+state (which collector ran when, what is running, whether any tile changed
+level) cheap enough to rebuild twice a second, pushed to the page as it
+changes; the page fetches the full summary again only when `levels` moves.
 """
+import hashlib
+import json
 import re
+import sqlite3
 import time
+from pathlib import Path
 
 from jarvis.core.store import Store
 from jarvis.response.reporting import score
@@ -261,3 +270,110 @@ def build(db_path, scheduler=None, now=None):
         "score": ({"score": verified.get("score"), "grade": verified.get("grade"),
                    "at": verified.get("at")} if verified else None),
     }
+
+
+# ── the live feed ───────────────────────────────────────────────────────────
+LIVE_PERIOD_S = 0.5         # the shared live state is rebuilt at most this often
+LIVE_STREAMS = 4            # open /api/coverage/stream connections at once
+LIVE_BEAT_S = 5             # a visible heartbeat this often while nothing changes
+_INGESTED = re.compile(r"(\d+) events? committed")
+_live_cache = {}            # db_path -> {"map": (raw, rows), "open": {job: (ts, n)}}
+
+
+def _open_serious(conn, job, run, cache):
+    """Open critical and high findings in a snapshot, read once per run.
+
+    `run` identifies the run: its second and its measured duration, so two runs
+    stamped in the same second are still told apart."""
+    known = cache.get(job)
+    if known and known[0] == run:
+        return known[1]
+    row = conn.execute("SELECT payload FROM snapshots WHERE kind=?", (job,)).fetchone()
+    try:
+        findings = json.loads(row[0]) if row else []
+    except (TypeError, ValueError):
+        findings = []
+    n = sum(1 for f in findings if isinstance(f, dict)
+            and f.get("severity") in ("critical", "high"))
+    cache[job] = (run, n)
+    return n
+
+
+def _map_rows(raw, cache):
+    """The stored map's technique rows with their feeding jobs, parsed once per map."""
+    known = cache.get("map")
+    if known and known[0] == raw:
+        return known[1], known[2]
+    try:
+        attack = json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        attack = None
+    rows = [(row, [] if row["level"] == "blind" else sources(row["tid"], row.get("evidence")))
+            for row in (attack or {}).get("techniques", [])]
+    cache["map"] = (raw, rows, (attack or {}).get("at"))
+    return rows, (attack or {}).get("at")
+
+
+def live(db_path, scheduler=None, now=None):
+    """What changed since the page last looked. Never raises: a failure is a
+    state with `ok: false`, which the page shows as "not live", never as calm.
+
+    Read-only, through a read-only connection of its own: it runs twice a
+    second while a page is open and must not take the store's write path.
+    """
+    now = time.time() if now is None else now
+    cache = _live_cache.setdefault(db_path, {"open": {}})
+    try:
+        # as_uri(): a Windows path or one with spaces is a valid URI this way.
+        conn = sqlite3.connect(Path(db_path).absolute().as_uri() + "?mode=ro", uri=True, timeout=2)
+        try:
+            snaps = {kind: {"ts": ts, "error": error, "duration": duration}
+                     for kind, ts, error, duration in
+                     conn.execute("SELECT kind, ts, error, duration FROM snapshots")}
+            meta = dict(conn.execute("SELECT k, v FROM meta WHERE k IN (?, ?)",
+                                     (attackmap.META, "native_delivery")))
+            collectors = {}
+            for job, (interval, _label) in JOBS.items():
+                snap = snaps.get(job)
+                ts = int(snap["ts"]) if snap and snap.get("ts") else 0
+                collectors[job] = [ts, score.freshness(snap, interval, now),
+                                   _open_serious(conn, job, (ts, snap.get("duration")),
+                                                 cache["open"]) if ts else 0]
+        finally:
+            conn.close()
+    except (sqlite3.Error, OSError) as exc:
+        return _versioned({"ok": False, "error": type(exc).__name__, "at": int(now)})
+
+    rows, map_at = _map_rows(meta.get(attackmap.META), cache)
+    levels = hashlib.sha256("".join(
+        f"{row['tid']}:{live_level(row, jobs, snaps, now)[0]};"
+        for row, jobs in rows).encode()).hexdigest()[:16]
+
+    running = []
+    if scheduler is not None:
+        try:
+            running = list(scheduler.wake_phase().get("current") or [])
+        except Exception:
+            running = []
+
+    ingest = None
+    try:
+        delivery = json.loads(meta.get("native_delivery") or "null")
+        found = _INGESTED.search(delivery["stages"]["ingested"]["detail"])
+        if found:
+            # Events the native sensor's last pass committed to the history.
+            ingest = {"events": int(found.group(1)), "at": int(delivery["at"])}
+    except (TypeError, ValueError, KeyError):
+        ingest = None
+
+    return _versioned({"ok": True, "at": int(now), "map_at": map_at, "levels": levels,
+                       "running": running, "c": collectors, "ingest": ingest})
+
+
+def _versioned(state):
+    """Add `version`: a digest of everything but the clock, so the stream can
+    tell a real change from a re-send."""
+    body = {k: v for k, v in state.items() if k != "at"}
+    state["version"] = hashlib.sha256(
+        json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16]
+    return state

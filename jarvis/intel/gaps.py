@@ -92,6 +92,29 @@ COVERAGE.update({
 for _tid in sorted(techniques.technique_ids()):
     COVERAGE.setdefault(_tid, "sysmon / sysmon_linux — process-creation technique rules")
 
+# Proven by a probe against an existing collector (service/attackmap.py). A
+# test keeps this in step with the probes, so the gap report and the coverage
+# map cannot disagree about what is looked for.
+COVERAGE.update({
+    "T1068": "evasion / sysmon — exploitable kernel drivers; system services starting a shell",
+    "T1102": "evasion — dead-drop and tunnel hosts in the DNS cache",
+    "T1185": "internet — browsers started with a remote-debugging port",
+    "T1187": "sysmon — outbound file-share connections to public addresses",
+    "T1195": "toolchain — package registry and index redirection",
+    "T1200": "preos — option ROM code not in the measured-boot baseline",
+    "T1568": "sysmon — bursts of lookups for names that do not exist",
+    "T1689": "netwatch — Wi-Fi encryption weakened on a known network",
+})
+
+# Ids ATT&CK retired by splitting them. Writeups keep citing the old id for
+# years; it is covered when a successor is, and is never mapped by itself.
+SUPERSEDED = {"T1562": ("T1685", "T1686", "T1688", "T1689", "T1690")}
+
+
+def _successors(parent):
+    mapped = [t for t in SUPERSEDED.get(parent, ()) if t in COVERAGE]
+    return f"superseded by {', '.join(mapped)}, which are mapped" if mapped else None
+
 # Techniques worth naming explicitly as uncovered when intel raises them, with
 # the reason they are hard rather than merely missing.
 KNOWN_BLIND = {
@@ -170,7 +193,7 @@ def gaps(store, min_docs=1):
     for r in rows:
         tid, n = r["norm"], r["doc_count"]
         parent = tid.split(".")[0]
-        where = COVERAGE.get(tid) or COVERAGE.get(parent)
+        where = COVERAGE.get(tid) or COVERAGE.get(parent) or _successors(parent)
         if where:
             covered.append((tid, n, where))
             continue

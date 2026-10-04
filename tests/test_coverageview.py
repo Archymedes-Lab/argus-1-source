@@ -241,6 +241,88 @@ class UptimeTests(unittest.TestCase):
         self.assertLess(next(c for c in again["collectors"] if c["job"] == "scan")["uptime"]["pct24"], 0.8)
 
 
+class LiveTests(unittest.TestCase):
+    """The compact state the page is kept live by (coveragemap.live)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.db = os.path.join(self.tmp.name, "live.db")
+        self.store = Store(self.db)
+        self.addCleanup(self.store.close)
+        self.store.set_meta(attackmap.META, json.dumps({
+            "at": 100, "totals": {}, "tactics": {"execution": {}},
+            "techniques": [{"tid": "T1059", "name": "Interpreter", "tactics": ["execution"],
+                            "level": "validated", "evidence": "x; live via scan",
+                            "fired": True, "what": "x"}]}))
+        self.store.save_snapshot("scan", [{"severity": "high", "title": "a"},
+                                          {"severity": "critical", "title": "b"},
+                                          {"severity": "low", "title": "c"}])
+        self.store.commit()
+        coveragemap._live_cache.clear()
+
+    def test_every_collector_is_listed_with_its_run_state_and_serious_findings(self):
+        state = coveragemap.live(self.db)
+        self.assertTrue(state["ok"])
+        self.assertEqual(set(state["c"]), set(JOBS))
+        ts, freshness, serious = state["c"]["scan"]
+        self.assertEqual((freshness, serious), ("current", 2))
+        self.assertAlmostEqual(ts, time.time(), delta=5)
+        self.assertEqual(state["c"]["hidden"], [0, "missing", 0])      # never ran: not quiet
+        self.assertEqual(state["map_at"], 100)
+        self.assertLess(len(json.dumps(state)), 6000)                  # it has to stay cheap to push
+
+    def test_version_tracks_change_and_ignores_the_clock(self):
+        now = time.time()
+        first = coveragemap.live(self.db, now=now)
+        self.assertEqual(coveragemap.live(self.db, now=now + 1)["version"], first["version"])
+        # A second run, possibly stamped in the same second as the first.
+        self.store.save_snapshot("scan", [{"severity": "high", "title": "a"}], duration=1.25)
+        self.store.commit()
+        again = coveragemap.live(self.db, now=now + 2)
+        self.assertNotEqual(again["version"], first["version"])
+        self.assertEqual(again["c"]["scan"][2], 1)                     # counted again for the new run
+
+    def test_levels_move_when_a_pane_would_change_between_map_measurements(self):
+        fresh = coveragemap.live(self.db)
+        stale = coveragemap.live(self.db, now=time.time() + JOBS["scan"][0] * 10 + 600)
+        self.assertEqual(stale["c"]["scan"][1], "stale")
+        self.assertNotEqual(stale["levels"], fresh["levels"])
+        self.assertNotEqual(stale["version"], fresh["version"])
+
+    def test_running_comes_from_the_scheduler_and_a_broken_one_is_empty(self):
+        scheduler = mock.Mock()
+        scheduler.wake_phase.return_value = {"current": ["scan"]}
+        self.assertEqual(coveragemap.live(self.db, scheduler)["running"], ["scan"])
+        scheduler.wake_phase.side_effect = RuntimeError("down")
+        self.assertEqual(coveragemap.live(self.db, scheduler)["running"], [])
+
+    def test_ingest_is_the_sensor_figure_or_absent_never_invented(self):
+        self.assertIsNone(coveragemap.live(self.db)["ingest"])
+        for value, want in (
+                ({"at": 50, "stages": {"ingested": {"detail": "141 events committed to the history"}}},
+                 {"events": 141, "at": 50}),
+                ({"at": 50, "stages": {"ingested": {"detail": "nothing new"}}}, None),
+                ("not json", None)):
+            self.store.set_meta("native_delivery", value if isinstance(value, str) else json.dumps(value))
+            self.store.commit()
+            self.assertEqual(coveragemap.live(self.db)["ingest"], want, value)
+
+    def test_an_unreadable_database_is_a_failed_state_not_an_exception_or_a_new_file(self):
+        missing = os.path.join(self.tmp.name, "absent.db")
+        state = coveragemap.live(missing)
+        self.assertFalse(state["ok"])
+        self.assertIn("version", state)
+        self.assertFalse(os.path.exists(missing))                      # read-only: it creates nothing
+
+    def test_it_reads_through_a_read_only_connection(self):
+        before = os.stat(self.db).st_mtime_ns
+        with mock.patch.object(coveragemap, "Store") as store:
+            coveragemap.live(self.db)
+            store.assert_not_called()
+        self.assertEqual(os.stat(self.db).st_mtime_ns, before)
+
+
 class RouteTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -274,6 +356,52 @@ class RouteTests(unittest.TestCase):
         status, _headers, body = self.get("/api/coverage")
         self.assertEqual(status, 200)
         self.assertEqual(len(json.loads(body)["collectors"]), len(JOBS))
+
+    def stream(self, headers=None):
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=5)
+        conn.request("GET", "/api/coverage/stream", headers=headers or {})
+        self.addCleanup(conn.close)
+        return conn.getresponse()
+
+    def test_live_state_is_served_and_streamed_within_bounds(self):
+        status, _headers, body = self.get("/api/coverage/live")
+        self.assertEqual(status, 200)
+        self.assertEqual(set(json.loads(body)["c"]), set(JOBS))
+
+        self.assertEqual(self.stream({"Sec-Fetch-Site": "cross-site"}).status, 403)
+
+        open_streams = []
+        beat = mock.patch.object(coveragemap, "LIVE_BEAT_S", 0.3)
+        beat.start()
+        self.addCleanup(beat.stop)
+        for _ in range(coveragemap.LIVE_STREAMS):
+            res = self.stream({"Sec-Fetch-Site": "same-origin"})
+            self.assertEqual(res.status, 200)
+            self.assertTrue(res.getheader("Content-Type").startswith("text/event-stream"))
+            open_streams.append(res)
+        lines, deadline = [], time.time() + 5
+        while "event: pulse" not in lines and time.time() < deadline:
+            lines.append(open_streams[0].fp.readline().decode().rstrip("\n"))
+        self.assertIn("event: pulse", lines)
+        # Nothing changes in this empty database, so the next thing sent is the
+        # heartbeat the page uses to tell quiet from dead.
+        while "event: beat" not in lines and time.time() < deadline:
+            lines.append(open_streams[0].fp.readline().decode().rstrip("\n"))
+        self.assertIn("event: beat", lines)
+        self.assertEqual(lines.count("event: pulse"), 1)   # the state itself was not re-sent
+        self.assertEqual(self.stream().status, 503)        # every slot taken: refused, not queued
+        for res in open_streams:
+            res.close()
+
+    def test_the_page_has_the_controls_its_script_drives(self):
+        page = self.get("/coverage")[2].decode()
+        script = self.get("/static/coverage.js")[2].decode()
+        import re
+        for ident in sorted(set(re.findall(r"\$\('([a-z]+)'\)", script))):
+            self.assertIn(f'id="{ident}"', page, ident)
+        self.assertIn('data-theme="light"', page)           # both themes are styled
+        self.assertIn("prefers-reduced-motion", page)
 
     def test_page_loads_no_inline_or_foreign_script(self):
         _status, _headers, body = self.get("/coverage")

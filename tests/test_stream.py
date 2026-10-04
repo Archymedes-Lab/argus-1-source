@@ -143,6 +143,22 @@ class RunStreamTests(unittest.TestCase):
         self.assertEqual(sent, 1)
         self.assertGreaterEqual(text.count(": keepalive"), 2)
 
+    def test_a_beat_is_an_event_the_page_can_see_and_a_keepalive_is_not(self):
+        for beat, want in ((False, b": keepalive\n\n"), (True, stream.BEAT)):
+            hub = stream.Hub("db", None, builder=lambda d, s: {"version": "same"})
+            out, ticks = [], iter(range(0, 1000, 3))
+            stop = threading.Event()
+
+            def sleep(_s):
+                if len(out) >= 4:
+                    stop.set()
+
+            stream.run_stream(hub, out.append, stop=stop, clock=lambda: next(ticks), sleep=sleep,
+                              keepalive=5, beat=beat)
+            self.assertIn(want, out)
+            self.assertEqual(sum(1 for chunk in out if chunk.startswith(b"id:")), 1)   # state sent once
+        self.assertTrue(stream.BEAT.startswith(b"event: beat\n"))
+
     def test_lifetime_bounds_the_stream(self):
         sent, _ = self._run(["a"], lifetime=20)
         self.assertEqual(sent, 1)   # returned instead of looping forever

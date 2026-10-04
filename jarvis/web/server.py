@@ -401,6 +401,7 @@ class Handler(BaseHTTPRequestHandler):
     db_path = DEFAULT_DB
     scheduler = None
     hub = None          # stream.Hub, shared by every /api/pulse and /api/stream client
+    cover_hub = None    # stream.Hub for the /coverage page's live state
 
     def log_message(self, *a):
         pass  # the dashboard polls constantly; access logs would be noise
@@ -498,13 +499,25 @@ class Handler(BaseHTTPRequestHandler):
             Handler.hub = stream.Hub(self.db_path, self.scheduler)
         return Handler.hub
 
-    def _stream(self):
-        """Server-Sent Events of the live pulse (see web/stream.py)."""
+    def _cover_hub(self):
+        """One shared live state for every open /coverage page, rebuilt at most
+        twice a second however many are listening, with its own bounded slots."""
+        hub = Handler.cover_hub
+        if hub is None or hub.db_path != self.db_path or hub.scheduler is not self.scheduler:
+            from jarvis.service import coveragemap
+            hub = Handler.cover_hub = stream.Hub(
+                self.db_path, self.scheduler, period=coveragemap.LIVE_PERIOD_S,
+                max_streams=coveragemap.LIVE_STREAMS, builder=coveragemap.live)
+        return hub
+
+    def _stream(self, hub=None, beat=None):
+        """Server-Sent Events of the live pulse (see web/stream.py). `beat` is
+        the interval of a visible heartbeat, for pages that show liveness."""
         # Checked before a slot is taken: a cross-site page cannot read the
         # stream, but without this it could still hold every slot open.
         if not self._same_origin():
             return self._send(403, json.dumps({"error": "cross-site"}))
-        hub = self._hub()
+        hub = hub or self._hub()
         if not hub.acquire():
             return self._send(503, json.dumps({"error": "too many live streams; poll /api/pulse"}))
         try:
@@ -520,8 +533,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
 
             try:
+                options = {"keepalive": beat, "beat": True} if beat else {}
                 stream.run_stream(hub, write,
-                                  gone=lambda: stream.peer_closed(self.connection))
+                                  gone=lambda: stream.peer_closed(self.connection), **options)
             except (BrokenPipeError, ConnectionResetError, OSError):
                 pass  # the client left; nothing to deliver
         finally:
@@ -803,6 +817,13 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in COVERAGE_ASSETS:
             return self._coverage_asset(url.path)
 
+        if url.path == "/api/coverage/live":
+            return self._send(200, json.dumps(self._cover_hub().latest(), default=str))
+
+        if url.path == "/api/coverage/stream":
+            from jarvis.service import coveragemap
+            return self._stream(self._cover_hub(), beat=coveragemap.LIVE_BEAT_S)
+
         if url.path == "/api/coverage":
             from jarvis.service import coveragemap
             return self._send(200, json.dumps(
@@ -896,6 +917,7 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
     Handler.db_path = db_path
     Handler.scheduler = scheduler
     Handler.hub = stream.Hub(db_path, scheduler)
+    Handler.cover_hub = None        # built on first use, for this database and scheduler
     # Localhost only, deliberately and without an override.
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     # flush=True so journalctl shows these immediately under systemd, where

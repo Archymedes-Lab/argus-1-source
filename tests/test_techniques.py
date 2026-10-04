@@ -377,6 +377,32 @@ class CollectorSeamTests(unittest.TestCase):
         self.assertIn("stolen credential", attackmap.HELD["T1078"])
         self.assertTrue(attackmap.PROBES["T1078"][0]()[0])      # the probe still runs
 
+    def test_gap_report_and_coverage_map_agree_on_what_is_looked_for(self):
+        from jarvis.intel import gaps
+        self.assertEqual(sorted(set(attackmap.PROBES) - set(gaps.COVERAGE)), [])
+
+    def test_a_retired_id_is_covered_through_its_successors_only(self):
+        from jarvis.intel import gaps
+        self.assertNotIn("T1562", gaps.COVERAGE)                 # never mapped by itself
+        self.assertIn("T1685", gaps._successors("T1562"))
+        self.assertIsNone(gaps._successors("T1497"))
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "g.db"))
+            try:
+                for tid in ("T1562.001", "T1497.001"):
+                    store.db.execute(
+                        """INSERT INTO indicators(kind,value,norm,confidence,topic,context,malware,
+                                                  source_url,first_seen,last_seen,source,doc_count,status)
+                           VALUES('attack',?,?,'high','','','','',0,0,'exa',3,'active')""", (tid, tid))
+                store.db.execute("INSERT INTO attack_techniques(tid,name,tactics,platforms,updated) "
+                                 "VALUES('T1497','Sandbox Evasion','stealth','Windows',1)")
+                store.commit()
+                findings, covered, _ = gaps.gaps(store)
+            finally:
+                store.close()
+        self.assertIn("T1562.001", [c[0] for c in covered])
+        self.assertEqual([f["title"].split()[0] for f in findings], ["T1497.001"])
+
     def test_claims_no_detector_backs_are_gone(self):
         from jarvis.intel import gaps
         for tid in ("T1497", "T1571"):

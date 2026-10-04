@@ -33,6 +33,29 @@ change. T1620 stays claimed because its classifier module is not in the live rel
 Roll back if the service does not come back `ready`, if any touched collector errors, goes
 stale or changes its findings outside the items above, or if the map reports a regression.
 
-## Outcome
+## Outcome (measured 2026-10-04, 01:42 to 01:50 EEST)
 
-To be filled in from the live readback.
+Deployed by the owner as release `20261003T224213Z-e42b88bd6f8c`.
+
+| Check | Baseline | After deploy |
+|---|---|---|
+| Service | healthy, ready | active, 0 restarts, healthy, ready, no traceback |
+| Security score | 58 | 58 |
+| Coverage map | 72 validated, 33 claimed, 81 blind of 186 | 89 validated, 25 claimed, 72 blind, 0 regressed |
+| `firewall`, `bruteforce`, `implant`, `evasion`, `toolchain`, `sysmon` | 3, 1, 2, 1, 6, 6 findings | identical |
+| `sysmon_linux` | 15 | 15: one high aged out of its 24 h window (24.5 h old), one fresh medium for a real raw-access event |
+| `gaps` | 195 | 207 |
+
+The map reads 89 validated, not the 90 written above: the expectation counted T1620, whose probe
+is not registered in this release. Seventeen techniques moved to validated, T1078 stayed claimed,
+T1497 and T1571 went from claimed to blind, nothing left validated.
+
+One expectation was wrong. Removing the retired T1562 mapping made the gap list report T1562 and
+seven of its sub-techniques as uncovered, because intelligence documents still cite the old id.
+Eight coverage-gap findings appeared that item 4 did not predict. `gaps` is unscored, so the
+score did not move, but the list was less accurate. Fixed in the next release: a retired id is
+treated as covered through its mapped successors (`gaps.SUPERSEDED`), and a test keeps the gap
+list and the coverage map in step.
+
+Live positive control: seven read-only discovery commands under one `cmd.exe` were reported by
+the Windows detector as one medium `discovery burst under cmd.exe` on its next run.
