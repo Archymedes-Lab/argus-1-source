@@ -131,9 +131,55 @@ Also fixed, found while reading the score: the editor-extension inventory forgot
 under a directory it could not read for one run, then reported all of it as new on the next
 (23 false highs after a standby). See `COVERAGE-DEPTH-RELEASE-2026-10-04.md`.
 
-Still open: `partial` level for sub-techniques; file canaries and a wider Sysmon file policy
-(owner decisions); the rest of Phase 3 C, D, E and F; Arena emulation; a live positive control
-for a single-action rule.
+Deployed 2026-10-04 18:25 EEST and read back: 91 / 31 / 64, nothing regressed.
+
+## Status 2026-10-04 (evening): the blind side
+
+Live before this round: 91 validated, 31 claimed, 64 blind of 186. This round projects
+**100 validated, 40 claimed, 46 blind of 186** in the narrow release. Ten of the 46 are ids
+ATT&CK has retired, so 36 real techniques stay blind, and the figure becomes 100 of 176 (57%)
+when the catalogue reloads.
+
+Jev was asked how each of 20 candidates should be counted and whether it would be noisy
+(`scripts/reviews/coverage_blind_advisory.py`). Code applied the same policy as before.
+
+- **Validated (9).** T1039 copy from a network share, T1119 one command collecting documents
+  recursively, T1005 a key store, password database or wallet copied with a copy tool, T1029 a
+  scheduled task or cron entry whose action uploads, T1132 data encoded and piped to a network
+  tool, T1573 a shell carried over a TLS client, T1095 a shell carried over UDP, T1499 a fork
+  bomb, T1020 one command looping over files and uploading each.
+- **Built, held at claimed (9).** T1571 (network events: a script host reaching a public
+  address on an unusual port), T1205 (the existing raw-packet-socket finding, through a new data
+  seam in `sniffing._linux`), T1074, T1080, T1491, T1678, T1497, T1072, T1030. Each carries its
+  reason in `attackmap.HELD`.
+- **Dropped.** T1559: the document-application rule is already counted for two techniques and
+  Jev put 0.28 on not mapping it a third time. T1011: I do not know the Bluetooth transfer
+  program's command line well enough to write a rule that is not a guess.
+
+Noise, measured before scoring: 758,278 Windows events and 514,553 Linux events (14 days)
+replayed. The new rules reported nothing on Windows, including no unusual-port connection in
+about 300,000 network events. On Linux the encoding rule fired once on a `grep` whose pattern
+used `\|` between tool names; the rule now needs a real pipe and that command is a look-alike.
+A shell rule still reads the text of the whole command line, so a command that only *contains*
+such a pipeline as text (a here-document, this project's own tests typed at a shell) is
+reported: seen once, on my own test command.
+
+What stays blind, and what each group needs:
+
+| Group | Techniques | Needs |
+|---|---|---|
+| Removable media | T1025, T1052, T1091, T1092 | a removable-volume inventory on Windows; buildable next |
+| File contents and mass change | T1486, T1554, T1565, T1221 | a wider Sysmon file policy or decoy files (owner decision) |
+| Inside a program | T1106, T1129, T1480, T1559, T1622, T1668, T1679 | API-level telemetry the sensors do not collect |
+| Content of traffic | T1001, T1008, T1041, T1104, T1665 | decrypting traffic, which JARVIS does not do |
+| Exploitation itself | T1210, T1211, T1212, T1687 | only effects are visible |
+| Off the machine | T1111, T1199, T1213, T1534, T1621, T1657, T1659, T1667, T1669, T1684 | another vantage point (mail, identity provider, network) |
+| Other | T1011, T1498 | a Bluetooth or tethering inventory; network volume |
+| Retired ids | T1026, T1034, T1043, T1051, T1061, T1062, T1064, T1108, T1153, T1175 | nothing: they leave at the catalogue reload |
+
+Still open: `partial` level for sub-techniques; removable media; file canaries and a wider
+Sysmon file policy (owner decisions); Arena emulation; a live positive control for a
+single-action rule.
 
 ## Rules for every phase
 

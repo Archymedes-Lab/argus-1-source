@@ -87,13 +87,15 @@ def _promisc_ifaces():
     return out
 
 
-def _linux():
+def _linux(tools=None, sockets=None, promisc=None):
+    """Findings for the Linux side. The arguments replace what is read from this
+    machine, so the coverage map can show the rules fire; the rules are the same."""
     out = []
-    tools = _capture_procs_linux()
-    sockets = [(pid, name) for pid, name in _packet_sockets()
+    tools = _capture_procs_linux() if tools is None else tools
+    sockets = [(pid, name) for pid, name in (_packet_sockets() if sockets is None else sockets)
                if name not in ("systemd-networkd", "NetworkManager", "dhclient",
                                "dhcpcd", "wpa_supplicant", "avahi-daemon")]
-    promisc = _promisc_ifaces()
+    promisc = _promisc_ifaces() if promisc is None else promisc
     phys_promisc = [i for i in promisc
                     if not any(i.startswith(b) for b in BENIGN_IFACE)
                     and i != "lo"]

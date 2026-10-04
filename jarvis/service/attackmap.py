@@ -417,6 +417,31 @@ def probe_forced_authentication():
         "outbound file-share connection to a public address; a LAN share and an inbound one are quiet"
 
 
+def probe_unusual_port():
+    from jarvis.collectors.telemetry import sysmon
+    def conn(image, dest, port, initiated=True):
+        return sysmon.audit(events=[{"id": 3, "image": image, "dest": dest, "dport": port,
+                                     "initiated": initiated, "time": _WHEN}])
+    ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    return (_reports(conn(ps, "8.8.4.4", "4444"), "T1571")
+            and not _reports(conn(ps, "8.8.4.4", "443"), "T1571")
+            and not _reports(conn(ps, "192.168.1.20", "4444"), "T1571")
+            and not _reports(conn(ps, "8.8.4.4", "4444", initiated=False), "T1571")
+            and not _reports(conn(r"C:\Program Files\App\app.exe", "8.8.4.4", "4444"), "T1571")), \
+        ("a script host connecting out to a public address on an unusual port; a web port, a LAN "
+         "address, an inbound connection and an ordinary program are quiet")
+
+
+def probe_raw_socket():
+    import importlib
+    sniffing = importlib.import_module("jarvis.collectors.network.sniffing")
+    held = sniffing._linux(tools=[], sockets=[("4242", "kworker")], promisc=[])
+    usual = sniffing._linux(tools=[], sockets=[("77", "systemd-networkd")], promisc=[])
+    return (any("raw packet socket" in f["title"] and f["severity"] == "high" for f in held)
+            and all(f["severity"] == "ok" for f in usual)), \
+        "an unexpected process holding a raw packet socket; the network daemons that need one are quiet"
+
+
 def probe_generated_domains():
     from jarvis.collectors.telemetry import sysmon, techniques
     def lookups(n, status):
@@ -613,6 +638,10 @@ _optional("T1674", probe_injected_input, ("input",),
           lambda: _has("jarvis.collectors.host.inputwatch.analysis", "injected_findings"))
 _optional("T1495", probe_firmware_change, ("preos",),
           lambda: _has("jarvis.collectors.host.bootintegrity", "drift"))
+_optional("T1571", probe_unusual_port, ("sysmon",),
+          lambda: _has("jarvis.collectors.telemetry.techniques", "odd_port"))
+_optional("T1205", probe_raw_socket, ("sniffing",),
+          lambda: "tools" in _params("jarvis.collectors.network.sniffing", "_linux"))
 _optional("T1187", probe_forced_authentication, ("sysmon",),
           lambda: _has("jarvis.collectors.telemetry.techniques", "outbound_smb"))
 _optional("T1568", probe_generated_domains, ("sysmon",),
@@ -689,6 +718,18 @@ HELD["T1189"] = ("a browser starting a script host is reported; a compromise tha
 HELD["T1563"] = "the tscon command is reported; no emulation has shown a hijack being caught"
 HELD["T1484"] = ("Group Policy cmdlets are reported; this machine is in no domain, so nothing "
                  "has exercised it")
+# Blind-side round (scripts/reviews/coverage_blind_advisory.py): Jev counted these as claimed.
+HELD["T1571"] = ("only the port is judged, for a short list of script hosts; a payload using "
+                 "its own program or an ordinary port is not seen")
+HELD["T1205"] = ("a raw packet socket is the same observation as a sniffer; a filter on an "
+                 "ordinary socket, or a knock sequence, is not seen")
+HELD["T1074"] = "an archive written to a few shared directories is reported; staging anywhere else is not seen"
+HELD["T1080"] = "a copy command is reported; this machine uses no shared drive, so nothing has exercised it"
+HELD["T1491"] = "a wallpaper change from a command line is reported; any other defacement is not seen"
+HELD["T1678"] = "a loopback ping used as a sleep is reported; a delay inside a program is not seen"
+HELD["T1497"] = "two hardware queries are reported; checks made through an API are not seen"
+HELD["T1072"] = "no deployment agent is installed on this machine, so nothing has exercised it"
+HELD["T1030"] = "splitting with an archive tool is reported; size limits applied inside a program are not seen"
 # Only techniques that have a probe are held; the rest keep whatever the map gives them.
 HELD = {tid: why for tid, why in HELD.items() if tid in PROBES or tid in _context_only()}
 CONTEXT_ONLY = frozenset(HELD)

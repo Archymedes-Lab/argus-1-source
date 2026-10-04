@@ -582,7 +582,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
     technique_hits, discovery_seen = {}, []
-    smb_out, failed_lookups, registry_hits, registry_seen = {}, [], {}, set()
+    smb_out, failed_lookups, registry_hits, registry_seen, odd_ports = {}, [], {}, set(), {}
     dropped, drop_times = {}, []
     boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
 
@@ -636,6 +636,10 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             if techniques.outbound_smb(e.get("dest"), e.get("dport"), e.get("initiated")):
                 seen = smb_out.setdefault(image, [set(), e.get("time")])
                 seen[0].add(e.get("dest"))
+                seen[1] = e.get("time") or seen[1]
+            elif techniques.odd_port(image, e.get("dest"), e.get("dport"), e.get("initiated")):
+                seen = odd_ports.setdefault(image, [set(), e.get("time")])
+                seen[0].add(f"{e.get('dest')}:{e.get('dport')}")
                 seen[1] = e.get("time") or seen[1]
         elif eid == 1:
             h = _sha256_of(e.get("hashes"))
@@ -788,6 +792,14 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             f"signed-in account's NTLM credentials to a file share it connects to, which is "
             f"how a link or document is used to capture them.", image)
         f["techniques"] = ["T1187"]
+        out.append(f)
+    for image, (dests, when) in odd_ports.items():
+        f = _finding(
+            "technique", "medium", f"{_base(image)} connected out on an unusual port (T1571)",
+            f"to {', '.join(sorted(dests)[:4])} at {iso_of(when)}. A script host or system "
+            f"utility seldom opens a connection of its own, and this one is not on a web, mail, "
+            f"name or remote-shell port. Only the port is judged; what was sent is not seen.", image)
+        f["techniques"] = ["T1571"]
         out.append(f)
     for label, names in techniques.dga_bursts(failed_lookups):
         f = _finding(

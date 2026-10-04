@@ -54,7 +54,7 @@ class BuildTests(unittest.TestCase):
     def test_levels_sources_and_collector_state_come_from_the_stored_evidence(self):
         data = coveragemap.build(self.db)
         by_tid = {t["tid"]: t for t in data["techniques"]}
-        self.assertEqual(by_tid["T1059"]["sources"], ["scan"])
+        self.assertEqual(by_tid["T1059"]["sources"][0], "scan")             # its own collector first
         self.assertEqual(by_tid["T1204"]["sources"][0], "intrusion")        # its own collector first
         self.assertEqual(by_tid["T1106"]["sources"], [])          # blind is never drawn as fed
         by_job = {c["job"]: c for c in data["collectors"]}

@@ -97,4 +97,26 @@ sudo python3 -I /opt/jarvis/current/scripts/deploy_root_runtime.py --source /hom
 
 ## Outcome
 
-To be filled in from the live readback.
+Read back 2026-10-04 after the owner deployed at 18:25 EEST (release
+`20261004T152526Z-db35acdbd196`, built from the stage above). The map and gap jobs were forced
+once through `/api/run` and ran when the lane was free.
+
+| Expectation | Measured |
+|---|---|
+| service back, healthy | healthy, ready, protection healthy |
+| map 91 / 31 / 64, 0 regressed | 91 validated, 31 claimed, 64 blind, 0 regressed of 186 |
+| T1674, T1495, T1566 validated | all three validated |
+| T1189, T1563, T1484, T1207, T1606 claimed; T1550 demoted | all six claimed |
+| rows carry `ways` | yes; 48 of the 91 validated are proven more than one way |
+| `gaps` 193 to 189 | 189; T1207, T1484, T1484.002 and T1606 gone, nothing added |
+| `sysmon_registry_recorded_v1` appears | present after the first run, naming the service-start key family; T1685 then counted 10 ways |
+| `sysmon`, `sysmon_linux`, `toolchain`, `preos` unchanged | identical severity counts to the baseline |
+| `input` unchanged | one transient medium, "the injected-input monitor has gone quiet", for a single watchdog pass after the restart (raised by the hook supervisor, which this release does not touch); gone on the next pass |
+| score unchanged | 57 at baseline, 55 at readback |
+
+The two points of score are not this release: another session was running a headless browser
+in the Linux guest against a development server, which the hidden-process collector reported
+(a deleted executable mapping and three loopback connections with no visible owner).
+
+The extension-baseline fix has not been exercised live yet: there has been no standby since
+the deploy. `toolchain_ext_unread_runs` is absent, as expected on healthy runs.
