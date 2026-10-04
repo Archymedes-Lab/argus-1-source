@@ -1,0 +1,1784 @@
+{
+ "taken": "2026-10-04T03:25:12+0300",
+ "release": "/opt/jarvis/releases/20261003T224213Z-e42b88bd6f8c",
+ "health": {
+  "healthy": true,
+  "ready": true,
+  "protection_healthy": true,
+  "live": true
+ },
+ "score": {
+  "score": 56,
+  "coverage": 100,
+  "at": 1791073104,
+  "areas": [
+   [
+    "Active threats",
+    4,
+    {
+     "low": 62,
+     "medium": 18,
+     "high": 1,
+     "critical": 20
+    }
+   ],
+   [
+    "OS hardening",
+    73,
+    {
+     "low": 26,
+     "medium": 3
+    }
+   ],
+   [
+    "Persistence & access",
+    38,
+    {
+     "low": 186,
+     "critical": 1,
+     "medium": 3
+    }
+   ],
+   [
+    "Data & privacy",
+    15,
+    {
+     "critical": 3,
+     "high": 3,
+     "medium": 4,
+     "low": 74
+    }
+   ],
+   [
+    "Network",
+    100,
+    {
+     "low": 32
+    }
+   ],
+   [
+    "Developer toolchain",
+    89,
+    {
+     "medium": 1,
+     "low": 5
+    }
+   ],
+   [
+    "Monitoring",
+    73,
+    {
+     "low": 5,
+     "medium": 3
+    }
+   ]
+  ]
+ },
+ "snapshots": {
+  "scan": {
+   "ts": 1791073498,
+   "age_s": 14,
+   "duration": 95.59606313705444,
+   "error": "",
+   "severities": {
+    "critical": 1,
+    "medium": 3,
+    "low": 10
+   },
+   "findings": [
+    [
+     "critical",
+     "process",
+     "bash [pid 378692] \u2014 NEW"
+    ],
+    [
+     "low",
+     "process",
+     "(unattributed) [pid 0]"
+    ],
+    [
+     "low",
+     "process",
+     "2.1.289 [pid 315587]"
+    ],
+    [
+     "low",
+     "process",
+     "MsMpEng.exe [pid 6436]"
+    ],
+    [
+     "low",
+     "process",
+     "claude [pid 11010]"
+    ],
+    [
+     "low",
+     "process",
+     "claude [pid 30953]"
+    ],
+    [
+     "low",
+     "process",
+     "claude [pid 315524]"
+    ],
+    [
+     "low",
+     "process",
+     "firefox.exe [pid 23828] \u2014 NEW"
+    ],
+    [
+     "low",
+     "process",
+     "firefox.exe [pid 28484]"
+    ],
+    [
+     "low",
+     "process",
+     "python3 [pid 378695] \u2014 NEW"
+    ],
+    [
+     "low",
+     "process",
+     "svchost.exe [pid 6380]"
+    ],
+    [
+     "medium",
+     "process",
+     "DefenderSessionHelper.exe [pid 5448]"
+    ],
+    [
+     "medium",
+     "process",
+     "powershell.exe [pid 378012]"
+    ],
+    [
+     "medium",
+     "process",
+     "powershell.exe [pid 379270]"
+    ]
+   ]
+  },
+  "firewall": {
+   "ts": 1791073096,
+   "age_s": 416,
+   "duration": 62.12736201286316,
+   "error": "",
+   "severities": {
+    "low": 18,
+    "medium": 4,
+    "ok": 1
+   },
+   "findings": [
+    [
+     "low",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "low",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "low",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "low",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "low",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "low",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "low",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "low",
+     "rules",
+     "permissive inbound rule"
+    ],
+    [
+     "medium",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "medium",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "medium",
+     "posture",
+     "service installed recently"
+    ],
+    [
+     "medium",
+     "posture",
+     "service installed recently"
+    ]
+   ]
+  },
+  "coverage": {
+   "ts": 1791072631,
+   "age_s": 881,
+   "duration": 0.431628942489624,
+   "error": "",
+   "severities": {
+    "low": 5,
+    "ok": 3
+   },
+   "findings": [
+    [
+     "low",
+     "limits",
+     "WSL is not a security boundary"
+    ],
+    [
+     "low",
+     "limits",
+     "least-privilege visibility"
+    ],
+    [
+     "low",
+     "limits",
+     "no kernel component"
+    ],
+    [
+     "low",
+     "limits",
+     "sampling, not interception"
+    ],
+    [
+     "low",
+     "limits",
+     "scheduler view not comparable here"
+    ]
+   ]
+  },
+  "gaps": {
+   "ts": 1791069193,
+   "age_s": 4319,
+   "duration": 0.027185916900634766,
+   "error": "",
+   "severities": {
+    "high": 24,
+    "medium": 15,
+    "low": 168
+   },
+   "findings": [
+    [
+     "high",
+     "coverage gap",
+     "T1001 Data Obfuscation"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1008 Fallback Channels"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1043 Commonly Used Port"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1064 Scripting"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1095 Non-Application Layer Protocol"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1102 Web Service"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1132 Data Encoding"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1132.002 Non-Standard Encoding"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1212 Exploitation for Credential Access"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1221 Template Injection"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1480 Execution Guardrails"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1484 Domain or Tenant Policy Modification"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1497 Virtualization/Sandbox Evasion"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1497.001 System Checks"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1497.002 User Activity Based Checks"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1497.003 Time Based Checks"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1568 Dynamic Resolution"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1568.001 Fast Flux DNS"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1568.002 Domain Generation Algorithms"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1571 Non-Standard Port"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1573 Encrypted Channel"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1578 Modify Cloud Compute Infrastructure"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1606 Forge Web Credentials"
+    ],
+    [
+     "high",
+     "coverage gap",
+     "T1622 Debugger Evasion"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1001.003 Protocol or Service Impersonation"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1043.000 Commonly Used Port"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1043.001 Commonly Used Port"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1102.003 One-Way Communication"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1111 Multi-Factor Authentication Interception"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1207 Rogue Domain Controller"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1211 Exploitation for Stealth"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1484.002 Trust Modification"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1497.008 Virtualization/Sandbox Evasion"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1568.003 DNS Calculation"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1621 Multi-Factor Authentication Request Generation"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1647 Plist File Modification"
+    ],
+    [
+     "low",
+     "coverage gap",
+     "T1665 Hide Infrastructure"
+    ],
+    [
+     "low",
+     "not observable",
+     "T0143"
+    ],
+    [
+     "low",
+     "not observable",
+     "T0832"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1000"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1002"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1004"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1009"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1013"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1015"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1017"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1019"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1022"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1023"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1024"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1028"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1031"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1032"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1035"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1038"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1042"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1044"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1045"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1050"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1054"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1058"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1060"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1063"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1063.003"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1065"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1066"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1067"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1075"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1077"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1081"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1084"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1085"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1086"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1088"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1089"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1093"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1094"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1096"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1097"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1099"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1100"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1100.001"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1101"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1107"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1109"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1116"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1117"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1121"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1122"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1128"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1130"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1131"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1138"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1139"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1147"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1151"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1152"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1155"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1156"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1159"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1160"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1163"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1165"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1170"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1171"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1172"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1178"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1179"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1180"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1181"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1186"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1188"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1192"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1206"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1209"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1215"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1230"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1231"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1242"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1256"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1312"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1321"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1337"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1350"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1356"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1359"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1361"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1366"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1382"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1386"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1400"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1405"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1406"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1407"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1410"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1411"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1413"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1417"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1418"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1420"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1425"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1429"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1430"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1450"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1457"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1466"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1468"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1469"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1470"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1472"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1476"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1481"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1483"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1487"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1500"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1503"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1509"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1510"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1512"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1516"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1517"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1520"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1521"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1522"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1524"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1527"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1533"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1551"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1551.003"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562.001"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562.002"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562.003"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562.004"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562.005"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562.006"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1562.007"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1579"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1581"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1604"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1607"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1617"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1618"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1623"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1628"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1629"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1644"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1646"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1658"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1703"
+    ],
+    [
+     "low",
+     "not observable",
+     "T1904"
+    ],
+    [
+     "low",
+     "not observable",
+     "T3710"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1001.001 Junk Data"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1026 Multiband Communication"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1062 Hypervisor"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1092 Communication Through Removable Media"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1108 Redundant Access"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1187 Forced Authentication"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1205 Traffic Signaling"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1525 Implant Internal Image"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1528 Steal Application Access Token"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1535 Unused/Unsupported Cloud Regions"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1573.001 Symmetric Cryptography"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1599 Network Boundary Bridging"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1601 Modify System Image"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1612 Build Image on Host"
+    ],
+    [
+     "medium",
+     "coverage gap",
+     "T1689 Downgrade Attack"
+    ]
+   ]
+  },
+  "sysmon": {
+   "ts": 1791073261,
+   "age_s": 251,
+   "duration": 1.5862722396850586,
+   "error": "",
+   "severities": {
+    "low": 5,
+    "medium": 1,
+    "ok": 1
+   },
+   "findings": [
+    [
+     "low",
+     "credential access",
+     "compattelrunner.exe queried LSASS"
+    ],
+    [
+     "low",
+     "credential access",
+     "hotkeyserviceuwp.exe queried LSASS"
+    ],
+    [
+     "low",
+     "credential access",
+     "hpaudioanalytics.exe queried LSASS"
+    ],
+    [
+     "low",
+     "credential access",
+     "microsoftedgeupdate.exe queried LSASS"
+    ],
+    [
+     "low",
+     "credential access",
+     "powershell.exe queried LSASS (JARVIS broker)"
+    ],
+    [
+     "medium",
+     "technique",
+     "discovery burst under cmd.exe"
+    ]
+   ]
+  },
+  "sysmon_linux": {
+   "ts": 1791073260,
+   "age_s": 252,
+   "duration": 8.4481041431427,
+   "error": "",
+   "severities": {
+    "high": 2,
+    "medium": 13,
+    "low": 1,
+    "ok": 1
+   },
+   "findings": [
+    [
+     "high",
+     "sysmon-linux",
+     "a log or history file was deleted"
+    ],
+    [
+     "high",
+     "sysmon-linux",
+     "write to a persistence or trust location"
+    ],
+    [
+     "low",
+     "sysmon-linux",
+     "outbound connections from an unresolved process"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "Sysmon raw-access event has an unresolved device"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "discovery burst under bash"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from 2.1.288"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from 2.1.289"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from api"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from chrome-headless-shell"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from cloudflared"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from docker-buildx"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from dragonfly"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from env"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from python3.12"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from python3.13"
+    ],
+    [
+     "medium",
+     "sysmon-linux",
+     "outbound connections from snapfuse"
+    ]
+   ]
+  },
+  "attackmap": {
+   "ts": 1791069194,
+   "age_s": 4318,
+   "duration": 1.722381830215454,
+   "error": "",
+   "severities": {
+    "ok": 1
+   },
+   "findings": []
+  },
+  "native": {
+   "ts": 1791073402,
+   "age_s": 110,
+   "duration": 3.441467523574829,
+   "error": "",
+   "severities": {
+    "ok": 1
+   },
+   "findings": []
+  }
+ },
+ "coverage_api": {
+  "totals": {
+   "validated": 89,
+   "claimed": 25,
+   "blind": 72,
+   "regressed": 0,
+   "total": 186
+  },
+  "map_at": 1791069194,
+  "tactics": {
+   "initial-access": [
+    4,
+    11
+   ],
+   "execution": [
+    9,
+    18
+   ],
+   "persistence": [
+    16,
+    23
+   ],
+   "privilege-escalation": [
+    11,
+    14
+   ],
+   "credential-access": [
+    12,
+    16
+   ],
+   "discovery": [
+    4,
+    29
+   ],
+   "lateral-movement": [
+    3,
+    11
+   ],
+   "collection": [
+    9,
+    15
+   ],
+   "command-and-control": [
+    7,
+    20
+   ],
+   "stealth": [
+    17,
+    30
+   ],
+   "defense-impairment": [
+    9,
+    12
+   ],
+   "exfiltration": [
+    2,
+    8
+   ],
+   "impact": [
+    7,
+    15
+   ]
+  },
+  "collector_states": {
+   "current": 50
+  },
+  "uptime": 0.3399,
+  "has_fired_field": false,
+  "levels": {
+   "T1001": "blind",
+   "T1003": "validated",
+   "T1005": "blind",
+   "T1006": "validated",
+   "T1007": "claimed",
+   "T1008": "blind",
+   "T1010": "claimed",
+   "T1011": "blind",
+   "T1012": "claimed",
+   "T1014": "validated",
+   "T1016": "claimed",
+   "T1018": "claimed",
+   "T1020": "blind",
+   "T1021": "validated",
+   "T1025": "blind",
+   "T1026": "blind",
+   "T1027": "validated",
+   "T1029": "blind",
+   "T1030": "blind",
+   "T1033": "claimed",
+   "T1034": "blind",
+   "T1036": "validated",
+   "T1037": "validated",
+   "T1039": "blind",
+   "T1040": "validated",
+   "T1041": "blind",
+   "T1043": "blind",
+   "T1046": "validated",
+   "T1047": "validated",
+   "T1048": "validated",
+   "T1049": "claimed",
+   "T1051": "blind",
+   "T1052": "blind",
+   "T1053": "validated",
+   "T1055": "validated",
+   "T1056": "validated",
+   "T1057": "claimed",
+   "T1059": "validated",
+   "T1061": "blind",
+   "T1062": "blind",
+   "T1064": "blind",
+   "T1068": "validated",
+   "T1069": "claimed",
+   "T1070": "validated",
+   "T1071": "validated",
+   "T1072": "blind",
+   "T1074": "blind",
+   "T1078": "claimed",
+   "T1080": "blind",
+   "T1082": "claimed",
+   "T1083": "claimed",
+   "T1087": "claimed",
+   "T1090": "validated",
+   "T1091": "blind",
+   "T1092": "blind",
+   "T1095": "blind",
+   "T1098": "validated",
+   "T1102": "validated",
+   "T1104": "blind",
+   "T1105": "validated",
+   "T1106": "blind",
+   "T1108": "blind",
+   "T1110": "validated",
+   "T1111": "blind",
+   "T1112": "validated",
+   "T1113": "validated",
+   "T1114": "validated",
+   "T1115": "validated",
+   "T1119": "blind",
+   "T1120": "claimed",
+   "T1123": "validated",
+   "T1124": "claimed",
+   "T1125": "validated",
+   "T1127": "validated",
+   "T1129": "blind",
+   "T1132": "blind",
+   "T1133": "validated",
+   "T1134": "validated",
+   "T1135": "claimed",
+   "T1136": "validated",
+   "T1137": "validated",
+   "T1140": "validated",
+   "T1153": "blind",
+   "T1175": "blind",
+   "T1176": "validated",
+   "T1185": "validated",
+   "T1187": "validated",
+   "T1189": "blind",
+   "T1190": "validated",
+   "T1195": "validated",
+   "T1197": "validated",
+   "T1199": "blind",
+   "T1200": "validated",
+   "T1201": "claimed",
+   "T1202": "validated",
+   "T1203": "validated",
+   "T1204": "validated",
+   "T1205": "blind",
+   "T1207": "blind",
+   "T1210": "blind",
+   "T1211": "blind",
+   "T1212": "blind",
+   "T1213": "blind",
+   "T1216": "validated",
+   "T1217": "validated",
+   "T1218": "validated",
+   "T1219": "validated",
+   "T1220": "validated",
+   "T1221": "blind",
+   "T1222": "validated",
+   "T1480": "blind",
+   "T1482": "validated",
+   "T1484": "blind",
+   "T1485": "validated",
+   "T1486": "blind",
+   "T1489": "validated",
+   "T1490": "validated",
+   "T1491": "blind",
+   "T1495": "blind",
+   "T1496": "validated",
+   "T1497": "blind",
+   "T1498": "blind",
+   "T1499": "blind",
+   "T1505": "validated",
+   "T1518": "claimed",
+   "T1529": "validated",
+   "T1531": "validated",
+   "T1534": "blind",
+   "T1539": "validated",
+   "T1542": "validated",
+   "T1543": "validated",
+   "T1546": "validated",
+   "T1547": "validated",
+   "T1548": "validated",
+   "T1550": "validated",
+   "T1552": "validated",
+   "T1553": "validated",
+   "T1554": "blind",
+   "T1555": "validated",
+   "T1556": "validated",
+   "T1557": "validated",
+   "T1558": "validated",
+   "T1559": "blind",
+   "T1560": "validated",
+   "T1561": "validated",
+   "T1563": "blind",
+   "T1564": "validated",
+   "T1565": "blind",
+   "T1566": "blind",
+   "T1567": "validated",
+   "T1568": "validated",
+   "T1569": "validated",
+   "T1570": "validated",
+   "T1571": "blind",
+   "T1572": "validated",
+   "T1573": "blind",
+   "T1574": "validated",
+   "T1606": "blind",
+   "T1611": "validated",
+   "T1614": "claimed",
+   "T1615": "claimed",
+   "T1620": "claimed",
+   "T1621": "blind",
+   "T1622": "blind",
+   "T1649": "validated",
+   "T1652": "claimed",
+   "T1653": "validated",
+   "T1654": "claimed",
+   "T1657": "blind",
+   "T1659": "blind",
+   "T1665": "blind",
+   "T1667": "blind",
+   "T1668": "blind",
+   "T1669": "blind",
+   "T1673": "claimed",
+   "T1674": "blind",
+   "T1678": "blind",
+   "T1679": "blind",
+   "T1680": "claimed",
+   "T1684": "blind",
+   "T1685": "validated",
+   "T1686": "validated",
+   "T1687": "blind",
+   "T1688": "validated",
+   "T1689": "validated",
+   "T1690": "validated"
+  }
+ }
+}

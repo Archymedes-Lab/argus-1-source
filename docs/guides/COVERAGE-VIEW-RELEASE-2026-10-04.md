@@ -1,5 +1,6 @@
 # Coverage view: live feed and glass redesign, release record (2026-10-04)
 
+Stage: `~/.cache/jarvis-release-staging/20261004T002224Z-on-e42b88bd6f8c`
 Base: live release `20261003T224213Z-e42b88bd6f8c` (`sha256:e42b88bd6f8c…`).
 Baseline: `docs/guides/baselines/coverage-view-baseline-2026-10-04.json`.
 
