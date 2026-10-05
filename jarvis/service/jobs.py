@@ -48,7 +48,7 @@ from jarvis.core import mlworker as mlworker_mod
 from jarvis.core.eventlog import LogError
 from jarvis.core.finding import LOCAL_HOST
 from jarvis.core.store import Store
-from jarvis.intel import feeds, gaps, hunt
+from jarvis.intel import feeds, gaps, hunt, worldwatch
 from jarvis.intel import research as intel
 from jarvis.lab import audit as arena_audit
 from jarvis.platform import host
@@ -431,6 +431,7 @@ RUNNERS = {
     "evidence": _with_store(evidence.audit),
     "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
     "geo": _with_store(geo.audit),
+    "world": _with_store(worldwatch.audit),
     "containers": _hosts_only(containers.audit),
     "attackmap": _with_store(lambda store, hosts=None: attackmap.measure(store)[0]),
     "model": lambda hosts, db_path: [llm.status_findings(alert.load_conf())],

@@ -1,0 +1,6510 @@
+{
+  "before": {
+    "at": "2026-10-01T10:03:59.8700220Z",
+    "dotnet": [
+      {
+        "Id": 9048,
+        "ProcessName": "AggregatorHost"
+      },
+      {
+        "Id": 3572,
+        "ProcessName": "AppHelperCap"
+      },
+      {
+        "Id": 21188,
+        "ProcessName": "ApplicationFrameHost"
+      },
+      {
+        "Id": 13136,
+        "ProcessName": "backgroundTaskHost"
+      },
+      {
+        "Id": 8932,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 14612,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 17628,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 17736,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 19204,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 7092,
+        "ProcessName": "codex-windows-sandbox-service"
+      },
+      {
+        "Id": 1304,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 5740,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 6080,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 7404,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 9300,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 9384,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 9616,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 10060,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 10940,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 12960,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 15048,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 15052,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 18956,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 19320,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 20920,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 8064,
+        "ProcessName": "cowork-svc"
+      },
+      {
+        "Id": 10436,
+        "ProcessName": "crashhelper"
+      },
+      {
+        "Id": 4288,
+        "ProcessName": "CrossDeviceResume"
+      },
+      {
+        "Id": 6572,
+        "ProcessName": "CrossDeviceService"
+      },
+      {
+        "Id": 632,
+        "ProcessName": "csrss"
+      },
+      {
+        "Id": 1196,
+        "ProcessName": "csrss"
+      },
+      {
+        "Id": 13440,
+        "ProcessName": "ctfmon"
+      },
+      {
+        "Id": 3416,
+        "ProcessName": "DefenderSessionHelper"
+      },
+      {
+        "Id": 3636,
+        "ProcessName": "DiagsCap"
+      },
+      {
+        "Id": 1172,
+        "ProcessName": "dllhost"
+      },
+      {
+        "Id": 1872,
+        "ProcessName": "dllhost"
+      },
+      {
+        "Id": 9712,
+        "ProcessName": "dwm"
+      },
+      {
+        "Id": 2756,
+        "ProcessName": "ELAN_MOC_Service"
+      },
+      {
+        "Id": 5192,
+        "ProcessName": "escsvc64"
+      },
+      {
+        "Id": 4168,
+        "ProcessName": "explorer"
+      },
+      {
+        "Id": 2156,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 5820,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 6944,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 8908,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 12396,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 12744,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 12752,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 13740,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 16752,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 17404,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 20316,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 9240,
+        "ProcessName": "FMAudioMonitor"
+      },
+      {
+        "Id": 5932,
+        "ProcessName": "FMService64"
+      },
+      {
+        "Id": 11836,
+        "ProcessName": "FMToastNotification"
+      },
+      {
+        "Id": 1632,
+        "ProcessName": "fontdrvhost"
+      },
+      {
+        "Id": 19992,
+        "ProcessName": "fontdrvhost"
+      },
+      {
+        "Id": 5436,
+        "ProcessName": "HotKeyServiceUWP"
+      },
+      {
+        "Id": 16144,
+        "ProcessName": "HPAudioAnalytics"
+      },
+      {
+        "Id": 6024,
+        "ProcessName": "HpSfuService64"
+      },
+      {
+        "Id": 4172,
+        "ProcessName": "hpsvcsscan"
+      },
+      {
+        "Id": 0,
+        "ProcessName": "Idle"
+      },
+      {
+        "Id": 6036,
+        "ProcessName": "IntelAudioService"
+      },
+      {
+        "Id": 2288,
+        "ProcessName": "IntelCpHDCPSvc"
+      },
+      {
+        "Id": 5028,
+        "ProcessName": "IntelGraphicsSoftware"
+      },
+      {
+        "Id": 6844,
+        "ProcessName": "IntelGraphicsSoftware.Service"
+      },
+      {
+        "Id": 1436,
+        "ProcessName": "ipf_helper"
+      },
+      {
+        "Id": 5904,
+        "ProcessName": "ipf_uf"
+      },
+      {
+        "Id": 6156,
+        "ProcessName": "ipfsvc"
+      },
+      {
+        "Id": 7104,
+        "ProcessName": "JarvisSensor"
+      },
+      {
+        "Id": 6164,
+        "ProcessName": "jhi_service"
+      },
+      {
+        "Id": 8312,
+        "ProcessName": "LanWlanWwanSwitchingServiceUWP"
+      },
+      {
+        "Id": 1448,
+        "ProcessName": "LsaIso"
+      },
+      {
+        "Id": 1456,
+        "ProcessName": "lsass"
+      },
+      {
+        "Id": 2940,
+        "ProcessName": "M365Copilot"
+      },
+      {
+        "Id": 4084,
+        "ProcessName": "Memory Compression"
+      },
+      {
+        "Id": 7148,
+        "ProcessName": "MicrosoftEdgeUpdate"
+      },
+      {
+        "Id": 18492,
+        "ProcessName": "MicrosoftStartFeedProvider"
+      },
+      {
+        "Id": 6212,
+        "ProcessName": "MpDefenderCoreService"
+      },
+      {
+        "Id": 256,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 3092,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 4384,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 4928,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 5472,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 5520,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 6808,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 8572,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 8580,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 11596,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 12792,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13020,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13320,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13636,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13964,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14240,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14548,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14732,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14800,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 15040,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16060,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16596,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16744,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16904,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 18140,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 18352,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 18384,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 19180,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 19336,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 19552,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 20312,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 6264,
+        "ProcessName": "MsMpEng"
+      },
+      {
+        "Id": 3348,
+        "ProcessName": "ms-teams"
+      },
+      {
+        "Id": 9660,
+        "ProcessName": "ms-teams"
+      },
+      {
+        "Id": 3668,
+        "ProcessName": "NetworkCap"
+      },
+      {
+        "Id": 15924,
+        "ProcessName": "NisSrv"
+      },
+      {
+        "Id": 12120,
+        "ProcessName": "ollama"
+      },
+      {
+        "Id": 3460,
+        "ProcessName": "ollama app"
+      },
+      {
+        "Id": 1584,
+        "ProcessName": "OneDrive"
+      },
+      {
+        "Id": 6092,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 9464,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 14280,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 16288,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 22308,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 9284,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 17716,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 19144,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 19240,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 19452,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 22060,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 7676,
+        "ProcessName": "PresentMonService"
+      },
+      {
+        "Id": 12196,
+        "ProcessName": "ProtonDrive"
+      },
+      {
+        "Id": 13768,
+        "ProcessName": "ProtonVPN.Client"
+      },
+      {
+        "Id": 18532,
+        "ProcessName": "ProtonVPN.NrptWatchdog"
+      },
+      {
+        "Id": 15868,
+        "ProcessName": "ProtonVPNService"
+      },
+      {
+        "Id": 232,
+        "ProcessName": "Registry"
+      },
+      {
+        "Id": 1604,
+        "ProcessName": "RiotClientCrashHandler"
+      },
+      {
+        "Id": 18092,
+        "ProcessName": "RiotClientServices"
+      },
+      {
+        "Id": 5400,
+        "ProcessName": "RtkAudUService64"
+      },
+      {
+        "Id": 8092,
+        "ProcessName": "RtkAudUService64"
+      },
+      {
+        "Id": 15400,
+        "ProcessName": "RtkAudUService64"
+      },
+      {
+        "Id": 5948,
+        "ProcessName": "RtkBtManServ"
+      },
+      {
+        "Id": 11472,
+        "ProcessName": "rundll32"
+      },
+      {
+        "Id": 884,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 4956,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 9500,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 11532,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 13144,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 14072,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 14912,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 15092,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 19168,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 4816,
+        "ProcessName": "SearchHost"
+      },
+      {
+        "Id": 14664,
+        "ProcessName": "SearchIndexer"
+      },
+      {
+        "Id": 188,
+        "ProcessName": "Secure System"
+      },
+      {
+        "Id": 13192,
+        "ProcessName": "SecurityHealthService"
+      },
+      {
+        "Id": 3008,
+        "ProcessName": "SecurityHealthSystray"
+      },
+      {
+        "Id": 1420,
+        "ProcessName": "services"
+      },
+      {
+        "Id": 11752,
+        "ProcessName": "ShellExperienceHost"
+      },
+      {
+        "Id": 15728,
+        "ProcessName": "ShellHost"
+      },
+      {
+        "Id": 4524,
+        "ProcessName": "sihost"
+      },
+      {
+        "Id": 852,
+        "ProcessName": "smss"
+      },
+      {
+        "Id": 11908,
+        "ProcessName": "SNAPOS64"
+      },
+      {
+        "Id": 6188,
+        "ProcessName": "SNAPOSS64"
+      },
+      {
+        "Id": 8360,
+        "ProcessName": "SnippingTool"
+      },
+      {
+        "Id": 6060,
+        "ProcessName": "spoolsv"
+      },
+      {
+        "Id": 1664,
+        "ProcessName": "StartMenuExperienceHost"
+      },
+      {
+        "Id": 1608,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1744,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1824,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1988,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1996,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2008,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2044,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2096,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2104,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2144,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2268,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2300,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2320,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2376,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2444,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2468,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2600,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2788,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2848,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2892,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2968,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3104,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3276,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3424,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3440,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3548,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3612,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3660,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3732,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3752,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3936,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3976,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3984,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3992,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4328,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4516,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4620,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4848,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5204,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5492,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5504,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5584,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5788,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5796,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5800,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5896,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5956,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6044,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6096,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6172,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6180,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6196,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6220,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6496,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6852,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 7792,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 8540,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 9076,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 9716,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 9760,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10412,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10792,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10900,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10912,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11024,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11084,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11232,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11880,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 12212,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 12912,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13216,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13236,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13900,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13912,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 14124,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 14468,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 14576,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16316,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16420,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16532,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16616,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 17024,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 17616,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 20116,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 20456,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 21128,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3616,
+        "ProcessName": "SysInfoCap"
+      },
+      {
+        "Id": 6392,
+        "ProcessName": "Sysmon64"
+      },
+      {
+        "Id": 4,
+        "ProcessName": "System"
+      },
+      {
+        "Id": 20008,
+        "ProcessName": "SystemSettings"
+      },
+      {
+        "Id": 18424,
+        "ProcessName": "taskhostw"
+      },
+      {
+        "Id": 9280,
+        "ProcessName": "TextInputHost"
+      },
+      {
+        "Id": 22200,
+        "ProcessName": "TiWorker"
+      },
+      {
+        "Id": 3704,
+        "ProcessName": "TouchpointAnalyticsClientService"
+      },
+      {
+        "Id": 5076,
+        "ProcessName": "TrustedInstaller"
+      },
+      {
+        "Id": 3676,
+        "ProcessName": "unsecapp"
+      },
+      {
+        "Id": 12812,
+        "ProcessName": "vmcompute"
+      },
+      {
+        "Id": 19196,
+        "ProcessName": "vmmemWSL"
+      },
+      {
+        "Id": 10028,
+        "ProcessName": "vmwp"
+      },
+      {
+        "Id": 8548,
+        "ProcessName": "WhatsApp.Root"
+      },
+      {
+        "Id": 17708,
+        "ProcessName": "WidgetBoard"
+      },
+      {
+        "Id": 4536,
+        "ProcessName": "WidgetService"
+      },
+      {
+        "Id": 17952,
+        "ProcessName": "WindowsTerminal"
+      },
+      {
+        "Id": 1284,
+        "ProcessName": "wininit"
+      },
+      {
+        "Id": 9964,
+        "ProcessName": "winlogon"
+      },
+      {
+        "Id": 4988,
+        "ProcessName": "WmiPrvSE"
+      },
+      {
+        "Id": 10200,
+        "ProcessName": "WmiPrvSE"
+      },
+      {
+        "Id": 22220,
+        "ProcessName": "WmiPrvSE"
+      },
+      {
+        "Id": 5560,
+        "ProcessName": "WMIRegistrationService"
+      },
+      {
+        "Id": 5880,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 7412,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 10372,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 10416,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 11548,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 13808,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 16220,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 18440,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 18700,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 20980,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 5320,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 8464,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 10196,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 15164,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 15748,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 19140,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 17576,
+        "ProcessName": "wslrelay"
+      },
+      {
+        "Id": 6020,
+        "ProcessName": "wslservice"
+      },
+      {
+        "Id": 1736,
+        "ProcessName": "WUDFHost"
+      },
+      {
+        "Id": 1912,
+        "ProcessName": "WUDFHost"
+      },
+      {
+        "Id": 2504,
+        "ProcessName": "WUDFHost"
+      }
+    ],
+    "cim": [
+      {
+        "pid": 0,
+        "ppid": 0,
+        "name": "System Idle Process",
+        "exe": null,
+        "started": "2026-09-30T17:18:33.9107130Z"
+      },
+      {
+        "pid": 4,
+        "ppid": 0,
+        "name": "System",
+        "exe": null,
+        "started": "2026-09-30T17:18:33.9107130Z"
+      },
+      {
+        "pid": 188,
+        "ppid": 4,
+        "name": "Secure System",
+        "exe": null,
+        "started": "2026-09-30T17:18:12.5680900Z"
+      },
+      {
+        "pid": 232,
+        "ppid": 4,
+        "name": "Registry",
+        "exe": null,
+        "started": "2026-09-30T17:18:12.5810540Z"
+      },
+      {
+        "pid": 852,
+        "ppid": 4,
+        "name": "smss.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:33.9216010Z"
+      },
+      {
+        "pid": 1196,
+        "ppid": 996,
+        "name": "csrss.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.1236420Z"
+      },
+      {
+        "pid": 1284,
+        "ppid": 996,
+        "name": "wininit.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.7906640Z"
+      },
+      {
+        "pid": 1420,
+        "ppid": 1284,
+        "name": "services.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.8725990Z"
+      },
+      {
+        "pid": 1448,
+        "ppid": 1284,
+        "name": "LsaIso.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.9196900Z"
+      },
+      {
+        "pid": 1456,
+        "ppid": 1284,
+        "name": "lsass.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.9258570Z"
+      },
+      {
+        "pid": 1608,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.3991940Z"
+      },
+      {
+        "pid": 1632,
+        "ppid": 1284,
+        "name": "fontdrvhost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.4138240Z"
+      },
+      {
+        "pid": 1736,
+        "ppid": 1420,
+        "name": "WUDFHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.5495470Z"
+      },
+      {
+        "pid": 1744,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.5604060Z"
+      },
+      {
+        "pid": 1824,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.6155710Z"
+      },
+      {
+        "pid": 1912,
+        "ppid": 1420,
+        "name": "WUDFHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7446940Z"
+      },
+      {
+        "pid": 1988,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7627990Z"
+      },
+      {
+        "pid": 2008,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7642140Z"
+      },
+      {
+        "pid": 2044,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7699850Z"
+      },
+      {
+        "pid": 2096,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8029170Z"
+      },
+      {
+        "pid": 2104,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8038020Z"
+      },
+      {
+        "pid": 2144,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8132600Z"
+      },
+      {
+        "pid": 2268,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8534470Z"
+      },
+      {
+        "pid": 2288,
+        "ppid": 1420,
+        "name": "IntelCpHDCPSvc.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8598960Z"
+      },
+      {
+        "pid": 2300,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8673270Z"
+      },
+      {
+        "pid": 2320,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8795950Z"
+      },
+      {
+        "pid": 2376,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8931910Z"
+      },
+      {
+        "pid": 2444,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9125600Z"
+      },
+      {
+        "pid": 2468,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9162150Z"
+      },
+      {
+        "pid": 2504,
+        "ppid": 1420,
+        "name": "WUDFHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9249480Z"
+      },
+      {
+        "pid": 2600,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9393160Z"
+      },
+      {
+        "pid": 2756,
+        "ppid": 1420,
+        "name": "ELAN_MOC_Service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9618030Z"
+      },
+      {
+        "pid": 2788,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9730130Z"
+      },
+      {
+        "pid": 2892,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.0157370Z"
+      },
+      {
+        "pid": 2848,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.0861870Z"
+      },
+      {
+        "pid": 2968,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.0892550Z"
+      },
+      {
+        "pid": 3276,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.1615530Z"
+      },
+      {
+        "pid": 3424,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.2517570Z"
+      },
+      {
+        "pid": 3440,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.2879120Z"
+      },
+      {
+        "pid": 3548,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.3531250Z"
+      },
+      {
+        "pid": 3752,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.5884010Z"
+      },
+      {
+        "pid": 3936,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.7953360Z"
+      },
+      {
+        "pid": 3976,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8159470Z"
+      },
+      {
+        "pid": 3984,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8161780Z"
+      },
+      {
+        "pid": 3992,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8176980Z"
+      },
+      {
+        "pid": 4084,
+        "ppid": 4,
+        "name": "Memory Compression",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8515570Z"
+      },
+      {
+        "pid": 3104,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8708830Z"
+      },
+      {
+        "pid": 3616,
+        "ppid": 1420,
+        "name": "SysInfoCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9134390Z"
+      },
+      {
+        "pid": 3636,
+        "ppid": 1420,
+        "name": "DiagsCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9150230Z"
+      },
+      {
+        "pid": 3572,
+        "ppid": 1420,
+        "name": "AppHelperCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9150790Z"
+      },
+      {
+        "pid": 3704,
+        "ppid": 1420,
+        "name": "TouchpointAnalyticsClientService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9151030Z"
+      },
+      {
+        "pid": 3732,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9174240Z"
+      },
+      {
+        "pid": 3668,
+        "ppid": 1420,
+        "name": "NetworkCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9178350Z"
+      },
+      {
+        "pid": 3660,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9183310Z"
+      },
+      {
+        "pid": 3612,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9300940Z"
+      },
+      {
+        "pid": 4172,
+        "ppid": 1420,
+        "name": "hpsvcsscan.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.0356440Z"
+      },
+      {
+        "pid": 4328,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.1473250Z"
+      },
+      {
+        "pid": 4516,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.6197780Z"
+      },
+      {
+        "pid": 4620,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.8423480Z"
+      },
+      {
+        "pid": 4848,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:02.5046470Z"
+      },
+      {
+        "pid": 3676,
+        "ppid": 1608,
+        "name": "unsecapp.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:03.2013620Z"
+      },
+      {
+        "pid": 4988,
+        "ppid": 1608,
+        "name": "WmiPrvSE.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:03.2795070Z"
+      },
+      {
+        "pid": 5204,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:03.6296470Z"
+      },
+      {
+        "pid": 5436,
+        "ppid": 1420,
+        "name": "HotKeyServiceUWP.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:05.5306960Z"
+      },
+      {
+        "pid": 5492,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:05.5800750Z"
+      },
+      {
+        "pid": 5788,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:05.9117200Z"
+      },
+      {
+        "pid": 5896,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:06.2051900Z"
+      },
+      {
+        "pid": 5956,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:06.2430540Z"
+      },
+      {
+        "pid": 6060,
+        "ppid": 1420,
+        "name": "spoolsv.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:06.7201310Z"
+      },
+      {
+        "pid": 5504,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.0761260Z"
+      },
+      {
+        "pid": 5796,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1201150Z"
+      },
+      {
+        "pid": 5584,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1331810Z"
+      },
+      {
+        "pid": 5800,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1407170Z"
+      },
+      {
+        "pid": 5400,
+        "ppid": 1420,
+        "name": "RtkAudUService64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1431240Z"
+      },
+      {
+        "pid": 6036,
+        "ppid": 1420,
+        "name": "IntelAudioService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1431710Z"
+      },
+      {
+        "pid": 5932,
+        "ppid": 1420,
+        "name": "FMService64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1458610Z"
+      },
+      {
+        "pid": 5948,
+        "ppid": 1420,
+        "name": "RtkBtManServ.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1461810Z"
+      },
+      {
+        "pid": 6024,
+        "ppid": 1420,
+        "name": "HpSfuService64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1462800Z"
+      },
+      {
+        "pid": 5560,
+        "ppid": 1420,
+        "name": "WMIRegistrationService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1419350Z"
+      },
+      {
+        "pid": 6020,
+        "ppid": 1420,
+        "name": "wslservice.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1469910Z"
+      },
+      {
+        "pid": 5904,
+        "ppid": 1420,
+        "name": "ipf_uf.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1482470Z"
+      },
+      {
+        "pid": 5192,
+        "ppid": 1420,
+        "name": "escsvc64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1513330Z"
+      },
+      {
+        "pid": 6044,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1456140Z"
+      },
+      {
+        "pid": 6156,
+        "ppid": 1420,
+        "name": "ipfsvc.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1591780Z"
+      },
+      {
+        "pid": 6164,
+        "ppid": 1420,
+        "name": "jhi_service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1606420Z"
+      },
+      {
+        "pid": 6172,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1611380Z"
+      },
+      {
+        "pid": 6180,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1613340Z"
+      },
+      {
+        "pid": 6188,
+        "ppid": 1420,
+        "name": "SNAPOSS64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1645290Z"
+      },
+      {
+        "pid": 6196,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1645780Z"
+      },
+      {
+        "pid": 6212,
+        "ppid": 1420,
+        "name": "MpDefenderCoreService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1689190Z"
+      },
+      {
+        "pid": 6220,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1706810Z"
+      },
+      {
+        "pid": 6264,
+        "ppid": 1420,
+        "name": "MsMpEng.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1855660Z"
+      },
+      {
+        "pid": 6392,
+        "ppid": 1420,
+        "name": "Sysmon64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.2520880Z"
+      },
+      {
+        "pid": 7104,
+        "ppid": 1420,
+        "name": "JarvisSensor.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.6810900Z"
+      },
+      {
+        "pid": 7792,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.0963960Z"
+      },
+      {
+        "pid": 8064,
+        "ppid": 1420,
+        "name": "cowork-svc.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.3061190Z"
+      },
+      {
+        "pid": 6852,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.3488120Z"
+      },
+      {
+        "pid": 6844,
+        "ppid": 1420,
+        "name": "IntelGraphicsSoftware.Service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.4144010Z"
+      },
+      {
+        "pid": 7092,
+        "ppid": 1420,
+        "name": "codex-windows-sandbox-service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.4365770Z"
+      },
+      {
+        "pid": 8312,
+        "ppid": 1420,
+        "name": "LanWlanWwanSwitchingServiceUWP.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.6122840Z"
+      },
+      {
+        "pid": 9048,
+        "ppid": 5584,
+        "name": "AggregatorHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:09.4399000Z"
+      },
+      {
+        "pid": 9076,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:09.5120510Z"
+      },
+      {
+        "pid": 9284,
+        "ppid": 2468,
+        "name": "powershell.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:10.0235800Z"
+      },
+      {
+        "pid": 9716,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:10.5558990Z"
+      },
+      {
+        "pid": 9384,
+        "ppid": 9284,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:12.8914980Z"
+      },
+      {
+        "pid": 7676,
+        "ppid": 6844,
+        "name": "PresentMonService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:13.5895450Z"
+      },
+      {
+        "pid": 9300,
+        "ppid": 7676,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:13.6962470Z"
+      },
+      {
+        "pid": 10792,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:15.0356950Z"
+      },
+      {
+        "pid": 10900,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:15.2020140Z"
+      },
+      {
+        "pid": 11232,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:15.5173740Z"
+      },
+      {
+        "pid": 11880,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:17.1140700Z"
+      },
+      {
+        "pid": 12812,
+        "ppid": 1420,
+        "name": "vmcompute.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:20.4389570Z"
+      },
+      {
+        "pid": 13912,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:24.7185650Z"
+      },
+      {
+        "pid": 13900,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:24.8104320Z"
+      },
+      {
+        "pid": 14664,
+        "ppid": 1420,
+        "name": "SearchIndexer.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:26.3592710Z"
+      },
+      {
+        "pid": 13192,
+        "ppid": 1420,
+        "name": "SecurityHealthService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:49.5209590Z"
+      },
+      {
+        "pid": 6496,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:51.6337270Z"
+      },
+      {
+        "pid": 15924,
+        "ppid": 1420,
+        "name": "NisSrv.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:53.7082320Z"
+      },
+      {
+        "pid": 16616,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:20:05.3324840Z"
+      },
+      {
+        "pid": 12912,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:12.8232480Z"
+      },
+      {
+        "pid": 9760,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:13.0928090Z"
+      },
+      {
+        "pid": 16316,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:13.2336060Z"
+      },
+      {
+        "pid": 16420,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:13.8728970Z"
+      },
+      {
+        "pid": 17024,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:14.0683470Z"
+      },
+      {
+        "pid": 14124,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:23:23.1966370Z"
+      },
+      {
+        "pid": 13236,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:34:32.6092780Z"
+      },
+      {
+        "pid": 13216,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:34:41.5506190Z"
+      },
+      {
+        "pid": 17616,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:52:17.6311640Z"
+      },
+      {
+        "pid": 10200,
+        "ppid": 1608,
+        "name": "WmiPrvSE.exe",
+        "exe": null,
+        "started": "2026-09-30T18:22:52.2755100Z"
+      },
+      {
+        "pid": 1996,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T18:35:18.7347910Z"
+      },
+      {
+        "pid": 20456,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T18:35:18.7822910Z"
+      },
+      {
+        "pid": 632,
+        "ppid": 8432,
+        "name": "csrss.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.4418210Z"
+      },
+      {
+        "pid": 9964,
+        "ppid": 8432,
+        "name": "winlogon.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.5022360Z"
+      },
+      {
+        "pid": 19992,
+        "ppid": 9964,
+        "name": "fontdrvhost.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.7515210Z"
+      },
+      {
+        "pid": 9712,
+        "ppid": 9964,
+        "name": "dwm.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.8373000Z"
+      },
+      {
+        "pid": 11908,
+        "ppid": 6188,
+        "name": "SNAPOS64.exe",
+        "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\snapo64.inf_amd64_fd4aaa60454ea9da\\SNAPOS64.exe",
+        "started": "2026-10-01T09:05:39.6304700Z"
+      },
+      {
+        "pid": 15048,
+        "ppid": 11908,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:05:39.6480700Z"
+      },
+      {
+        "pid": 4524,
+        "ppid": 2892,
+        "name": "sihost.exe",
+        "exe": "C:\\WINDOWS\\system32\\sihost.exe",
+        "started": "2026-10-01T09:05:40.1248030Z"
+      },
+      {
+        "pid": 11024,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:40.2547260Z"
+      },
+      {
+        "pid": 14468,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:40.3105090Z"
+      },
+      {
+        "pid": 12212,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:40.3690260Z"
+      },
+      {
+        "pid": 18424,
+        "ppid": 2468,
+        "name": "taskhostw.exe",
+        "exe": "C:\\WINDOWS\\system32\\taskhostw.exe",
+        "started": "2026-10-01T09:05:40.4578220Z"
+      },
+      {
+        "pid": 12960,
+        "ppid": 2468,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\System32\\conhost.exe",
+        "started": "2026-10-01T09:05:40.4785220Z"
+      },
+      {
+        "pid": 19240,
+        "ppid": 12960,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T09:05:40.5534490Z"
+      },
+      {
+        "pid": 6080,
+        "ppid": 2468,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\System32\\conhost.exe",
+        "started": "2026-10-01T09:05:40.7683470Z"
+      },
+      {
+        "pid": 19144,
+        "ppid": 6080,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T09:05:40.8757730Z"
+      },
+      {
+        "pid": 11472,
+        "ppid": 1608,
+        "name": "rundll32.exe",
+        "exe": "C:\\WINDOWS\\System32\\rundll32.exe",
+        "started": "2026-10-01T09:05:41.1310000Z"
+      },
+      {
+        "pid": 4168,
+        "ppid": 5928,
+        "name": "explorer.exe",
+        "exe": "C:\\WINDOWS\\Explorer.EXE",
+        "started": "2026-10-01T09:05:43.2154760Z"
+      },
+      {
+        "pid": 15728,
+        "ppid": 4524,
+        "name": "ShellHost.exe",
+        "exe": "C:\\Windows\\System32\\ShellHost.exe",
+        "started": "2026-10-01T09:05:43.3295480Z"
+      },
+      {
+        "pid": 4288,
+        "ppid": 4524,
+        "name": "CrossDeviceResume.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\CrossDeviceResume.exe",
+        "started": "2026-10-01T09:05:43.7025030Z"
+      },
+      {
+        "pid": 11084,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:44.1564660Z"
+      },
+      {
+        "pid": 6572,
+        "ppid": 1608,
+        "name": "CrossDeviceService.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.CrossDevice_1.26072.116.0_x64__cw5n1h2txyewy\\CrossDeviceService.exe",
+        "started": "2026-10-01T09:05:45.1302230Z"
+      },
+      {
+        "pid": 4816,
+        "ppid": 1608,
+        "name": "SearchHost.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",
+        "started": "2026-10-01T09:05:45.8872570Z"
+      },
+      {
+        "pid": 1664,
+        "ppid": 1608,
+        "name": "StartMenuExperienceHost.exe",
+        "exe": "C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",
+        "started": "2026-10-01T09:05:45.9065540Z"
+      },
+      {
+        "pid": 17708,
+        "ppid": 1608,
+        "name": "WidgetBoard.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.Client.WebExperience_526.21100.40.0_x64__cw5n1h2txyewy\\WidgetBoard.exe",
+        "started": "2026-10-01T09:05:46.2726440Z"
+      },
+      {
+        "pid": 14912,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:05:46.6819230Z"
+      },
+      {
+        "pid": 16532,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:46.7172270Z"
+      },
+      {
+        "pid": 4536,
+        "ppid": 1608,
+        "name": "WidgetService.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WidgetsPlatformRuntime_1.6.19.0_x64__8wekyb3d8bbwe\\WidgetService\\WidgetService.exe",
+        "started": "2026-10-01T09:05:47.2007840Z"
+      },
+      {
+        "pid": 10028,
+        "ppid": 12812,
+        "name": "vmwp.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:48.5907150Z"
+      },
+      {
+        "pid": 19196,
+        "ppid": 10028,
+        "name": "vmmemWSL",
+        "exe": null,
+        "started": "2026-10-01T09:05:48.7351000Z"
+      },
+      {
+        "pid": 20312,
+        "ppid": 4816,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:49.1647170Z"
+      },
+      {
+        "pid": 1872,
+        "ppid": 1608,
+        "name": "dllhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\DllHost.exe",
+        "started": "2026-10-01T09:05:49.3299480Z"
+      },
+      {
+        "pid": 14240,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:49.6356600Z"
+      },
+      {
+        "pid": 3416,
+        "ppid": 6264,
+        "name": "DefenderSessionHelper.exe",
+        "exe": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26080.4-0\\DefenderSessionHelper.exe",
+        "started": "2026-10-01T09:05:50.4417220Z"
+      },
+      {
+        "pid": 14732,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:50.7380620Z"
+      },
+      {
+        "pid": 14800,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:50.7422740Z"
+      },
+      {
+        "pid": 15040,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:50.9996930Z"
+      },
+      {
+        "pid": 13636,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:51.1998120Z"
+      },
+      {
+        "pid": 1436,
+        "ppid": 5904,
+        "name": "ipf_helper.exe",
+        "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\ipf_cpu.inf_amd64_4bb9da04f87a83ff\\ipf_helper.exe",
+        "started": "2026-10-01T09:05:51.6151060Z"
+      },
+      {
+        "pid": 8092,
+        "ppid": 5400,
+        "name": "RtkAudUService64.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:51.8094110Z"
+      },
+      {
+        "pid": 9240,
+        "ppid": 5932,
+        "name": "FMAudioMonitor.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:52.0817080Z"
+      },
+      {
+        "pid": 16144,
+        "ppid": 1420,
+        "name": "HPAudioAnalytics.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:52.3258270Z"
+      },
+      {
+        "pid": 11836,
+        "ppid": 4168,
+        "name": "FMToastNotification.exe",
+        "exe": "C:\\WINDOWS\\system32\\FMToastNotification.exe",
+        "started": "2026-10-01T09:05:52.9956940Z"
+      },
+      {
+        "pid": 18492,
+        "ppid": 1608,
+        "name": "MicrosoftStartFeedProvider.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.StartExperiencesApp_1.380.2.0_x64__8wekyb3d8bbwe\\MicrosoftStartFeedProvider\\MicrosoftStartFeedProvider.exe",
+        "started": "2026-10-01T09:05:53.5022830Z"
+      },
+      {
+        "pid": 13440,
+        "ppid": 5492,
+        "name": "ctfmon.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:53.5375910Z"
+      },
+      {
+        "pid": 19168,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:05:54.0895810Z"
+      },
+      {
+        "pid": 17576,
+        "ppid": 6020,
+        "name": "wslrelay.exe",
+        "exe": "C:\\Program Files\\WSL\\wslrelay.exe",
+        "started": "2026-10-01T09:05:54.5327520Z"
+      },
+      {
+        "pid": 5320,
+        "ppid": 6020,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:05:55.2133760Z"
+      },
+      {
+        "pid": 9616,
+        "ppid": 5320,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:05:55.2808360Z"
+      },
+      {
+        "pid": 9280,
+        "ppid": 1608,
+        "name": "TextInputHost.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",
+        "started": "2026-10-01T09:05:55.7090130Z"
+      },
+      {
+        "pid": 10372,
+        "ppid": 9284,
+        "name": "wsl.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:58.1073800Z"
+      },
+      {
+        "pid": 10416,
+        "ppid": 10372,
+        "name": "wsl.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:58.1891670Z"
+      },
+      {
+        "pid": 1172,
+        "ppid": 1608,
+        "name": "dllhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:58.2534370Z"
+      },
+      {
+        "pid": 8464,
+        "ppid": 10416,
+        "name": "wslhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:06:05.7137950Z"
+      },
+      {
+        "pid": 15052,
+        "ppid": 8464,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:06:05.7801500Z"
+      },
+      {
+        "pid": 3008,
+        "ppid": 4168,
+        "name": "SecurityHealthSystray.exe",
+        "exe": "C:\\Windows\\System32\\SecurityHealthSystray.exe",
+        "started": "2026-10-01T09:06:19.6377600Z"
+      },
+      {
+        "pid": 7148,
+        "ppid": 2468,
+        "name": "MicrosoftEdgeUpdate.exe",
+        "exe": null,
+        "started": "2026-10-01T09:06:41.1036070Z"
+      },
+      {
+        "pid": 15400,
+        "ppid": 4168,
+        "name": "RtkAudUService64.exe",
+        "exe": "C:\\Windows\\System32\\DriverStore\\FileRepository\\realtekservice.inf_amd64_464be4340fa51d6a\\RtkAudUService64.exe",
+        "started": "2026-10-01T09:06:49.7726130Z"
+      },
+      {
+        "pid": 12792,
+        "ppid": 17708,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:51.7611240Z"
+      },
+      {
+        "pid": 3092,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:51.8351780Z"
+      },
+      {
+        "pid": 11596,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.1416070Z"
+      },
+      {
+        "pid": 19180,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.1538110Z"
+      },
+      {
+        "pid": 14072,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:06:52.2140560Z"
+      },
+      {
+        "pid": 256,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.3495970Z"
+      },
+      {
+        "pid": 13320,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.5629980Z"
+      },
+      {
+        "pid": 1584,
+        "ppid": 4168,
+        "name": "OneDrive.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe",
+        "started": "2026-10-01T09:07:11.9757990Z"
+      },
+      {
+        "pid": 13768,
+        "ppid": 4924,
+        "name": "ProtonVPN.Client.exe",
+        "exe": "C:\\Program Files\\Proton\\VPN\\v5.1.8\\ProtonVPN.Client.exe",
+        "started": "2026-10-01T09:07:15.4052050Z"
+      },
+      {
+        "pid": 15868,
+        "ppid": 1420,
+        "name": "ProtonVPNService.exe",
+        "exe": null,
+        "started": "2026-10-01T09:07:27.7151740Z"
+      },
+      {
+        "pid": 18532,
+        "ppid": 15868,
+        "name": "ProtonVPN.NrptWatchdog.exe",
+        "exe": null,
+        "started": "2026-10-01T09:07:30.4491200Z"
+      },
+      {
+        "pid": 7404,
+        "ppid": 18532,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:07:30.4771970Z"
+      },
+      {
+        "pid": 17952,
+        "ppid": 4168,
+        "name": "WindowsTerminal.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\WindowsTerminal.exe",
+        "started": "2026-10-01T09:07:32.8468720Z"
+      },
+      {
+        "pid": 9464,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:07:34.4427830Z"
+      },
+      {
+        "pid": 19452,
+        "ppid": 17952,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T09:07:34.4716780Z"
+      },
+      {
+        "pid": 6092,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:07:38.1706070Z"
+      },
+      {
+        "pid": 5880,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T09:07:38.1829560Z"
+      },
+      {
+        "pid": 18700,
+        "ppid": 5880,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T09:07:38.2523490Z"
+      },
+      {
+        "pid": 15748,
+        "ppid": 18700,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:07:38.3592740Z"
+      },
+      {
+        "pid": 5740,
+        "ppid": 15748,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:07:38.4118950Z"
+      },
+      {
+        "pid": 12196,
+        "ppid": 4168,
+        "name": "ProtonDrive.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Proton\\Drive\\ProtonDrive.exe",
+        "started": "2026-10-01T09:07:45.2158990Z"
+      },
+      {
+        "pid": 13740,
+        "ppid": 8096,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:51.4459580Z"
+      },
+      {
+        "pid": 10436,
+        "ppid": 13740,
+        "name": "crashhelper.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\crashhelper.exe",
+        "started": "2026-10-01T09:07:51.7844860Z"
+      },
+      {
+        "pid": 2156,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.0796160Z"
+      },
+      {
+        "pid": 12396,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.3743880Z"
+      },
+      {
+        "pid": 20316,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.7497950Z"
+      },
+      {
+        "pid": 16752,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.7763430Z"
+      },
+      {
+        "pid": 5820,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:53.5560100Z"
+      },
+      {
+        "pid": 12752,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:54.8236390Z"
+      },
+      {
+        "pid": 12744,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:54.8601320Z"
+      },
+      {
+        "pid": 17404,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:55.9324720Z"
+      },
+      {
+        "pid": 6944,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:55.9583500Z"
+      },
+      {
+        "pid": 18092,
+        "ppid": 4168,
+        "name": "RiotClientServices.exe",
+        "exe": "C:\\Riot Games\\Riot Client\\RiotClientServices.exe",
+        "started": "2026-10-01T09:08:00.9725640Z"
+      },
+      {
+        "pid": 1604,
+        "ppid": 18092,
+        "name": "RiotClientCrashHandler.exe",
+        "exe": "C:\\Riot Games\\Riot Client\\RiotClientCrashHandler.exe",
+        "started": "2026-10-01T09:08:05.7769840Z"
+      },
+      {
+        "pid": 8908,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:08:07.0384800Z"
+      },
+      {
+        "pid": 8932,
+        "ppid": 4524,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:23.6830560Z"
+      },
+      {
+        "pid": 14612,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:24.5568590Z"
+      },
+      {
+        "pid": 19204,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:24.8345470Z"
+      },
+      {
+        "pid": 17628,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:24.9352560Z"
+      },
+      {
+        "pid": 17736,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:29.6600440Z"
+      },
+      {
+        "pid": 5028,
+        "ppid": 4524,
+        "name": "IntelGraphicsSoftware.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\AppUp.IntelArcSoftware_26.32.2604.0_x64__8j3eq9eme6ctt\\VFS\\ProgramFilesX64\\Intel\\Intel Graphics Software\\IntelGraphicsSoftware.exe",
+        "started": "2026-10-01T09:08:36.5681930Z"
+      },
+      {
+        "pid": 13144,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:08:38.9940390Z"
+      },
+      {
+        "pid": 2940,
+        "ppid": 20468,
+        "name": "M365Copilot.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2609.52011.0_x64__8wekyb3d8bbwe\\M365Copilot.exe",
+        "started": "2026-10-01T09:09:08.1778370Z"
+      },
+      {
+        "pid": 9500,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:09:08.8143300Z"
+      },
+      {
+        "pid": 16904,
+        "ppid": 2940,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.3831060Z"
+      },
+      {
+        "pid": 16060,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.5040360Z"
+      },
+      {
+        "pid": 6808,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.8497760Z"
+      },
+      {
+        "pid": 5472,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.8612400Z"
+      },
+      {
+        "pid": 18384,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.9839530Z"
+      },
+      {
+        "pid": 18352,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:10.1758540Z"
+      },
+      {
+        "pid": 8548,
+        "ppid": 4524,
+        "name": "WhatsApp.Root.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\5319275A.WhatsAppDesktop_2.2637.100.0_x64__cv1g1gvanyjgm\\WhatsApp.Root.exe",
+        "started": "2026-10-01T09:09:37.2000630Z"
+      },
+      {
+        "pid": 15092,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:09:39.3046580Z"
+      },
+      {
+        "pid": 19552,
+        "ppid": 8548,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:40.9148270Z"
+      },
+      {
+        "pid": 14548,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.0223490Z"
+      },
+      {
+        "pid": 13964,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.2362790Z"
+      },
+      {
+        "pid": 18140,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.2439630Z"
+      },
+      {
+        "pid": 8580,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.3525050Z"
+      },
+      {
+        "pid": 16596,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:44.0365200Z"
+      },
+      {
+        "pid": 3348,
+        "ppid": 9868,
+        "name": "ms-teams.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MSTeams_26246.1604.5133.838_x64__8wekyb3d8bbwe\\ms-teams.exe",
+        "started": "2026-10-01T09:10:08.0374880Z"
+      },
+      {
+        "pid": 4384,
+        "ppid": 3348,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.0280170Z"
+      },
+      {
+        "pid": 19336,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.1167590Z"
+      },
+      {
+        "pid": 16744,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.3330270Z"
+      },
+      {
+        "pid": 5520,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.3432560Z"
+      },
+      {
+        "pid": 11532,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:10:10.3962500Z"
+      },
+      {
+        "pid": 13020,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.5200350Z"
+      },
+      {
+        "pid": 8572,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.7096440Z"
+      },
+      {
+        "pid": 9660,
+        "ppid": 3348,
+        "name": "ms-teams.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MSTeams_26246.1604.5133.838_x64__8wekyb3d8bbwe\\ms-teams.exe",
+        "started": "2026-10-01T09:10:12.3821810Z"
+      },
+      {
+        "pid": 3460,
+        "ppid": 4168,
+        "name": "ollama app.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Ollama\\ollama app.exe",
+        "started": "2026-10-01T09:10:37.7396320Z"
+      },
+      {
+        "pid": 12120,
+        "ppid": 3460,
+        "name": "ollama.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+        "started": "2026-10-01T09:10:38.8706510Z"
+      },
+      {
+        "pid": 10940,
+        "ppid": 12120,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:10:38.9083530Z"
+      },
+      {
+        "pid": 8540,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+        "started": "2026-10-01T09:10:39.3535670Z"
+      },
+      {
+        "pid": 21188,
+        "ppid": 1608,
+        "name": "ApplicationFrameHost.exe",
+        "exe": "C:\\WINDOWS\\system32\\ApplicationFrameHost.exe",
+        "started": "2026-10-01T09:14:33.4527540Z"
+      },
+      {
+        "pid": 20008,
+        "ppid": 1608,
+        "name": "SystemSettings.exe",
+        "exe": "C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe",
+        "started": "2026-10-01T09:14:33.4565680Z"
+      },
+      {
+        "pid": 21128,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:14:36.1710870Z"
+      },
+      {
+        "pid": 11752,
+        "ppid": 1608,
+        "name": "ShellExperienceHost.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\ShellExperienceHost_cw5n1h2txyewy\\ShellExperienceHost.exe",
+        "started": "2026-10-01T09:17:22.1801450Z"
+      },
+      {
+        "pid": 884,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:17:22.7185560Z"
+      },
+      {
+        "pid": 4928,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:17:26.7579170Z"
+      },
+      {
+        "pid": 22308,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:19:08.4450900Z"
+      },
+      {
+        "pid": 20980,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T09:19:08.4552640Z"
+      },
+      {
+        "pid": 13808,
+        "ppid": 20980,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T09:19:08.5507840Z"
+      },
+      {
+        "pid": 15164,
+        "ppid": 13808,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:19:08.6516720Z"
+      },
+      {
+        "pid": 20920,
+        "ppid": 15164,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:19:08.7114630Z"
+      },
+      {
+        "pid": 13136,
+        "ppid": 1608,
+        "name": "backgroundTaskHost.exe",
+        "exe": "C:\\WINDOWS\\system32\\backgroundTaskHost.exe",
+        "started": "2026-10-01T09:47:48.5080720Z"
+      },
+      {
+        "pid": 4956,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:47:48.9501150Z"
+      },
+      {
+        "pid": 16288,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:48:20.2662780Z"
+      },
+      {
+        "pid": 11548,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T09:48:20.2780980Z"
+      },
+      {
+        "pid": 18440,
+        "ppid": 11548,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T09:48:20.4018640Z"
+      },
+      {
+        "pid": 10196,
+        "ppid": 18440,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:48:20.5064780Z"
+      },
+      {
+        "pid": 19320,
+        "ppid": 10196,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:48:20.5666330Z"
+      },
+      {
+        "pid": 10912,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:57:32.2403400Z"
+      },
+      {
+        "pid": 10412,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:57:33.6766660Z"
+      },
+      {
+        "pid": 8360,
+        "ppid": 4168,
+        "name": "SnippingTool.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.ScreenSketch_11.2607.23.0_x64__8wekyb3d8bbwe\\SnippingTool\\SnippingTool.exe",
+        "started": "2026-10-01T09:59:39.5299310Z"
+      },
+      {
+        "pid": 14280,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T10:00:26.7921350Z"
+      },
+      {
+        "pid": 16220,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T10:00:26.8388890Z"
+      },
+      {
+        "pid": 7412,
+        "ppid": 16220,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T10:00:26.9519360Z"
+      },
+      {
+        "pid": 19140,
+        "ppid": 7412,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T10:00:27.0741440Z"
+      },
+      {
+        "pid": 18956,
+        "ppid": 19140,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T10:00:27.1248830Z"
+      },
+      {
+        "pid": 22220,
+        "ppid": 1608,
+        "name": "WmiPrvSE.exe",
+        "exe": null,
+        "started": "2026-10-01T10:01:21.6794350Z"
+      },
+      {
+        "pid": 6096,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:40.1119760Z"
+      },
+      {
+        "pid": 5076,
+        "ppid": 1420,
+        "name": "TrustedInstaller.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:42.5340180Z"
+      },
+      {
+        "pid": 22200,
+        "ppid": 1608,
+        "name": "TiWorker.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:42.6180390Z"
+      },
+      {
+        "pid": 20116,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:47.5967750Z"
+      },
+      {
+        "pid": 14576,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T10:03:49.3360140Z"
+      },
+      {
+        "pid": 22060,
+        "ppid": 5320,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T10:03:58.1020950Z"
+      },
+      {
+        "pid": 1304,
+        "ppid": 22060,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T10:03:58.1278820Z"
+      },
+      {
+        "pid": 17716,
+        "ppid": 7412,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T10:03:58.5750510Z"
+      },
+      {
+        "pid": 10060,
+        "ppid": 17716,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T10:03:58.5943160Z"
+      }
+    ]
+  },
+  "after": {
+    "at": "2026-10-01T10:04:03.8879922Z",
+    "dotnet": [
+      {
+        "Id": 9048,
+        "ProcessName": "AggregatorHost"
+      },
+      {
+        "Id": 3572,
+        "ProcessName": "AppHelperCap"
+      },
+      {
+        "Id": 21188,
+        "ProcessName": "ApplicationFrameHost"
+      },
+      {
+        "Id": 13136,
+        "ProcessName": "backgroundTaskHost"
+      },
+      {
+        "Id": 8932,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 14612,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 17628,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 17736,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 19204,
+        "ProcessName": "ChatGPT Classic"
+      },
+      {
+        "Id": 7092,
+        "ProcessName": "codex-windows-sandbox-service"
+      },
+      {
+        "Id": 1304,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 3304,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 5740,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 6080,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 7404,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 9300,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 9384,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 9616,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 10940,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 12960,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 15048,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 15052,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 18956,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 19320,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 20920,
+        "ProcessName": "conhost"
+      },
+      {
+        "Id": 8064,
+        "ProcessName": "cowork-svc"
+      },
+      {
+        "Id": 10436,
+        "ProcessName": "crashhelper"
+      },
+      {
+        "Id": 4288,
+        "ProcessName": "CrossDeviceResume"
+      },
+      {
+        "Id": 6572,
+        "ProcessName": "CrossDeviceService"
+      },
+      {
+        "Id": 12596,
+        "ProcessName": "csc"
+      },
+      {
+        "Id": 632,
+        "ProcessName": "csrss"
+      },
+      {
+        "Id": 1196,
+        "ProcessName": "csrss"
+      },
+      {
+        "Id": 13440,
+        "ProcessName": "ctfmon"
+      },
+      {
+        "Id": 3416,
+        "ProcessName": "DefenderSessionHelper"
+      },
+      {
+        "Id": 3636,
+        "ProcessName": "DiagsCap"
+      },
+      {
+        "Id": 1172,
+        "ProcessName": "dllhost"
+      },
+      {
+        "Id": 1872,
+        "ProcessName": "dllhost"
+      },
+      {
+        "Id": 9712,
+        "ProcessName": "dwm"
+      },
+      {
+        "Id": 2756,
+        "ProcessName": "ELAN_MOC_Service"
+      },
+      {
+        "Id": 5192,
+        "ProcessName": "escsvc64"
+      },
+      {
+        "Id": 4168,
+        "ProcessName": "explorer"
+      },
+      {
+        "Id": 2156,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 5820,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 6944,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 8908,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 12396,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 12744,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 12752,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 13740,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 16752,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 17404,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 20316,
+        "ProcessName": "firefox"
+      },
+      {
+        "Id": 9240,
+        "ProcessName": "FMAudioMonitor"
+      },
+      {
+        "Id": 5932,
+        "ProcessName": "FMService64"
+      },
+      {
+        "Id": 11836,
+        "ProcessName": "FMToastNotification"
+      },
+      {
+        "Id": 1632,
+        "ProcessName": "fontdrvhost"
+      },
+      {
+        "Id": 19992,
+        "ProcessName": "fontdrvhost"
+      },
+      {
+        "Id": 5436,
+        "ProcessName": "HotKeyServiceUWP"
+      },
+      {
+        "Id": 16144,
+        "ProcessName": "HPAudioAnalytics"
+      },
+      {
+        "Id": 6024,
+        "ProcessName": "HpSfuService64"
+      },
+      {
+        "Id": 4172,
+        "ProcessName": "hpsvcsscan"
+      },
+      {
+        "Id": 0,
+        "ProcessName": "Idle"
+      },
+      {
+        "Id": 6036,
+        "ProcessName": "IntelAudioService"
+      },
+      {
+        "Id": 2288,
+        "ProcessName": "IntelCpHDCPSvc"
+      },
+      {
+        "Id": 5028,
+        "ProcessName": "IntelGraphicsSoftware"
+      },
+      {
+        "Id": 6844,
+        "ProcessName": "IntelGraphicsSoftware.Service"
+      },
+      {
+        "Id": 1436,
+        "ProcessName": "ipf_helper"
+      },
+      {
+        "Id": 5904,
+        "ProcessName": "ipf_uf"
+      },
+      {
+        "Id": 6156,
+        "ProcessName": "ipfsvc"
+      },
+      {
+        "Id": 7104,
+        "ProcessName": "JarvisSensor"
+      },
+      {
+        "Id": 6164,
+        "ProcessName": "jhi_service"
+      },
+      {
+        "Id": 8312,
+        "ProcessName": "LanWlanWwanSwitchingServiceUWP"
+      },
+      {
+        "Id": 1448,
+        "ProcessName": "LsaIso"
+      },
+      {
+        "Id": 1456,
+        "ProcessName": "lsass"
+      },
+      {
+        "Id": 2940,
+        "ProcessName": "M365Copilot"
+      },
+      {
+        "Id": 4084,
+        "ProcessName": "Memory Compression"
+      },
+      {
+        "Id": 7148,
+        "ProcessName": "MicrosoftEdgeUpdate"
+      },
+      {
+        "Id": 18492,
+        "ProcessName": "MicrosoftStartFeedProvider"
+      },
+      {
+        "Id": 6212,
+        "ProcessName": "MpDefenderCoreService"
+      },
+      {
+        "Id": 256,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 3092,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 4384,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 4928,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 5472,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 5520,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 6808,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 8572,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 8580,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 11596,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 12792,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13020,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13320,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13636,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 13964,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14240,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14548,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14732,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 14800,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 15040,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16060,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16596,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16744,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 16904,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 18140,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 18352,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 18384,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 19180,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 19336,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 19552,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 20312,
+        "ProcessName": "msedgewebview2"
+      },
+      {
+        "Id": 6264,
+        "ProcessName": "MsMpEng"
+      },
+      {
+        "Id": 3348,
+        "ProcessName": "ms-teams"
+      },
+      {
+        "Id": 9660,
+        "ProcessName": "ms-teams"
+      },
+      {
+        "Id": 3668,
+        "ProcessName": "NetworkCap"
+      },
+      {
+        "Id": 15924,
+        "ProcessName": "NisSrv"
+      },
+      {
+        "Id": 12120,
+        "ProcessName": "ollama"
+      },
+      {
+        "Id": 3460,
+        "ProcessName": "ollama app"
+      },
+      {
+        "Id": 1584,
+        "ProcessName": "OneDrive"
+      },
+      {
+        "Id": 6092,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 9464,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 14280,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 16288,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 22308,
+        "ProcessName": "OpenConsole"
+      },
+      {
+        "Id": 9284,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 19144,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 19240,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 19452,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 20680,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 22060,
+        "ProcessName": "powershell"
+      },
+      {
+        "Id": 7676,
+        "ProcessName": "PresentMonService"
+      },
+      {
+        "Id": 12196,
+        "ProcessName": "ProtonDrive"
+      },
+      {
+        "Id": 13768,
+        "ProcessName": "ProtonVPN.Client"
+      },
+      {
+        "Id": 18532,
+        "ProcessName": "ProtonVPN.NrptWatchdog"
+      },
+      {
+        "Id": 15868,
+        "ProcessName": "ProtonVPNService"
+      },
+      {
+        "Id": 232,
+        "ProcessName": "Registry"
+      },
+      {
+        "Id": 1604,
+        "ProcessName": "RiotClientCrashHandler"
+      },
+      {
+        "Id": 18092,
+        "ProcessName": "RiotClientServices"
+      },
+      {
+        "Id": 5400,
+        "ProcessName": "RtkAudUService64"
+      },
+      {
+        "Id": 8092,
+        "ProcessName": "RtkAudUService64"
+      },
+      {
+        "Id": 15400,
+        "ProcessName": "RtkAudUService64"
+      },
+      {
+        "Id": 5948,
+        "ProcessName": "RtkBtManServ"
+      },
+      {
+        "Id": 11472,
+        "ProcessName": "rundll32"
+      },
+      {
+        "Id": 884,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 4956,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 9500,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 11532,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 13144,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 14072,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 14912,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 15092,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 19168,
+        "ProcessName": "RuntimeBroker"
+      },
+      {
+        "Id": 4816,
+        "ProcessName": "SearchHost"
+      },
+      {
+        "Id": 14664,
+        "ProcessName": "SearchIndexer"
+      },
+      {
+        "Id": 188,
+        "ProcessName": "Secure System"
+      },
+      {
+        "Id": 13192,
+        "ProcessName": "SecurityHealthService"
+      },
+      {
+        "Id": 3008,
+        "ProcessName": "SecurityHealthSystray"
+      },
+      {
+        "Id": 1420,
+        "ProcessName": "services"
+      },
+      {
+        "Id": 11752,
+        "ProcessName": "ShellExperienceHost"
+      },
+      {
+        "Id": 15728,
+        "ProcessName": "ShellHost"
+      },
+      {
+        "Id": 4524,
+        "ProcessName": "sihost"
+      },
+      {
+        "Id": 852,
+        "ProcessName": "smss"
+      },
+      {
+        "Id": 11908,
+        "ProcessName": "SNAPOS64"
+      },
+      {
+        "Id": 6188,
+        "ProcessName": "SNAPOSS64"
+      },
+      {
+        "Id": 8360,
+        "ProcessName": "SnippingTool"
+      },
+      {
+        "Id": 6060,
+        "ProcessName": "spoolsv"
+      },
+      {
+        "Id": 1664,
+        "ProcessName": "StartMenuExperienceHost"
+      },
+      {
+        "Id": 1608,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1744,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1824,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1988,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 1996,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2008,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2044,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2096,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2104,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2144,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2268,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2300,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2320,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2376,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2444,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2468,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2600,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2788,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2848,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2892,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 2968,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3104,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3276,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3424,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3440,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3548,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3612,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3660,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3732,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3752,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3936,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3976,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3984,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3992,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4328,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4516,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4620,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 4848,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5204,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5492,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5504,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5584,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5788,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5796,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5800,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5896,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 5956,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6044,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6096,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6172,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6180,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6196,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6220,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6496,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 6852,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 7792,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 8540,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 9076,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 9716,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 9760,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10412,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10792,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10900,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 10912,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11024,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11084,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11232,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 11880,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 12212,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 12912,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13216,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13236,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13900,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 13912,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 14124,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 14468,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 14576,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16316,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16420,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16532,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 16616,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 17024,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 17616,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 20116,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 20456,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 21128,
+        "ProcessName": "svchost"
+      },
+      {
+        "Id": 3616,
+        "ProcessName": "SysInfoCap"
+      },
+      {
+        "Id": 6392,
+        "ProcessName": "Sysmon64"
+      },
+      {
+        "Id": 4,
+        "ProcessName": "System"
+      },
+      {
+        "Id": 20008,
+        "ProcessName": "SystemSettings"
+      },
+      {
+        "Id": 18424,
+        "ProcessName": "taskhostw"
+      },
+      {
+        "Id": 9280,
+        "ProcessName": "TextInputHost"
+      },
+      {
+        "Id": 22200,
+        "ProcessName": "TiWorker"
+      },
+      {
+        "Id": 3704,
+        "ProcessName": "TouchpointAnalyticsClientService"
+      },
+      {
+        "Id": 5076,
+        "ProcessName": "TrustedInstaller"
+      },
+      {
+        "Id": 3676,
+        "ProcessName": "unsecapp"
+      },
+      {
+        "Id": 12812,
+        "ProcessName": "vmcompute"
+      },
+      {
+        "Id": 19196,
+        "ProcessName": "vmmemWSL"
+      },
+      {
+        "Id": 10028,
+        "ProcessName": "vmwp"
+      },
+      {
+        "Id": 8548,
+        "ProcessName": "WhatsApp.Root"
+      },
+      {
+        "Id": 17708,
+        "ProcessName": "WidgetBoard"
+      },
+      {
+        "Id": 4536,
+        "ProcessName": "WidgetService"
+      },
+      {
+        "Id": 17952,
+        "ProcessName": "WindowsTerminal"
+      },
+      {
+        "Id": 1284,
+        "ProcessName": "wininit"
+      },
+      {
+        "Id": 9964,
+        "ProcessName": "winlogon"
+      },
+      {
+        "Id": 4988,
+        "ProcessName": "WmiPrvSE"
+      },
+      {
+        "Id": 10200,
+        "ProcessName": "WmiPrvSE"
+      },
+      {
+        "Id": 22220,
+        "ProcessName": "WmiPrvSE"
+      },
+      {
+        "Id": 5560,
+        "ProcessName": "WMIRegistrationService"
+      },
+      {
+        "Id": 5880,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 7412,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 10372,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 10416,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 11548,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 13808,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 16220,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 18440,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 18700,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 20980,
+        "ProcessName": "wsl"
+      },
+      {
+        "Id": 5320,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 8464,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 10196,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 15164,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 15748,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 19140,
+        "ProcessName": "wslhost"
+      },
+      {
+        "Id": 17576,
+        "ProcessName": "wslrelay"
+      },
+      {
+        "Id": 6020,
+        "ProcessName": "wslservice"
+      },
+      {
+        "Id": 1736,
+        "ProcessName": "WUDFHost"
+      },
+      {
+        "Id": 1912,
+        "ProcessName": "WUDFHost"
+      },
+      {
+        "Id": 2504,
+        "ProcessName": "WUDFHost"
+      }
+    ],
+    "cim": [
+      {
+        "pid": 0,
+        "ppid": 0,
+        "name": "System Idle Process",
+        "exe": null,
+        "started": "2026-09-30T17:18:33.9107130Z"
+      },
+      {
+        "pid": 4,
+        "ppid": 0,
+        "name": "System",
+        "exe": null,
+        "started": "2026-09-30T17:18:33.9107130Z"
+      },
+      {
+        "pid": 188,
+        "ppid": 4,
+        "name": "Secure System",
+        "exe": null,
+        "started": "2026-09-30T17:18:12.5680900Z"
+      },
+      {
+        "pid": 232,
+        "ppid": 4,
+        "name": "Registry",
+        "exe": null,
+        "started": "2026-09-30T17:18:12.5810540Z"
+      },
+      {
+        "pid": 852,
+        "ppid": 4,
+        "name": "smss.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:33.9216010Z"
+      },
+      {
+        "pid": 1196,
+        "ppid": 996,
+        "name": "csrss.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.1236420Z"
+      },
+      {
+        "pid": 1284,
+        "ppid": 996,
+        "name": "wininit.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.7906640Z"
+      },
+      {
+        "pid": 1420,
+        "ppid": 1284,
+        "name": "services.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.8725990Z"
+      },
+      {
+        "pid": 1448,
+        "ppid": 1284,
+        "name": "LsaIso.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.9196900Z"
+      },
+      {
+        "pid": 1456,
+        "ppid": 1284,
+        "name": "lsass.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:58.9258570Z"
+      },
+      {
+        "pid": 1608,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.3991940Z"
+      },
+      {
+        "pid": 1632,
+        "ppid": 1284,
+        "name": "fontdrvhost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.4138240Z"
+      },
+      {
+        "pid": 1736,
+        "ppid": 1420,
+        "name": "WUDFHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.5495470Z"
+      },
+      {
+        "pid": 1744,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.5604060Z"
+      },
+      {
+        "pid": 1824,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.6155710Z"
+      },
+      {
+        "pid": 1912,
+        "ppid": 1420,
+        "name": "WUDFHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7446940Z"
+      },
+      {
+        "pid": 1988,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7627990Z"
+      },
+      {
+        "pid": 2008,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7642140Z"
+      },
+      {
+        "pid": 2044,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.7699850Z"
+      },
+      {
+        "pid": 2096,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8029170Z"
+      },
+      {
+        "pid": 2104,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8038020Z"
+      },
+      {
+        "pid": 2144,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8132600Z"
+      },
+      {
+        "pid": 2268,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8534470Z"
+      },
+      {
+        "pid": 2288,
+        "ppid": 1420,
+        "name": "IntelCpHDCPSvc.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8598960Z"
+      },
+      {
+        "pid": 2300,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8673270Z"
+      },
+      {
+        "pid": 2320,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8795950Z"
+      },
+      {
+        "pid": 2376,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.8931910Z"
+      },
+      {
+        "pid": 2444,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9125600Z"
+      },
+      {
+        "pid": 2468,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9162150Z"
+      },
+      {
+        "pid": 2504,
+        "ppid": 1420,
+        "name": "WUDFHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9249480Z"
+      },
+      {
+        "pid": 2600,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9393160Z"
+      },
+      {
+        "pid": 2756,
+        "ppid": 1420,
+        "name": "ELAN_MOC_Service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9618030Z"
+      },
+      {
+        "pid": 2788,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:18:59.9730130Z"
+      },
+      {
+        "pid": 2892,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.0157370Z"
+      },
+      {
+        "pid": 2848,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.0861870Z"
+      },
+      {
+        "pid": 2968,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.0892550Z"
+      },
+      {
+        "pid": 3276,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.1615530Z"
+      },
+      {
+        "pid": 3424,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.2517570Z"
+      },
+      {
+        "pid": 3440,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.2879120Z"
+      },
+      {
+        "pid": 3548,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.3531250Z"
+      },
+      {
+        "pid": 3752,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.5884010Z"
+      },
+      {
+        "pid": 3936,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.7953360Z"
+      },
+      {
+        "pid": 3976,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8159470Z"
+      },
+      {
+        "pid": 3984,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8161780Z"
+      },
+      {
+        "pid": 3992,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8176980Z"
+      },
+      {
+        "pid": 4084,
+        "ppid": 4,
+        "name": "Memory Compression",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8515570Z"
+      },
+      {
+        "pid": 3104,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.8708830Z"
+      },
+      {
+        "pid": 3616,
+        "ppid": 1420,
+        "name": "SysInfoCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9134390Z"
+      },
+      {
+        "pid": 3636,
+        "ppid": 1420,
+        "name": "DiagsCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9150230Z"
+      },
+      {
+        "pid": 3572,
+        "ppid": 1420,
+        "name": "AppHelperCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9150790Z"
+      },
+      {
+        "pid": 3704,
+        "ppid": 1420,
+        "name": "TouchpointAnalyticsClientService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9151030Z"
+      },
+      {
+        "pid": 3732,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9174240Z"
+      },
+      {
+        "pid": 3668,
+        "ppid": 1420,
+        "name": "NetworkCap.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9178350Z"
+      },
+      {
+        "pid": 3660,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9183310Z"
+      },
+      {
+        "pid": 3612,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:00.9300940Z"
+      },
+      {
+        "pid": 4172,
+        "ppid": 1420,
+        "name": "hpsvcsscan.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.0356440Z"
+      },
+      {
+        "pid": 4328,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.1473250Z"
+      },
+      {
+        "pid": 4516,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.6197780Z"
+      },
+      {
+        "pid": 4620,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:01.8423480Z"
+      },
+      {
+        "pid": 4848,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:02.5046470Z"
+      },
+      {
+        "pid": 3676,
+        "ppid": 1608,
+        "name": "unsecapp.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:03.2013620Z"
+      },
+      {
+        "pid": 4988,
+        "ppid": 1608,
+        "name": "WmiPrvSE.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:03.2795070Z"
+      },
+      {
+        "pid": 5204,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:03.6296470Z"
+      },
+      {
+        "pid": 5436,
+        "ppid": 1420,
+        "name": "HotKeyServiceUWP.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:05.5306960Z"
+      },
+      {
+        "pid": 5492,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:05.5800750Z"
+      },
+      {
+        "pid": 5788,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:05.9117200Z"
+      },
+      {
+        "pid": 5896,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:06.2051900Z"
+      },
+      {
+        "pid": 5956,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:06.2430540Z"
+      },
+      {
+        "pid": 6060,
+        "ppid": 1420,
+        "name": "spoolsv.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:06.7201310Z"
+      },
+      {
+        "pid": 5504,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.0761260Z"
+      },
+      {
+        "pid": 5796,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1201150Z"
+      },
+      {
+        "pid": 5584,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1331810Z"
+      },
+      {
+        "pid": 5800,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1407170Z"
+      },
+      {
+        "pid": 5400,
+        "ppid": 1420,
+        "name": "RtkAudUService64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1431240Z"
+      },
+      {
+        "pid": 6036,
+        "ppid": 1420,
+        "name": "IntelAudioService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1431710Z"
+      },
+      {
+        "pid": 5932,
+        "ppid": 1420,
+        "name": "FMService64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1458610Z"
+      },
+      {
+        "pid": 5948,
+        "ppid": 1420,
+        "name": "RtkBtManServ.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1461810Z"
+      },
+      {
+        "pid": 6024,
+        "ppid": 1420,
+        "name": "HpSfuService64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1462800Z"
+      },
+      {
+        "pid": 5560,
+        "ppid": 1420,
+        "name": "WMIRegistrationService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1419350Z"
+      },
+      {
+        "pid": 6020,
+        "ppid": 1420,
+        "name": "wslservice.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1469910Z"
+      },
+      {
+        "pid": 5904,
+        "ppid": 1420,
+        "name": "ipf_uf.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1482470Z"
+      },
+      {
+        "pid": 5192,
+        "ppid": 1420,
+        "name": "escsvc64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1513330Z"
+      },
+      {
+        "pid": 6044,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1456140Z"
+      },
+      {
+        "pid": 6156,
+        "ppid": 1420,
+        "name": "ipfsvc.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1591780Z"
+      },
+      {
+        "pid": 6164,
+        "ppid": 1420,
+        "name": "jhi_service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1606420Z"
+      },
+      {
+        "pid": 6172,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1611380Z"
+      },
+      {
+        "pid": 6180,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1613340Z"
+      },
+      {
+        "pid": 6188,
+        "ppid": 1420,
+        "name": "SNAPOSS64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1645290Z"
+      },
+      {
+        "pid": 6196,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1645780Z"
+      },
+      {
+        "pid": 6212,
+        "ppid": 1420,
+        "name": "MpDefenderCoreService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1689190Z"
+      },
+      {
+        "pid": 6220,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1706810Z"
+      },
+      {
+        "pid": 6264,
+        "ppid": 1420,
+        "name": "MsMpEng.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.1855660Z"
+      },
+      {
+        "pid": 6392,
+        "ppid": 1420,
+        "name": "Sysmon64.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.2520880Z"
+      },
+      {
+        "pid": 7104,
+        "ppid": 1420,
+        "name": "JarvisSensor.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:07.6810900Z"
+      },
+      {
+        "pid": 7792,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.0963960Z"
+      },
+      {
+        "pid": 8064,
+        "ppid": 1420,
+        "name": "cowork-svc.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.3061190Z"
+      },
+      {
+        "pid": 6852,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.3488120Z"
+      },
+      {
+        "pid": 6844,
+        "ppid": 1420,
+        "name": "IntelGraphicsSoftware.Service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.4144010Z"
+      },
+      {
+        "pid": 7092,
+        "ppid": 1420,
+        "name": "codex-windows-sandbox-service.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.4365770Z"
+      },
+      {
+        "pid": 8312,
+        "ppid": 1420,
+        "name": "LanWlanWwanSwitchingServiceUWP.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:08.6122840Z"
+      },
+      {
+        "pid": 9048,
+        "ppid": 5584,
+        "name": "AggregatorHost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:09.4399000Z"
+      },
+      {
+        "pid": 9076,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:09.5120510Z"
+      },
+      {
+        "pid": 9284,
+        "ppid": 2468,
+        "name": "powershell.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:10.0235800Z"
+      },
+      {
+        "pid": 9716,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:10.5558990Z"
+      },
+      {
+        "pid": 9384,
+        "ppid": 9284,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:12.8914980Z"
+      },
+      {
+        "pid": 7676,
+        "ppid": 6844,
+        "name": "PresentMonService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:13.5895450Z"
+      },
+      {
+        "pid": 9300,
+        "ppid": 7676,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:13.6962470Z"
+      },
+      {
+        "pid": 10792,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:15.0356950Z"
+      },
+      {
+        "pid": 10900,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:15.2020140Z"
+      },
+      {
+        "pid": 11232,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:15.5173740Z"
+      },
+      {
+        "pid": 11880,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:17.1140700Z"
+      },
+      {
+        "pid": 12812,
+        "ppid": 1420,
+        "name": "vmcompute.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:20.4389570Z"
+      },
+      {
+        "pid": 13912,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:24.7185650Z"
+      },
+      {
+        "pid": 13900,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:24.8104320Z"
+      },
+      {
+        "pid": 14664,
+        "ppid": 1420,
+        "name": "SearchIndexer.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:26.3592710Z"
+      },
+      {
+        "pid": 13192,
+        "ppid": 1420,
+        "name": "SecurityHealthService.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:49.5209590Z"
+      },
+      {
+        "pid": 6496,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:51.6337270Z"
+      },
+      {
+        "pid": 15924,
+        "ppid": 1420,
+        "name": "NisSrv.exe",
+        "exe": null,
+        "started": "2026-09-30T17:19:53.7082320Z"
+      },
+      {
+        "pid": 16616,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:20:05.3324840Z"
+      },
+      {
+        "pid": 12912,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:12.8232480Z"
+      },
+      {
+        "pid": 9760,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:13.0928090Z"
+      },
+      {
+        "pid": 16316,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:13.2336060Z"
+      },
+      {
+        "pid": 16420,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:13.8728970Z"
+      },
+      {
+        "pid": 17024,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:21:14.0683470Z"
+      },
+      {
+        "pid": 14124,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:23:23.1966370Z"
+      },
+      {
+        "pid": 13236,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:34:32.6092780Z"
+      },
+      {
+        "pid": 13216,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:34:41.5506190Z"
+      },
+      {
+        "pid": 17616,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T17:52:17.6311640Z"
+      },
+      {
+        "pid": 10200,
+        "ppid": 1608,
+        "name": "WmiPrvSE.exe",
+        "exe": null,
+        "started": "2026-09-30T18:22:52.2755100Z"
+      },
+      {
+        "pid": 1996,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T18:35:18.7347910Z"
+      },
+      {
+        "pid": 20456,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-09-30T18:35:18.7822910Z"
+      },
+      {
+        "pid": 632,
+        "ppid": 8432,
+        "name": "csrss.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.4418210Z"
+      },
+      {
+        "pid": 9964,
+        "ppid": 8432,
+        "name": "winlogon.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.5022360Z"
+      },
+      {
+        "pid": 19992,
+        "ppid": 9964,
+        "name": "fontdrvhost.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.7515210Z"
+      },
+      {
+        "pid": 9712,
+        "ppid": 9964,
+        "name": "dwm.exe",
+        "exe": null,
+        "started": "2026-09-30T19:03:12.8373000Z"
+      },
+      {
+        "pid": 11908,
+        "ppid": 6188,
+        "name": "SNAPOS64.exe",
+        "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\snapo64.inf_amd64_fd4aaa60454ea9da\\SNAPOS64.exe",
+        "started": "2026-10-01T09:05:39.6304700Z"
+      },
+      {
+        "pid": 15048,
+        "ppid": 11908,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:05:39.6480700Z"
+      },
+      {
+        "pid": 4524,
+        "ppid": 2892,
+        "name": "sihost.exe",
+        "exe": "C:\\WINDOWS\\system32\\sihost.exe",
+        "started": "2026-10-01T09:05:40.1248030Z"
+      },
+      {
+        "pid": 11024,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:40.2547260Z"
+      },
+      {
+        "pid": 14468,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:40.3105090Z"
+      },
+      {
+        "pid": 12212,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:40.3690260Z"
+      },
+      {
+        "pid": 18424,
+        "ppid": 2468,
+        "name": "taskhostw.exe",
+        "exe": "C:\\WINDOWS\\system32\\taskhostw.exe",
+        "started": "2026-10-01T09:05:40.4578220Z"
+      },
+      {
+        "pid": 12960,
+        "ppid": 2468,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\System32\\conhost.exe",
+        "started": "2026-10-01T09:05:40.4785220Z"
+      },
+      {
+        "pid": 19240,
+        "ppid": 12960,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T09:05:40.5534490Z"
+      },
+      {
+        "pid": 6080,
+        "ppid": 2468,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\System32\\conhost.exe",
+        "started": "2026-10-01T09:05:40.7683470Z"
+      },
+      {
+        "pid": 19144,
+        "ppid": 6080,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T09:05:40.8757730Z"
+      },
+      {
+        "pid": 11472,
+        "ppid": 1608,
+        "name": "rundll32.exe",
+        "exe": "C:\\WINDOWS\\System32\\rundll32.exe",
+        "started": "2026-10-01T09:05:41.1310000Z"
+      },
+      {
+        "pid": 4168,
+        "ppid": 5928,
+        "name": "explorer.exe",
+        "exe": "C:\\WINDOWS\\Explorer.EXE",
+        "started": "2026-10-01T09:05:43.2154760Z"
+      },
+      {
+        "pid": 15728,
+        "ppid": 4524,
+        "name": "ShellHost.exe",
+        "exe": "C:\\Windows\\System32\\ShellHost.exe",
+        "started": "2026-10-01T09:05:43.3295480Z"
+      },
+      {
+        "pid": 4288,
+        "ppid": 4524,
+        "name": "CrossDeviceResume.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\CrossDeviceResume.exe",
+        "started": "2026-10-01T09:05:43.7025030Z"
+      },
+      {
+        "pid": 11084,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:44.1564660Z"
+      },
+      {
+        "pid": 6572,
+        "ppid": 1608,
+        "name": "CrossDeviceService.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.CrossDevice_1.26072.116.0_x64__cw5n1h2txyewy\\CrossDeviceService.exe",
+        "started": "2026-10-01T09:05:45.1302230Z"
+      },
+      {
+        "pid": 4816,
+        "ppid": 1608,
+        "name": "SearchHost.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",
+        "started": "2026-10-01T09:05:45.8872570Z"
+      },
+      {
+        "pid": 1664,
+        "ppid": 1608,
+        "name": "StartMenuExperienceHost.exe",
+        "exe": "C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",
+        "started": "2026-10-01T09:05:45.9065540Z"
+      },
+      {
+        "pid": 17708,
+        "ppid": 1608,
+        "name": "WidgetBoard.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.Client.WebExperience_526.21100.40.0_x64__cw5n1h2txyewy\\WidgetBoard.exe",
+        "started": "2026-10-01T09:05:46.2726440Z"
+      },
+      {
+        "pid": 14912,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:05:46.6819230Z"
+      },
+      {
+        "pid": 16532,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:05:46.7172270Z"
+      },
+      {
+        "pid": 4536,
+        "ppid": 1608,
+        "name": "WidgetService.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WidgetsPlatformRuntime_1.6.19.0_x64__8wekyb3d8bbwe\\WidgetService\\WidgetService.exe",
+        "started": "2026-10-01T09:05:47.2007840Z"
+      },
+      {
+        "pid": 10028,
+        "ppid": 12812,
+        "name": "vmwp.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:48.5907150Z"
+      },
+      {
+        "pid": 19196,
+        "ppid": 10028,
+        "name": "vmmemWSL",
+        "exe": null,
+        "started": "2026-10-01T09:05:48.7351000Z"
+      },
+      {
+        "pid": 20312,
+        "ppid": 4816,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:49.1647170Z"
+      },
+      {
+        "pid": 1872,
+        "ppid": 1608,
+        "name": "dllhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\DllHost.exe",
+        "started": "2026-10-01T09:05:49.3299480Z"
+      },
+      {
+        "pid": 14240,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:49.6356600Z"
+      },
+      {
+        "pid": 3416,
+        "ppid": 6264,
+        "name": "DefenderSessionHelper.exe",
+        "exe": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26080.4-0\\DefenderSessionHelper.exe",
+        "started": "2026-10-01T09:05:50.4417220Z"
+      },
+      {
+        "pid": 14732,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:50.7380620Z"
+      },
+      {
+        "pid": 14800,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:50.7422740Z"
+      },
+      {
+        "pid": 15040,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:50.9996930Z"
+      },
+      {
+        "pid": 13636,
+        "ppid": 20312,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:05:51.1998120Z"
+      },
+      {
+        "pid": 1436,
+        "ppid": 5904,
+        "name": "ipf_helper.exe",
+        "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\ipf_cpu.inf_amd64_4bb9da04f87a83ff\\ipf_helper.exe",
+        "started": "2026-10-01T09:05:51.6151060Z"
+      },
+      {
+        "pid": 8092,
+        "ppid": 5400,
+        "name": "RtkAudUService64.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:51.8094110Z"
+      },
+      {
+        "pid": 9240,
+        "ppid": 5932,
+        "name": "FMAudioMonitor.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:52.0817080Z"
+      },
+      {
+        "pid": 16144,
+        "ppid": 1420,
+        "name": "HPAudioAnalytics.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:52.3258270Z"
+      },
+      {
+        "pid": 11836,
+        "ppid": 4168,
+        "name": "FMToastNotification.exe",
+        "exe": "C:\\WINDOWS\\system32\\FMToastNotification.exe",
+        "started": "2026-10-01T09:05:52.9956940Z"
+      },
+      {
+        "pid": 18492,
+        "ppid": 1608,
+        "name": "MicrosoftStartFeedProvider.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.StartExperiencesApp_1.380.2.0_x64__8wekyb3d8bbwe\\MicrosoftStartFeedProvider\\MicrosoftStartFeedProvider.exe",
+        "started": "2026-10-01T09:05:53.5022830Z"
+      },
+      {
+        "pid": 13440,
+        "ppid": 5492,
+        "name": "ctfmon.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:53.5375910Z"
+      },
+      {
+        "pid": 19168,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:05:54.0895810Z"
+      },
+      {
+        "pid": 17576,
+        "ppid": 6020,
+        "name": "wslrelay.exe",
+        "exe": "C:\\Program Files\\WSL\\wslrelay.exe",
+        "started": "2026-10-01T09:05:54.5327520Z"
+      },
+      {
+        "pid": 5320,
+        "ppid": 6020,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:05:55.2133760Z"
+      },
+      {
+        "pid": 9616,
+        "ppid": 5320,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:05:55.2808360Z"
+      },
+      {
+        "pid": 9280,
+        "ppid": 1608,
+        "name": "TextInputHost.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",
+        "started": "2026-10-01T09:05:55.7090130Z"
+      },
+      {
+        "pid": 10372,
+        "ppid": 9284,
+        "name": "wsl.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:58.1073800Z"
+      },
+      {
+        "pid": 10416,
+        "ppid": 10372,
+        "name": "wsl.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:58.1891670Z"
+      },
+      {
+        "pid": 1172,
+        "ppid": 1608,
+        "name": "dllhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:05:58.2534370Z"
+      },
+      {
+        "pid": 8464,
+        "ppid": 10416,
+        "name": "wslhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:06:05.7137950Z"
+      },
+      {
+        "pid": 15052,
+        "ppid": 8464,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:06:05.7801500Z"
+      },
+      {
+        "pid": 3008,
+        "ppid": 4168,
+        "name": "SecurityHealthSystray.exe",
+        "exe": "C:\\Windows\\System32\\SecurityHealthSystray.exe",
+        "started": "2026-10-01T09:06:19.6377600Z"
+      },
+      {
+        "pid": 7148,
+        "ppid": 2468,
+        "name": "MicrosoftEdgeUpdate.exe",
+        "exe": null,
+        "started": "2026-10-01T09:06:41.1036070Z"
+      },
+      {
+        "pid": 15400,
+        "ppid": 4168,
+        "name": "RtkAudUService64.exe",
+        "exe": "C:\\Windows\\System32\\DriverStore\\FileRepository\\realtekservice.inf_amd64_464be4340fa51d6a\\RtkAudUService64.exe",
+        "started": "2026-10-01T09:06:49.7726130Z"
+      },
+      {
+        "pid": 12792,
+        "ppid": 17708,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:51.7611240Z"
+      },
+      {
+        "pid": 3092,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:51.8351780Z"
+      },
+      {
+        "pid": 11596,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.1416070Z"
+      },
+      {
+        "pid": 19180,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.1538110Z"
+      },
+      {
+        "pid": 14072,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:06:52.2140560Z"
+      },
+      {
+        "pid": 256,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.3495970Z"
+      },
+      {
+        "pid": 13320,
+        "ppid": 12792,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:06:52.5629980Z"
+      },
+      {
+        "pid": 1584,
+        "ppid": 4168,
+        "name": "OneDrive.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe",
+        "started": "2026-10-01T09:07:11.9757990Z"
+      },
+      {
+        "pid": 13768,
+        "ppid": 4924,
+        "name": "ProtonVPN.Client.exe",
+        "exe": "C:\\Program Files\\Proton\\VPN\\v5.1.8\\ProtonVPN.Client.exe",
+        "started": "2026-10-01T09:07:15.4052050Z"
+      },
+      {
+        "pid": 15868,
+        "ppid": 1420,
+        "name": "ProtonVPNService.exe",
+        "exe": null,
+        "started": "2026-10-01T09:07:27.7151740Z"
+      },
+      {
+        "pid": 18532,
+        "ppid": 15868,
+        "name": "ProtonVPN.NrptWatchdog.exe",
+        "exe": null,
+        "started": "2026-10-01T09:07:30.4491200Z"
+      },
+      {
+        "pid": 7404,
+        "ppid": 18532,
+        "name": "conhost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:07:30.4771970Z"
+      },
+      {
+        "pid": 17952,
+        "ppid": 4168,
+        "name": "WindowsTerminal.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\WindowsTerminal.exe",
+        "started": "2026-10-01T09:07:32.8468720Z"
+      },
+      {
+        "pid": 9464,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:07:34.4427830Z"
+      },
+      {
+        "pid": 19452,
+        "ppid": 17952,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T09:07:34.4716780Z"
+      },
+      {
+        "pid": 6092,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:07:38.1706070Z"
+      },
+      {
+        "pid": 5880,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T09:07:38.1829560Z"
+      },
+      {
+        "pid": 18700,
+        "ppid": 5880,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T09:07:38.2523490Z"
+      },
+      {
+        "pid": 15748,
+        "ppid": 18700,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:07:38.3592740Z"
+      },
+      {
+        "pid": 5740,
+        "ppid": 15748,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:07:38.4118950Z"
+      },
+      {
+        "pid": 12196,
+        "ppid": 4168,
+        "name": "ProtonDrive.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Proton\\Drive\\ProtonDrive.exe",
+        "started": "2026-10-01T09:07:45.2158990Z"
+      },
+      {
+        "pid": 13740,
+        "ppid": 8096,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:51.4459580Z"
+      },
+      {
+        "pid": 10436,
+        "ppid": 13740,
+        "name": "crashhelper.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\crashhelper.exe",
+        "started": "2026-10-01T09:07:51.7844860Z"
+      },
+      {
+        "pid": 2156,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.0796160Z"
+      },
+      {
+        "pid": 12396,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.3743880Z"
+      },
+      {
+        "pid": 20316,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.7497950Z"
+      },
+      {
+        "pid": 16752,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:52.7763430Z"
+      },
+      {
+        "pid": 5820,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:53.5560100Z"
+      },
+      {
+        "pid": 12752,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:54.8236390Z"
+      },
+      {
+        "pid": 12744,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:54.8601320Z"
+      },
+      {
+        "pid": 17404,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:55.9324720Z"
+      },
+      {
+        "pid": 6944,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:07:55.9583500Z"
+      },
+      {
+        "pid": 18092,
+        "ppid": 4168,
+        "name": "RiotClientServices.exe",
+        "exe": "C:\\Riot Games\\Riot Client\\RiotClientServices.exe",
+        "started": "2026-10-01T09:08:00.9725640Z"
+      },
+      {
+        "pid": 1604,
+        "ppid": 18092,
+        "name": "RiotClientCrashHandler.exe",
+        "exe": "C:\\Riot Games\\Riot Client\\RiotClientCrashHandler.exe",
+        "started": "2026-10-01T09:08:05.7769840Z"
+      },
+      {
+        "pid": 8908,
+        "ppid": 13740,
+        "name": "firefox.exe",
+        "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        "started": "2026-10-01T09:08:07.0384800Z"
+      },
+      {
+        "pid": 8932,
+        "ppid": 4524,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:23.6830560Z"
+      },
+      {
+        "pid": 14612,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:24.5568590Z"
+      },
+      {
+        "pid": 19204,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:24.8345470Z"
+      },
+      {
+        "pid": 17628,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:24.9352560Z"
+      },
+      {
+        "pid": 17736,
+        "ppid": 8932,
+        "name": "ChatGPT Classic.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+        "started": "2026-10-01T09:08:29.6600440Z"
+      },
+      {
+        "pid": 5028,
+        "ppid": 4524,
+        "name": "IntelGraphicsSoftware.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\AppUp.IntelArcSoftware_26.32.2604.0_x64__8j3eq9eme6ctt\\VFS\\ProgramFilesX64\\Intel\\Intel Graphics Software\\IntelGraphicsSoftware.exe",
+        "started": "2026-10-01T09:08:36.5681930Z"
+      },
+      {
+        "pid": 13144,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:08:38.9940390Z"
+      },
+      {
+        "pid": 2940,
+        "ppid": 20468,
+        "name": "M365Copilot.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2609.52011.0_x64__8wekyb3d8bbwe\\M365Copilot.exe",
+        "started": "2026-10-01T09:09:08.1778370Z"
+      },
+      {
+        "pid": 9500,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:09:08.8143300Z"
+      },
+      {
+        "pid": 16904,
+        "ppid": 2940,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.3831060Z"
+      },
+      {
+        "pid": 16060,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.5040360Z"
+      },
+      {
+        "pid": 6808,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.8497760Z"
+      },
+      {
+        "pid": 5472,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.8612400Z"
+      },
+      {
+        "pid": 18384,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:09.9839530Z"
+      },
+      {
+        "pid": 18352,
+        "ppid": 16904,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:10.1758540Z"
+      },
+      {
+        "pid": 8548,
+        "ppid": 4524,
+        "name": "WhatsApp.Root.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\5319275A.WhatsAppDesktop_2.2637.100.0_x64__cv1g1gvanyjgm\\WhatsApp.Root.exe",
+        "started": "2026-10-01T09:09:37.2000630Z"
+      },
+      {
+        "pid": 15092,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:09:39.3046580Z"
+      },
+      {
+        "pid": 19552,
+        "ppid": 8548,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:40.9148270Z"
+      },
+      {
+        "pid": 14548,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.0223490Z"
+      },
+      {
+        "pid": 13964,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.2362790Z"
+      },
+      {
+        "pid": 18140,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.2439630Z"
+      },
+      {
+        "pid": 8580,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:41.3525050Z"
+      },
+      {
+        "pid": 16596,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:09:44.0365200Z"
+      },
+      {
+        "pid": 3348,
+        "ppid": 9868,
+        "name": "ms-teams.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MSTeams_26246.1604.5133.838_x64__8wekyb3d8bbwe\\ms-teams.exe",
+        "started": "2026-10-01T09:10:08.0374880Z"
+      },
+      {
+        "pid": 4384,
+        "ppid": 3348,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.0280170Z"
+      },
+      {
+        "pid": 19336,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.1167590Z"
+      },
+      {
+        "pid": 16744,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.3330270Z"
+      },
+      {
+        "pid": 5520,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.3432560Z"
+      },
+      {
+        "pid": 11532,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:10:10.3962500Z"
+      },
+      {
+        "pid": 13020,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.5200350Z"
+      },
+      {
+        "pid": 8572,
+        "ppid": 4384,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:10:10.7096440Z"
+      },
+      {
+        "pid": 9660,
+        "ppid": 3348,
+        "name": "ms-teams.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\MSTeams_26246.1604.5133.838_x64__8wekyb3d8bbwe\\ms-teams.exe",
+        "started": "2026-10-01T09:10:12.3821810Z"
+      },
+      {
+        "pid": 3460,
+        "ppid": 4168,
+        "name": "ollama app.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Ollama\\ollama app.exe",
+        "started": "2026-10-01T09:10:37.7396320Z"
+      },
+      {
+        "pid": 12120,
+        "ppid": 3460,
+        "name": "ollama.exe",
+        "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+        "started": "2026-10-01T09:10:38.8706510Z"
+      },
+      {
+        "pid": 10940,
+        "ppid": 12120,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:10:38.9083530Z"
+      },
+      {
+        "pid": 8540,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+        "started": "2026-10-01T09:10:39.3535670Z"
+      },
+      {
+        "pid": 21188,
+        "ppid": 1608,
+        "name": "ApplicationFrameHost.exe",
+        "exe": "C:\\WINDOWS\\system32\\ApplicationFrameHost.exe",
+        "started": "2026-10-01T09:14:33.4527540Z"
+      },
+      {
+        "pid": 20008,
+        "ppid": 1608,
+        "name": "SystemSettings.exe",
+        "exe": "C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe",
+        "started": "2026-10-01T09:14:33.4565680Z"
+      },
+      {
+        "pid": 21128,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:14:36.1710870Z"
+      },
+      {
+        "pid": 11752,
+        "ppid": 1608,
+        "name": "ShellExperienceHost.exe",
+        "exe": "C:\\WINDOWS\\SystemApps\\ShellExperienceHost_cw5n1h2txyewy\\ShellExperienceHost.exe",
+        "started": "2026-10-01T09:17:22.1801450Z"
+      },
+      {
+        "pid": 884,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:17:22.7185560Z"
+      },
+      {
+        "pid": 4928,
+        "ppid": 19552,
+        "name": "msedgewebview2.exe",
+        "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+        "started": "2026-10-01T09:17:26.7579170Z"
+      },
+      {
+        "pid": 22308,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:19:08.4450900Z"
+      },
+      {
+        "pid": 20980,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T09:19:08.4552640Z"
+      },
+      {
+        "pid": 13808,
+        "ppid": 20980,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T09:19:08.5507840Z"
+      },
+      {
+        "pid": 15164,
+        "ppid": 13808,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:19:08.6516720Z"
+      },
+      {
+        "pid": 20920,
+        "ppid": 15164,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:19:08.7114630Z"
+      },
+      {
+        "pid": 13136,
+        "ppid": 1608,
+        "name": "backgroundTaskHost.exe",
+        "exe": "C:\\WINDOWS\\system32\\backgroundTaskHost.exe",
+        "started": "2026-10-01T09:47:48.5080720Z"
+      },
+      {
+        "pid": 4956,
+        "ppid": 1608,
+        "name": "RuntimeBroker.exe",
+        "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        "started": "2026-10-01T09:47:48.9501150Z"
+      },
+      {
+        "pid": 16288,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T09:48:20.2662780Z"
+      },
+      {
+        "pid": 11548,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T09:48:20.2780980Z"
+      },
+      {
+        "pid": 18440,
+        "ppid": 11548,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T09:48:20.4018640Z"
+      },
+      {
+        "pid": 10196,
+        "ppid": 18440,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T09:48:20.5064780Z"
+      },
+      {
+        "pid": 19320,
+        "ppid": 10196,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T09:48:20.5666330Z"
+      },
+      {
+        "pid": 10912,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+        "started": "2026-10-01T09:57:32.2403400Z"
+      },
+      {
+        "pid": 10412,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T09:57:33.6766660Z"
+      },
+      {
+        "pid": 8360,
+        "ppid": 4168,
+        "name": "SnippingTool.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.ScreenSketch_11.2607.23.0_x64__8wekyb3d8bbwe\\SnippingTool\\SnippingTool.exe",
+        "started": "2026-10-01T09:59:39.5299310Z"
+      },
+      {
+        "pid": 14280,
+        "ppid": 17952,
+        "name": "OpenConsole.exe",
+        "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+        "started": "2026-10-01T10:00:26.7921350Z"
+      },
+      {
+        "pid": 16220,
+        "ppid": 17952,
+        "name": "wsl.exe",
+        "exe": "C:\\Windows\\system32\\wsl.exe",
+        "started": "2026-10-01T10:00:26.8388890Z"
+      },
+      {
+        "pid": 7412,
+        "ppid": 16220,
+        "name": "wsl.exe",
+        "exe": "C:\\Program Files\\WSL\\wsl.exe",
+        "started": "2026-10-01T10:00:26.9519360Z"
+      },
+      {
+        "pid": 19140,
+        "ppid": 7412,
+        "name": "wslhost.exe",
+        "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+        "started": "2026-10-01T10:00:27.0741440Z"
+      },
+      {
+        "pid": 18956,
+        "ppid": 19140,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T10:00:27.1248830Z"
+      },
+      {
+        "pid": 22220,
+        "ppid": 1608,
+        "name": "WmiPrvSE.exe",
+        "exe": null,
+        "started": "2026-10-01T10:01:21.6794350Z"
+      },
+      {
+        "pid": 6096,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:40.1119760Z"
+      },
+      {
+        "pid": 5076,
+        "ppid": 1420,
+        "name": "TrustedInstaller.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:42.5340180Z"
+      },
+      {
+        "pid": 22200,
+        "ppid": 1608,
+        "name": "TiWorker.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:42.6180390Z"
+      },
+      {
+        "pid": 20116,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T10:02:47.5967750Z"
+      },
+      {
+        "pid": 14576,
+        "ppid": 1420,
+        "name": "svchost.exe",
+        "exe": null,
+        "started": "2026-10-01T10:03:49.3360140Z"
+      },
+      {
+        "pid": 22060,
+        "ppid": 5320,
+        "name": "powershell.exe",
+        "exe": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T10:03:58.1020950Z"
+      },
+      {
+        "pid": 1304,
+        "ppid": 22060,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T10:03:58.1278820Z"
+      },
+      {
+        "pid": 20680,
+        "ppid": 7412,
+        "name": "powershell.exe",
+        "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "started": "2026-10-01T10:04:02.7441810Z"
+      },
+      {
+        "pid": 3304,
+        "ppid": 20680,
+        "name": "conhost.exe",
+        "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+        "started": "2026-10-01T10:04:02.7563410Z"
+      }
+    ]
+  }
+}

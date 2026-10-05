@@ -135,6 +135,10 @@ ALL_JOBS = {
     # Device location & geofencing. One registry read when location is off;
     # one native-locator call when the user has consented.
     "geo":      (900,   "Device location & geofencing"),
+    # Conflict reports from public newsroom feeds and GDELT, for the /world
+    # view. Context only: unscored, deferrable, and the same requests whoever
+    # and wherever the owner is.
+    "world":    (900,   "World conflict reports"),
     # Docker container inventory: privilege flags, namespace sharing, socket
     # and sensitive-mount exposure. `docker inspect` per container, read-only.
     "containers": (900, "Container privilege and exposure inventory"),

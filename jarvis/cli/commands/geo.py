@@ -8,6 +8,7 @@
     jarvis geo zone add HOME LAT LON [--radius M]
     jarvis geo zone list
     jarvis geo zone rm NAME
+    jarvis geo world [--refresh]      reported conflict zones and distance to them
 
 Locations you set are user-asserted ground truth, labelled as such and never
 dressed up as a GPS fix. Raw coordinates are never kept as history; JARVIS never
@@ -92,6 +93,33 @@ def cmd_geo(args, store):
               if fix.get("status") == "ok" else fix.get("reason", "")))
         return 0 if fix.get("status") == "ok" else 1
 
+    if args.action == "world":
+        from jarvis.intel import worldwatch
+        if args.refresh:
+            result = worldwatch.refresh(store)
+            print(f"refreshed: {result['items']} conflict reports, {result['mapped']} placed, "
+                  f"{result['zones']} zones"
+                  + (f"; unreachable: {', '.join(result['failed'])}" if result["failed"] else ""))
+        world = worldwatch.state(store, location=geo_collector.effective(
+            store, geo_collector.current(store)), trusted=geosecurity.get_zones(store))
+        if args.json:
+            print(json.dumps(world, indent=2, default=str))
+            return 0
+        age = "never collected" if world["age_s"] is None else f"{world['age_s'] // 60} min old"
+        print(f"world watch: {world['counts']['reports']} conflict reports in 72 h, "
+              f"{world['counts']['mapped']} placed, {len(world['zones'])} zones ({age}"
+              + (", stale" if world["stale"] else "") + ")")
+        for zone in world["zones"]:
+            print(f"  {zone['name']}: {zone['reports']} reports from {zone['sources']} publishers")
+        for anchor in world["anchors"]:
+            near = anchor.get("nearest")
+            if near:
+                print(f"  {anchor['name']}: " + ("inside " if near["inside"]
+                      else f"{near['distance_km']} km from ") + near["name"])
+        print("Zones outline clusters of reports, not front lines. "
+              "View: http://localhost:8787/world")
+        return 0
+
     # status
     payload = geosecurity.state(store)
     if args.json:
@@ -119,11 +147,13 @@ def cmd_geo(args, store):
 def add_parser(sub):
     p = sub.add_parser("geo", help="device location, geofencing and the GeoSecurity globe")
     p.add_argument("action", nargs="?", default="status",
-                   choices=["status", "here", "locate", "zone"])
+                   choices=["status", "here", "locate", "zone", "world"])
     p.add_argument("rest", nargs="*", help="here: LAT LON · zone: add NAME LAT LON | list | rm NAME")
     p.add_argument("--label", help="a name for the location you set (e.g. 'Norrsken Kigali')")
     p.add_argument("--clear", action="store_true", help="here: forget the location you set")
     p.add_argument("--radius", type=int, help="zone radius in metres (default 200)")
+    p.add_argument("--refresh", action="store_true",
+                   help="world: fetch the public news feeds now")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_geo)
     return p

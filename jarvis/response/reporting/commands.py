@@ -58,6 +58,7 @@ JOB_COMMANDS = {
     "evidence": "broker status",
     "arena": "arena suite",
     "geo": "geo status",
+    "world": "geo world",
     "watchdogs": "selfcheck",
     "resources": "status",
     "report": "alert",

@@ -1,0 +1,5052 @@
+{
+  "at": "2026-10-01T10:06:25.0458679Z",
+  "rows": [
+    {
+      "pid": 0,
+      "ppid": 0,
+      "name": "System Idle Process",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 4,
+      "ppid": 0,
+      "name": "System",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 188,
+      "ppid": 4,
+      "name": "Secure System",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 232,
+      "ppid": 4,
+      "name": "Registry",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 852,
+      "ppid": 4,
+      "name": "smss.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1196,
+      "ppid": 996,
+      "name": "csrss.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1284,
+      "ppid": 996,
+      "name": "wininit.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1420,
+      "ppid": 1284,
+      "name": "services.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1448,
+      "ppid": 1284,
+      "name": "LsaIso.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1456,
+      "ppid": 1284,
+      "name": "lsass.exe",
+      "exe": "C:\\WINDOWS\\system32\\lsass.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "KeyIso",
+          "DisplayName": "CNG Key Isolation"
+        },
+        {
+          "Name": "SamSs",
+          "DisplayName": "Security Accounts Manager"
+        },
+        {
+          "Name": "VaultSvc",
+          "DisplayName": "Credential Manager"
+        }
+      ],
+      "file": {
+        "description": "Local Security Authority Process",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 1608,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "BrokerInfrastructure",
+          "DisplayName": "Background Tasks Infrastructure Service"
+        },
+        {
+          "Name": "DcomLaunch",
+          "DisplayName": "DCOM Server Process Launcher"
+        },
+        {
+          "Name": "PlugPlay",
+          "DisplayName": "Plug and Play"
+        },
+        {
+          "Name": "Power",
+          "DisplayName": "Power"
+        },
+        {
+          "Name": "SystemEventsBroker",
+          "DisplayName": "System Events Broker"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 1632,
+      "ppid": 1284,
+      "name": "fontdrvhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1736,
+      "ppid": 1420,
+      "name": "WUDFHost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1744,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "RpcEptMapper",
+          "DisplayName": "RPC Endpoint Mapper"
+        },
+        {
+          "Name": "RpcSs",
+          "DisplayName": "Remote Procedure Call (RPC)"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 1824,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "LSM",
+          "DisplayName": "LSM"
+        }
+      ],
+      "file": null
+    },
+    {
+      "pid": 1912,
+      "ppid": 1420,
+      "name": "WUDFHost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1988,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HvHost",
+          "DisplayName": "HV Host Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2008,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "BDESVC",
+          "DisplayName": "BitLocker Drive Encryption Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2044,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "nsi",
+          "DisplayName": "Network Store Interface Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2096,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "TimeBrokerSvc",
+          "DisplayName": "Time Broker"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2104,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "NcbService",
+          "DisplayName": "Network Connection Broker"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2144,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Dhcp",
+          "DisplayName": "DHCP Client"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2268,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Dnscache",
+          "DisplayName": "DNS Client"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2288,
+      "ppid": 1420,
+      "name": "IntelCpHDCPSvc.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\iigd_dch.inf_amd64_8f45d7765bed783c\\IntelCpHDCPSvc.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "cplspcon",
+          "DisplayName": "Intel(R) Content Protection HDCP Service"
+        }
+      ],
+      "file": {
+        "description": "Intel HD Graphics Drivers for Windows(R)",
+        "company": "Intel Corporation",
+        "product": "Intel HD Graphics Drivers for Windows(R)",
+        "version": "32.0.101.7088",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2300,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "DisplayEnhancementService",
+          "DisplayName": "Display Enhancement Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2320,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "hidserv",
+          "DisplayName": "Human Interface Device Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2376,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "netprofm",
+          "DisplayName": "Network List Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2444,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "CoreMessagingRegistrar",
+          "DisplayName": "CoreMessaging"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2468,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Schedule",
+          "DisplayName": "Task Scheduler"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2504,
+      "ppid": 1420,
+      "name": "WUDFHost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 2600,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "ProfSvc",
+          "DisplayName": "User Profile Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2756,
+      "ppid": 1420,
+      "name": "ELAN_MOC_Service.exe",
+      "exe": "C:\\WINDOWS\\System32\\ELAN_MOC_Service.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "ELAN_MOC_Service",
+          "DisplayName": "ELAN MOC Service"
+        }
+      ],
+      "file": {
+        "description": "ELAN MOC Service",
+        "company": "ELAN Microelectronics Corp.",
+        "product": "ELAN FingerPrinter",
+        "version": "5.2.12011.20006",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2788,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WinHttpAutoProxySvc",
+          "DisplayName": "WinHTTP Web Proxy Auto-Discovery Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2892,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "UserManager",
+          "DisplayName": "User Manager"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2848,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Wcmsvc",
+          "DisplayName": "Windows Connection Manager"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2968,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "CryptSvc",
+          "DisplayName": "Cryptographic Services"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3276,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "hns",
+          "DisplayName": "Host Network Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3424,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "nvagent",
+          "DisplayName": "Network Virtualization Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3440,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "DispBrokerDesktopSvc",
+          "DisplayName": "Display Policy Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3548,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "BFE",
+          "DisplayName": "Base Filtering Engine"
+        },
+        {
+          "Name": "mpssvc",
+          "DisplayName": "Windows Defender Firewall"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3752,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SharedAccess",
+          "DisplayName": "Internet Connection Sharing (ICS)"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3936,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "EventLog",
+          "DisplayName": "Windows Event Log"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3976,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Themes",
+          "DisplayName": "Themes"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3984,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "EventSystem",
+          "DisplayName": "COM+ Event System"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3992,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SysMain",
+          "DisplayName": "SysMain"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4084,
+      "ppid": 4,
+      "name": "Memory Compression",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 3104,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SENS",
+          "DisplayName": "System Event Notification Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3616,
+      "ppid": 1420,
+      "name": "SysInfoCap.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpcustomcapcomp.inf_amd64_bac3c2b2a2c0d811\\x64\\SysInfoCap.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HPSysInfoCap",
+          "DisplayName": "HP System Info HSA Service"
+        }
+      ],
+      "file": {
+        "description": "",
+        "company": "HP Inc.",
+        "product": "SysInfoCap",
+        "version": "1.83.4311.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3636,
+      "ppid": 1420,
+      "name": "DiagsCap.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpcustomcapcomp.inf_amd64_bac3c2b2a2c0d811\\x64\\DiagsCap.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HPDiagsCap",
+          "DisplayName": "HP Diagnostics HSA Service"
+        }
+      ],
+      "file": {
+        "description": "",
+        "company": "HP Inc.",
+        "product": "DiagsCap",
+        "version": "1.83.4311.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3572,
+      "ppid": 1420,
+      "name": "AppHelperCap.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpcustomcapcomp.inf_amd64_bac3c2b2a2c0d811\\x64\\AppHelperCap.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HPAppHelperCap",
+          "DisplayName": "HP App Helper HSA Service"
+        }
+      ],
+      "file": {
+        "description": "",
+        "company": "HP Inc.",
+        "product": "AppHelperCap",
+        "version": "1.83.4311.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3704,
+      "ppid": 1420,
+      "name": "TouchpointAnalyticsClientService.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpanalyticscomp.inf_amd64_b532962506597d3d\\x64\\TouchpointAnalyticsClientService.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HpTouchpointAnalyticsService",
+          "DisplayName": "HP Insights Analytics"
+        }
+      ],
+      "file": {
+        "description": "HP Insights Analytics Service",
+        "company": "HP Inc.",
+        "product": "HP Insights Analytics",
+        "version": "4.2.2494.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3732,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "AudioEndpointBuilder",
+          "DisplayName": "Windows Audio Endpoint Builder"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3668,
+      "ppid": 1420,
+      "name": "NetworkCap.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpcustomcapcomp.inf_amd64_bac3c2b2a2c0d811\\x64\\NetworkCap.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HPNetworkCap",
+          "DisplayName": "HP Network HSA Service"
+        }
+      ],
+      "file": {
+        "description": "",
+        "company": "HP Inc.",
+        "product": "NetworkCap",
+        "version": "1.83.4311.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3660,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Winmgmt",
+          "DisplayName": "Windows Management Instrumentation"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3612,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "FontCache",
+          "DisplayName": "Windows Font Cache Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4172,
+      "ppid": 1420,
+      "name": "hpsvcsscan.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpsvcsscancomp.inf_amd64_df5bc9f22dc3c742\\x64\\hpsvcsscan.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "hpsvcsscan",
+          "DisplayName": "HP Services Scan"
+        }
+      ],
+      "file": {
+        "description": "HP Services Scan",
+        "company": "HP Inc.",
+        "product": "HP Services Scan",
+        "version": "4.8.130.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4328,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Audiosrv",
+          "DisplayName": "Windows Audio"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4516,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "StateRepository",
+          "DisplayName": "State Repository Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4620,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "RmSvc",
+          "DisplayName": "Radio Management Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4848,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Appinfo",
+          "DisplayName": "Application Information"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3676,
+      "ppid": 1608,
+      "name": "unsecapp.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 4988,
+      "ppid": 1608,
+      "name": "WmiPrvSE.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 5204,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "LanmanServer",
+          "DisplayName": "Server"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5436,
+      "ppid": 1420,
+      "name": "HotKeyServiceUWP.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpqkbsoftwarecompnent.inf_amd64_0d182501a33019e2\\HotKeyServiceUWP.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HotKeyServiceUWP",
+          "DisplayName": "HP Hotkey UWP Service"
+        }
+      ],
+      "file": {
+        "description": "HP Hotkey UWP Service",
+        "company": "HP Inc.",
+        "product": "HP Hotkey Support",
+        "version": "8.10.52.464",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5492,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "TextInputManagementService",
+          "DisplayName": "Text Input Management Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5788,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "DusmSvc",
+          "DisplayName": "Data Usage"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5896,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WlanSvc",
+          "DisplayName": "WLAN AutoConfig"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5956,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "ShellHWDetection",
+          "DisplayName": "Shell Hardware Detection"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6060,
+      "ppid": 1420,
+      "name": "spoolsv.exe",
+      "exe": "C:\\WINDOWS\\System32\\spoolsv.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Spooler",
+          "DisplayName": "Print Spooler"
+        }
+      ],
+      "file": {
+        "description": "Spooler SubSystem App",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8875 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5504,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "LanmanWorkstation",
+          "DisplayName": "Workstation"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5796,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "DeviceAssociationService",
+          "DisplayName": "Device Association Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5584,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "DiagTrack",
+          "DisplayName": "Connected User Experiences and Telemetry"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5800,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "StiSvc",
+          "DisplayName": "Windows Image Acquisition (WIA)"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5400,
+      "ppid": 1420,
+      "name": "RtkAudUService64.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\realtekservice.inf_amd64_464be4340fa51d6a\\RtkAudUService64.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "RtkAudioUniversalService",
+          "DisplayName": "Realtek Audio Universal Service"
+        }
+      ],
+      "file": {
+        "description": "Realtek HD Audio Universal Service",
+        "company": "Realtek Semiconductor",
+        "product": "Realtek HD Audio Universal Service",
+        "version": "1.1.767.1",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6036,
+      "ppid": 1420,
+      "name": "IntelAudioService.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\intcoed.inf_amd64_2959a83fe72a1f51\\AS\\IAS\\IntelAudioService.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "IntelAudioService",
+          "DisplayName": "Intel(R) Audio Service"
+        }
+      ],
+      "file": {
+        "description": "IntelAudioService",
+        "company": "Intel",
+        "product": "IntelAudioService",
+        "version": "1.0.4028.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5932,
+      "ppid": 1420,
+      "name": "FMService64.exe",
+      "exe": "C:\\WINDOWS\\System32\\FMService64.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "FMAPOService",
+          "DisplayName": "Fortemedia APO Control Service"
+        }
+      ],
+      "file": {
+        "description": "Fortemedia Service",
+        "company": "Fortemedia",
+        "product": "Fortemedia APO Control Service",
+        "version": "0.1.1.143",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5948,
+      "ppid": 1420,
+      "name": "RtkBtManServ.exe",
+      "exe": "C:\\WINDOWS\\RtkBtManServ.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "RtkBtManServ",
+          "DisplayName": "Realtek Bluetooth Device Manager Service"
+        }
+      ],
+      "file": {
+        "description": "Realtek Bluetooth Service Application",
+        "company": "Realtek Semiconductor Corp.",
+        "product": "Bluetooth Software",
+        "version": "2.0.5.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6024,
+      "ppid": 1420,
+      "name": "HpSfuService64.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpsfuservice.inf_amd64_03ebfd05b519032c\\HpSfuService64.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SFUService",
+          "DisplayName": "HP SFU Service"
+        }
+      ],
+      "file": {
+        "description": "SFU Service",
+        "company": "HP Inc.",
+        "product": "HP Seamless Firmware Update",
+        "version": "1.1.10.1",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5560,
+      "ppid": 1420,
+      "name": "WMIRegistrationService.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\mewmiprov.inf_amd64_92a56761ef7ba712\\WMIRegistrationService.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WMIRegistrationService",
+          "DisplayName": "Intel(R) Management Engine WMI Provider Registration"
+        }
+      ],
+      "file": {
+        "description": "Intel(R) Management Engine WMI Provider Registration",
+        "company": "Intel Corporation",
+        "product": "Intel(R) Management Engine WMI Provider Registration",
+        "version": "2546.9.2.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6020,
+      "ppid": 1420,
+      "name": "wslservice.exe",
+      "exe": "C:\\Program Files\\WSL\\wslservice.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WSLService",
+          "DisplayName": "WSL Service"
+        }
+      ],
+      "file": {
+        "description": "Windows Subsystem for Linux Service",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5904,
+      "ppid": 1420,
+      "name": "ipf_uf.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\ipf_cpu.inf_amd64_4bb9da04f87a83ff\\ipf_uf.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "ipfsvc",
+          "DisplayName": "Intel(R) Innovation Platform Framework Service"
+        }
+      ],
+      "file": {
+        "description": "Intel(R) Innovation Platform Framework Service",
+        "company": "Intel Corporation",
+        "product": "Intel(R) Innovation Platform Framework",
+        "version": "1.0.11702.1514",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5192,
+      "ppid": 1420,
+      "name": "escsvc64.exe",
+      "exe": "C:\\WINDOWS\\system32\\EscSvc64.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "EpsonScanSvc",
+          "DisplayName": "Epson Scanner Service"
+        }
+      ],
+      "file": {
+        "description": "Epson Scanner Service (64bit)",
+        "company": "Seiko Epson Corporation",
+        "product": "EPSON Scanner Driver",
+        "version": "1.3.2.1",
+        "signature": "Valid",
+        "signer": "CN=SEIKO EPSON CORPORATION, OU=Information Service & Support Department, O=SEIKO EPSON CORPORATION, L=Suwa-Shi, S=Nagano, C=JP"
+      }
+    },
+    {
+      "pid": 6044,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "iphlpsvc",
+          "DisplayName": "IP Helper"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6156,
+      "ppid": 1420,
+      "name": "ipfsvc.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\dtt_sw.inf_amd64_683097297aaa9bb4\\ipfsvc.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "dptftcs",
+          "DisplayName": "Intel(R) Dynamic Tuning Technology Telemetry Service"
+        }
+      ],
+      "file": {
+        "description": "Intel(R) Innovation Platform Framework Service Container",
+        "company": "Intel Corporation",
+        "product": "Intel(R) Innovation Platform Framework",
+        "version": "1.0.11700.940",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6164,
+      "ppid": 1420,
+      "name": "jhi_service.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\dal.inf_amd64_b45f13a105037dbe\\jhi_service.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "jhi_service",
+          "DisplayName": "Intel(R) Dynamic Application Loader Host Interface Service"
+        }
+      ],
+      "file": {
+        "description": "Intel(R) Dynamic Application Loader Host Interface",
+        "company": "Intel Corporation",
+        "product": "Intel(R) Dynamic Application Loader Host Interface",
+        "version": "1.46.2024.0221",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6172,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WpnService",
+          "DisplayName": "Windows Push Notifications System Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6180,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "DPS",
+          "DisplayName": "Diagnostic Policy Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6188,
+      "ppid": 1420,
+      "name": "SNAPOSS64.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\snapo64.inf_amd64_fd4aaa60454ea9da\\SNAPOSS64.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SNAPOService",
+          "DisplayName": "Sonitude APO Service"
+        }
+      ],
+      "file": {
+        "description": "Sonitude APO System Service",
+        "company": "Sonitude Corporation",
+        "product": "Sonitude APO System Service",
+        "version": "2.1.1.99",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6196,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "TrkWks",
+          "DisplayName": "Distributed Link Tracking Client"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6212,
+      "ppid": 1420,
+      "name": "MpDefenderCoreService.exe",
+      "exe": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26080.4-0\\MpDefenderCoreService.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "MDCoreSvc",
+          "DisplayName": "Microsoft Defender Core Service"
+        }
+      ],
+      "file": {
+        "description": "Antimalware Core Service",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "4.18.26080.4 (ccacee407da609d5c2c557d13db39624e32a0227)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6220,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WwanSvc",
+          "DisplayName": "WWAN AutoConfig"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6264,
+      "ppid": 1420,
+      "name": "MsMpEng.exe",
+      "exe": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26080.4-0\\MsMpEng.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WinDefend",
+          "DisplayName": "Microsoft Defender Antivirus Service"
+        }
+      ],
+      "file": {
+        "description": "Antimalware Service Executable",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "4.18.26080.4 (ccacee407da609d5c2c557d13db39624e32a0227)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6392,
+      "ppid": 1420,
+      "name": "Sysmon64.exe",
+      "exe": "C:\\WINDOWS\\Sysmon64.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "Sysmon64",
+          "DisplayName": "Sysmon64"
+        }
+      ],
+      "file": {
+        "description": "System activity monitor",
+        "company": "Sysinternals - www.sysinternals.com",
+        "product": "Sysinternals Sysmon",
+        "version": "15.21",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 7104,
+      "ppid": 1420,
+      "name": "JarvisSensor.exe",
+      "exe": "C:\\Program Files\\Jarvis\\Sensor\\JarvisSensor.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "JarvisNativeSensor",
+          "DisplayName": "JARVIS native sensor"
+        }
+      ],
+      "file": {
+        "description": " ",
+        "company": "",
+        "product": "",
+        "version": "0.0.0.0",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 7792,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "camsvc",
+          "DisplayName": "Capability Access Manager Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 8064,
+      "ppid": 1420,
+      "name": "cowork-svc.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Claude_2.9939.2.0_x64__pzs8sxrjxfjjc\\app\\resources\\cowork-svc.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "CoworkVMService",
+          "DisplayName": "Claude"
+        }
+      ],
+      "file": {
+        "description": null,
+        "company": null,
+        "product": null,
+        "version": null,
+        "signature": "Valid",
+        "signer": "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US"
+      }
+    },
+    {
+      "pid": 6852,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WSAIFabricSvc",
+          "DisplayName": "Windows AI Components Host"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6844,
+      "ppid": 1420,
+      "name": "IntelGraphicsSoftware.Service.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\AppUp.IntelArcSoftware_26.32.2604.0_x64__8j3eq9eme6ctt\\VFS\\ProgramFilesX64\\Intel\\Intel Graphics Software\\IntelGraphicsSoftware.Service.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "IntelGraphicsSoftwareService",
+          "DisplayName": "Intel\u00ae Graphics Software"
+        }
+      ],
+      "file": {
+        "description": "IntelGraphicsSoftware.Service",
+        "company": "Intel Corporation",
+        "product": "Intel Graphics Software",
+        "version": "26.32.2604.4",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 7092,
+      "ppid": 1420,
+      "name": "codex-windows-sandbox-service.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.924.2738.0_x64__2p2nqsd0c76g0\\app\\resources\\codex-windows-sandbox-service.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "CodexSandboxService.OpenAI.Codex",
+          "DisplayName": "ChatGPT"
+        }
+      ],
+      "file": {
+        "description": null,
+        "company": null,
+        "product": null,
+        "version": null,
+        "signature": "Valid",
+        "signer": "CN=\"OpenAI OpCo, LLC\", O=\"OpenAI OpCo, LLC\", L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 8312,
+      "ppid": 1420,
+      "name": "LanWlanWwanSwitchingServiceUWP.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpqkbsoftwarecompnent.inf_amd64_0d182501a33019e2\\LanWlanWwanSwitchingServiceUWP.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "LanWlanWwanSwitchingServiceUWP",
+          "DisplayName": "HP LAN/WLAN/WWAN Switching UWP Service"
+        }
+      ],
+      "file": {
+        "description": "HP LAN/WLAN/WWAN Switching UWP Service",
+        "company": "HP Inc.",
+        "product": "HP Hotkey Support",
+        "version": "8.10.52.464",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9048,
+      "ppid": 5584,
+      "name": "AggregatorHost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 9076,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "TokenBroker",
+          "DisplayName": "Web Account Manager"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9284,
+      "ppid": 2468,
+      "name": "powershell.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 9716,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "CDPSvc",
+          "DisplayName": "Connected Devices Platform Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9384,
+      "ppid": 9284,
+      "name": "conhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 7676,
+      "ppid": 6844,
+      "name": "PresentMonService.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 9300,
+      "ppid": 7676,
+      "name": "conhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 10792,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WdiSystemHost",
+          "DisplayName": "Diagnostic System Host"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 10900,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "PcaSvc",
+          "DisplayName": "Program Compatibility Assistant Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11232,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "lmhosts",
+          "DisplayName": "TCP/IP NetBIOS Helper"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11880,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "LicenseManager",
+          "DisplayName": "Windows License Manager Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 12812,
+      "ppid": 1420,
+      "name": "vmcompute.exe",
+      "exe": "C:\\WINDOWS\\system32\\vmcompute.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "vmcompute",
+          "DisplayName": "Hyper-V Host Compute Service"
+        }
+      ],
+      "file": {
+        "description": "Hyper-V Host Compute Service",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13912,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "lfsvc",
+          "DisplayName": "Geolocation Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13900,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SSDPSRV",
+          "DisplayName": "SSDP Discovery"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14664,
+      "ppid": 1420,
+      "name": "SearchIndexer.exe",
+      "exe": "C:\\WINDOWS\\system32\\SearchIndexer.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WSearch",
+          "DisplayName": "Windows Search"
+        }
+      ],
+      "file": {
+        "description": "Microsoft Windows Search Indexer",
+        "company": "Microsoft Corporation",
+        "product": "Windows\u00ae Search",
+        "version": "7.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13192,
+      "ppid": 1420,
+      "name": "SecurityHealthService.exe",
+      "exe": "C:\\WINDOWS\\system32\\SecurityHealthService.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SecurityHealthService",
+          "DisplayName": "Windows Security Service"
+        }
+      ],
+      "file": {
+        "description": "Windows Security Health Service",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6496,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "webthreatdefsvc",
+          "DisplayName": "Web Threat Defense Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 15924,
+      "ppid": 1420,
+      "name": "NisSrv.exe",
+      "exe": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26080.4-0\\NisSrv.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WdNisSvc",
+          "DisplayName": "Microsoft Defender Antivirus Network Inspection Service"
+        }
+      ],
+      "file": {
+        "description": "Microsoft Network Realtime Inspection Service",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "4.18.26080.4 (ccacee407da609d5c2c557d13db39624e32a0227)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16616,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "UsoSvc",
+          "DisplayName": "Update Orchestrator Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 12912,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "DoSvc",
+          "DisplayName": "Delivery Optimization"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9760,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "StorSvc",
+          "DisplayName": "Storage Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16316,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "InventorySvc",
+          "DisplayName": "Inventory and Compatibility Appraisal service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16420,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "whesvc",
+          "DisplayName": "Windows Health and Optimized Experiences"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 17024,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "wscsvc",
+          "DisplayName": "Security Center"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14124,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "InstallService",
+          "DisplayName": "Microsoft Store Install Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13236,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "SstpSvc",
+          "DisplayName": "Secure Socket Tunneling Protocol Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13216,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "bthserv",
+          "DisplayName": "Bluetooth Support Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 17616,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "BITS",
+          "DisplayName": "Background Intelligent Transfer Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 10200,
+      "ppid": 1608,
+      "name": "WmiPrvSE.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1996,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "TapiSrv",
+          "DisplayName": "Telephony"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 20456,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "RasMan",
+          "DisplayName": "Remote Access Connection Manager"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 632,
+      "ppid": 8432,
+      "name": "csrss.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 9964,
+      "ppid": 8432,
+      "name": "winlogon.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 19992,
+      "ppid": 9964,
+      "name": "fontdrvhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 9712,
+      "ppid": 9964,
+      "name": "dwm.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 11908,
+      "ppid": 6188,
+      "name": "SNAPOS64.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\snapo64.inf_amd64_fd4aaa60454ea9da\\SNAPOS64.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Sonitude APO Service ",
+        "company": "Sonitude Corporation",
+        "product": "Sonitude APO Service",
+        "version": "2.1.1.99",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 15048,
+      "ppid": 11908,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4524,
+      "ppid": 2892,
+      "name": "sihost.exe",
+      "exe": "C:\\WINDOWS\\system32\\sihost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Shell Infrastructure Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11024,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "CDPUserSvc_41338e4",
+          "DisplayName": "Connected Devices Platform User Service_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14468,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "webthreatdefusersvc_41338e4",
+          "DisplayName": "Web Threat Defense User Service_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 12212,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "WpnUserService_41338e4",
+          "DisplayName": "Windows Push Notifications User Service_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18424,
+      "ppid": 2468,
+      "name": "taskhostw.exe",
+      "exe": "C:\\WINDOWS\\system32\\taskhostw.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Host Process for Windows Tasks",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 12960,
+      "ppid": 2468,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\System32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19240,
+      "ppid": 12960,
+      "name": "powershell.exe",
+      "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows PowerShell",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8972 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6080,
+      "ppid": 2468,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\System32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19144,
+      "ppid": 6080,
+      "name": "powershell.exe",
+      "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows PowerShell",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8972 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11472,
+      "ppid": 1608,
+      "name": "rundll32.exe",
+      "exe": "C:\\WINDOWS\\System32\\rundll32.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows host process (Rundll32)",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4168,
+      "ppid": 5928,
+      "name": "explorer.exe",
+      "exe": "C:\\WINDOWS\\Explorer.EXE",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Explorer",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8117 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 15728,
+      "ppid": 4524,
+      "name": "ShellHost.exe",
+      "exe": "C:\\Windows\\System32\\ShellHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "ShellHost",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4288,
+      "ppid": 4524,
+      "name": "CrossDeviceResume.exe",
+      "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\CrossDeviceResume.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "2607.27000.0.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11084,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "cbdhsvc_41338e4",
+          "DisplayName": "Clipboard User Service_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6572,
+      "ppid": 1608,
+      "name": "CrossDeviceService.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.CrossDevice_1.26072.116.0_x64__cw5n1h2txyewy\\CrossDeviceService.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Cross Device Service",
+        "company": "Microsoft Corporation",
+        "product": "CrossDeviceService",
+        "version": "1.26072.116.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4816,
+      "ppid": 1608,
+      "name": "SearchHost.exe",
+      "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "2607.28006.200.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 1664,
+      "ppid": 1608,
+      "name": "StartMenuExperienceHost.exe",
+      "exe": "C:\\Windows\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\StartMenuExperienceHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Start Experience Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 17708,
+      "ppid": 1608,
+      "name": "WidgetBoard.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.Client.WebExperience_526.21100.40.0_x64__cw5n1h2txyewy\\WidgetBoard.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "526.21100.10.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14912,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16532,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "UdkUserSvc_41338e4",
+          "DisplayName": "Udk User Service_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4536,
+      "ppid": 1608,
+      "name": "WidgetService.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WidgetsPlatformRuntime_1.6.19.0_x64__8wekyb3d8bbwe\\WidgetService\\WidgetService.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "WidgetService.exe",
+        "company": "Microsoft Corporation",
+        "product": "Widgets Platform Runtime",
+        "version": "0.5.0.0",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 10028,
+      "ppid": 12812,
+      "name": "vmwp.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 19196,
+      "ppid": 10028,
+      "name": "vmmemWSL",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 20312,
+      "ppid": 4816,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 1872,
+      "ppid": 1608,
+      "name": "dllhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\DllHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "COM Surrogate",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14240,
+      "ppid": 20312,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3416,
+      "ppid": 6264,
+      "name": "DefenderSessionHelper.exe",
+      "exe": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26080.4-0\\DefenderSessionHelper.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Defender Session Helper",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "4.18.26080.4 (ccacee407da609d5c2c557d13db39624e32a0227)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14732,
+      "ppid": 20312,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14800,
+      "ppid": 20312,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 15040,
+      "ppid": 20312,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13636,
+      "ppid": 20312,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 1436,
+      "ppid": 5904,
+      "name": "ipf_helper.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\ipf_cpu.inf_amd64_4bb9da04f87a83ff\\ipf_helper.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Intel(R) Innovation Platform Framework Utility Application",
+        "company": "Intel Corporation",
+        "product": "Intel(R) Innovation Platform Framework Utility Application",
+        "version": "1.0.11702.1514",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 8092,
+      "ppid": 5400,
+      "name": "RtkAudUService64.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 9240,
+      "ppid": 5932,
+      "name": "FMAudioMonitor.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 16144,
+      "ppid": 1420,
+      "name": "HPAudioAnalytics.exe",
+      "exe": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\hpqkbsoftwarecompnent.inf_amd64_0d182501a33019e2\\HPAudioAnalytics.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "HPAudioAnalytics",
+          "DisplayName": "HP Audio Analytics Service"
+        }
+      ],
+      "file": {
+        "description": "HP Hotkey UWP Service",
+        "company": "HP Inc.",
+        "product": "HP Hotkey Support",
+        "version": "8.10.52.464",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11836,
+      "ppid": 4168,
+      "name": "FMToastNotification.exe",
+      "exe": "C:\\WINDOWS\\system32\\FMToastNotification.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "FMToastNotification",
+        "company": "Fortemedia",
+        "product": "FMToastNotification",
+        "version": "1.0.0.8",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18492,
+      "ppid": 1608,
+      "name": "MicrosoftStartFeedProvider.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.StartExperiencesApp_1.380.2.0_x64__8wekyb3d8bbwe\\MicrosoftStartFeedProvider\\MicrosoftStartFeedProvider.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\\MicrosoftStartFeedProvider",
+        "version": "1.380.2.0",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 13440,
+      "ppid": 5492,
+      "name": "ctfmon.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 19168,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 17576,
+      "ppid": 6020,
+      "name": "wslrelay.exe",
+      "exe": "C:\\Program Files\\WSL\\wslrelay.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5320,
+      "ppid": 6020,
+      "name": "wslhost.exe",
+      "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9616,
+      "ppid": 5320,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9280,
+      "ppid": 1608,
+      "name": "TextInputHost.exe",
+      "exe": "C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "2607.27000.0.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 10372,
+      "ppid": 9284,
+      "name": "wsl.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 10416,
+      "ppid": 10372,
+      "name": "wsl.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 1172,
+      "ppid": 1608,
+      "name": "dllhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 8464,
+      "ppid": 10416,
+      "name": "wslhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 15052,
+      "ppid": 8464,
+      "name": "conhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 3008,
+      "ppid": 4168,
+      "name": "SecurityHealthSystray.exe",
+      "exe": "C:\\Windows\\System32\\SecurityHealthSystray.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Security notification icon",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8115 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 7148,
+      "ppid": 2468,
+      "name": "MicrosoftEdgeUpdate.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 15400,
+      "ppid": 4168,
+      "name": "RtkAudUService64.exe",
+      "exe": "C:\\Windows\\System32\\DriverStore\\FileRepository\\realtekservice.inf_amd64_464be4340fa51d6a\\RtkAudUService64.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Realtek HD Audio Universal Service",
+        "company": "Realtek Semiconductor",
+        "product": "Realtek HD Audio Universal Service",
+        "version": "1.1.767.1",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows Hardware Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 12792,
+      "ppid": 17708,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3092,
+      "ppid": 12792,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11596,
+      "ppid": 12792,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19180,
+      "ppid": 12792,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14072,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 256,
+      "ppid": 12792,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13320,
+      "ppid": 12792,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 1584,
+      "ppid": 4168,
+      "name": "OneDrive.exe",
+      "exe": "C:\\Users\\chris\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft OneDrive",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft OneDrive",
+        "version": "26.168.0830.0006",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13768,
+      "ppid": 4924,
+      "name": "ProtonVPN.Client.exe",
+      "exe": "C:\\Program Files\\Proton\\VPN\\v5.1.8\\ProtonVPN.Client.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Proton VPN",
+        "company": "ProtonVPN",
+        "product": "Proton VPN",
+        "version": "5.1.8.0",
+        "signature": "Valid",
+        "signer": "CN=Proton AG, O=Proton AG, S=Gen\u00e8ve, C=CH, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.3=CH, SERIALNUMBER=CHE-354.686.492"
+      }
+    },
+    {
+      "pid": 15868,
+      "ppid": 1420,
+      "name": "ProtonVPNService.exe",
+      "exe": "C:\\Program Files\\Proton\\VPN\\v5.1.8\\ProtonVPNService.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "ProtonVPN Service",
+          "DisplayName": "ProtonVPN Service"
+        }
+      ],
+      "file": {
+        "description": "Proton VPN",
+        "company": "ProtonVPN",
+        "product": "Proton VPN",
+        "version": "5.1.8.0",
+        "signature": "Valid",
+        "signer": "CN=Proton AG, O=Proton AG, S=Gen\u00e8ve, C=CH, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.3=CH, SERIALNUMBER=CHE-354.686.492"
+      }
+    },
+    {
+      "pid": 18532,
+      "ppid": 15868,
+      "name": "ProtonVPN.NrptWatchdog.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 7404,
+      "ppid": 18532,
+      "name": "conhost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 17952,
+      "ppid": 4168,
+      "name": "WindowsTerminal.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\WindowsTerminal.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Terminal Host",
+        "company": "Microsoft Corporation",
+        "product": "Windows Terminal",
+        "version": "1.24.2607.10001",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9464,
+      "ppid": 17952,
+      "name": "OpenConsole.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window and PTY Host (Open Source)",
+        "company": "Microsoft Corporation",
+        "product": "Windows Terminal",
+        "version": "1.24.2607.10001",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19452,
+      "ppid": 17952,
+      "name": "powershell.exe",
+      "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows PowerShell",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8972 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6092,
+      "ppid": 17952,
+      "name": "OpenConsole.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window and PTY Host (Open Source)",
+        "company": "Microsoft Corporation",
+        "product": "Windows Terminal",
+        "version": "1.24.2607.10001",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5880,
+      "ppid": 17952,
+      "name": "wsl.exe",
+      "exe": "C:\\Windows\\system32\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8737 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18700,
+      "ppid": 5880,
+      "name": "wsl.exe",
+      "exe": "C:\\Program Files\\WSL\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 15748,
+      "ppid": 18700,
+      "name": "wslhost.exe",
+      "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5740,
+      "ppid": 15748,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 12196,
+      "ppid": 4168,
+      "name": "ProtonDrive.exe",
+      "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Proton\\Drive\\ProtonDrive.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Proton Drive",
+        "company": "Proton AG",
+        "product": "Proton Drive",
+        "version": "1.12.9.0",
+        "signature": "Valid",
+        "signer": "CN=Proton AG, O=Proton AG, S=Gen\u00e8ve, C=CH, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.3=CH, SERIALNUMBER=CHE-354.686.492"
+      }
+    },
+    {
+      "pid": 13740,
+      "ppid": 8096,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 10436,
+      "ppid": 13740,
+      "name": "crashhelper.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\crashhelper.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "",
+        "company": "Mozilla Foundation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 2156,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 12396,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 20316,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 16752,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 5820,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 12752,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 12744,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 17404,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 6944,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 18092,
+      "ppid": 4168,
+      "name": "RiotClientServices.exe",
+      "exe": "C:\\Riot Games\\Riot Client\\RiotClientServices.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Riot Client",
+        "company": "Riot Games, Inc.",
+        "product": "RiotClient",
+        "version": "140.0.3.5004",
+        "signature": "Valid",
+        "signer": "CN=\"Riot Games, Inc.\", O=\"Riot Games, Inc.\", L=Los Angeles, S=California, C=US, SERIALNUMBER=4155843, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US"
+      }
+    },
+    {
+      "pid": 1604,
+      "ppid": 18092,
+      "name": "RiotClientCrashHandler.exe",
+      "exe": "C:\\Riot Games\\Riot Client\\RiotClientCrashHandler.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": null,
+        "company": null,
+        "product": null,
+        "version": null,
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 8908,
+      "ppid": 13740,
+      "name": "firefox.exe",
+      "exe": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Firefox",
+        "company": "Mozilla Corporation",
+        "product": "Firefox",
+        "version": "156.0.1",
+        "signature": "Valid",
+        "signer": "CN=Mozilla Corporation, OU=Firefox Engineering Operations, O=Mozilla Corporation, L=San Francisco, S=California, C=US"
+      }
+    },
+    {
+      "pid": 8932,
+      "ppid": 4524,
+      "name": "ChatGPT Classic.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "ChatGPT Classic",
+        "company": "OpenAI",
+        "product": "ChatGPT Classic",
+        "version": "1.2026.190",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 14612,
+      "ppid": 8932,
+      "name": "ChatGPT Classic.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "ChatGPT Classic",
+        "company": "OpenAI",
+        "product": "ChatGPT Classic",
+        "version": "1.2026.190",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 19204,
+      "ppid": 8932,
+      "name": "ChatGPT Classic.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "ChatGPT Classic",
+        "company": "OpenAI",
+        "product": "ChatGPT Classic",
+        "version": "1.2026.190",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 17628,
+      "ppid": 8932,
+      "name": "ChatGPT Classic.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "ChatGPT Classic",
+        "company": "OpenAI",
+        "product": "ChatGPT Classic",
+        "version": "1.2026.190",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 17736,
+      "ppid": 8932,
+      "name": "ChatGPT Classic.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0\\app\\ChatGPT Classic.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "ChatGPT Classic",
+        "company": "OpenAI",
+        "product": "ChatGPT Classic",
+        "version": "1.2026.190",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 5028,
+      "ppid": 4524,
+      "name": "IntelGraphicsSoftware.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\AppUp.IntelArcSoftware_26.32.2604.0_x64__8j3eq9eme6ctt\\VFS\\ProgramFilesX64\\Intel\\Intel Graphics Software\\IntelGraphicsSoftware.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Intel\u00ae Graphics Software",
+        "company": "Intel Corporation",
+        "product": "Intel Graphics Software",
+        "version": "26.32.2604.4",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 13144,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2940,
+      "ppid": 20468,
+      "name": "M365Copilot.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2609.52011.0_x64__8wekyb3d8bbwe\\M365Copilot.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft 365 Copilot App",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft 365 Copilot",
+        "version": "19.2609.52011.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9500,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16904,
+      "ppid": 2940,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16060,
+      "ppid": 16904,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 6808,
+      "ppid": 16904,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5472,
+      "ppid": 16904,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18384,
+      "ppid": 16904,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18352,
+      "ppid": 16904,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 8548,
+      "ppid": 4524,
+      "name": "WhatsApp.Root.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\5319275A.WhatsAppDesktop_2.2637.100.0_x64__cv1g1gvanyjgm\\WhatsApp.Root.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "WhatsApp.Root",
+        "company": "WhatsApp.Root",
+        "product": "WhatsApp.Root",
+        "version": "1.0.0.0",
+        "signature": "NotSigned",
+        "signer": null
+      }
+    },
+    {
+      "pid": 15092,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19552,
+      "ppid": 8548,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14548,
+      "ppid": 19552,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13964,
+      "ppid": 19552,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18140,
+      "ppid": 19552,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 8580,
+      "ppid": 19552,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16596,
+      "ppid": 19552,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3348,
+      "ppid": 9868,
+      "name": "ms-teams.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\MSTeams_26246.1604.5133.838_x64__8wekyb3d8bbwe\\ms-teams.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Teams",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Teams",
+        "version": "26246.1604.5133.838",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4384,
+      "ppid": 3348,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19336,
+      "ppid": 4384,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16744,
+      "ppid": 4384,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 5520,
+      "ppid": 4384,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11532,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13020,
+      "ppid": 4384,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 8572,
+      "ppid": 4384,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 9660,
+      "ppid": 3348,
+      "name": "ms-teams.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\MSTeams_26246.1604.5133.838_x64__8wekyb3d8bbwe\\ms-teams.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Teams",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Teams",
+        "version": "26246.1604.5133.838",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 3460,
+      "ppid": 4168,
+      "name": "ollama app.exe",
+      "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Ollama\\ollama app.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": null,
+        "company": null,
+        "product": null,
+        "version": null,
+        "signature": "Valid",
+        "signer": "CN=Ollama Inc., O=Ollama Inc., L=Toronto, S=Ontario, C=CA, SERIALNUMBER=2713355, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Ontario, OID.1.3.6.1.4.1.311.60.2.1.3=CA"
+      }
+    },
+    {
+      "pid": 12120,
+      "ppid": 3460,
+      "name": "ollama.exe",
+      "exe": "C:\\Users\\chris\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": null,
+        "company": null,
+        "product": null,
+        "version": null,
+        "signature": "Valid",
+        "signer": "CN=Ollama Inc., O=Ollama Inc., L=Toronto, S=Ontario, C=CA, SERIALNUMBER=2713355, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Ontario, OID.1.3.6.1.4.1.311.60.2.1.3=CA"
+      }
+    },
+    {
+      "pid": 10940,
+      "ppid": 12120,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 8540,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "PimIndexMaintenanceSvc_41338e4",
+          "DisplayName": "Contact Data_41338e4"
+        },
+        {
+          "Name": "UnistoreSvc_41338e4",
+          "DisplayName": "User Data Storage_41338e4"
+        },
+        {
+          "Name": "UserDataSvc_41338e4",
+          "DisplayName": "User Data Access_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 21188,
+      "ppid": 1608,
+      "name": "ApplicationFrameHost.exe",
+      "exe": "C:\\WINDOWS\\system32\\ApplicationFrameHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Application Frame Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 20008,
+      "ppid": 1608,
+      "name": "SystemSettings.exe",
+      "exe": "C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Settings",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 21128,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "DevicesFlowUserSvc_41338e4",
+          "DisplayName": "DevicesFlow_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11752,
+      "ppid": 1608,
+      "name": "ShellExperienceHost.exe",
+      "exe": "C:\\WINDOWS\\SystemApps\\ShellExperienceHost_cw5n1h2txyewy\\ShellExperienceHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Shell Experience Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 884,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4928,
+      "ppid": 19552,
+      "name": "msedgewebview2.exe",
+      "exe": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\154.0.4258.37\\msedgewebview2.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Microsoft Edge WebView2",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft Edge WebView2",
+        "version": "154.0.4258.37",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 22308,
+      "ppid": 17952,
+      "name": "OpenConsole.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window and PTY Host (Open Source)",
+        "company": "Microsoft Corporation",
+        "product": "Windows Terminal",
+        "version": "1.24.2607.10001",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 20980,
+      "ppid": 17952,
+      "name": "wsl.exe",
+      "exe": "C:\\Windows\\system32\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8737 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13808,
+      "ppid": 20980,
+      "name": "wsl.exe",
+      "exe": "C:\\Program Files\\WSL\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 15164,
+      "ppid": 13808,
+      "name": "wslhost.exe",
+      "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 20920,
+      "ppid": 15164,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 13136,
+      "ppid": 1608,
+      "name": "backgroundTaskHost.exe",
+      "exe": "C:\\WINDOWS\\system32\\backgroundTaskHost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Background Task Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 4956,
+      "ppid": 1608,
+      "name": "RuntimeBroker.exe",
+      "exe": "C:\\Windows\\System32\\RuntimeBroker.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Runtime Broker",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.9278 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16288,
+      "ppid": 17952,
+      "name": "OpenConsole.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window and PTY Host (Open Source)",
+        "company": "Microsoft Corporation",
+        "product": "Windows Terminal",
+        "version": "1.24.2607.10001",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 11548,
+      "ppid": 17952,
+      "name": "wsl.exe",
+      "exe": "C:\\Windows\\system32\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8737 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18440,
+      "ppid": 11548,
+      "name": "wsl.exe",
+      "exe": "C:\\Program Files\\WSL\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 10196,
+      "ppid": 18440,
+      "name": "wslhost.exe",
+      "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19320,
+      "ppid": 10196,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 10912,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "NPSMSvc_41338e4",
+          "DisplayName": "Now Playing Session Manager Service_41338e4"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 10412,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "WFDSConMgrSvc",
+          "DisplayName": "Wi-Fi Direct Services Connection Manager Service"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 8360,
+      "ppid": 4168,
+      "name": "SnippingTool.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.ScreenSketch_11.2607.23.0_x64__8wekyb3d8bbwe\\SnippingTool\\SnippingTool.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "SnippingTool.exe",
+        "company": "Microsoft Corporation",
+        "product": "Snipping Tool",
+        "version": "11.2607.23.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 14280,
+      "ppid": 17952,
+      "name": "OpenConsole.exe",
+      "exe": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11911.0_x64__8wekyb3d8bbwe\\OpenConsole.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window and PTY Host (Open Source)",
+        "company": "Microsoft Corporation",
+        "product": "Windows Terminal",
+        "version": "1.24.2607.10001",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 16220,
+      "ppid": 17952,
+      "name": "wsl.exe",
+      "exe": "C:\\Windows\\system32\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8737 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 7412,
+      "ppid": 16220,
+      "name": "wsl.exe",
+      "exe": "C:\\Program Files\\WSL\\wsl.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 19140,
+      "ppid": 7412,
+      "name": "wslhost.exe",
+      "exe": "C:\\Program Files\\WSL\\wslhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows Subsystem for Linux",
+        "company": "Microsoft Corporation",
+        "product": "Windows Subsystem for Linux",
+        "version": "2.7.8.0",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18956,
+      "ppid": 19140,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 22220,
+      "ppid": 1608,
+      "name": "WmiPrvSE.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 6096,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\System32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "smphost",
+          "DisplayName": "Microsoft Storage Spaces SMP"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 20116,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "wuauserv",
+          "DisplayName": "Windows Update"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 18420,
+      "ppid": 4328,
+      "name": "audiodg.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [],
+      "file": null
+    },
+    {
+      "pid": 8364,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": null,
+      "path_source": "process",
+      "services": [
+        {
+          "Name": "NetSetupSvc",
+          "DisplayName": "NetSetupSvc"
+        }
+      ],
+      "file": null
+    },
+    {
+      "pid": 17572,
+      "ppid": 1420,
+      "name": "svchost.exe",
+      "exe": "C:\\WINDOWS\\system32\\svchost.exe",
+      "path_source": "service_config",
+      "services": [
+        {
+          "Name": "gpsvc",
+          "DisplayName": "Group Policy Client"
+        }
+      ],
+      "file": {
+        "description": "Host Process for Windows Services",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 21340,
+      "ppid": 7412,
+      "name": "powershell.exe",
+      "exe": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Windows PowerShell",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.8972 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    },
+    {
+      "pid": 2040,
+      "ppid": 21340,
+      "name": "conhost.exe",
+      "exe": "C:\\WINDOWS\\system32\\conhost.exe",
+      "path_source": "process",
+      "services": [],
+      "file": {
+        "description": "Console Window Host",
+        "company": "Microsoft Corporation",
+        "product": "Microsoft\u00ae Windows\u00ae Operating System",
+        "version": "10.0.26100.1 (WinBuild.160101.0800)",
+        "signature": "Valid",
+        "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      }
+    }
+  ]
+}

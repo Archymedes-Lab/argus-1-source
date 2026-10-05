@@ -27,7 +27,7 @@ NONCRITICAL = TIER_1 + TIER_2
 # protection, ingestion and freshness supervision always run.
 GOVERNED_JOBS = frozenset({
     "intel", "feeds", "secrets", "memscan", "spy", "posture", "toolchain",
-    "webshell", "hunt", "gaps", "attackmap", "arena", "model", "geo",
+    "webshell", "hunt", "gaps", "attackmap", "arena", "model", "geo", "world",
     "pixel", "intrusion", "rust_mirror",
 })
 

@@ -47,6 +47,13 @@ COVERAGE_ASSETS = {
     "/static/vendor/three.module.min.js": (
         "vendor/three.module.min.js", "text/javascript; charset=utf-8",
         "08fd7545d13d2c7fb65ab691530a802dafefd638596501854f267d0fb13c39e7"),
+    # The /world view: same engine, same policy. Its map data is generated from
+    # pinned Natural Earth files (scripts/tools/build_world_assets.py).
+    "/world": ("world.html", "text/html; charset=utf-8", None),
+    "/static/world.js": ("world.js", "text/javascript; charset=utf-8", None),
+    "/static/vendor/world-50m.json": (
+        "vendor/world-50m.json", "application/json",
+        "bd89e13c5073e3fba5dbe16ca9231a1d7d7de5844961f426e9d35d95b4ec4a28"),
 }
 
 
@@ -855,6 +862,20 @@ class Handler(BaseHTTPRequestHandler):
                           if isinstance(f, dict)
                           and f.get("severity") in ("critical", "high")]
                 payload = geosecurity.state(store, health_state=hstate, recent_findings=recent)
+            finally:
+                store.close()
+            return self._send(200, json.dumps(payload, default=str))
+
+        if url.path == "/api/world":
+            from jarvis.collectors.host import geo
+            from jarvis.intel import worldwatch
+            # Stored reports plus distances worked out here. The device position
+            # is read locally and returned only to this loopback page.
+            store = Store(self.db_path)
+            try:
+                payload = worldwatch.state(
+                    store, location=geo.effective(store, geo.current(store)),
+                    trusted=geo.get_zones(store))
             finally:
                 store.close()
             return self._send(200, json.dumps(payload, default=str))

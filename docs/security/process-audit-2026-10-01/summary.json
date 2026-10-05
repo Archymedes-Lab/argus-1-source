@@ -1,0 +1,344 @@
+{
+  "at": 1790849039.2464094,
+  "errors": [],
+  "wsl_count": 102,
+  "windows_count": 296,
+  "wsl_stable_missing": [
+    64094
+  ],
+  "windows_cim_stable_missing": [],
+  "windows_dotnet_stable_missing": [],
+  "windows_no_exe": 158,
+  "wsl_no_exe": 78,
+  "windows_names": {
+    "(unattributed)": 1,
+    "AggregatorHost.exe": 1,
+    "AppHelperCap.exe": 1,
+    "ApplicationFrameHost.exe": 1,
+    "ChatGPT Classic.exe": 5,
+    "CrossDeviceResume.exe": 1,
+    "CrossDeviceService.exe": 1,
+    "DefenderSessionHelper.exe": 1,
+    "DiagsCap.exe": 1,
+    "ELAN_MOC_Service.exe": 1,
+    "FMAudioMonitor.exe": 1,
+    "FMService64.exe": 1,
+    "FMToastNotification.exe": 1,
+    "HPAudioAnalytics.exe": 1,
+    "HotKeyServiceUWP.exe": 1,
+    "HpSfuService64.exe": 1,
+    "IntelAudioService.exe": 1,
+    "IntelCpHDCPSvc.exe": 1,
+    "IntelGraphicsSoftware.Service.exe": 1,
+    "IntelGraphicsSoftware.exe": 1,
+    "JarvisSensor.exe": 1,
+    "LanWlanWwanSwitchingServiceUWP.exe": 1,
+    "LsaIso.exe": 1,
+    "M365Copilot.exe": 1,
+    "Memory Compression": 1,
+    "MicrosoftEdgeUpdate.exe": 1,
+    "MicrosoftStartFeedProvider.exe": 1,
+    "MpDefenderCoreService.exe": 1,
+    "MsMpEng.exe": 1,
+    "NetworkCap.exe": 1,
+    "NisSrv.exe": 1,
+    "OneDrive.exe": 1,
+    "OpenConsole.exe": 5,
+    "PresentMonService.exe": 1,
+    "ProtonDrive.exe": 1,
+    "ProtonVPN.Client.exe": 1,
+    "ProtonVPN.NrptWatchdog.exe": 1,
+    "ProtonVPNService.exe": 1,
+    "Registry": 1,
+    "RiotClientCrashHandler.exe": 1,
+    "RiotClientServices.exe": 1,
+    "RtkAudUService64.exe": 3,
+    "RtkBtManServ.exe": 1,
+    "RuntimeBroker.exe": 9,
+    "SNAPOS64.exe": 1,
+    "SNAPOSS64.exe": 1,
+    "SearchHost.exe": 1,
+    "SearchIndexer.exe": 1,
+    "Secure System": 1,
+    "SecurityHealthService.exe": 1,
+    "SecurityHealthSystray.exe": 1,
+    "ShellExperienceHost.exe": 1,
+    "ShellHost.exe": 1,
+    "SnippingTool.exe": 1,
+    "StartMenuExperienceHost.exe": 1,
+    "SysInfoCap.exe": 1,
+    "Sysmon64.exe": 1,
+    "System": 1,
+    "SystemSettings.exe": 1,
+    "TextInputHost.exe": 1,
+    "TiWorker.exe": 1,
+    "TouchpointAnalyticsClientService.exe": 1,
+    "TrustedInstaller.exe": 1,
+    "WMIRegistrationService.exe": 1,
+    "WUDFHost.exe": 3,
+    "WhatsApp.Root.exe": 1,
+    "WidgetBoard.exe": 1,
+    "WidgetService.exe": 1,
+    "WindowsTerminal.exe": 1,
+    "WmiPrvSE.exe": 3,
+    "backgroundTaskHost.exe": 1,
+    "codex-windows-sandbox-service.exe": 1,
+    "conhost.exe": 15,
+    "cowork-svc.exe": 1,
+    "crashhelper.exe": 1,
+    "csrss.exe": 2,
+    "ctfmon.exe": 1,
+    "dllhost.exe": 2,
+    "dwm.exe": 1,
+    "escsvc64.exe": 1,
+    "explorer.exe": 1,
+    "firefox.exe": 11,
+    "fontdrvhost.exe": 2,
+    "hpsvcsscan.exe": 1,
+    "ipf_helper.exe": 1,
+    "ipf_uf.exe": 1,
+    "ipfsvc.exe": 1,
+    "jhi_service.exe": 1,
+    "lsass.exe": 1,
+    "ms-teams.exe": 2,
+    "msedgewebview2.exe": 31,
+    "ollama app.exe": 1,
+    "ollama.exe": 1,
+    "powershell.exe": 6,
+    "rundll32.exe": 1,
+    "services.exe": 1,
+    "sihost.exe": 1,
+    "smss.exe": 1,
+    "spoolsv.exe": 1,
+    "svchost.exe": 86,
+    "taskhostw.exe": 1,
+    "tasklist.exe": 1,
+    "unsecapp.exe": 1,
+    "vmcompute.exe": 1,
+    "vmmemWSL": 1,
+    "vmwp.exe": 1,
+    "wininit.exe": 1,
+    "winlogon.exe": 1,
+    "wsl.exe": 10,
+    "wslhost.exe": 6,
+    "wslrelay.exe": 1,
+    "wslservice.exe": 1
+  },
+  "wsl_names": {
+    "(sd-pam)": 1,
+    "(udev-worker)": 6,
+    "Relay(14926)": 1,
+    "Relay(3338)": 1,
+    "Relay(46655)": 1,
+    "Relay(59518)": 1,
+    "Relay(601)": 1,
+    "SessionLeader": 5,
+    "agetty": 1,
+    "api": 3,
+    "bash": 6,
+    "claude": 3,
+    "cloudflared": 1,
+    "codex": 3,
+    "codex-code-mode": 1,
+    "containerd": 1,
+    "containerd-shim": 9,
+    "cron": 1,
+    "dbus-daemon": 2,
+    "dockerd": 1,
+    "dragonfly": 1,
+    "fusermount3": 1,
+    "haproxy": 2,
+    "init": 1,
+    "init-systemd(Ub": 1,
+    "login": 1,
+    "nats-server": 1,
+    "node": 2,
+    "npm exec serve@": 1,
+    "polkitd": 1,
+    "postgres": 15,
+    "powershell.exe": 1,
+    "python3": 1,
+    "rsyslogd": 1,
+    "sh": 1,
+    "sleep": 2,
+    "snapd": 1,
+    "snapfuse": 6,
+    "sysmon": 1,
+    "systemd": 2,
+    "systemd-inhibit": 1,
+    "systemd-journal": 1,
+    "systemd-logind": 1,
+    "systemd-resolve": 1,
+    "systemd-timesyn": 1,
+    "systemd-udevd": 1,
+    "unattended-upgr": 1,
+    "uvicorn": 1,
+    "xdg-document-po": 1,
+    "xdg-permission-": 1
+  },
+  "health": {
+    "healthy": true,
+    "ready": true,
+    "protection_healthy": true,
+    "sources": {
+      "scan": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848955
+      },
+      "bridge": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790849005
+      },
+      "sysmon": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848764
+      },
+      "native": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848959
+      },
+      "internet": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790849033
+      },
+      "veil": {
+        "status": "not_reporting",
+        "reason": "no observation yet",
+        "observed_at": null
+      },
+      "secrets": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790847353
+      },
+      "resources": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848747
+      }
+    },
+    "perception": {
+      "at": 1790849019,
+      "windows_processes": 298,
+      "sysmon_process_create_policy": {
+        "event1": "full",
+        "mode": "exclude",
+        "detail": "ProcessCreate recorded without excludes",
+        "source": "elevated_broker",
+        "config_hash": "72a1d071718a8a33d2dc46d2839bfcd2010e9ec098a106fad01ce00f815e72c9"
+      },
+      "sysmon_process_create_coverage": {
+        "status": "observed",
+        "boot": "111",
+        "cursor_at": 1790848960.933973,
+        "continuous_since": 1790788745.911,
+        "dropped_process_create": 0
+      },
+      "sysmon_pressure": {
+        "status": "observed",
+        "boot": "2026-09-30T17:18:12.5000000Z",
+        "retained_registry_events": 1563,
+        "by_rule": [
+          {
+            "name": "registry-persistence",
+            "count": 1563
+          }
+        ],
+        "by_image": [
+          {
+            "name": "services.exe",
+            "count": 606
+          },
+          {
+            "name": "svchost.exe",
+            "count": 594
+          },
+          {
+            "name": "System",
+            "count": 215
+          },
+          {
+            "name": "ProtonVPNService.exe",
+            "count": 43
+          },
+          {
+            "name": "taskhostw.exe",
+            "count": 37
+          },
+          {
+            "name": "sihost.exe",
+            "count": 22
+          },
+          {
+            "name": "WMIADAP.EXE",
+            "count": 12
+          },
+          {
+            "name": "setup.exe",
+            "count": 12
+          },
+          {
+            "name": "MsMpEng.exe",
+            "count": 10
+          },
+          {
+            "name": "winlogon.exe",
+            "count": 2
+          },
+          {
+            "name": "LogonUI.exe",
+            "count": 2
+          },
+          {
+            "name": "Explorer.EXE",
+            "count": 2
+          },
+          {
+            "name": "jhi_service.exe",
+            "count": 2
+          },
+          {
+            "name": "ProtonVPN.Client.exe",
+            "count": 2
+          },
+          {
+            "name": "csrss.exe",
+            "count": 1
+          },
+          {
+            "name": "HpSfuService64.exe",
+            "count": 1
+          }
+        ],
+        "drops": [
+          {
+            "at": "2026-09-30T17:19:07.8530951Z",
+            "counts": {
+              "ProcessTerminate": 20,
+              "ProcessCreate": 94,
+              "ImageLoad": 151,
+              "CreateRemoteThread": 2,
+              "ProcessAccess": 1662,
+              "FileCreate": 60,
+              "RegistryEvent": 76866,
+              "PipeEvent": 28
+            },
+            "driver_queue_size": 50000
+          }
+        ],
+        "truncated": false,
+        "source": "elevated_broker"
+      },
+      "verified": 220,
+      "unreconciled": 0,
+      "unknown": 78
+    }
+  },
+  "native_sequence_before": 59309,
+  "native_sequence_after": 59309
+}

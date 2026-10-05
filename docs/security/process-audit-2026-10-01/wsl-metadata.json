@@ -1,0 +1,596 @@
+[
+  {
+    "pid": 1,
+    "name": "systemd",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 2,
+    "name": "init-systemd(Ub",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 6,
+    "name": "init",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 46,
+    "name": "systemd-journal",
+    "cgroup": "0::/system.slice/systemd-journald.service",
+    "exe": ""
+  },
+  {
+    "pid": 94,
+    "name": "systemd-udevd",
+    "cgroup": "0::/system.slice/systemd-udevd.service/udev",
+    "exe": ""
+  },
+  {
+    "pid": 104,
+    "name": "snapfuse",
+    "cgroup": "0::/system.slice/snap-core24-1643.mount",
+    "exe": ""
+  },
+  {
+    "pid": 105,
+    "name": "snapfuse",
+    "cgroup": "0::/system.slice/snap-core24-2124.mount",
+    "exe": ""
+  },
+  {
+    "pid": 118,
+    "name": "snapfuse",
+    "cgroup": "0::/system.slice/snap-snapd-27710.mount",
+    "exe": ""
+  },
+  {
+    "pid": 123,
+    "name": "snapfuse",
+    "cgroup": "0::/system.slice/snap-snapd-27738.mount",
+    "exe": ""
+  },
+  {
+    "pid": 129,
+    "name": "snapfuse",
+    "cgroup": "0::/system.slice/snap-terraform-938.mount",
+    "exe": ""
+  },
+  {
+    "pid": 132,
+    "name": "snapfuse",
+    "cgroup": "0::/system.slice/snap-terraform-943.mount",
+    "exe": ""
+  },
+  {
+    "pid": 218,
+    "name": "systemd-resolve",
+    "cgroup": "0::/system.slice/systemd-resolved.service",
+    "exe": ""
+  },
+  {
+    "pid": 219,
+    "name": "systemd-timesyn",
+    "cgroup": "0::/system.slice/systemd-timesyncd.service",
+    "exe": ""
+  },
+  {
+    "pid": 226,
+    "name": "python3",
+    "cgroup": "0::/system.slice/jarvis.service",
+    "exe": ""
+  },
+  {
+    "pid": 227,
+    "name": "cron",
+    "cgroup": "0::/system.slice/cron.service",
+    "exe": ""
+  },
+  {
+    "pid": 229,
+    "name": "dbus-daemon",
+    "cgroup": "0::/system.slice/dbus.service",
+    "exe": ""
+  },
+  {
+    "pid": 240,
+    "name": "snapd",
+    "cgroup": "0::/system.slice/snapd.service",
+    "exe": ""
+  },
+  {
+    "pid": 241,
+    "name": "systemd-logind",
+    "cgroup": "0::/system.slice/systemd-logind.service",
+    "exe": ""
+  },
+  {
+    "pid": 260,
+    "name": "rsyslogd",
+    "cgroup": "0::/system.slice/rsyslog.service",
+    "exe": ""
+  },
+  {
+    "pid": 273,
+    "name": "agetty",
+    "cgroup": "0::/system.slice/system-getty.slice/getty@tty1.service",
+    "exe": ""
+  },
+  {
+    "pid": 282,
+    "name": "containerd",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 293,
+    "name": "unattended-upgr",
+    "cgroup": "0::/system.slice/unattended-upgrades.service",
+    "exe": ""
+  },
+  {
+    "pid": 296,
+    "name": "systemd",
+    "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 317,
+    "name": "(sd-pam)",
+    "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 346,
+    "name": "dockerd",
+    "cgroup": "0::/system.slice/docker.service",
+    "exe": ""
+  },
+  {
+    "pid": 448,
+    "name": "sysmon",
+    "cgroup": "0::/system.slice/sysmon.service",
+    "exe": ""
+  },
+  {
+    "pid": 594,
+    "name": "SessionLeader",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 595,
+    "name": "Relay(601)",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 597,
+    "name": "login",
+    "cgroup": "0::/user.slice/user-1000.slice/session-2.scope",
+    "exe": ""
+  },
+  {
+    "pid": 601,
+    "name": "bash",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/bash"
+  },
+  {
+    "pid": 799,
+    "name": "bash",
+    "cgroup": "0::/user.slice/user-1000.slice/session-2.scope",
+    "exe": "/usr/bin/bash"
+  },
+  {
+    "pid": 1167,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1192,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1225,
+    "name": "nats-server",
+    "cgroup": "0::/system.slice/docker-ab29362a0f60c4ce2fef3e563b750a5b048d41aa89d34ddb4a6245a235ceca6f.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1228,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1238,
+    "name": "haproxy",
+    "cgroup": "0::/system.slice/docker-5bf4b0167b4b97563cc4b85951e2b24ac6912f2e939ff5c598c5f1901660789e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1262,
+    "name": "dragonfly",
+    "cgroup": "0::/system.slice/docker-509928a54ba8d332c60b028f794b1ad8dd848d5cf5835394ae024513fe2f9ebb.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1349,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1365,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1408,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1498,
+    "name": "uvicorn",
+    "cgroup": "0::/system.slice/docker-03ca8c183ab6a273bfd858bd2862970369a7b8854946e4d1c1f7e58b49090a10.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1503,
+    "name": "cloudflared",
+    "cgroup": "0::/system.slice/docker-bdbbe1731c98270ebc8a14bcf58cdce7d292984e8ccb26a26222e0ee60548ae4.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1529,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1715,
+    "name": "haproxy",
+    "cgroup": "0::/system.slice/docker-5bf4b0167b4b97563cc4b85951e2b24ac6912f2e939ff5c598c5f1901660789e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1873,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1896,
+    "name": "api",
+    "cgroup": "0::/system.slice/docker-3774a563061c4c3264da450fffc76a8ab964124548cea88c0f8c78d1824d7667.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1915,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1930,
+    "name": "containerd-shim",
+    "cgroup": "0::/system.slice/containerd.service",
+    "exe": ""
+  },
+  {
+    "pid": 1963,
+    "name": "api",
+    "cgroup": "0::/system.slice/docker-4ca1ed34528e3010e6d7f77488865f71d192fade026a973ae5e87e2371b3822b.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1976,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1979,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1980,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1981,
+    "name": "api",
+    "cgroup": "0::/system.slice/docker-72d5524a161167a34673fcc029c5f21aee4b62ae9e6013d4b5176bbc82279d96.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1986,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 1988,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 2001,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 2002,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 2003,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 3331,
+    "name": "SessionLeader",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 3332,
+    "name": "Relay(3338)",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 3338,
+    "name": "bash",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/bash"
+  },
+  {
+    "pid": 8304,
+    "name": "claude",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.local/share/claude/versions/2.1.285"
+  },
+  {
+    "pid": 14922,
+    "name": "SessionLeader",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 14923,
+    "name": "Relay(14926)",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 14926,
+    "name": "bash",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/bash"
+  },
+  {
+    "pid": 20206,
+    "name": "claude",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.local/share/claude/versions/2.1.286"
+  },
+  {
+    "pid": 31591,
+    "name": "npm exec serve@",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.nvm/versions/node/v22.22.0/bin/node"
+  },
+  {
+    "pid": 31752,
+    "name": "dbus-daemon",
+    "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/session.slice/dbus.service",
+    "exe": "/usr/bin/dbus-daemon"
+  },
+  {
+    "pid": 31790,
+    "name": "xdg-document-po",
+    "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/session.slice/xdg-document-portal.service",
+    "exe": "/usr/libexec/xdg-document-portal"
+  },
+  {
+    "pid": 31795,
+    "name": "xdg-permission-",
+    "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/session.slice/xdg-permission-store.service",
+    "exe": "/usr/libexec/xdg-permission-store"
+  },
+  {
+    "pid": 31804,
+    "name": "fusermount3",
+    "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/session.slice/xdg-document-portal.service",
+    "exe": ""
+  },
+  {
+    "pid": 31923,
+    "name": "sh",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/dash"
+  },
+  {
+    "pid": 31924,
+    "name": "node",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.nvm/versions/node/v22.22.0/bin/node"
+  },
+  {
+    "pid": 46652,
+    "name": "SessionLeader",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 46653,
+    "name": "Relay(46655)",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 46655,
+    "name": "bash",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/bash"
+  },
+  {
+    "pid": 59135,
+    "name": "claude",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.local/share/claude/versions/2.1.286"
+  },
+  {
+    "pid": 59516,
+    "name": "SessionLeader",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 59517,
+    "name": "Relay(59518)",
+    "cgroup": "0::/init.scope",
+    "exe": ""
+  },
+  {
+    "pid": 59518,
+    "name": "bash",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/bash"
+  },
+  {
+    "pid": 59892,
+    "name": "node",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.nvm/versions/node/v22.22.0/bin/node"
+  },
+  {
+    "pid": 59899,
+    "name": "codex",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.nvm/versions/node/v22.22.0/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+  },
+  {
+    "pid": 59964,
+    "name": "codex",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.codex/packages/app-server-daemon/releases/0.159.2-x86_64-unknown-linux-musl/bin/codex"
+  },
+  {
+    "pid": 60067,
+    "name": "codex",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.codex/packages/app-server-daemon/releases/0.159.2-x86_64-unknown-linux-musl/bin/codex"
+  },
+  {
+    "pid": 62159,
+    "name": "systemd-inhibit",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/systemd-inhibit"
+  },
+  {
+    "pid": 62171,
+    "name": "polkitd",
+    "cgroup": "0::/system.slice/polkit.service",
+    "exe": ""
+  },
+  {
+    "pid": 62237,
+    "name": "sleep",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/sleep"
+  },
+  {
+    "pid": 62422,
+    "name": "codex-code-mode",
+    "cgroup": "0::/init.scope",
+    "exe": "/home/chris/.codex/packages/app-server-daemon/releases/0.159.2-x86_64-unknown-linux-musl/bin/codex-code-mode-host"
+  },
+  {
+    "pid": 63205,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 63206,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 63207,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 63208,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 63209,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 63210,
+    "name": "postgres",
+    "cgroup": "0::/system.slice/docker-92c630c91670595df215cd8c7946153068765a148142d3dd51b95d0dae4c2d5e.scope",
+    "exe": ""
+  },
+  {
+    "pid": 65180,
+    "name": "wsl-pro-service",
+    "cgroup": "0::/system.slice/wsl-pro.service",
+    "exe": ""
+  },
+  {
+    "pid": 66600,
+    "name": "python3",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/python3.12"
+  },
+  {
+    "pid": 66779,
+    "name": "sleep",
+    "cgroup": "0::/init.scope",
+    "exe": "/usr/bin/sleep"
+  },
+  {
+    "pid": 66787,
+    "name": "(udev-worker)",
+    "cgroup": "0::/system.slice/systemd-udevd.service/udev",
+    "exe": ""
+  },
+  {
+    "pid": 66789,
+    "name": "(udev-worker)",
+    "cgroup": "0::/system.slice/systemd-udevd.service/udev",
+    "exe": ""
+  }
+]

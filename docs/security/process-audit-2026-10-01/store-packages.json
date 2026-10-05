@@ -1,0 +1,32 @@
+[
+  {
+    "Name": "Microsoft.WidgetsPlatformRuntime",
+    "PackageFullName": "Microsoft.WidgetsPlatformRuntime_1.6.19.0_x64__8wekyb3d8bbwe",
+    "SignatureKind": 3,
+    "Status": 0
+  },
+  {
+    "Name": "OpenAI.ChatGPT-Desktop",
+    "PackageFullName": "OpenAI.ChatGPT-Desktop_1.2026.190.0_x64__2p2nqsd0c76g0",
+    "SignatureKind": 3,
+    "Status": 0
+  },
+  {
+    "Name": "Microsoft.StartExperiencesApp",
+    "PackageFullName": "Microsoft.StartExperiencesApp_1.380.2.0_x64__8wekyb3d8bbwe",
+    "SignatureKind": 3,
+    "Status": 0
+  },
+  {
+    "Name": "AppUp.IntelArcSoftware",
+    "PackageFullName": "AppUp.IntelArcSoftware_26.32.2604.0_x64__8j3eq9eme6ctt",
+    "SignatureKind": 3,
+    "Status": 0
+  },
+  {
+    "Name": "5319275A.WhatsAppDesktop",
+    "PackageFullName": "5319275A.WhatsAppDesktop_2.2637.100.0_x64__cv1g1gvanyjgm",
+    "SignatureKind": 3,
+    "Status": 0
+  }
+]

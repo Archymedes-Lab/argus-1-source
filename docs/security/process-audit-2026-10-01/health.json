@@ -1,0 +1,1020 @@
+{
+  "before": {
+    "assurance": {
+      "policy_version": "2026-09-19",
+      "scope": "engineering register; not a live security or compromise verdict",
+      "complete": false,
+      "absence_of_alerts_proves_safety": false,
+      "score": 17,
+      "score_definition": "weighted evidence of trust in JARVIS itself; not machine protection health",
+      "evidence_gaps": {
+        "implementation_partial": 16,
+        "implementation_unverified": 2,
+        "observation_mapping_missing": 11,
+        "live_telemetry_not_current": 12,
+        "containment_not_validated": 18,
+        "validation_date_missing": 18
+      },
+      "capabilities": {
+        "human_safety": {
+          "implementation": "partial",
+          "basis": "response actions and bounded repairs",
+          "blind_spot": "No complete essential-service dependency model",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "online_guardian": {
+          "implementation": "partial",
+          "basis": "internetwatch and threat intelligence",
+          "blind_spot": "No synchronous browser credential/payment/OAuth interception",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "browser_privacy_veil": {
+          "implementation": "partial",
+          "basis": "opt-in metadata-only browser sensor (surfaces counted on use, named session-replay vendors, cross-origin pixel origins) with deterministic Veil correlation, and opt-in declarativeNetRequest rulesets for session recorders and tracking pixels that ship disabled, cannot match pages or frames, and yield to per-site exceptions (rule and logic tests under Node stubs)",
+          "blind_spot": "No installed/attested browser integration; blocking is unvalidated in a live browser; first-party/CNAME-cloaked or server-side trackers and recorders served from the site origin are neither named nor blocked; the main-world probe can be forged or evaded by the page",
+          "live_telemetry": "not_reporting",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "input_surveillance": {
+          "implementation": "partial",
+          "basis": "injected-input hook with forensics, source-tested exact media-control/key-event reconciliation and proportionate media-only severity, hook-chain latency and per-interval stall episodes, pointer-setting and LowLevelHooksTimeout checks, keyboard/mouse class-filter and Scancode Map inventory, monitoring-tool process-name heuristics, screen-capture posture, and an elevated-broker Win32k AuditApiCalls trace inventorying low-level hook (1002) and background raw-input (1001) registrations by process, image and signature; the event fields and attribution were measured on 2026-09-23 with a positive control (WH_MOUSE_LL and a keyboard RIDEV_INPUTSINK both captured), and validated end to end through the scheduled broker the same day: an unelevated control that had already exited was identified from Sysmon history and reported (keyboard sink high, mouse hook medium)",
+          "blind_spot": "GetAsyncKeyState polling is not logged on this build (1003 absent under the positive control), so polling loggers are invisible; the trace does not survive reboot, so watchers registered before its first broker run each boot are unseen; stalls are symptoms and never attributed to a process; the input hook does not identify which process injected a media control",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "credential_guardian": {
+          "implementation": "partial",
+          "basis": "secret scanning and credential access collectors",
+          "blind_spot": "No complete secret-egress prevention",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "download_provenance": {
+          "implementation": "unverified",
+          "basis": "host collectors",
+          "blind_spot": "Extraction-to-execution provenance not established",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "system_state_graph": {
+          "implementation": "partial",
+          "basis": "ProcessGuid lineage, conservative snapshot/event reconciliation, source-tested bounded byte-and-identity checks for deleted Linux executables, deterministic posture debt and conditional remediation projections, bounded repair audit state, and repeated-sample sustained-health verification; source-tested host topology (WSL /init runtime proven by file identity, read-only mount and /init ancestry; argv0-link, shebang and systemd-helper name explanations with a system-binary collision guard; WSL-declared DNS tunnel listener), typed KNOWN_SAFE/KNOWN_UNSAFE/UNKNOWN observations with separate sensor health, and one bounded epoch-coherent re-query that keeps transient first sightings; source-tested WSL boundary snapshot (allowlisted wsl.conf/.wslconfig keys, DrvFs mounts, interop registration, Windows PATH entries, Docker socket presence) with an explicit-accept hash-chained checkpoint file that reports OFFLINE_STATE_DRIFT across a boot change, STATE_DRIFT within one, and EVIDENCE_LOST for unreadable sources; source-tested spyware and covert-process reasoning (jarvis reason): typed evidence, a deterministic hypothesis engine with exact-publisher category explanations, dual-use handling, per-mechanism blind spots and missing-evidence output, and a notes-only typed advisory; measured on a synthetic corpus of 8 spyware controls and 11 legitimate look-alikes (8 of 8 detected, 0 false positives) and on the live host with every source current; deployed live (release 686d4763a3a1); the deterministic engine additionally live-verified against real emulated mechanisms in a locked-down, non-root, no-network QEMU/KVM disposable guest (jarvis/lab/vmlab.py), 4 independent runs: 5 of 6 testable Linux positive controls detected with every expected fact present and correct latency, one honestly skipped for missing guest hardware, one clean-process guard stayed quiet every run, isolation verified each run (container removed, run directory removed, base image checksum unchanged); its own clean-guest baseline caught a real false positive on the legitimate systemd-logind daemon, fixed with a narrow path-anchored exception and confirmed clean on the next 2 runs",
+          "blind_spot": "No privileged live proof yet for the deleted-executable reconciliation or the topology explanations (not deployed; the service view with CAP_SYS_PTRACE has not run them); Windows interop (/init-backed .exe processes) and container execution domains are not modelled; the WSL VM-root owner of loopback udp/323 is unobservable; no complete cross-layer causal graph, broad verified remediation orchestration, reboot-cycle sustained-health proof, or long-duration soak evidence; the WSL boundary checkpoint has no accepted live baseline, no scheduled comparison, no alert wiring, no cross-boundary process edges, and its local hash chain has no independent anchor; the reasoning workflow is not scheduled; the isolated positive-control lab is Linux-only so far and on-demand rather than scheduled, and its Windows counterpart is designed but blocked on the owner enabling Windows Sandbox (not installed on this host) - the safer design uses only existing signed tools (the AutoHotkey #UseHook directive, file copy/rename), never custom hook-registration code, after a safety classifier declined raw Win32 capture-API source; corpus results are synthetic and say nothing about mechanisms no sensor observes (polling keyloggers, BitBlt or DXGI capture, clipboard listeners, who called SendInput, local staging, beacon timing, kernel-level hiding); the advisory model did not separate controls from explained look-alikes on the corpus and has no authority over verdict or depth",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "behavioral_physics": {
+          "implementation": "partial",
+          "basis": "resourcewatch",
+          "blind_spot": "Hardware counters and robust multivariate validation incomplete",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "sensor_integrity": {
+          "implementation": "partial",
+          "basis": "native sequence/digest replay checks, manifest-addressed spool reads, process-deadlined ingestion, continuous-coverage cursors, snapshot/event perception states, live-validated elevated Sysmon policy export (2026-09-22: running config hash equals windows-sysmon/jarvis-windows-baseline.xml, ProcessCreate unfiltered), the running Sysmon configuration hash continuously compared with the reviewed baseline, fresh Windows reconciliation and an EventLogReader boot-pressure probe (2s measured through the elevated broker on 2026-09-23 over 34002 events, was a 120s timeout via Get-WinEvent); receipts, freshness budgets, leases and supervised recovery watchdogs; source-tested on-demand WSL wall-clock stability probe (paired realtime/monotonic samples plus the journal step records; measured 2026-09-30 as unstable with -2.47 s steps about every 30 s)",
+          "blind_spot": "Independent authenticated sensors and anti-replay remain incomplete; boot 94 still overflowed the driver queue 46s after boot, under the previous policy, dropping 82 ProcessCreate and 64784 RegistryEvent records; the revised baseline removes 95% of registry volume in a replay of this boot (37062 to 1927 events) but is not yet applied, and whether it prevents boot-time overflow is unmeasured until it is applied and the machine reboots; no export of the pre-change policy was preserved; the clock probe is not scheduled, cannot identify the cause of a step, and detectors that compare wall-clock windows are not yet monotonic-based",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "continuous_attestation": {
+          "implementation": "unverified",
+          "basis": "security posture observations",
+          "blind_spot": "No validated TPM quote/PCR trust chain",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "component_isolation": {
+          "implementation": "partial",
+          "basis": "fixed response action registry; capability-aware visibility checks and a detector for privileged units running user-editable code; root-owned sealed release run under python3 -I with three visibility capabilities; source-tested execution identities (Ed25519 key readable only by the capability-holding daemon, binding observed via SO_PEERCRED/pidfd, CLOCK_BOOTTIME expiry, ancestry attribution) and agent/test capsules with private TMPDIR (docs/architecture/EVIDENCE-FABRIC.md); JARVIS-managed scheduled tasks verified against one declaration table (all 9 live tasks verified against the real checkout on 2026-09-24)",
+          "blind_spot": "Observer and responder privilege separation incomplete; execution identities are not live until a deploy provisions the key (no measured issuance yet); capsule capabilities are declared, not enforced; agent actors are self-declared; Windows-side (interop) processes are not attributed; provenance is attribution only and lowers no finding",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "forensic_storage": {
+          "implementation": "partial",
+          "basis": "authoritative Python hash-chained temporal event log plus an independently durable Rust gzip segment store with locked writers, atomic segment commits and full verification, fed by a governed bounded mirror job: events carry their authoritative source_seq, the store is its own cursor, ingest is all-or-nothing, budgeted pruning keeps the header chain and a store cursor behind the recorded one pauses mirroring as tampering evidence; an append-only Windows vault (Administrators/SYSTEM write, owner read) filled by the elevated broker and verified against the live chain (2026-09-23: 36 segments vaulted and payload-verified); OpenTimestamps anchors of the chain heads (only a 32-byte digest leaves the machine; first proof accepted by 4 calendars, Bitcoin confirmation pending); evidence cases and response intent records",
+          "blind_spot": "An administrator can still alter or delete the vault; anchors expose a rewrite of anchored history only while an anchor record survives somewhere and only once its Bitcoin proof exists (hours), and new events between anchors (up to 6h) are unanchored; the vault is on this machine, not off-host, and is unencrypted; the Rust mirror is not tamper-independent; retention gaps before vaulting are counted, not recoverable",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "temporal_correlation": {
+          "implementation": "partial",
+          "basis": "globally sequenced native events, multi-category temporal projection (process/network/file/registry/driver/ipc/wmi/malware/protection/task/sensor), event-consumed detectors, process lineage, incidents and snapshot reconciliation clamped to the current boot by its kernel-lifetime processes; source-tested observation epochs (boot id, wall-minus-monotonic step, kernel suspend delta, release change) with epoch-scoped monotonic ordering, recorded by the hidden job",
+          "blind_spot": "Epochs are not yet consumed by Sysmon/native reconciliation, so cross-standby wall-clock comparisons there remain; Windows process reconciliation only; the sensor labels records with the boot current at read time, so the prior boot shutdown tail is excluded at reconciliation, not at ingest; kernel minimal processes (Registry, Memory Compression, vmmem) have no start event and stay unknown; attack-sequence and cross-layer coverage incomplete",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "forge": {
+          "implementation": "partial",
+          "basis": "jarvis.lab scenarios",
+          "blind_spot": "No full directive scenario/latency/containment validation",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "performance": {
+          "implementation": "partial",
+          "basis": "per-subsystem scheduler duty cycle, process/RAM/database profiling, shared process/socket providers, optional Rust metrics/governance and durable-store bridge, plus hourly-validated OpenVINO GPU execution of bounded deterministic graphs (GPU.0, CPU-reference cross-checked)",
+          "blind_spot": "No complete measured CPU/RAM/IO/battery/latency budget, authoritative Rust sensor-ingest integration or comparative CPU-vs-GPU throughput benchmark",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "supply_chain": {
+          "implementation": "partial",
+          "basis": "standard-library Python runtime, exact-file hash check for one reviewed agent plugin version, a live service-verified exact-payload match to a Microsoft WHCP-signed Logitech DriverStore installer (2026-09-23), and a source-tested release controller: content-addressed release_id, single-writer deploy lock, --expect-base refusal of stale narrow releases, recorded installation checkout, and refusal of world-writable build sources",
+          "blind_spot": "Signed reproducible releases, complete SBOM validation, and broader package provenance unverified; the release controller has not yet run as root on this machine (the live deploy script predates it)",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "recovery": {
+          "implementation": "partial",
+          "basis": "action undo, fresh repair observations and read-only interrupted-action reconciliation",
+          "blind_spot": "No full restart/power-loss recovery validation",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "self_improvement": {
+          "implementation": "partial",
+          "basis": "human-gated fix proposals: deterministic daemon scan, bounded validated Ollama directives, OpenCode patch drafting, advisory Jev assessments (Tier-2, human-gated, offline-safe), separate investigation and exact-patch authorization, test-gated apply with revert",
+          "blind_spot": "No autonomous code execution; model directives remain untrusted, application stays human-authorized, and email replies cannot approve",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        }
+      }
+    },
+    "service": "JARVIS",
+    "time": 1790849035.7221599,
+    "healthy": true,
+    "live": true,
+    "ready": true,
+    "protection_healthy": true,
+    "progress_age": 1.8915517330169678,
+    "fast_lane_age": 19.948717832565308,
+    "current_job": "hidden",
+    "current_fast_job": "scan",
+    "sources": {
+      "scan": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848955
+      },
+      "bridge": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790849005
+      },
+      "sysmon": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848764
+      },
+      "native": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848959
+      },
+      "internet": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790849033
+      },
+      "veil": {
+        "status": "not_reporting",
+        "reason": "no observation yet",
+        "observed_at": null
+      },
+      "secrets": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790847353
+      },
+      "resources": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848747
+      }
+    },
+    "telemetry_chain": {
+      "at": 1790848959.8810482,
+      "stages": {
+        "installed": {
+          "state": "ok",
+          "detail": "/mnt/c/ProgramData/Jarvis/Sensor"
+        },
+        "running": {
+          "state": "ok",
+          "detail": "health written -2s ago"
+        },
+        "producing": {
+          "state": "ok",
+          "detail": "sensor completed its last read pass"
+        },
+        "arriving": {
+          "state": "ok",
+          "detail": "2 batches delivered this pass"
+        },
+        "ingested": {
+          "state": "ok",
+          "detail": "10 events committed to the history"
+        },
+        "gaps": {
+          "state": "ok",
+          "detail": "none detected this pass"
+        },
+        "integrity": {
+          "state": "ok",
+          "detail": "chain verified 21h ago"
+        },
+        "fresh": {
+          "state": "ok",
+          "detail": "evidence within its freshness budget"
+        }
+      },
+      "channels": {},
+      "backlog": 0,
+      "last_sequence": 59309,
+      "gaps": 0,
+      "quarantined": 0,
+      "checkpoint": 59309,
+      "current": true
+    },
+    "perception": {
+      "at": 1790848921,
+      "windows_processes": 291,
+      "sysmon_process_create_policy": {
+        "event1": "full",
+        "mode": "exclude",
+        "detail": "ProcessCreate recorded without excludes",
+        "source": "elevated_broker",
+        "config_hash": "72a1d071718a8a33d2dc46d2839bfcd2010e9ec098a106fad01ce00f815e72c9"
+      },
+      "sysmon_process_create_coverage": {
+        "status": "observed",
+        "boot": "111",
+        "cursor_at": 1790848818.530643,
+        "continuous_since": 1790788745.911,
+        "dropped_process_create": 0
+      },
+      "sysmon_pressure": {
+        "status": "observed",
+        "boot": "2026-09-30T17:18:12.5000000Z",
+        "retained_registry_events": 1563,
+        "by_rule": [
+          {
+            "name": "registry-persistence",
+            "count": 1563
+          }
+        ],
+        "by_image": [
+          {
+            "name": "services.exe",
+            "count": 606
+          },
+          {
+            "name": "svchost.exe",
+            "count": 594
+          },
+          {
+            "name": "System",
+            "count": 215
+          },
+          {
+            "name": "ProtonVPNService.exe",
+            "count": 43
+          },
+          {
+            "name": "taskhostw.exe",
+            "count": 37
+          },
+          {
+            "name": "sihost.exe",
+            "count": 22
+          },
+          {
+            "name": "WMIADAP.EXE",
+            "count": 12
+          },
+          {
+            "name": "setup.exe",
+            "count": 12
+          },
+          {
+            "name": "MsMpEng.exe",
+            "count": 10
+          },
+          {
+            "name": "winlogon.exe",
+            "count": 2
+          },
+          {
+            "name": "LogonUI.exe",
+            "count": 2
+          },
+          {
+            "name": "Explorer.EXE",
+            "count": 2
+          },
+          {
+            "name": "jhi_service.exe",
+            "count": 2
+          },
+          {
+            "name": "ProtonVPN.Client.exe",
+            "count": 2
+          },
+          {
+            "name": "csrss.exe",
+            "count": 1
+          },
+          {
+            "name": "HpSfuService64.exe",
+            "count": 1
+          }
+        ],
+        "drops": [
+          {
+            "at": "2026-09-30T17:19:07.8530951Z",
+            "counts": {
+              "ProcessTerminate": 20,
+              "ProcessCreate": 94,
+              "ImageLoad": 151,
+              "CreateRemoteThread": 2,
+              "ProcessAccess": 1662,
+              "FileCreate": 60,
+              "RegistryEvent": 76866,
+              "PipeEvent": 28
+            },
+            "driver_queue_size": 50000
+          }
+        ],
+        "truncated": false,
+        "source": "elevated_broker"
+      },
+      "verified": 217,
+      "unreconciled": 0,
+      "unknown": 74
+    },
+    "governor": {
+      "pressured": false,
+      "reason": "machine idle on AC; deferred maintenance may resume",
+      "governed_jobs": [
+        "arena",
+        "attackmap",
+        "feeds",
+        "gaps",
+        "geo",
+        "hunt",
+        "intel",
+        "intrusion",
+        "memscan",
+        "model",
+        "pixel",
+        "posture",
+        "rust_mirror",
+        "secrets",
+        "spy",
+        "toolchain",
+        "webshell"
+      ]
+    },
+    "runtime": {
+      "runtime": "rust",
+      "cpu_pct": 51.24999999999999,
+      "mem_available_pct": 81.50643264312912,
+      "pressured": false,
+      "reason": "nominal load; all tiers permitted",
+      "storage": {
+        "at": 1790848298,
+        "behind": 0,
+        "budget_bytes": 134217728,
+        "cursor": 875989,
+        "elapsed_s": 11.96,
+        "gap_events": 0,
+        "mirrored": 147,
+        "ok": true,
+        "root": "/home/chris/.jarvis/rust-eventlog",
+        "runtime": "rust",
+        "store_bytes": 133887989,
+        "age_s": 738
+      }
+    },
+    "mlworker": {
+      "queued": 0,
+      "gpu_executor_configured": true,
+      "submitted": 0,
+      "gpu": 0,
+      "cpu": 0,
+      "deferred": 0,
+      "none": 0,
+      "dropped": 0
+    },
+    "invariants": {
+      "startup": {
+        "ok": true,
+        "reason": "engine present, health known, UI openable"
+      },
+      "protection": {
+        "ok": true,
+        "reason": "engine independent of UI liveness"
+      },
+      "freshness": {
+        "ok": true,
+        "reason": "no unstale-mandatory gap without recovery"
+      },
+      "repair": {
+        "ok": true,
+        "reason": "no patch proposed; nothing to authorize"
+      },
+      "evidence": {
+        "ok": true,
+        "reason": "no unverified success claims"
+      },
+      "performance": {
+        "ok": true,
+        "reason": "noncritical work yields under pressure"
+      },
+      "privacy": {
+        "ok": true,
+        "reason": "precise location and interaction content local"
+      },
+      "ok": true
+    },
+    "reliability": {
+      "levels": {
+        "FRESH": 43,
+        "LATE": 2,
+        "DEGRADED": 1,
+        "STALE": 0
+      },
+      "stale_collectors": [],
+      "recovering": [],
+      "violations": [],
+      "expired_leases": []
+    }
+  },
+  "after": {
+    "assurance": {
+      "policy_version": "2026-09-19",
+      "scope": "engineering register; not a live security or compromise verdict",
+      "complete": false,
+      "absence_of_alerts_proves_safety": false,
+      "score": 17,
+      "score_definition": "weighted evidence of trust in JARVIS itself; not machine protection health",
+      "evidence_gaps": {
+        "implementation_partial": 16,
+        "implementation_unverified": 2,
+        "observation_mapping_missing": 11,
+        "live_telemetry_not_current": 12,
+        "containment_not_validated": 18,
+        "validation_date_missing": 18
+      },
+      "capabilities": {
+        "human_safety": {
+          "implementation": "partial",
+          "basis": "response actions and bounded repairs",
+          "blind_spot": "No complete essential-service dependency model",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "online_guardian": {
+          "implementation": "partial",
+          "basis": "internetwatch and threat intelligence",
+          "blind_spot": "No synchronous browser credential/payment/OAuth interception",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "browser_privacy_veil": {
+          "implementation": "partial",
+          "basis": "opt-in metadata-only browser sensor (surfaces counted on use, named session-replay vendors, cross-origin pixel origins) with deterministic Veil correlation, and opt-in declarativeNetRequest rulesets for session recorders and tracking pixels that ship disabled, cannot match pages or frames, and yield to per-site exceptions (rule and logic tests under Node stubs)",
+          "blind_spot": "No installed/attested browser integration; blocking is unvalidated in a live browser; first-party/CNAME-cloaked or server-side trackers and recorders served from the site origin are neither named nor blocked; the main-world probe can be forged or evaded by the page",
+          "live_telemetry": "not_reporting",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "input_surveillance": {
+          "implementation": "partial",
+          "basis": "injected-input hook with forensics, source-tested exact media-control/key-event reconciliation and proportionate media-only severity, hook-chain latency and per-interval stall episodes, pointer-setting and LowLevelHooksTimeout checks, keyboard/mouse class-filter and Scancode Map inventory, monitoring-tool process-name heuristics, screen-capture posture, and an elevated-broker Win32k AuditApiCalls trace inventorying low-level hook (1002) and background raw-input (1001) registrations by process, image and signature; the event fields and attribution were measured on 2026-09-23 with a positive control (WH_MOUSE_LL and a keyboard RIDEV_INPUTSINK both captured), and validated end to end through the scheduled broker the same day: an unelevated control that had already exited was identified from Sysmon history and reported (keyboard sink high, mouse hook medium)",
+          "blind_spot": "GetAsyncKeyState polling is not logged on this build (1003 absent under the positive control), so polling loggers are invisible; the trace does not survive reboot, so watchers registered before its first broker run each boot are unseen; stalls are symptoms and never attributed to a process; the input hook does not identify which process injected a media control",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "credential_guardian": {
+          "implementation": "partial",
+          "basis": "secret scanning and credential access collectors",
+          "blind_spot": "No complete secret-egress prevention",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "download_provenance": {
+          "implementation": "unverified",
+          "basis": "host collectors",
+          "blind_spot": "Extraction-to-execution provenance not established",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "system_state_graph": {
+          "implementation": "partial",
+          "basis": "ProcessGuid lineage, conservative snapshot/event reconciliation, source-tested bounded byte-and-identity checks for deleted Linux executables, deterministic posture debt and conditional remediation projections, bounded repair audit state, and repeated-sample sustained-health verification; source-tested host topology (WSL /init runtime proven by file identity, read-only mount and /init ancestry; argv0-link, shebang and systemd-helper name explanations with a system-binary collision guard; WSL-declared DNS tunnel listener), typed KNOWN_SAFE/KNOWN_UNSAFE/UNKNOWN observations with separate sensor health, and one bounded epoch-coherent re-query that keeps transient first sightings; source-tested WSL boundary snapshot (allowlisted wsl.conf/.wslconfig keys, DrvFs mounts, interop registration, Windows PATH entries, Docker socket presence) with an explicit-accept hash-chained checkpoint file that reports OFFLINE_STATE_DRIFT across a boot change, STATE_DRIFT within one, and EVIDENCE_LOST for unreadable sources; source-tested spyware and covert-process reasoning (jarvis reason): typed evidence, a deterministic hypothesis engine with exact-publisher category explanations, dual-use handling, per-mechanism blind spots and missing-evidence output, and a notes-only typed advisory; measured on a synthetic corpus of 8 spyware controls and 11 legitimate look-alikes (8 of 8 detected, 0 false positives) and on the live host with every source current; deployed live (release 686d4763a3a1); the deterministic engine additionally live-verified against real emulated mechanisms in a locked-down, non-root, no-network QEMU/KVM disposable guest (jarvis/lab/vmlab.py), 4 independent runs: 5 of 6 testable Linux positive controls detected with every expected fact present and correct latency, one honestly skipped for missing guest hardware, one clean-process guard stayed quiet every run, isolation verified each run (container removed, run directory removed, base image checksum unchanged); its own clean-guest baseline caught a real false positive on the legitimate systemd-logind daemon, fixed with a narrow path-anchored exception and confirmed clean on the next 2 runs",
+          "blind_spot": "No privileged live proof yet for the deleted-executable reconciliation or the topology explanations (not deployed; the service view with CAP_SYS_PTRACE has not run them); Windows interop (/init-backed .exe processes) and container execution domains are not modelled; the WSL VM-root owner of loopback udp/323 is unobservable; no complete cross-layer causal graph, broad verified remediation orchestration, reboot-cycle sustained-health proof, or long-duration soak evidence; the WSL boundary checkpoint has no accepted live baseline, no scheduled comparison, no alert wiring, no cross-boundary process edges, and its local hash chain has no independent anchor; the reasoning workflow is not scheduled; the isolated positive-control lab is Linux-only so far and on-demand rather than scheduled, and its Windows counterpart is designed but blocked on the owner enabling Windows Sandbox (not installed on this host) - the safer design uses only existing signed tools (the AutoHotkey #UseHook directive, file copy/rename), never custom hook-registration code, after a safety classifier declined raw Win32 capture-API source; corpus results are synthetic and say nothing about mechanisms no sensor observes (polling keyloggers, BitBlt or DXGI capture, clipboard listeners, who called SendInput, local staging, beacon timing, kernel-level hiding); the advisory model did not separate controls from explained look-alikes on the corpus and has no authority over verdict or depth",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "behavioral_physics": {
+          "implementation": "partial",
+          "basis": "resourcewatch",
+          "blind_spot": "Hardware counters and robust multivariate validation incomplete",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "sensor_integrity": {
+          "implementation": "partial",
+          "basis": "native sequence/digest replay checks, manifest-addressed spool reads, process-deadlined ingestion, continuous-coverage cursors, snapshot/event perception states, live-validated elevated Sysmon policy export (2026-09-22: running config hash equals windows-sysmon/jarvis-windows-baseline.xml, ProcessCreate unfiltered), the running Sysmon configuration hash continuously compared with the reviewed baseline, fresh Windows reconciliation and an EventLogReader boot-pressure probe (2s measured through the elevated broker on 2026-09-23 over 34002 events, was a 120s timeout via Get-WinEvent); receipts, freshness budgets, leases and supervised recovery watchdogs; source-tested on-demand WSL wall-clock stability probe (paired realtime/monotonic samples plus the journal step records; measured 2026-09-30 as unstable with -2.47 s steps about every 30 s)",
+          "blind_spot": "Independent authenticated sensors and anti-replay remain incomplete; boot 94 still overflowed the driver queue 46s after boot, under the previous policy, dropping 82 ProcessCreate and 64784 RegistryEvent records; the revised baseline removes 95% of registry volume in a replay of this boot (37062 to 1927 events) but is not yet applied, and whether it prevents boot-time overflow is unmeasured until it is applied and the machine reboots; no export of the pre-change policy was preserved; the clock probe is not scheduled, cannot identify the cause of a step, and detectors that compare wall-clock windows are not yet monotonic-based",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "continuous_attestation": {
+          "implementation": "unverified",
+          "basis": "security posture observations",
+          "blind_spot": "No validated TPM quote/PCR trust chain",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "component_isolation": {
+          "implementation": "partial",
+          "basis": "fixed response action registry; capability-aware visibility checks and a detector for privileged units running user-editable code; root-owned sealed release run under python3 -I with three visibility capabilities; source-tested execution identities (Ed25519 key readable only by the capability-holding daemon, binding observed via SO_PEERCRED/pidfd, CLOCK_BOOTTIME expiry, ancestry attribution) and agent/test capsules with private TMPDIR (docs/architecture/EVIDENCE-FABRIC.md); JARVIS-managed scheduled tasks verified against one declaration table (all 9 live tasks verified against the real checkout on 2026-09-24)",
+          "blind_spot": "Observer and responder privilege separation incomplete; execution identities are not live until a deploy provisions the key (no measured issuance yet); capsule capabilities are declared, not enforced; agent actors are self-declared; Windows-side (interop) processes are not attributed; provenance is attribution only and lowers no finding",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "forensic_storage": {
+          "implementation": "partial",
+          "basis": "authoritative Python hash-chained temporal event log plus an independently durable Rust gzip segment store with locked writers, atomic segment commits and full verification, fed by a governed bounded mirror job: events carry their authoritative source_seq, the store is its own cursor, ingest is all-or-nothing, budgeted pruning keeps the header chain and a store cursor behind the recorded one pauses mirroring as tampering evidence; an append-only Windows vault (Administrators/SYSTEM write, owner read) filled by the elevated broker and verified against the live chain (2026-09-23: 36 segments vaulted and payload-verified); OpenTimestamps anchors of the chain heads (only a 32-byte digest leaves the machine; first proof accepted by 4 calendars, Bitcoin confirmation pending); evidence cases and response intent records",
+          "blind_spot": "An administrator can still alter or delete the vault; anchors expose a rewrite of anchored history only while an anchor record survives somewhere and only once its Bitcoin proof exists (hours), and new events between anchors (up to 6h) are unanchored; the vault is on this machine, not off-host, and is unencrypted; the Rust mirror is not tamper-independent; retention gaps before vaulting are counted, not recoverable",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "temporal_correlation": {
+          "implementation": "partial",
+          "basis": "globally sequenced native events, multi-category temporal projection (process/network/file/registry/driver/ipc/wmi/malware/protection/task/sensor), event-consumed detectors, process lineage, incidents and snapshot reconciliation clamped to the current boot by its kernel-lifetime processes; source-tested observation epochs (boot id, wall-minus-monotonic step, kernel suspend delta, release change) with epoch-scoped monotonic ordering, recorded by the hidden job",
+          "blind_spot": "Epochs are not yet consumed by Sysmon/native reconciliation, so cross-standby wall-clock comparisons there remain; Windows process reconciliation only; the sensor labels records with the boot current at read time, so the prior boot shutdown tail is excluded at reconciliation, not at ingest; kernel minimal processes (Registry, Memory Compression, vmmem) have no start event and stay unknown; attack-sequence and cross-layer coverage incomplete",
+          "live_telemetry": "current",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "forge": {
+          "implementation": "partial",
+          "basis": "jarvis.lab scenarios",
+          "blind_spot": "No full directive scenario/latency/containment validation",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "performance": {
+          "implementation": "partial",
+          "basis": "per-subsystem scheduler duty cycle, process/RAM/database profiling, shared process/socket providers, optional Rust metrics/governance and durable-store bridge, plus hourly-validated OpenVINO GPU execution of bounded deterministic graphs (GPU.0, CPU-reference cross-checked)",
+          "blind_spot": "No complete measured CPU/RAM/IO/battery/latency budget, authoritative Rust sensor-ingest integration or comparative CPU-vs-GPU throughput benchmark",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "supply_chain": {
+          "implementation": "partial",
+          "basis": "standard-library Python runtime, exact-file hash check for one reviewed agent plugin version, a live service-verified exact-payload match to a Microsoft WHCP-signed Logitech DriverStore installer (2026-09-23), and a source-tested release controller: content-addressed release_id, single-writer deploy lock, --expect-base refusal of stale narrow releases, recorded installation checkout, and refusal of world-writable build sources",
+          "blind_spot": "Signed reproducible releases, complete SBOM validation, and broader package provenance unverified; the release controller has not yet run as root on this machine (the live deploy script predates it)",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "recovery": {
+          "implementation": "partial",
+          "basis": "action undo, fresh repair observations and read-only interrupted-action reconciliation",
+          "blind_spot": "No full restart/power-loss recovery validation",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        },
+        "self_improvement": {
+          "implementation": "partial",
+          "basis": "human-gated fix proposals: deterministic daemon scan, bounded validated Ollama directives, OpenCode patch drafting, advisory Jev assessments (Tier-2, human-gated, offline-safe), separate investigation and exact-patch authorization, test-gated apply with revert",
+          "blind_spot": "No autonomous code execution; model directives remain untrusted, application stays human-authorized, and email replies cannot approve",
+          "live_telemetry": "unverified",
+          "last_validation": null,
+          "detection_latency_ms": null,
+          "intervention_latency_ms": null,
+          "validated_containment": false
+        }
+      }
+    },
+    "service": "JARVIS",
+    "time": 1790849039.190933,
+    "healthy": true,
+    "live": true,
+    "ready": true,
+    "protection_healthy": true,
+    "progress_age": 5.360324859619141,
+    "fast_lane_age": 23.41749095916748,
+    "current_job": "hidden",
+    "current_fast_job": "scan",
+    "sources": {
+      "scan": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848955
+      },
+      "bridge": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790849005
+      },
+      "sysmon": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848764
+      },
+      "native": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848959
+      },
+      "internet": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790849033
+      },
+      "veil": {
+        "status": "not_reporting",
+        "reason": "no observation yet",
+        "observed_at": null
+      },
+      "secrets": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790847353
+      },
+      "resources": {
+        "status": "complete",
+        "reason": "recent successful collection",
+        "observed_at": 1790848747
+      }
+    },
+    "telemetry_chain": {
+      "at": 1790848959.8810482,
+      "stages": {
+        "installed": {
+          "state": "ok",
+          "detail": "/mnt/c/ProgramData/Jarvis/Sensor"
+        },
+        "running": {
+          "state": "ok",
+          "detail": "health written -2s ago"
+        },
+        "producing": {
+          "state": "ok",
+          "detail": "sensor completed its last read pass"
+        },
+        "arriving": {
+          "state": "ok",
+          "detail": "2 batches delivered this pass"
+        },
+        "ingested": {
+          "state": "ok",
+          "detail": "10 events committed to the history"
+        },
+        "gaps": {
+          "state": "ok",
+          "detail": "none detected this pass"
+        },
+        "integrity": {
+          "state": "ok",
+          "detail": "chain verified 21h ago"
+        },
+        "fresh": {
+          "state": "ok",
+          "detail": "evidence within its freshness budget"
+        }
+      },
+      "channels": {},
+      "backlog": 0,
+      "last_sequence": 59309,
+      "gaps": 0,
+      "quarantined": 0,
+      "checkpoint": 59309,
+      "current": true
+    },
+    "perception": {
+      "at": 1790849019,
+      "windows_processes": 298,
+      "sysmon_process_create_policy": {
+        "event1": "full",
+        "mode": "exclude",
+        "detail": "ProcessCreate recorded without excludes",
+        "source": "elevated_broker",
+        "config_hash": "72a1d071718a8a33d2dc46d2839bfcd2010e9ec098a106fad01ce00f815e72c9"
+      },
+      "sysmon_process_create_coverage": {
+        "status": "observed",
+        "boot": "111",
+        "cursor_at": 1790848960.933973,
+        "continuous_since": 1790788745.911,
+        "dropped_process_create": 0
+      },
+      "sysmon_pressure": {
+        "status": "observed",
+        "boot": "2026-09-30T17:18:12.5000000Z",
+        "retained_registry_events": 1563,
+        "by_rule": [
+          {
+            "name": "registry-persistence",
+            "count": 1563
+          }
+        ],
+        "by_image": [
+          {
+            "name": "services.exe",
+            "count": 606
+          },
+          {
+            "name": "svchost.exe",
+            "count": 594
+          },
+          {
+            "name": "System",
+            "count": 215
+          },
+          {
+            "name": "ProtonVPNService.exe",
+            "count": 43
+          },
+          {
+            "name": "taskhostw.exe",
+            "count": 37
+          },
+          {
+            "name": "sihost.exe",
+            "count": 22
+          },
+          {
+            "name": "WMIADAP.EXE",
+            "count": 12
+          },
+          {
+            "name": "setup.exe",
+            "count": 12
+          },
+          {
+            "name": "MsMpEng.exe",
+            "count": 10
+          },
+          {
+            "name": "winlogon.exe",
+            "count": 2
+          },
+          {
+            "name": "LogonUI.exe",
+            "count": 2
+          },
+          {
+            "name": "Explorer.EXE",
+            "count": 2
+          },
+          {
+            "name": "jhi_service.exe",
+            "count": 2
+          },
+          {
+            "name": "ProtonVPN.Client.exe",
+            "count": 2
+          },
+          {
+            "name": "csrss.exe",
+            "count": 1
+          },
+          {
+            "name": "HpSfuService64.exe",
+            "count": 1
+          }
+        ],
+        "drops": [
+          {
+            "at": "2026-09-30T17:19:07.8530951Z",
+            "counts": {
+              "ProcessTerminate": 20,
+              "ProcessCreate": 94,
+              "ImageLoad": 151,
+              "CreateRemoteThread": 2,
+              "ProcessAccess": 1662,
+              "FileCreate": 60,
+              "RegistryEvent": 76866,
+              "PipeEvent": 28
+            },
+            "driver_queue_size": 50000
+          }
+        ],
+        "truncated": false,
+        "source": "elevated_broker"
+      },
+      "verified": 220,
+      "unreconciled": 0,
+      "unknown": 78
+    },
+    "governor": {
+      "pressured": false,
+      "reason": "machine idle on AC; deferred maintenance may resume",
+      "governed_jobs": [
+        "arena",
+        "attackmap",
+        "feeds",
+        "gaps",
+        "geo",
+        "hunt",
+        "intel",
+        "intrusion",
+        "memscan",
+        "model",
+        "pixel",
+        "posture",
+        "rust_mirror",
+        "secrets",
+        "spy",
+        "toolchain",
+        "webshell"
+      ]
+    },
+    "runtime": {
+      "runtime": "rust",
+      "cpu_pct": 49.25,
+      "mem_available_pct": 81.38607059041733,
+      "pressured": false,
+      "reason": "nominal load; all tiers permitted",
+      "storage": {
+        "at": 1790848298,
+        "behind": 0,
+        "budget_bytes": 134217728,
+        "cursor": 875989,
+        "elapsed_s": 11.96,
+        "gap_events": 0,
+        "mirrored": 147,
+        "ok": true,
+        "root": "/home/chris/.jarvis/rust-eventlog",
+        "runtime": "rust",
+        "store_bytes": 133887989,
+        "age_s": 741
+      }
+    },
+    "mlworker": {
+      "queued": 0,
+      "gpu_executor_configured": true,
+      "submitted": 0,
+      "gpu": 0,
+      "cpu": 0,
+      "deferred": 0,
+      "none": 0,
+      "dropped": 0
+    },
+    "invariants": {
+      "startup": {
+        "ok": true,
+        "reason": "engine present, health known, UI openable"
+      },
+      "protection": {
+        "ok": true,
+        "reason": "engine independent of UI liveness"
+      },
+      "freshness": {
+        "ok": true,
+        "reason": "no unstale-mandatory gap without recovery"
+      },
+      "repair": {
+        "ok": true,
+        "reason": "no patch proposed; nothing to authorize"
+      },
+      "evidence": {
+        "ok": true,
+        "reason": "no unverified success claims"
+      },
+      "performance": {
+        "ok": true,
+        "reason": "noncritical work yields under pressure"
+      },
+      "privacy": {
+        "ok": true,
+        "reason": "precise location and interaction content local"
+      },
+      "ok": true
+    },
+    "reliability": {
+      "levels": {
+        "FRESH": 43,
+        "LATE": 1,
+        "DEGRADED": 2,
+        "STALE": 0
+      },
+      "stale_collectors": [],
+      "recovering": [],
+      "violations": [],
+      "expired_leases": []
+    }
+  }
+}

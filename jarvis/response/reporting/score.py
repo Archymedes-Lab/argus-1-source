@@ -34,7 +34,8 @@ from jarvis.response import acknowledge, alert
 # Jobs absent here do not describe the machine's safety and are not scored:
 # gaps (jarvis's own detection coverage), intel/feeds (knowledge-base upkeep),
 # ledger (a record of past alerts, already counted where they came from),
-# report (email cadence), resources and controls (performance and devices).
+# report (email cadence), resources and controls (performance and devices),
+# world (news about conflicts elsewhere, which says nothing about this machine).
 AREAS = (
     ("Active threats", ("hunt", "sysmon", "sysmon_linux", "memscan", "hidden",
                         "deep_hidden", "evasion", "intrusion", "webshell",
@@ -49,7 +50,7 @@ AREAS = (
                     "rust_mirror", "evidence")),
 )
 UNSCORED = ("gaps", "intel", "feeds", "ledger", "report", "resources", "controls", "audio",
-            "attackmap", "model", "containers", "preos")
+            "attackmap", "model", "containers", "preos", "world")
 AREA_OF = {job: area for area, jobs in AREAS for job in jobs}
 
 WEIGHT = {"critical": 20, "high": 8, "medium": 2, "low": 0, "ok": 0}

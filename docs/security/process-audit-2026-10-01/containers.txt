@@ -1,0 +1,9 @@
+72d5524a1611 aios-core-1 ghcr.io/angel-intelligence-os/core:latest
+3774a563061c aios-core-2 ghcr.io/angel-intelligence-os/core:latest
+4ca1ed34528e aios-core-3 ghcr.io/angel-intelligence-os/core:latest
+03ca8c183ab6 aios-engine-1 ghcr.io/angel-intelligence-os/engine:latest
+5bf4b0167b4b aios-haproxy-1 haproxytech/haproxy-alpine:3.0
+bdbbe1731c98 aios-cloudflared-1 cloudflare/cloudflared:2024.10.0
+509928a54ba8 aios-dragonfly-1 docker.dragonflydb.io/dragonflydb/dragonfly:v1.24.0
+ab29362a0f60 aios-nats-1 nats:2.10-alpine
+92c630c91670 aios-postgres-1 pgvector/pgvector:pg18
