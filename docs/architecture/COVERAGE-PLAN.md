@@ -168,7 +168,7 @@ What stays blind, and what each group needs:
 
 | Group | Techniques | Needs |
 |---|---|---|
-| Removable media | T1025, T1052, T1091, T1092 | a removable-volume inventory on Windows; buildable next |
+| Removable media | T1025, T1052, T1091, T1092 | a removable-volume inventory on Windows; buildable next (built 2026-10-05, see below; T1092 stays blind) |
 | File contents and mass change | T1486, T1554, T1565, T1221 | a wider Sysmon file policy or decoy files (owner decision) |
 | Inside a program | T1106, T1129, T1480, T1559, T1622, T1668, T1679 | API-level telemetry the sensors do not collect |
 | Content of traffic | T1001, T1008, T1041, T1104, T1665 | decrypting traffic, which JARVIS does not do |
@@ -180,6 +180,55 @@ What stays blind, and what each group needs:
 Still open: `partial` level for sub-techniques; removable media; file canaries and a wider
 Sysmon file policy (owner decisions); Arena emulation; a live positive control for a
 single-action rule.
+
+## Status 2026-10-05: removable media, and the blind-side round restaged
+
+Live before this round: still 91 validated, 31 claimed, 64 blind of 186. The blind-side round
+above was staged but never deployed: the world-watch release went out on the same base, which
+made that stage stale. This round restages it on the live release together with the work below
+and projects **100 validated, 43 claimed, 43 blind of 186** (measured in the staged tree against
+a copy of the live catalogue and collector freshness).
+
+- **Built, held at claimed (3).** T1091 a program started from a removable drive, T1025 a
+  command-line copy reading from one, T1052 a command-line copy writing to one. Jev put 0.92,
+  0.54 and 0.61 on "claimed" (`scripts/reviews/coverage_media_advisory.py`), and no removable
+  drive has been attached since they were written, so nothing has exercised them.
+- **Still blind.** T1092: what a program exchanges through files on a stick is not visible.
+
+Design, and why it won. Sysmon names the drive a program ran from, not what kind of drive it
+is, so the rules need a drive inventory from Windows. Three ways to get one were compared:
+
+| Design | Cost | Why not |
+|---|---|---|
+| Add the inventory to the posture script | none | the elevated broker trusts that script by hash; changing it drops the elevated posture read until the owner reinstalls the broker |
+| Poll the inventory on a schedule | a PowerShell start every few minutes | a stick attached and removed between polls is never seen, and the cost is paid on days nothing is attached |
+| Ask only when a process names a drive not known to be an internal disk (chosen) | about 3 s, once every 6 h and once per run while such a drive is in use | the drive may be gone before the 10-minute Sysmon run asks |
+
+The chosen design reports a drive that is gone as "a drive that is no longer attached" and says
+it may have been a network drive or a disk image (Jev 0.65 for reporting it over staying
+silent). A USB hard disk calls itself a fixed disk, so the bus of the disk is read as well as
+the drive type. Reconsider if the native sensor gains volume-arrival events (then the kind is
+known at the time, and the "no longer attached" case disappears), or if a machine with network
+drives mapped and unmapped all day makes that wording noisy.
+
+Invariants, each with a test in `tests/test_techniques.py` (`RemovableMediaTests`): an internal
+disk is never reported; a drive's kind comes from Windows or is said to be unknown; Windows is
+asked at most once a run and never when every drive named is known to be internal; a failed
+read keeps the last good inventory, judges nothing, and is reported as low "drive types could
+not be read"; a replay never asks; file names on a drive are never quoted.
+
+Noise, measured before scoring: 842,563 retained Windows events replayed with only `C:` given
+as internal, the most the rules can report. They reported nothing: all 290,795 retained process
+starts ran from `C:`, and no copy command named another drive. The real inventory read was run
+once through the collector's own function: `C: Fixed, NVMe`, 3 s.
+
+What these rules do not see: files dragged in Explorer or written by a program (no copy tool
+starts); a Linux guest mount; and anything at all until a drive is attached.
+
+Still open: a live positive control with a real stick (it also promotes nothing by itself:
+the owner decides whether one exercised procedure is enough); `partial` level for
+sub-techniques; file canaries and a wider Sysmon file policy (owner decisions); Arena
+emulation; a live positive control for a single-action rule.
 
 ## Rules for every phase
 

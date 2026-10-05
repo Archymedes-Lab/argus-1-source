@@ -432,6 +432,46 @@ def probe_unusual_port():
          "address, an inbound connection and an ordinary program are quiet")
 
 
+_DRIVES = {"C": ("Fixed", "NVMe"), "D": ("Fixed", "SATA"), "E": ("Removable", "USB"),
+           "F": ("Fixed", "USB"), "Z": ("Network", "")}
+
+
+def _drive_events(*pairs, volumes=_DRIVES):
+    from jarvis.collectors.telemetry import sysmon
+    return sysmon.audit(volumes=volumes, events=[
+        {"id": 1, "image": image, "cmdline": cmdline, "time": _WHEN} for image, cmdline in pairs])
+
+
+def probe_removable_run():
+    def run(image, **kw):
+        return _reports(_drive_events((image, image), **kw), "T1091")
+    return (run(r"E:\tools\setup.exe") and run(r"F:\portable\app.exe") and run(r"G:\autorun.exe")
+            and not run(r"C:\Program Files\App\app.exe") and not run(r"D:\Games\game.exe")
+            and not run(r"Z:\share\tool.exe") and not run(r"E:\tools\setup.exe", volumes=None)), \
+        ("a program started from a removable drive, a USB disk, or a drive detached before it "
+         "could be asked about; internal disks and a network drive are quiet")
+
+
+def _probe_copy(tid, fires, quiet):
+    robocopy = r"C:\Windows\System32\Robocopy.exe"
+    return (all(_reports(_drive_events((robocopy, c)), tid) for c in fires)
+            and not any(_reports(_drive_events((robocopy, c)), tid) for c in quiet))
+
+
+def probe_removable_read():
+    return _probe_copy("T1025", (r"robocopy E:\ C:\Users\a\in /E",),
+                       (r"robocopy C:\Users\a\Documents E:\backup /E",
+                        r"robocopy D:\data C:\Users\a\in /E")), \
+        "a copy command reading from a removable drive; a copy to one, or between internal disks, is quiet"
+
+
+def probe_removable_write():
+    return _probe_copy("T1052", (r"robocopy C:\Users\a\Documents E:\backup /E",),
+                       (r"robocopy E:\ C:\Users\a\in /E",
+                        r"robocopy C:\Users\a\Documents D:\backup /E")), \
+        "a copy command writing to a removable drive; a copy from one, or between internal disks, is quiet"
+
+
 def probe_raw_socket():
     import importlib
     sniffing = importlib.import_module("jarvis.collectors.network.sniffing")
@@ -640,6 +680,11 @@ _optional("T1495", probe_firmware_change, ("preos",),
           lambda: _has("jarvis.collectors.host.bootintegrity", "drift"))
 _optional("T1571", probe_unusual_port, ("sysmon",),
           lambda: _has("jarvis.collectors.telemetry.techniques", "odd_port"))
+for _tid, _probe in (("T1091", probe_removable_run), ("T1025", probe_removable_read),
+                     ("T1052", probe_removable_write)):
+    _optional(_tid, _probe, ("sysmon",),
+              lambda: _has("jarvis.collectors.telemetry.techniques", "off_disk")
+              and "volumes" in _params("jarvis.collectors.telemetry.sysmon", "audit"))
 _optional("T1205", probe_raw_socket, ("sniffing",),
           lambda: "tools" in _params("jarvis.collectors.network.sniffing", "_linux"))
 _optional("T1187", probe_forced_authentication, ("sysmon",),
@@ -730,6 +775,14 @@ HELD["T1678"] = "a loopback ping used as a sleep is reported; a delay inside a p
 HELD["T1497"] = "two hardware queries are reported; checks made through an API are not seen"
 HELD["T1072"] = "no deployment agent is installed on this machine, so nothing has exercised it"
 HELD["T1030"] = "splitting with an archive tool is reported; size limits applied inside a program are not seen"
+# Removable media (scripts/reviews/coverage_media_advisory.py). No removable drive has been
+# attached since these were built: the first one that is, read back, is their positive control.
+HELD["T1091"] = ("a program started from a removable drive is reported; no removable drive has "
+                 "been attached since this was built, so nothing has exercised it")
+HELD["T1025"] = ("a copy command reading from a removable drive is reported; files dragged in "
+                 "Explorer, or read by a program, are not seen")
+HELD["T1052"] = ("a copy command writing to a removable drive is reported; files dragged in "
+                 "Explorer, or written by a program, are not seen")
 # Only techniques that have a probe are held; the rest keep whatever the map gives them.
 HELD = {tid: why for tid, why in HELD.items() if tid in PROBES or tid in _context_only()}
 CONTEXT_ONLY = frozenset(HELD)

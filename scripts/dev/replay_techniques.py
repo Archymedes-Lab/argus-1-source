@@ -25,7 +25,10 @@ def main(last=None):
     hits, example, seen, chunk, started = collections.Counter(), {}, 0, [], time.time()
 
     def flush():
-        for f in sysmon.audit(events=sysmon.rows_from_events(chunk)):
+        # Only the system drive is given as internal, so every program or copy
+        # that names any other drive is reported: the most the drive rules can say.
+        for f in sysmon.audit(events=sysmon.rows_from_events(chunk),
+                              volumes={"C": ("Fixed", "")}):
             if f.get("techniques"):
                 key = (f["severity"], f["title"])
                 hits[key] += 1

@@ -51,6 +51,19 @@ CAT_ORDER = {"impact": 0, "credential access": 1, "injection": 2,
 CHANNEL = "Microsoft-Windows-Sysmon/Operational"
 REGISTRY_RECORDED_META = "sysmon_registry_recorded_v1"      # {registry rule title: last seen}
 REGISTRY_RECORDED_FOR_S = 30 * 86400
+VOLUMES_META = "windows_volumes_v1"     # {"at": epoch, "volumes": {letter: [drive type, bus]}}
+VOLUMES_FOR_S = 6 * 3600                # how long a drive known to be internal is not asked about again
+# Drive type alone calls a USB hard disk "Fixed"; the bus of the disk under the
+# letter tells it apart. Read-only, unelevated, about two seconds.
+PS_VOLUMES = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$bus = @{}
+Get-Partition | Where-Object { $_.DriveLetter } | ForEach-Object {
+  $bus[[string]$_.DriveLetter] = [string](Get-Disk -Number $_.DiskNumber).BusType }
+$o = @{ volumes = @([IO.DriveInfo]::GetDrives() | ForEach-Object {
+  $l = $_.Name.Substring(0,1)
+  [pscustomobject]@{ letter=$l; type=[string]$_.DriveType; bus=[string]$bus[$l] } }) }
+"""
 
 # Access masks that include reading another process's memory. 0x0010 is
 # PROCESS_VM_READ and 0x0400 is PROCESS_QUERY_INFORMATION; the classic
@@ -104,6 +117,26 @@ def _ps(script, timeout=240):
         script + "\n$json = [pscustomobject]$o | ConvertTo-Json -Depth 6 -Compress\n"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))",
         timeout=timeout)
+
+
+def _known_volumes(store):
+    """The last volume inventory this collector stored: ({letter: (type, bus)}, taken at)."""
+    try:
+        saved = json.loads(store.get_meta(VOLUMES_META, "") or "{}")
+        return ({str(k).upper(): tuple(v) for k, v in saved["volumes"].items()},
+                float(saved["at"]))
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return {}, 0.0
+
+
+def _read_volumes():
+    """Ask Windows which drives are attached. None when it cannot be asked: an
+    empty answer is a failure too, since the system drive is always there."""
+    data = _ps(PS_VOLUMES, timeout=60)
+    rows = aslist((data or {}).get("volumes")) if isinstance(data, dict) else []
+    found = {str(r.get("letter") or "").upper(): (str(r.get("type") or ""), str(r.get("bus") or ""))
+             for r in rows if isinstance(r, dict) and r.get("letter")}
+    return found or None
 
 
 def status():
@@ -492,11 +525,15 @@ def _query_blocked():
 
 
 def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None,
-          events=None):
+          events=None, volumes=None):
     """`events` replays the given reduced rows (the shape rows_from_events
     returns) through every rule below instead of reading the machine. A replay
     never touches the store: it cannot record a hit or move a cursor. The
-    coverage map's probes use it so they test this function, not a copy."""
+    coverage map's probes use it so they test this function, not a copy.
+
+    `volumes` is a drive inventory {letter: (type, bus)} to judge drives
+    against. A replay never asks Windows for one, so without it a replay leaves
+    drives unjudged."""
     if "win" not in hosts:
         return []
     probing = events is not None
@@ -582,6 +619,13 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
     technique_hits, discovery_seen = {}, []
+    off_runs, off_copies = [], []       # process starts naming a drive not known to be internal
+    judge_drives = volumes is not None or not probing
+    known_volumes, known_at = ((volumes, now()) if volumes is not None
+                               else _known_volumes(store) if judge_drives else ({}, 0.0))
+    internal = {letter for letter in known_volumes
+                if now() - known_at < VOLUMES_FOR_S
+                and techniques.volume_kind(letter, known_volumes) == techniques.INTERNAL}
     smb_out, failed_lookups, registry_hits, registry_seen, odd_ports = {}, [], {}, set(), {}
     dropped, drop_times = {}, []
     boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
@@ -653,6 +697,12 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 hit = technique_hits.setdefault((rule, image), [0, span, e.get("time")])
                 hit[0] += 1
                 hit[2] = e.get("time") or hit[2]
+            if judge_drives:
+                if techniques.drive_letter(image) not in internal | {""}:
+                    off_runs.append((image, e.get("time")))
+                sources, dest = techniques.copy_drives(image, cmdline)
+                if (sources | {dest}) - internal - {""}:
+                    off_copies.append((image, sources, dest, e.get("time")))
             for tid in techniques.discovery(image, cmdline, techniques.WIN):
                 discovery_seen.append((e.get("parent_guid") or "", _base(e.get("parent")) or "?",
                                        _epoch(e.get("time")), tid, base))
@@ -801,6 +851,37 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             f"name or remote-shell port. Only the port is judged; what was sent is not seen.", image)
         f["techniques"] = ["T1571"]
         out.append(f)
+    if off_runs or off_copies:
+        # Asked once a run, and only because a process named a drive that is not
+        # known to be an internal disk. A failed read never replaces the last
+        # good inventory, and what it leaves unjudged is said, not dropped.
+        inventory = volumes if volumes is not None else _read_volumes()
+        if inventory is not None and volumes is None and store is not None:
+            store.set_meta(VOLUMES_META, json.dumps({"at": now(), "volumes": inventory}))
+        if inventory is None:
+            was_internal = {letter for letter in known_volumes
+                            if techniques.volume_kind(letter, known_volumes) == techniques.INTERNAL}
+            off_runs = [r for r in off_runs if techniques.drive_letter(r[0]) not in was_internal]
+            off_copies = [(i, s - was_internal, "" if d in was_internal else d, w)
+                          for i, s, d, w in off_copies]
+        hits, unread = techniques.off_disk(off_runs, off_copies, inventory)
+        for tid, kind, letter, image, count, when in hits:
+            severity, title, why = techniques.OFF_DISK[tid]
+            f = _finding(
+                "technique", severity, f"{title.format(kind=techniques.KIND_TEXT[kind])} ({tid})",
+                f"{_base(image)}, drive {letter}:, at {iso_of(when)}"
+                + (f", {count} times" if count > 1 else "") + f". {why}"
+                + (" The drive was gone before its type could be asked for, so it may also "
+                   "have been a network drive or a mounted disk image."
+                   if kind == techniques.DETACHED else ""), image)
+            f["techniques"] = [tid]
+            out.append(f)
+        if unread:
+            out.append(_finding(
+                "visibility", "low", "drive types could not be read",
+                f"{unread} process events named a drive that is not known to be an internal "
+                f"disk, and Windows did not answer when asked what kind of drive it is. They "
+                f"were not judged as removable-media use; this is not a clean result.", CHANNEL))
     for label, names in techniques.dga_bursts(failed_lookups):
         f = _finding(
             "technique", "medium", f"{label} looked up many names that do not exist (T1568)",

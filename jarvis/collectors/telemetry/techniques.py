@@ -1296,3 +1296,112 @@ def dga_bursts(lookups):
             seen.add(key)
             out.append((label, names))
     return out
+
+
+# ── drives that are not this machine's own disks ────────────────────────────
+# Sysmon names the drive a program ran from but not what kind of drive it is.
+# The Sysmon collector asks Windows for the volume inventory only when a process
+# names a drive not already known to be an internal disk, and hands it here as
+# {letter: (drive type, bus)}. A drive absent from the inventory was detached
+# before it could be asked about, which is itself what a stick does.
+INTERNAL, REMOVABLE, DETACHED, OTHER = "internal", "removable", "detached", "other"
+# A USB hard disk reports itself as a fixed disk; only its bus tells it apart.
+REMOVABLE_BUSES = frozenset(("usb", "sd", "mmc", "1394"))
+_DRIVE_PATH = re.compile(r"(?<![A-Za-z0-9])([A-Za-z]):[\\/]")
+COPY_TOOLS = ("robocopy", "xcopy", "cmd") + POWERSHELL
+_COPY_VERB = re.compile(r"(?<![\w-])(robocopy|xcopy|copy-item|move-item|copy|move|cpi|cp|mv)(\.exe)?(?=\s)", re.I)
+_DESTINATION = re.compile(r"-dest\w*[\s:]+[\"']?([A-Za-z]):[\\/]", re.I)
+
+
+def drive_letter(path):
+    """The drive letter a Windows path starts with, upper case, or ''."""
+    path = str(path or "").lstrip('"')
+    return path[0].upper() if len(path) > 2 and path[1] == ":" and path[2] in "\\/" and path[0].isalpha() else ""
+
+
+def volume_kind(letter, volumes):
+    """What kind of drive `letter` is, from an inventory {letter: (type, bus)}."""
+    found = (volumes or {}).get(str(letter or "").upper())
+    if not found:
+        return DETACHED
+    kind, bus = (str(part or "").lower() for part in found)
+    if kind == "removable" or (kind == "fixed" and bus in REMOVABLE_BUSES):
+        return REMOVABLE
+    return INTERNAL if kind == "fixed" else OTHER
+
+
+def copy_drives(image, cmdline):
+    """Drives a copy command reads from and writes to: ({source letters}, destination letter or '').
+
+    Only the drive letters are taken; file names are never kept. Read from the
+    copy verb onward, so a path that merely locates the shell is not counted.
+    The destination is the last path of `copy`, `move` and `xcopy`, the second
+    of `robocopy`, or the one a `-Destination` parameter names. A copy made by
+    dragging files in Explorer starts no process and is not seen here.
+    """
+    if image_base(image) not in COPY_TOOLS:
+        return set(), ""
+    text = str(cmdline or "")[:MAX_CMDLINE]
+    verb = _COPY_VERB.search(text)
+    if not verb:
+        return set(), ""
+    rest = text[verb.end():]
+    letters = [m.group(1).upper() for m in _DRIVE_PATH.finditer(rest)]
+    if not letters:
+        return set(), ""
+    named = _DESTINATION.search(rest)
+    if named:
+        dest = named.group(1).upper()
+        sources = list(letters)
+        sources.remove(dest)
+    elif len(letters) == 1:
+        # One path with a letter: it is the destination when something comes
+        # before it to be copied (`copy report.txt E:\`), otherwise the source.
+        before = rest[:_DRIVE_PATH.search(rest).start()]
+        dest = letters[0] if re.search(r"[^\s/\"'-][^\s]*\s+[\"']?$", before) else ""
+        sources = [] if dest else letters
+    else:
+        at = 1 if verb.group(1).lower() == "robocopy" else len(letters) - 1
+        dest, sources = letters[at], letters[:at]
+    return set(sources) - {dest}, dest
+
+
+OFF_DISK = {
+    # tid -> (severity, title, what it means)
+    "T1091": ("medium", "program run from {kind}",
+              "Software carried in on a drive runs with the rights of whoever starts it."),
+    "T1025": ("low", "files copied from {kind}",
+              "Only the drives are noted, never the file names."),
+    "T1052": ("low", "files copied to {kind}",
+              "Only the drives are noted, never the file names."),
+}
+KIND_TEXT = {REMOVABLE: "a removable drive", DETACHED: "a drive that is no longer attached"}
+
+
+def off_disk(runs, copies, volumes):
+    """Judge programs run from, and copies to or from, drives that are not internal disks.
+
+    `runs` is [(image, when)], `copies` is [(image, {source letters},
+    destination letter, when)], `volumes` the inventory, or None when it could
+    not be read. -> ([(tid, kind, letter, image, count, when)], unread count).
+    With no inventory nothing is judged: an internal second disk and a stick
+    look the same, so the events are counted as unread instead of guessed at.
+    """
+    seen = [("T1091", drive_letter(image), image, when) for image, when in runs]
+    for image, sources, dest, when in copies:
+        seen += [("T1025", letter, image, when) for letter in sources]
+        if dest:
+            seen.append(("T1052", dest, image, when))
+    seen = [row for row in seen if row[1]]
+    if volumes is None:
+        return [], len(seen)
+    hits = {}
+    for tid, letter, image, when in seen:
+        kind = volume_kind(letter, volumes)
+        if kind not in KIND_TEXT:
+            continue
+        hit = hits.setdefault((tid, kind, letter, image_base(image)), [image, 0, when])
+        hit[1] += 1
+        hit[2] = when or hit[2]
+    return [(tid, kind, letter, image, count, when)
+            for (tid, kind, letter, _base), (image, count, when) in hits.items()], 0

@@ -601,3 +601,179 @@ class CollectorSeamTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+DRIVES = {"C": ("Fixed", "NVMe"), "D": ("Fixed", "SATA"), "E": ("Removable", "USB"),
+          "F": ("Fixed", "USB"), "Z": ("Network", "")}
+ROBOCOPY = r"C:\Windows\System32\Robocopy.exe"
+
+
+def start(image, cmdline=""):
+    return {"id": 1, "image": image, "cmdline": cmdline or image, "time": WHEN}
+
+
+class RemovableMediaTests(unittest.TestCase):
+    """Drives that are not this machine's own disks.
+
+    Invariants: an internal disk is never reported; a drive's kind comes from
+    Windows or is said to be unknown, never guessed; Windows is asked at most
+    once a run and only when a process names a drive not known to be internal;
+    a failed read keeps the last good inventory and is reported, not read as
+    clean; a replay never asks; file names on a drive are never quoted.
+    """
+
+    def drive_findings(self, events, **kw):
+        return [f for f in sysmon.audit(events=events, **kw)
+                if set(f.get("techniques") or ()) & {"T1091", "T1025", "T1052"}]
+
+    def live(self, store, events, read):
+        data = {"events": events, "complete": True, "rareComplete": True}
+        with mock.patch.object(sysmon, "_native", return_value=(data, 7)), \
+                mock.patch.object(sysmon, "_read_volumes", side_effect=read) as asked:
+            return sysmon.audit(store=store, incremental=True), asked
+
+    def test_drive_kind_comes_from_type_and_bus(self):
+        kind = techniques.volume_kind
+        self.assertEqual(kind("C", DRIVES), techniques.INTERNAL)
+        self.assertEqual(kind("e", DRIVES), techniques.REMOVABLE)
+        self.assertEqual(kind("F", DRIVES), techniques.REMOVABLE)      # a USB disk calls itself fixed
+        self.assertEqual(kind("Z", DRIVES), techniques.OTHER)
+        self.assertEqual(kind("G", DRIVES), techniques.DETACHED)
+        self.assertEqual(kind("C", {"C": ("Fixed", "")}), techniques.INTERNAL)
+        for path, letter in ((r"e:\x.exe", "E"), ('"E:/x.exe"', "E"), (r"\\srv\share\x.exe", ""),
+                             ("System", ""), ("", ""), (None, ""), ("HKLM:\\x", "")):
+            self.assertEqual(techniques.drive_letter(path), letter, path)
+
+    def test_copy_direction(self):
+        ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        cmd = r"C:\Windows\System32\cmd.exe"
+        for image, cmdline, want in (
+                (ROBOCOPY, r"robocopy C:\Users\a\Documents E:\backup /E", ({"C"}, "E")),
+                (ROBOCOPY, r"robocopy E:\ C:\Users\a\in /E", ({"E"}, "C")),
+                ("xcopy.exe", r"xcopy /s F:\photos C:\Users\a\Pictures", ({"F"}, "C")),
+                (cmd, r"C:\Windows\System32\cmd.exe /c copy report.txt E:" + "\\", (set(), "E")),
+                (cmd, r"cmd /c copy E:\secret.doc", ({"E"}, "")),
+                (cmd, r'cmd /c copy "C:\a b\x.doc" "E:\out"', ({"C"}, "E")),
+                (ps, r"powershell -c Copy-Item -Destination E:\x -Path C:\Users\a\d", ({"C"}, "E")),
+                (ps, r"powershell -c Copy-Item E:\x C:\Users\a\d", ({"E"}, "C")),
+                # Not copies: a listing, the shell's own path, a tool that is not a copy tool.
+                (ps, ps + r" -c Get-ChildItem E:" + "\\", (set(), "")),
+                (cmd, r"cmd /c dir E:" + "\\", (set(), "")),
+                ("notepad.exe", r"notepad copy E:\a", (set(), "")),
+                (ROBOCOPY, "robocopy", (set(), ""))):
+            self.assertEqual(techniques.copy_drives(image, cmdline), want, cmdline)
+
+    def test_only_drives_that_are_not_internal_disks_are_reported(self):
+        for image in (r"E:\tools\setup.exe", r"F:\portable\app.exe", r"G:\autorun.exe"):
+            self.assertTrue(self.drive_findings([start(image)], volumes=DRIVES), image)
+        for image in (r"C:\Program Files\App\app.exe", r"D:\Games\game.exe", r"Z:\share\tool.exe",
+                      r"\\srv\share\tool.exe", "System"):
+            self.assertEqual(self.drive_findings([start(image)], volumes=DRIVES), [], image)
+        gone = self.drive_findings([start(r"G:\autorun.exe")], volumes=DRIVES)[0]
+        self.assertIn("no longer attached", gone["title"])
+        self.assertIn("network drive or a mounted disk image", gone["detail"])   # not called a stick
+        self.assertEqual(gone["severity"], "medium")
+
+    def test_a_copy_is_reported_by_direction_without_file_names(self):
+        out = self.drive_findings([start(ROBOCOPY, r"robocopy C:\Users\a\Taxes2026 E:\Hidden /E")],
+                                  volumes=DRIVES)
+        self.assertEqual([f["techniques"] for f in out], [["T1052"]])
+        back = self.drive_findings([start(ROBOCOPY, r"robocopy E:\Payroll C:\Users\a\in")],
+                                   volumes=DRIVES)
+        self.assertEqual([f["techniques"] for f in back], [["T1025"]])
+        for f in out + back:
+            self.assertEqual(f["severity"], "low")
+            for private in ("Taxes2026", "Hidden", "Payroll"):
+                self.assertNotIn(private, json.dumps(f))
+        self.assertEqual(self.drive_findings(
+            [start(ROBOCOPY, r"robocopy C:\Users\a\Documents D:\backup /E")], volumes=DRIVES), [])
+
+    def test_a_replay_never_asks_windows_and_leaves_drives_unjudged(self):
+        with mock.patch.object(sysmon, "_read_volumes") as asked, \
+                mock.patch.object(sysmon, "ps_json") as ps:
+            out = sysmon.audit(events=[start(r"E:\tools\setup.exe")])
+            self.assertTrue(self.drive_findings([start(r"E:\tools\setup.exe")], volumes=DRIVES))
+        asked.assert_not_called()
+        ps.assert_not_called()
+        self.assertEqual([f for f in out if f["severity"] != "ok"], [])
+
+    def test_windows_is_asked_once_and_only_for_a_drive_not_known_to_be_internal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "v.db"))
+            try:
+                usual = [start(r"C:\Windows\System32\whoami.exe"), start(r"C:\Windows\explorer.exe")]
+                # First run: nothing is known, so the inventory is read once and kept.
+                out, asked = self.live(store, usual, [dict(DRIVES)])
+                self.assertEqual(asked.call_count, 1)
+                self.assertEqual(self.tagged_drives(out), [])
+                self.assertEqual(sysmon._known_volumes(store)[0]["F"], ("Fixed", "USB"))
+                # Ordinary runs after that cost nothing, however many events they carry.
+                out, asked = self.live(store, usual * 50 + [start(r"D:\Games\game.exe")], [])
+                asked.assert_not_called()
+                # A drive not known to be internal: asked once for the whole run.
+                sticks = [start(r"E:\a.exe"), start(r"E:\b.exe"), start(r"G:\c.exe"),
+                          start(ROBOCOPY, r"robocopy C:\Users\a\d E:\out")]
+                out, asked = self.live(store, usual + sticks, [dict(DRIVES)])
+                self.assertEqual(asked.call_count, 1)
+                self.assertEqual(sorted(t for f in self.tagged_drives(out) for t in f["techniques"]),
+                                 ["T1052", "T1091", "T1091", "T1091"])
+                # What is known expires: an old inventory is read again.
+                saved = json.loads(store.get_meta(sysmon.VOLUMES_META, ""))
+                saved["at"] = time.time() - sysmon.VOLUMES_FOR_S - 1
+                store.set_meta(sysmon.VOLUMES_META, json.dumps(saved))
+                out, asked = self.live(store, usual, [dict(DRIVES)])
+                self.assertEqual(asked.call_count, 1)
+            finally:
+                store.close()
+
+    def tagged_drives(self, findings):
+        """Drive findings of a stored run, which come back by title, as [{techniques: [tid]}]."""
+        return [{"techniques": [tid]} for f in findings
+                for tid in ("T1091", "T1025", "T1052") if f["title"].endswith(f"({tid})")]
+
+    def test_a_failed_read_is_said_and_keeps_the_last_good_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "f.db"))
+            try:
+                self.live(store, [start(r"C:\Windows\explorer.exe")], [dict(DRIVES)])
+                saved = json.loads(store.get_meta(sysmon.VOLUMES_META, ""))
+                saved["at"] = time.time() - sysmon.VOLUMES_FOR_S - 1        # stale, and Windows is silent
+                store.set_meta(sysmon.VOLUMES_META, json.dumps(saved))
+                events = [start(r"C:\Windows\explorer.exe"), start(r"D:\Games\game.exe"),
+                          start(r"E:\tools\setup.exe")]
+                out, asked = self.live(store, events, [None])
+                self.assertEqual(asked.call_count, 1)                       # no retry storm
+                self.assertEqual(self.tagged_drives(out), [])               # nothing guessed
+                unread = [f for f in out if f["title"] == "drive types could not be read"]
+                self.assertEqual(len(unread), 1)
+                self.assertEqual(unread[0]["severity"], "low")
+                self.assertTrue(unread[0]["detail"].startswith("1 process events"))   # only E:, not C: or D:
+                self.assertIn("not a clean result", unread[0]["detail"])
+                self.assertEqual(json.loads(store.get_meta(sysmon.VOLUMES_META, "")), saved)
+                # With no inventory at all and Windows silent, every drive is unread, none judged.
+                store.set_meta(sysmon.VOLUMES_META, "not json")
+                out, _ = self.live(store, events, [None])
+                self.assertEqual(self.tagged_drives(out), [])
+                self.assertTrue(any(f["title"] == "drive types could not be read" for f in out))
+                # Windows answers again: the same events are judged on the next run.
+                out, _ = self.live(store, events, [dict(DRIVES)])
+                self.assertEqual([f["techniques"] for f in self.tagged_drives(out)], [["T1091"]])
+                self.assertFalse(any(f["title"] == "drive types could not be read" for f in out))
+            finally:
+                store.close()
+
+    def test_an_empty_or_malformed_inventory_is_a_failed_read(self):
+        for answer in (None, {}, {"volumes": []}, {"volumes": "x"}, [1], {"volumes": [{"type": "Fixed"}]}):
+            with mock.patch.object(sysmon, "ps_json", return_value=answer):
+                self.assertIsNone(sysmon._read_volumes(), answer)
+        one = {"volumes": {"letter": "c", "type": "Fixed", "bus": "NVMe"}}        # one drive: not a list
+        with mock.patch.object(sysmon, "ps_json", return_value=one):
+            self.assertEqual(sysmon._read_volumes(), {"C": ("Fixed", "NVMe")})
+
+    def test_removable_media_is_held_until_a_real_drive_has_exercised_it(self):
+        for tid in ("T1091", "T1025", "T1052"):
+            fired, what = attackmap.PROBES[tid][0]()
+            self.assertTrue(fired, f"{tid}: {what}")
+            self.assertEqual(attackmap.PROBES[tid][1], ("sysmon",))
+            self.assertIn(tid, attackmap.CONTEXT_ONLY)
+            self.assertGreater(len(attackmap.HELD[tid]), 20)
+        self.assertNotIn("T1092", attackmap.PROBES)                     # nothing looks for it: blind
