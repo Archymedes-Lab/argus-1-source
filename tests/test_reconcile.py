@@ -185,5 +185,39 @@ class ProcessReconciliationTests(unittest.TestCase):
         self.assertEqual(reconcile.processes(self.snapshot(), self.now, self.root), [])
 
 
+class ProcessLookupIndexTests(unittest.TestCase):
+    """The 60s scan resolves every live PID via process_instances(host, pid).
+
+    At ~300k rows that lookup was a full table scan plus sort per PID
+    (17s for ~280 processes). The composite index must exist and the exact
+    query must seek it; verdict semantics are pinned by the tests above.
+    """
+
+    def test_host_pid_index_exists_on_fresh_writer_db(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "eventlog", writer=True)
+            try:
+                rows = log.db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index' "
+                    "AND tbl_name='processes'").fetchall()
+            finally:
+                log.close()
+        self.assertIn("processes_host_pid", {r[0] for r in rows})
+
+    def test_process_instances_query_seeks_instead_of_scanning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = EventLog(Path(tmp) / "eventlog", writer=True)
+            try:
+                plan = log.db.execute(
+                    "EXPLAIN QUERY PLAN SELECT * FROM processes "
+                    "WHERE host=? AND pid=? ORDER BY start_seq DESC LIMIT 32",
+                    ("win", 4)).fetchall()
+            finally:
+                log.close()
+        detail = " ".join(" ".join(str(v) for v in tuple(row)) for row in plan)
+        self.assertIn("SEARCH", detail)
+        self.assertNotIn("SCAN", detail)
+
+
 if __name__ == "__main__":
     unittest.main()

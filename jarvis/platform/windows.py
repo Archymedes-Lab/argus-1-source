@@ -95,18 +95,36 @@ def find_powershell() -> str:
     return ""
 
 
-def available() -> bool:
-    """True when the Windows side is reachable from here."""
+def available() -> bool | None:
+    """True when the Windows side is reachable from here.
+    
+    Returns:
+        True when Windows is reachable and PowerShell is available.
+        False when PowerShell is missing (cannot be found).
+        None when PowerShell is found but interop is unavailable.
+    """
     global _PS
     if not _PS:
         _PS = find_powershell()
     # A cached binary path and a surviving socket do not prove the Windows
     # filesystem survived a suspend. Recheck before declaring the bridge up.
-    return bool(_PS) and os.path.isfile(_PS) and ensure_interop()
+    if not _PS:
+        return False
+    if not os.path.isfile(_PS):
+        return False
+    if not ensure_interop():
+        return None
+    return True
 
 
 # The reason recorded when PowerShell cannot be reached at all.
 UNREACHABLE = "interop unavailable" if not host.native_windows() else "PowerShell unavailable"
+
+# Human-readable descriptions for each failure mode.
+UNREACHABLE_REASON = {
+    "interop unavailable": "PowerShell transport unavailable (no WSL interop socket)",
+    "PowerShell unavailable": "PowerShell not found or not executable",
+}
 
 _SESSION_PROBE = ("\"$((Get-Process -Id $PID).SessionId):"
                   "$((Get-Process explorer -EA SilentlyContinue | Select-Object -First 1).SessionId)\"")
@@ -214,7 +232,10 @@ def _script_target(cmd: str, exe_base: str) -> str:
 
 def collect(timeout: int = 45):
     """Return a list of process records for the Windows side (empty if unreachable)."""
-    if not available():
+    if (reachable := available()) is None:
+        collection.failed('windows-processes', UNREACHABLE)
+        return []
+    if reachable is False:
         collection.failed('windows-processes', UNREACHABLE)
         return []
     try:
@@ -317,7 +338,10 @@ def ps_json(script, timeout=120, payload=None):
     WSL_INTEROP can go stale between calls when the session that created it
     ends, and the only symptom is empty output.
     """
-    if not available():
+    if (reachable := available()) is None:
+        collection.failed('windows', UNREACHABLE)
+        return None
+    if reachable is False:
         collection.failed('windows', UNREACHABLE)
         return None
     if isinstance(payload, str):

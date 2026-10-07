@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS processes (
   ended TEXT, end_seq INTEGER, first_seq INTEGER, last_seq INTEGER);
 CREATE INDEX IF NOT EXISTS processes_parent ON processes(parent_guid);
 CREATE INDEX IF NOT EXISTS processes_sha ON processes(sha256);
+-- The 60-second scan resolves every live Windows PID through
+-- process_instances(host, pid); without this the lookup is a full table
+-- scan plus sort per PID (measured 17s for ~280 processes at 295k rows).
+-- Read-only speedup: identical rows, only faster.
+CREATE INDEX IF NOT EXISTS processes_host_pid ON processes(host, pid);
 -- First and last sighting of each indicator. Every occurrence is in the
 -- segments; this only says which range of them to replay.
 CREATE TABLE IF NOT EXISTS sightings (

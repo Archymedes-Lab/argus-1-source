@@ -77,10 +77,18 @@ def _user_env():
 
 
 def _run(cmd, env=None):
+    # Notification authority belongs to the daemon's main PID. systemctl is
+    # linked to libsystemd and may use an inherited NOTIFY_SOCKET, which makes
+    # the manager log "reception only permitted for main PID" for every call
+    # (and risks a child notification being mistaken for the daemon's own).
+    # Same strip as coverage._cmd; the sudo path below inherits too.
+    base = dict(os.environ) if env is None else dict(env)
+    for key in ("NOTIFY_SOCKET", "WATCHDOG_USEC", "WATCHDOG_PID"):
+        base.pop(key, None)
     try:
         p = subprocess.run(cmd, capture_output=True, text=True,
                            errors="replace", timeout=30,
-                           env=env)
+                           env=base)
         return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, "", str(exc)

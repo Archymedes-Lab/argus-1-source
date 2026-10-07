@@ -67,3 +67,65 @@ class SelfcheckNotificationTests(unittest.TestCase):
         self.assertEqual(self.send.call_count, 3)
         self.notify()
         self.assertEqual(self.send.call_count, 4)
+
+
+class SelfcheckNotifySocketTests(unittest.TestCase):
+    """systemctl children must never inherit the daemon's NOTIFY_SOCKET.
+
+    The manager logs 'reception only permitted for main PID' for every such
+    call; worse, a child notification could be mistaken for the daemon's own
+    watchdog ping. Same strip as coverage._cmd.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def run_with_env(self, env, side_effect=None):
+        from unittest.mock import patch
+        seen = {}
+
+        def fake_run(cmd, **kwargs):
+            seen.update(kwargs.get("env") or {})
+            seen["_cmd"] = cmd
+            if isinstance(side_effect, Exception):
+                raise side_effect
+            return type("R", (), {"returncode": 0, "stdout": "active\n",
+                                  "stderr": ""})()
+
+        with patch.object(selfcheck.subprocess, "run", side_effect=fake_run):
+            with patch.dict(os.environ, env, clear=False):
+                rc, out, _ = selfcheck._run(["systemctl", "show", "x"], env=None)
+        return rc, out, seen
+
+    def test_notify_socket_stripped_from_inherited_environment(self):
+        rc, out, seen = self.run_with_env(
+            {"NOTIFY_SOCKET": "/run/systemd/notify",
+             "WATCHDOG_USEC": "1000000", "WATCHDOG_PID": "206"})
+        self.assertEqual((rc, out), (0, "active"))
+        for key in ("NOTIFY_SOCKET", "WATCHDOG_USEC", "WATCHDOG_PID"):
+            self.assertNotIn(key, seen)
+
+    def test_explicit_env_also_stripped(self):
+        from unittest.mock import patch
+        seen = {}
+
+        def fake_run(cmd, **kwargs):
+            seen.update(kwargs.get("env") or {})
+            return type("R", (), {"returncode": 0, "stdout": "ok\n",
+                                  "stderr": ""})()
+
+        with patch.object(selfcheck.subprocess, "run", side_effect=fake_run):
+            env = dict(os.environ, NOTIFY_SOCKET="/run/systemd/notify")
+            rc, out, _ = selfcheck._run(["systemctl"], env=env)
+            self.assertEqual((rc, out), (0, "ok"))
+            self.assertNotIn("NOTIFY_SOCKET", seen)
+            self.assertIn("PATH", seen)
+
+    def test_spawn_failure_still_returns_error_tuple(self):
+        rc, out, seen = self.run_with_env(
+            {"NOTIFY_SOCKET": "/run/systemd/notify"},
+            side_effect=OSError("no bus"))
+        self.assertEqual(rc, 1)
+        self.assertEqual(out, "")
+        self.assertNotIn("NOTIFY_SOCKET", seen)
