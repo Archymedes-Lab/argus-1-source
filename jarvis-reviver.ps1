@@ -40,6 +40,16 @@ param(
     [string]$HealthUrl = 'http://127.0.0.1:8787/api/health',
     [int]$Interval = 5,
     [int]$HungAfter = 90,
+    # A daemon this young that is merely silent is in its cold start (catching
+    # up backlogs after a boot or resume), not hung. Restarting it then reset
+    # the catch-up: eight 3-restart storms, 2026-10-04..11, each ending in
+    # "needs a human". systemd's WatchdogSec=900 and the selfcheck timer still
+    # restart a daemon that never comes up; a unit that is not active is
+    # restarted at once, grace or not.
+    [int]$StartGrace = 300,
+    # /api/run kicks back off per source, from KickMin to KickMax seconds.
+    [int]$KickMin = 30,
+    [int]$KickMax = 600,
     [int]$RestartGap = 60,
     [int]$RestartBudget = 3,
     [int]$MaxSeconds = 0,          # testing: leave the loop after this long
@@ -177,6 +187,53 @@ function Get-UnitState {
     return ''
 }
 
+function Get-UnitAge {
+    # Seconds since jarvis.service last became active, from the guest's own
+    # monotonic clock (wall-clock steps cannot skew it), or $null if unknown.
+    $j = Start-Job -ScriptBlock { param($d)
+        (& wsl.exe -d $d --exec sh -c 'read u rest < /proc/uptime; echo $u $(systemctl show jarvis.service -p ActiveEnterTimestampMonotonic --value)' 2>$null) -join "`n" } -ArgumentList $Distro
+    if (Wait-Job $j -Timeout 20) {
+        $out = "$(Receive-Job $j)"; Remove-Job $j -Force -ErrorAction SilentlyContinue
+        return ConvertTo-UnitAge $out
+    }
+    Stop-Job $j -ErrorAction SilentlyContinue; Remove-Job $j -Force -ErrorAction SilentlyContinue
+    return $null
+}
+
+function ConvertTo-UnitAge([string]$text) {
+    # "<uptime seconds> <ActiveEnterTimestampMonotonic microseconds>"
+    $f = @("$text".Trim() -split '\s+')
+    if ($f.Count -lt 2) { return $null }
+    $up = 0.0; $mono = 0.0
+    if (-not [double]::TryParse($f[-2], [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$up)) { return $null }
+    if (-not [double]::TryParse($f[-1], [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$mono)) { return $null }
+    if ($mono -le 0) { return $null }          # never active: no start to measure from
+    $age = $up - $mono / 1e6
+    if ($age -lt 0) { return $null }
+    return [int]$age
+}
+
+function Test-StartGrace($unitAge) {
+    # True while a silent unit is young enough to still be starting. Unknown
+    # age gives no grace: the reviver then behaves as it always did.
+    return ($null -ne $unitAge -and [int]$unitAge -lt $StartGrace)
+}
+
+function Test-ShouldKick([string]$name, [string]$status, [long]$last, [int]$wait, [long]$now) {
+    # Re-run a source through /api/run only when re-running can help: it is
+    # stale, missing or unavailable (not partial, not the storage probe), and
+    # its back-off has elapsed.
+    if ($status -eq 'complete' -or $status -eq 'partial' -or $name -eq 'storage') { return $false }
+    return ($now - $last -ge $wait)
+}
+
+function Get-KickWait([object]$previous) {
+    # Next wait after a kick: double the last one, within KickMin..KickMax.
+    $w = [int]$previous
+    if ($w -lt $KickMin) { return $KickMin }
+    return [Math]::Min($KickMax, $w * 2)
+}
+
 # --- the loop ----------------------------------------------------------------
 [void](New-Item -ItemType Directory -Path $StateRoot -Force)
 $mutex = New-Object Threading.Mutex($false, 'Local\JarvisReviver')
@@ -186,7 +243,8 @@ if (-not $Once) {
 }
 
 $st = @{ healthy = $null; firstFailure = 0; lastAction = ''; lastActionAt = 0; lastResult = '';
-         restarts = @(); gaveUp = $false; kicked = @{}; gapSince = 0; startedAt = (Now); pid = $PID }
+         restarts = @(); gaveUp = $false; kicked = @{}; kickWait = @{}; gapSince = 0; graceNoted = 0;
+         startedAt = (Now); pid = $PID }
 if (Test-Path -LiteralPath $statePath) {
     try {
         $old = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -253,15 +311,21 @@ while ($true) {
                 $st.lastResult = "recovered after ${down}s"
             }
             $st.healthy = $true; $st.firstFailure = 0; $st.gaveUp = $false; $st.gapSince = 0
+            $st.kickWait = @{}
         } else {
             # Alive, but a required source is stale or blind: run it now.
             if ($st.healthy -ne $false) { $st.firstFailure = $now }
             $st.healthy = $false
             foreach ($p in $(if ($paused) { @() } else { $h.body.sources.PSObject.Properties })) {
-                if ($p.Value.status -eq 'complete' -or $p.Name -eq 'storage') { continue }
+                if ($p.Value.status -eq 'complete') { $st.kickWait.Remove($p.Name); continue }
+                # A partial source ran and reported a blind spot; running it again
+                # does not repair the sensor behind it, it only adds load. The
+                # scheduler already retries failed collectors on its own.
                 $last = [long]($st.kicked[$p.Name])
-                if ($now - $last -lt 30) { continue }
+                $wait = if ($st.kickWait.ContainsKey($p.Name)) { [int]$st.kickWait[$p.Name] } else { $KickMin }
+                if (-not (Test-ShouldKick $p.Name ([string]$p.Value.status) $last $wait $now)) { continue }
                 $st.kicked[$p.Name] = $now
+                $st.kickWait[$p.Name] = Get-KickWait $wait
                 $ok = Invoke-Run $p.Name
                 $st.lastAction = "queued $($p.Name) ($($p.Value.status): $($p.Value.reason))"
                 $st.lastActionAt = $now
@@ -286,7 +350,16 @@ while ($true) {
                 } elseif ($unit -ne '' -and $unit -ne 'active') {
                     Restart-Jarvis "unit is '$unit'"
                 } elseif ($unit -eq 'active' -and $age -ge $HungAfter) {
-                    Restart-Jarvis "active but $(if ($h.answered) { 'stalled' } else { 'silent' }) for ${age}s"
+                    $unitAge = if ($h.answered) { $null } else { Get-UnitAge }
+                    if (Test-StartGrace $unitAge) {
+                        # Silent, but started under StartGrace ago: still starting.
+                        if ($st.graceNoted -ne $st.firstFailure) {
+                            $st.graceNoted = $st.firstFailure
+                            Say "not restarting: jarvis.service became active ${unitAge}s ago and is still starting (grace ${StartGrace}s)"
+                        }
+                    } else {
+                        Restart-Jarvis "active but $(if ($h.answered) { 'stalled' } else { 'silent' }) for ${age}s"
+                    }
                 }
             }
         }

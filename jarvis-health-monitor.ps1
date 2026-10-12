@@ -62,6 +62,22 @@ function Get-Reviver {
                  paused=($r.paused -eq $true);action=[string]$r.lastAction;actionAt=[long]$r.lastActionAt}
     } catch {return @{present=$false;active=$false;gaveUp=$false;paused=$false;action='';actionAt=0}}
 }
+function Get-DegradedSources($h) {
+    # Required sources (jarvis/service/protection.py `required`) that are not
+    # complete, as "name status (reason)". A source the daemon did not report
+    # is named too: absence is not coverage.
+    $out=@()
+    foreach ($name in @('scan','bridge','sysmon','native')) {
+        $s=$null
+        if ($h -and $h.sources) {$s=$h.sources.$name}
+        if ($null -eq $s) {
+            if ($name -eq 'scan') {$out+="$name not reported"}   # scan is required on every host
+            continue
+        }
+        if ([string]$s.status -ne 'complete') {$out+=("{0} {1} ({2})" -f $name,[string]$s.status,[string]$s.reason)}
+    }
+    return $out
+}
 function Get-JarvisHealth {
     # Raw HttpWebRequest, not Invoke-RestMethod. Under Task Scheduler the
     # cmdlet consults the system proxy and Internet Explorer first-run state,
@@ -94,7 +110,11 @@ function Get-JarvisHealth {
                 $reader=New-Object IO.StreamReader($r.GetResponseStream())
                 try {$h=$reader.ReadToEnd()|ConvertFrom-Json} finally {$reader.Dispose();$r.Dispose()}
                 if ($h.live -eq $true) {
-                    return @{healthy=$false;reason='JARVIS is running but required protection coverage is unavailable'}
+                    # Running and making progress, with a source blind or late: a
+                    # coverage fault, reported as such -- not as JARVIS being down.
+                    $why=@(Get-DegradedSources $h)
+                    $list=if ($why.Count) {$why -join '; '} else {'no source named'}
+                    return @{healthy=$false;degraded=$true;reason="JARVIS is running but required coverage is degraded: $list"}
                 }
             } catch {}
             return @{healthy=$false;reason='JARVIS reports unavailable service or protection coverage'}
@@ -158,6 +178,8 @@ if (Test-Path -LiteralPath $saved) {
     try {
         $old=Get-Content -LiteralPath $saved -Raw | ConvertFrom-Json
         foreach ($p in $old.PSObject.Properties) {$state[$p.Name]=$p.Value}
+        # A note about an earlier unreadable file is history once one reads cleanly.
+        $state.Remove('stateError')
     } catch {$state.stateError='Previous state was unreadable; outage confirmation restarted'}
 }
 $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -183,7 +205,7 @@ if ($health.healthy) {
         try {Send-JarvisMail '[JARVIS] alert email path restored' 'The independent Windows monitor failed to send an earlier email. Delivery is working again and JARVIS is healthy.';$state.mailError=''}
         catch {$state.mailError='Email delivery still failing ('+(Get-MailFailure $_)+'); retrying hourly. No credential data logged.'}
     }
-    $state.failures=0;$state.firstFailure=0
+    $state.failures=0;$state.firstFailure=0;$state.alertKind=''
 } else {
     if (-not $state.firstFailure) {$state.firstFailure=$now}
     $state.failures=[int]$state.failures+1
@@ -197,16 +219,26 @@ if ($health.healthy) {
     if ($state.failures -ge 2 -and $age -ge 60 -and -not $holding) {
         $level=0
         foreach ($threshold in @(3600,21600,86400)) {if ($age -ge $threshold) {$level++}}
-        $title='[JARVIS] monitoring unavailable'
+        $kind=if ($health.degraded) {'degraded'} else {'unavailable'}
+        if ($kind -eq 'unavailable' -and $state.alertKind -eq 'degraded') {
+            # It got worse inside the same outage: JARVIS itself is now
+            # unreachable or stalled. Tell the owner now, whatever was sent.
+            $state.toastLevel=-1;$state.emailLevel=-1;$state.lastToastAttempt=0;$state.lastMailAttempt=0
+        }
+        $state.alertKind=$kind
+        $title=if ($kind -eq 'degraded') {'[JARVIS] coverage degraded'} else {'[JARVIS] monitoring unavailable'}
+        $toastTitle=if ($kind -eq 'degraded') {'JARVIS coverage degraded'} else {'JARVIS monitoring unavailable'}
         $tried=if (-not $rev.present) {'The instant reviver is not installed.'}
                elseif (-not $rev.active) {'The instant reviver is not running, so nothing has tried to fix this.'}
                elseif ($rev.paused) {'The instant reviver is paused for maintenance.'}
                elseif ($rev.action) {"The instant reviver tried: $($rev.action) ($([int](($now-$rev.actionAt)/60)) min ago)$(if ($rev.gaveUp) {', and has stopped after its restart budget'})."}
                else {'The instant reviver has not found anything it can safely restart.'}
-        $body="The independent Windows monitor cannot verify JARVIS. Failure duration: $([int]($age/60)) minutes. $($health.reason). $tried If this persists, open Ubuntu and run: jarvis selfcheck. Escalation level: $level."
+        $lead=if ($kind -eq 'degraded') {'The independent Windows monitor verified JARVIS is running, but required protection coverage is degraded.'}
+              else {'The independent Windows monitor cannot verify JARVIS.'}
+        $body="$lead Failure duration: $([int]($age/60)) minutes. $($health.reason). $tried If this persists, open Ubuntu and run: jarvis selfcheck. Escalation level: $level."
         if ($level -gt $state.toastLevel -and $now-$state.lastToastAttempt -ge 300) {
             $state.lastToastAttempt=$now
-            try {Show-JarvisToast 'JARVIS monitoring unavailable' $body;$state.toastLevel=$level;$state.toastError=''}
+            try {Show-JarvisToast $toastTitle $body;$state.toastLevel=$level;$state.toastError=''}
             catch {$state.toastError=$_.Exception.Message}
         }
         if ($level -gt $state.emailLevel -and $now-$state.lastMailAttempt -ge 300) {

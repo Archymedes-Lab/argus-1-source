@@ -200,7 +200,7 @@ namespace Jarvis.Native {
                 // The log wrapped before the sensor read these; they are gone for good.
                 gap="Records "+(after+1)+"-"+(oldest-1)+" were overwritten or cleared before they were read";
             }
-            ReadEvents(channel,after,events,ref bookmark);
+            ReadEvents(channel,after,oldest,count,events,ref bookmark);
             // A full batch is not partial: the drain loop reads the rest at once.
             string status=gap != null ? "partial" : "complete";
             if(bookmark=="" && after>0) bookmark="record:"+after;
@@ -231,31 +231,144 @@ namespace Jarvis.Native {
                     && Path.GetFileNameWithoutExtension(p).All(Char.IsDigit))
                 .OrderByDescending(p=>p,StringComparer.Ordinal).FirstOrDefault();
         }
-        static void ReadEvents(string channel,long after,List<object> events,ref string bookmark) {
+        // Resume by position, not by an EventRecordID XPath predicate. The
+        // predicate is evaluated from the oldest record forward, so every batch
+        // paid a scan of the whole log: 770 ms to the first event on the
+        // 208,860-record Sysmon log (2026-10-12), past the 2 s x 3 read deadline
+        // under load -- "The sensor cannot read Sysmon" on 463 passes. A seek by
+        // index reached the first event in 26 ms. The index-to-RecordId mapping
+        // is approximate, so Position corrects it within fixed bounds and the
+        // predicate query stays as the correct-but-slow fallback.
+        static void ReadEvents(string channel,long after,long oldest,long count,List<object> events,ref string bookmark) {
+            var query=new EventLogQuery(channel,PathType.LogName,"*") { ReverseDirection=false, TolerateQueryErrors=false };
+            using(var reader=new EventLogReader(query)) {
+                bool converged;
+                EventRecord record=Position<EventRecord>(after,oldest,count,
+                    index => reader.Seek(SeekOrigin.Begin,index),
+                    () => ReadEventWithRetry(reader),
+                    RecordIdOf,
+                    r => r.Dispose(),
+                    out converged);
+                if(!converged) { ReadEventsByQuery(channel,after,events,ref bookmark); return; }
+                while(record!=null) {
+                    using(record) AddEvent(record,events,ref bookmark);
+                    if(events.Count>=BatchEvents) break;
+                    record=ReadEventWithRetry(reader);
+                }
+            }
+        }
+        static long RecordIdOf(EventRecord record) {
+            if(!record.RecordId.HasValue) throw new InvalidDataException("Event identity/time missing");
+            return record.RecordId.Value;
+        }
+        // Seek attempts and records skipped per positioning: a fixed bound on
+        // work, after which the caller uses the predicate query instead.
+        internal const int MaxCorrections = 12;
+        internal const int MaxSkip = 50000;
+        // Returns the first record whose id is above `after`, or null when the
+        // log holds none. A record is returned only when nothing lower and still
+        // above `after` can exist: it is after+1, it is the first record in the
+        // log, or it directly follows a record at or below `after`. So no record
+        // is ever skipped. converged=false (and null) means the bounds ran out;
+        // nothing has been emitted and the cursor is unchanged.
+        internal static T Position<T>(long after,long oldest,long count,Action<long> seek,Func<T> read,
+                                      Func<T,long> id,Action<T> discard,out bool converged) where T:class {
+            converged=true;
+            if(count<=0) {
+                // Reported empty: confirm by reading rather than trusting it.
+                seek(0);
+                T head=read();
+                if(head==null || id(head)>after) return head;
+                return SkipForward(head,after,read,id,discard,out converged);
+            }
+            long index=Math.Min(Math.Max(0,after+1-oldest),count-1);
+            // Seek is exact within the result set; what is approximate is the
+            // log information (oldest, count) the target index is computed from.
+            // lo: largest index seen holding a record at or below the cursor.
+            // hi: smallest index seen holding a newer record, or past the end.
+            // Each landing moves by the record-id difference it measured, so a
+            // near miss costs one more seek; bisection takes over if it bounces.
+            long lo=-1, hi=-1, back=Math.Max(1,count/256);
+            for(int attempt=0;attempt<=MaxCorrections;attempt++) {
+                seek(index);
+                T record=read();
+                long next;
+                if(record==null) {
+                    if(index==0) return null;
+                    hi=index;
+                    next=lo>=0 ? lo+(hi-lo)/2 : Math.Max(0,index-back);
+                    back*=2;
+                } else {
+                    long rid=id(record);
+                    if(rid>after) {
+                        if(rid==after+1 || index==0) return record;
+                        discard(record);
+                        hi=index;
+                        next=Math.Max(0,index-(rid-after));
+                        if(lo>=0 && next<=lo) next=lo+(hi-lo)/2;
+                    } else {
+                        lo=index;
+                        long behind=after-rid;
+                        if(behind<=SkipWindow) return SkipForward(record,after,read,id,discard,out converged);
+                        discard(record);
+                        next=index+behind;
+                        if(hi>=0 && next>=hi) next=lo+(hi-lo)/2;
+                    }
+                }
+                if(next==index || (next==lo && lo>=0)) break;
+                index=next;
+            }
+            // Out of seeks: read forward from the best position known to be at or
+            // below the cursor, within the skip bound; otherwise report failure.
+            if(lo<0) { converged=false; return null; }
+            seek(lo);
+            T start=read();
+            if(start==null || id(start)>after) {
+                // The log changed underneath the search; let the caller use the query.
+                if(start!=null) discard(start);
+                converged=false; return null;
+            }
+            return SkipForward(start,after,read,id,discard,out converged);
+        }
+        internal const int SkipWindow = 4096;
+        static T SkipForward<T>(T record,long after,Func<T> read,Func<T,long> id,Action<T> discard,out bool converged) where T:class {
+            converged=true;
+            for(int skipped=0;;skipped++) {
+                discard(record);
+                if(skipped>=MaxSkip) { converged=false; return null; }
+                record=read();
+                if(record==null) return null;
+                if(id(record)>after) return record;
+            }
+        }
+        static void ReadEventsByQuery(string channel,long after,List<object> events,ref string bookmark) {
             string xpath=after>0 ? "*[System[EventRecordID>"+after+"]]" : "*";
             var query=new EventLogQuery(channel,PathType.LogName,xpath) { ReverseDirection=false, TolerateQueryErrors=false };
             using(var reader=new EventLogReader(query)) {
                 while(events.Count<BatchEvents) {
                     using(EventRecord record=ReadEventWithRetry(reader)) {
                         if(record==null) break;
-                        if(!record.RecordId.HasValue || !record.TimeCreated.HasValue) throw new InvalidDataException("Event identity/time missing");
-                        string xml=record.ToXml();
-                        if(xml.Length>1024*1024) throw new InvalidDataException("Oversized event; resume point retained");
-                        events.Add(new Dictionary<string,object> {
-                            {"record_id",record.RecordId.Value}, {"event_id",record.Id},
-                            {"time",record.TimeCreated.Value.ToUniversalTime().ToString("o")},
-                            // Preserve observation time separately from the
-                            // provider's event time so backlog and latency
-                            // remain measurable without rewriting history.
-                            {"read_time",DateTime.UtcNow.ToString("o")},
-                            // Milliseconds since boot when read: orders records within a
-                            // boot even if the wall clock is changed underneath.
-                            {"mono_ms",(long)GetTickCount64()}, {"xml",xml}
-                        });
-                        bookmark="record:"+record.RecordId.Value;
+                        AddEvent(record,events,ref bookmark);
                     }
                 }
             }
+        }
+        static void AddEvent(EventRecord record,List<object> events,ref string bookmark) {
+            if(!record.RecordId.HasValue || !record.TimeCreated.HasValue) throw new InvalidDataException("Event identity/time missing");
+            string xml=record.ToXml();
+            if(xml.Length>1024*1024) throw new InvalidDataException("Oversized event; resume point retained");
+            events.Add(new Dictionary<string,object> {
+                {"record_id",record.RecordId.Value}, {"event_id",record.Id},
+                {"time",record.TimeCreated.Value.ToUniversalTime().ToString("o")},
+                // Preserve observation time separately from the
+                // provider's event time so backlog and latency
+                // remain measurable without rewriting history.
+                {"read_time",DateTime.UtcNow.ToString("o")},
+                // Milliseconds since boot when read: orders records within a
+                // boot even if the wall clock is changed underneath.
+                {"mono_ms",(long)GetTickCount64()}, {"xml",xml}
+            });
+            bookmark="record:"+record.RecordId.Value;
         }
         static EventRecord ReadEventWithRetry(EventLogReader reader) {
             return RetryEventLogTimeout(() => reader.ReadEvent(TimeSpan.FromSeconds(ReadTimeoutSeconds)));
