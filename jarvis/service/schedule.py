@@ -157,6 +157,11 @@ ALL_JOBS = {
     # (a 32-byte digest at most every 6h). Incremental: new vaulted segments
     # are hashed each run, every vaulted payload once a day.
     "evidence": (900,   "Evidence vault & anchors"),
+    # Watches planted canary bait: verifies the tamper-evident canary journal,
+    # checks decoys against their plant-time fingerprints, ingests off-box
+    # callback hits the owner's listener recorded, and anchors the journal head.
+    # Cheap and local (no PowerShell); frequent so a trip surfaces quickly.
+    "canary":   (300,   "Canary tokens & tripwires"),
 }
 
 # Audits of one execution domain only. Everything else either observes both

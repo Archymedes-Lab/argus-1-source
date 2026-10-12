@@ -15,6 +15,7 @@ from jarvis.collectors.host import (
     accelerator,
     audiowatch,
     bootintegrity,
+    canary,
     containers,
     controlwatch,
     dotnet_posture,
@@ -338,6 +339,14 @@ def _hosts_only(audit):
     return lambda hosts, db_path: audit(hosts=hosts)
 
 
+def _canary(hosts, db_path):
+    # Config (callback inbox, anchoring) is read here, in the service layer, and
+    # handed to the collector, which must not import `response` itself.
+    conf = (alert.load_conf() or {}).get("canary", {}) or {}
+    with _store(db_path) as store:
+        return canary.audit(store, conf=conf)
+
+
 def _sorted(module):
     """A job whose collector takes no arguments and ships its own ordering."""
     return lambda hosts, db_path: module.sort_findings(module.audit())
@@ -429,6 +438,7 @@ RUNNERS = {
     "native": _with_store(native.audit),
     "rust_mirror": _with_store(mirror.audit),
     "evidence": _with_store(evidence.audit),
+    "canary": _canary,
     "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),
     "geo": _with_store(geo.audit),
     "world": _with_store(worldwatch.audit),

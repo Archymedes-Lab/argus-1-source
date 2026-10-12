@@ -56,6 +56,7 @@ JOB_COMMANDS = {
     "native": "timeline status",
     "rust_mirror": "status",
     "evidence": "broker status",
+    "canary": "status",
     "arena": "arena suite",
     "geo": "geo status",
     "world": "geo world",
