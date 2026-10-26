@@ -1,0 +1,1127 @@
+{
+ "pre_r6": {
+  "captured_at": 1792762071,
+  "captured_local": "2026-10-23 16:27:51 EEST",
+  "release": "sha256:414291d535bb44aedfa16d063d39c05b4362d6a467a4bfa78c840357129724f4",
+  "health": {
+   "ready": true,
+   "protection_healthy": true,
+   "healthy": true
+  },
+  "assurance_score": 12,
+  "security_score": {
+   "score": 51,
+   "grade": "needs work",
+   "at": 1792537686
+  },
+  "collectors": {
+   "scan": {
+    "state": "current",
+    "ts": 1792762021,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 4,
+     "low": 13
+    }
+   },
+   "bridge": {
+    "state": "current",
+    "ts": 1792762042,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "input_hook": {
+    "state": "current",
+    "ts": 1792762072,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "native": {
+    "state": "current",
+    "ts": 1792762061,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 2
+    }
+   },
+   "watchdogs": {
+    "state": "current",
+    "ts": 1792762023,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 0
+    }
+   },
+   "resources": {
+    "state": "current",
+    "ts": 1792761761,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 1,
+     "low": 0
+    }
+   },
+   "internet": {
+    "state": "current",
+    "ts": 1792761987,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 25
+    }
+   },
+   "controls": {
+    "state": "current",
+    "ts": 1792761768,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 2
+    }
+   },
+   "audio": {
+    "state": "current",
+    "ts": 1792761761,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 2
+    }
+   },
+   "privacy": {
+    "state": "current",
+    "ts": 1792761764,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "preos": {
+    "state": "current",
+    "ts": 1792760382,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 3,
+     "low": 1
+    }
+   },
+   "deep_hidden": {
+    "state": "current",
+    "ts": 1792756625,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 7
+    }
+   },
+   "hidden": {
+    "state": "current",
+    "ts": 1792762014,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 7
+    }
+   },
+   "firewall": {
+    "state": "current",
+    "ts": 1792760956,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 6,
+     "low": 13
+    }
+   },
+   "control": {
+    "state": "current",
+    "ts": 1792761510,
+    "findings": {
+     "critical": 3,
+     "high": 0,
+     "medium": 1,
+     "low": 122
+    }
+   },
+   "dotnet": {
+    "state": "current",
+    "ts": 1792760375,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "asep": {
+    "state": "current",
+    "ts": 1792759348,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 25
+    }
+   },
+   "spy": {
+    "state": "current",
+    "ts": 1792761599,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 38
+    }
+   },
+   "pixel": {
+    "state": "current",
+    "ts": 1792760174,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 7
+    }
+   },
+   "identity": {
+    "state": "current",
+    "ts": 1792761360,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 7
+    }
+   },
+   "intrusion": {
+    "state": "current",
+    "ts": 1792761696,
+    "findings": {
+     "critical": 0,
+     "high": 2,
+     "medium": 0,
+     "low": 14
+    }
+   },
+   "evasion": {
+    "state": "current",
+    "ts": 1792761736,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "coverage": {
+    "state": "current",
+    "ts": 1792761785,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 0,
+     "low": 5
+    }
+   },
+   "boot": {
+    "state": "current",
+    "ts": 1792756286,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 1,
+     "low": 15
+    }
+   },
+   "hunt": {
+    "state": "current",
+    "ts": 1792761244,
+    "findings": {
+     "critical": 4,
+     "high": 7,
+     "medium": 0,
+     "low": 14
+    }
+   },
+   "gaps": {
+    "state": "current",
+    "ts": 1792755335,
+    "findings": {
+     "critical": 0,
+     "high": 10,
+     "medium": 10,
+     "low": 166
+    }
+   },
+   "intel": {
+    "state": "current",
+    "ts": 1792756578,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 1
+    }
+   },
+   "report": {
+    "state": "current",
+    "ts": 1792761768,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "feeds": {
+    "state": "current",
+    "ts": 1792759818,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 3,
+     "low": 2
+    }
+   },
+   "implant": {
+    "state": "current",
+    "ts": 1792759859,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "netwatch": {
+    "state": "current",
+    "ts": 1792762029,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 11
+    }
+   },
+   "posture": {
+    "state": "current",
+    "ts": 1792755078,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 7
+    }
+   },
+   "backdoor": {
+    "state": "current",
+    "ts": 1792759914,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 4
+    }
+   },
+   "toolchain": {
+    "state": "current",
+    "ts": 1792760307,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 5
+    }
+   },
+   "ledger": {
+    "state": "current",
+    "ts": 1792760375,
+    "findings": {
+     "critical": 2,
+     "high": 14,
+     "medium": 1,
+     "low": 0
+    }
+   },
+   "input": {
+    "state": "current",
+    "ts": 1792762014,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 2
+    }
+   },
+   "memscan": {
+    "state": "failing",
+    "ts": 1792755130,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 4
+    }
+   },
+   "secrets": {
+    "state": "current",
+    "ts": 1792757041,
+    "findings": {
+     "critical": 11,
+     "high": 4,
+     "medium": 6,
+     "low": 25
+    }
+   },
+   "bruteforce": {
+    "state": "current",
+    "ts": 1792758610,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "sniffing": {
+    "state": "current",
+    "ts": 1792760378,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "webshell": {
+    "state": "current",
+    "ts": 1792755342,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "auditd": {
+    "state": "current",
+    "ts": 1792755130,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 0
+    }
+   },
+   "sysmon_linux": {
+    "state": "current",
+    "ts": 1792761942,
+    "findings": {
+     "critical": 0,
+     "high": 2,
+     "medium": 29,
+     "low": 1
+    }
+   },
+   "sysmon": {
+    "state": "current",
+    "ts": 1792761485,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 6
+    }
+   },
+   "attackmap": {
+    "state": "current",
+    "ts": 1792755376,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "arena": {
+    "state": "current",
+    "ts": 1792758937,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "geo": {
+    "state": "current",
+    "ts": 1792761816,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "world": {
+    "state": "current",
+    "ts": 1792761460,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "containers": {
+    "state": "current",
+    "ts": 1792761787,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "model": {
+    "state": "current",
+    "ts": 1792760379,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "rust_mirror": {
+    "state": "current",
+    "ts": 1792761492,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "history_verify": {
+    "state": "current",
+    "ts": 1792756575,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "evidence": {
+    "state": "current",
+    "ts": 1792761443,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 0,
+     "low": 0
+    }
+   }
+  },
+  "states": {
+   "current": 52,
+   "failing": 1
+  }
+ },
+ "r6_live": {
+  "captured_at": 1792763279,
+  "captured_local": "2026-10-23 16:47:59 EEST",
+  "release": "sha256:d13dc7206da480531ba34d7bd87040a6a165c4fc1f1ef0621a154567890c7e0c",
+  "health": {
+   "healthy": true,
+   "ready": true,
+   "protection_healthy": true
+  },
+  "assurance_score": 12,
+  "security_score": {
+   "score": 51,
+   "grade": "needs work",
+   "at": 1792537686
+  },
+  "collectors": {
+   "scan": {
+    "state": "current",
+    "ts": 1792763222,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 4,
+     "low": 13
+    }
+   },
+   "bridge": {
+    "state": "current",
+    "ts": 1792763250,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "input_hook": {
+    "state": "current",
+    "ts": 1792763259,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "native": {
+    "state": "current",
+    "ts": 1792763271,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 2
+    }
+   },
+   "watchdogs": {
+    "state": "current",
+    "ts": 1792763210,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 0
+    }
+   },
+   "resources": {
+    "state": "current",
+    "ts": 1792763046,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 2,
+     "low": 0
+    }
+   },
+   "internet": {
+    "state": "current",
+    "ts": 1792763185,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 25
+    }
+   },
+   "controls": {
+    "state": "current",
+    "ts": 1792763039,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 2
+    }
+   },
+   "audio": {
+    "state": "failing",
+    "ts": 1792763021,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 2
+    }
+   },
+   "privacy": {
+    "state": "current",
+    "ts": 1792763025,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "storage": {
+    "state": "current",
+    "ts": 1792762875,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 3,
+     "low": 7
+    }
+   },
+   "preos": {
+    "state": "current",
+    "ts": 1792762833,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 3,
+     "low": 1
+    }
+   },
+   "fwaudit": {
+    "state": "failing",
+    "ts": 1792762533,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "deep_hidden": {
+    "state": "current",
+    "ts": 1792763222,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 8
+    }
+   },
+   "hidden": {
+    "state": "current",
+    "ts": 1792763244,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 7
+    }
+   },
+   "firewall": {
+    "state": "current",
+    "ts": 1792762610,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 6,
+     "low": 13
+    }
+   },
+   "control": {
+    "state": "current",
+    "ts": 1792762632,
+    "findings": {
+     "critical": 4,
+     "high": 0,
+     "medium": 1,
+     "low": 121
+    }
+   },
+   "dotnet": {
+    "state": "current",
+    "ts": 1792762822,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "asep": {
+    "state": "current",
+    "ts": 1792762551,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 25
+    }
+   },
+   "spy": {
+    "state": "current",
+    "ts": 1792762994,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 38
+    }
+   },
+   "pixel": {
+    "state": "current",
+    "ts": 1792762775,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 7
+    }
+   },
+   "identity": {
+    "state": "current",
+    "ts": 1792762806,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 7
+    }
+   },
+   "intrusion": {
+    "state": "current",
+    "ts": 1792762904,
+    "findings": {
+     "critical": 0,
+     "high": 2,
+     "medium": 0,
+     "low": 14
+    }
+   },
+   "evasion": {
+    "state": "current",
+    "ts": 1792762769,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "coverage": {
+    "state": "current",
+    "ts": 1792763044,
+    "findings": {
+     "critical": 0,
+     "high": 3,
+     "medium": 0,
+     "low": 6
+    }
+   },
+   "boot": {
+    "state": "current",
+    "ts": 1792762968,
+    "findings": {
+     "critical": 0,
+     "high": 2,
+     "medium": 0,
+     "low": 14
+    }
+   },
+   "hunt": {
+    "state": "current",
+    "ts": 1792762742,
+    "findings": {
+     "critical": 4,
+     "high": 7,
+     "medium": 0,
+     "low": 14
+    }
+   },
+   "gaps": {
+    "state": "current",
+    "ts": 1792763000,
+    "findings": {
+     "critical": 0,
+     "high": 7,
+     "medium": 7,
+     "low": 179
+    }
+   },
+   "intel": {
+    "state": "current",
+    "ts": 1792763000,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 1
+    }
+   },
+   "report": {
+    "state": "current",
+    "ts": 1792763044,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "feeds": {
+    "state": "current",
+    "ts": 1792762777,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "implant": {
+    "state": "current",
+    "ts": 1792762566,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "netwatch": {
+    "state": "current",
+    "ts": 1792763242,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 11
+    }
+   },
+   "posture": {
+    "state": "current",
+    "ts": 1792763038,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 7
+    }
+   },
+   "backdoor": {
+    "state": "current",
+    "ts": 1792762594,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 4
+    }
+   },
+   "toolchain": {
+    "state": "current",
+    "ts": 1792762804,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 5
+    }
+   },
+   "ledger": {
+    "state": "current",
+    "ts": 1792762822,
+    "findings": {
+     "critical": 2,
+     "high": 14,
+     "medium": 2,
+     "low": 0
+    }
+   },
+   "input": {
+    "state": "current",
+    "ts": 1792763235,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 2
+    }
+   },
+   "memscan": {
+    "state": "failing",
+    "ts": 1792763044,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 5
+    }
+   },
+   "secrets": {
+    "state": "current",
+    "ts": 1792763169,
+    "findings": {
+     "critical": 11,
+     "high": 4,
+     "medium": 6,
+     "low": 25
+    }
+   },
+   "bruteforce": {
+    "state": "current",
+    "ts": 1792762996,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 1
+    }
+   },
+   "sniffing": {
+    "state": "current",
+    "ts": 1792762825,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "webshell": {
+    "state": "current",
+    "ts": 1792763007,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "auditd": {
+    "state": "current",
+    "ts": 1792763045,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 1,
+     "low": 0
+    }
+   },
+   "sysmon_linux": {
+    "state": "current",
+    "ts": 1792763174,
+    "findings": {
+     "critical": 0,
+     "high": 2,
+     "medium": 29,
+     "low": 1
+    }
+   },
+   "sysmon": {
+    "state": "current",
+    "ts": 1792763175,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 2,
+     "low": 6
+    }
+   },
+   "attackmap": {
+    "state": "current",
+    "ts": 1792763038,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "arena": {
+    "state": "current",
+    "ts": 1792762618,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "geo": {
+    "state": "current",
+    "ts": 1792763036,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "world": {
+    "state": "current",
+    "ts": 1792762729,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "containers": {
+    "state": "current",
+    "ts": 1792762618,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "model": {
+    "state": "current",
+    "ts": 1792762827,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "rust_mirror": {
+    "state": "current",
+    "ts": 1792762776,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "history_verify": {
+    "state": "current",
+    "ts": 1792762840,
+    "findings": {
+     "critical": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0
+    }
+   },
+   "evidence": {
+    "state": "current",
+    "ts": 1792762707,
+    "findings": {
+     "critical": 0,
+     "high": 1,
+     "medium": 0,
+     "low": 0
+    }
+   }
+  },
+  "known_failing": {
+   "audio": "sound listener absent from the running input hook; owner restarts the hook",
+   "fwaudit": "HP.Firmware module + jarvis broker install pending (owner, elevated)",
+   "memscan": "unelevated; broker reinstall pending"
+  }
+ }
+}

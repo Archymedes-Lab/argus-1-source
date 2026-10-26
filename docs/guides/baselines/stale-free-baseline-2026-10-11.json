@@ -1,0 +1,56 @@
+{
+ "recorded_at": 1791716743.5405178,
+ "release": "dcbf40de9393",
+ "health": {
+  "healthy": false,
+  "ready": false,
+  "protection_healthy": false,
+  "current_job": "evidence"
+ },
+ "score": 0,
+ "coverage": 42,
+ "stale_count": 31,
+ "stale": [
+  "arena",
+  "asep",
+  "attackmap",
+  "audio",
+  "backdoor",
+  "boot",
+  "bruteforce",
+  "controls",
+  "coverage",
+  "dotnet",
+  "evidence",
+  "feeds",
+  "firewall",
+  "gaps",
+  "hidden",
+  "hunt",
+  "implant",
+  "input",
+  "intel",
+  "internet",
+  "ledger",
+  "model",
+  "netwatch",
+  "pixel",
+  "preos",
+  "report",
+  "resources",
+  "rust_mirror",
+  "sniffing",
+  "toolchain",
+  "webshell"
+ ],
+ "sysmon": {
+  "duration": 53.3,
+  "error": "sysmon: event query capped or completeness unverified; cursor retained",
+  "freshness": "FRESH"
+ },
+ "expected": [
+  "stale count falls over the next 1-2 h as starved jobs are served first and evidence/world/feeds/rust_mirror run on the bulk lane",
+  "sysmon error 'capped ... cursor retained' replaced by a medium 'Sysmon is catching up a backlog' while paging, then a complete run",
+  "no collector disappears; score changes only with fresh evidence"
+ ]
+}

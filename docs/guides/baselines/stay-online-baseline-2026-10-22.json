@@ -1,0 +1,114 @@
+{
+ "recorded_at": 1792681612,
+ "recorded_at_iso": "2026-10-22T18:06:52",
+ "release": "20261021T204348Z-0d307253d24d",
+ "health": {
+  "healthy": false,
+  "live": true,
+  "ready": false,
+  "protection_healthy": false,
+  "progress_age": 0.4365994930267334,
+  "fast_lane_age": 0.5923111438751221
+ },
+ "sources": {
+  "scan": {
+   "status": "unavailable",
+   "reason": "windows-processes: query failed or timed out",
+   "observed_at": 1792681591
+  },
+  "bridge": {
+   "status": "complete",
+   "reason": "recent successful collection",
+   "observed_at": 1792681578
+  },
+  "sysmon": {
+   "status": "complete",
+   "reason": "recent successful collection",
+   "observed_at": 1792681113
+  },
+  "native": {
+   "status": "complete",
+   "reason": "recent successful collection",
+   "observed_at": 1792681598
+  },
+  "internet": {
+   "status": "unavailable",
+   "reason": "windows: PowerShell failed or timed out",
+   "observed_at": 1792681581
+  },
+  "veil": {
+   "status": "not_reporting",
+   "reason": "no observation yet",
+   "observed_at": null
+  },
+  "secrets": {
+   "status": "complete",
+   "reason": "recent successful collection",
+   "observed_at": 1792679532
+  },
+  "resources": {
+   "status": "unavailable",
+   "reason": "windows: PowerShell failed or timed out",
+   "observed_at": 1792681420
+  }
+ },
+ "score_live": {
+  "score": 37,
+  "grade": "at risk",
+  "coverage": 97
+ },
+ "snapshots": {
+  "scan": {
+   "ts": 1792681591,
+   "error": "windows-processes: query failed or timed out",
+   "findings": 11
+  },
+  "netwatch": {
+   "ts": 1792681481,
+   "error": "windows: PowerShell failed or timed out",
+   "findings": 14
+  },
+  "posture": {
+   "ts": 1792679370,
+   "error": "",
+   "findings": 9
+  },
+  "input": {
+   "ts": 1792681532,
+   "error": "windows: PowerShell failed or timed out",
+   "findings": 15
+  },
+  "sysmon": {
+   "ts": 1792681113,
+   "error": "",
+   "findings": 11
+  },
+  "bridge": {
+   "ts": 1792681578,
+   "error": "",
+   "findings": 1
+  },
+  "resources": {
+   "ts": 1792681420,
+   "error": "windows: PowerShell failed or timed out",
+   "findings": 2
+  },
+  "native": {
+   "ts": 1792681598,
+   "error": "",
+   "findings": 3
+  }
+ },
+ "cgroup": {
+  "current": 1509056512,
+  "high": 1610612736,
+  "events_high": 7965
+ },
+ "interop_binfmt": "WSLInterop missing since 17:24 EEST; PowerShell collectors failing",
+ "expected_after_deploy": {
+  "bridge": "ok + medium 'interop registration was removed from binfmt_misc' until systemd-binfmt is restarted; then ok only",
+  "scan/netwatch/input/posture and other PowerShell collectors": "fresh snapshots without 'PowerShell failed or timed out' even while the binfmt entry is missing",
+  "health": "healthy/ready once the required sources are complete; progress_age must not jump after a standby",
+  "resources": "after two samples a medium 'throttled at its memory ceiling' finding while MemoryHigh stays 1536M"
+ }
+}

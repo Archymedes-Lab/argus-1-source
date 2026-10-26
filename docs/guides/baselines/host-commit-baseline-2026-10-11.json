@@ -1,0 +1,72 @@
+{
+ "recorded_at": 1791712922.0570924,
+ "release": "/opt/jarvis/releases/20261004T200640Z-677b2a83b901",
+ "service": [
+  "NRestarts=0",
+  "ActiveState=active"
+ ],
+ "health_http": 503,
+ "health": {
+  "healthy": false,
+  "live": true,
+  "ready": false,
+  "protection_healthy": false,
+  "current_job": "sysmon"
+ },
+ "pre_existing_degradation": "sysmon fallback livelock (event query capped; cursor retained) starves other jobs; tracked by docs/architecture/LANE-FAIRNESS-AND-OUTAGE-RECORD.md, not by this release",
+ "security_score": 24,
+ "grade": "at risk",
+ "stale_jobs": [
+  "attackmap",
+  "audio",
+  "boot",
+  "control",
+  "controls",
+  "dotnet",
+  "gaps",
+  "hidden",
+  "hunt",
+  "input",
+  "intel",
+  "ledger",
+  "model",
+  "preos",
+  "report",
+  "resources",
+  "rust_mirror",
+  "sniffing",
+  "webshell"
+ ],
+ "stale_count": 19,
+ "jobs_total": 51,
+ "resources_job": {
+  "ts": 1791711562,
+  "duration": 34.2,
+  "error": "",
+  "counts": {
+   "high": 2
+  },
+  "stale": true,
+  "freshness": "STALE"
+ },
+ "resources_findings": [
+  [
+   "high",
+   "disk capacity pressure",
+   "wsl"
+  ],
+  [
+   "high",
+   "resource-intensive process",
+   "win"
+  ]
+ ],
+ "expected_after_deploy": [
+  "resources gains 'host memory commit pressure' with host=win while commit stays >=85% (medium) / >=95% (high)",
+  "resources gains 'WSL VM crashed' (medium) while a kernel-panic report from the last 24 h exists",
+  "existing resource findings (disk capacity pressure high, resource-intensive process high) unchanged",
+  "no finding disappears; resources run time grows by about 4 s",
+  "health/ready/stale-job state no worse than this baseline (already degraded by the sysmon livelock)",
+  "bridge down -> 'host memory commit unmeasured' (medium), never healthy"
+ ]
+}
