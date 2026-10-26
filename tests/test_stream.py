@@ -237,8 +237,11 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(r.status, 200)
         self.assertTrue(r.getheader("Content-Type").startswith("text/event-stream"))
         lines = []
-        deadline = time.time() + 5
-        while "event: pulse" not in lines and time.time() < deadline:
+        # Monotonic deadlines: this host's wall clock steps by ~9 s (the WSL
+        # clock fight), which failed this test about two runs in three while
+        # the stream itself was correct (measured 2026-10-23).
+        deadline = time.monotonic() + 5
+        while "event: pulse" not in lines and time.monotonic() < deadline:
             lines.append(r.fp.readline().decode().rstrip("\n"))
         self.assertIn("event: pulse", lines)
 
@@ -248,9 +251,9 @@ class HttpTests(unittest.TestCase):
 
         r.close()                   # client leaves -> slot returns
         conn.close()
-        deadline = time.time() + stream.PERIOD_S + 5
+        deadline = time.monotonic() + stream.PERIOD_S + 5
         while not self.hub.acquire():
-            self.assertLess(time.time(), deadline, "stream slot never released")
+            self.assertLess(time.monotonic(), deadline, "stream slot never released")
             time.sleep(0.2)
         self.hub.release()
 

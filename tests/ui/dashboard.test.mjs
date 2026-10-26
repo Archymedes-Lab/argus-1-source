@@ -70,9 +70,10 @@ describe("continuity card", () => {
       governor: { pressured: false, reason: "nominal" },
       perception: null,
     });
-    assert.match(out, /VIOLATED/);
+    // Sentence case since the 2026-10-22 design system; the state is what matters.
+    assert.match(out, /title="violated"[^]*>Violated</);
     assert.match(out, /stale with no recovery/);
-    assert.match(out, /holding/);
+    assert.match(out, /holding/i);
   });
 
   it("shows governor deferral and perception counts", () => {

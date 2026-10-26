@@ -30,6 +30,8 @@ export function loadPage(relPath, exportNames) {
     addEventListener: () => {},
     createElement: () => makeEl(),
     querySelector: () => makeEl(),
+    querySelectorAll: () => [],
+    documentElement: makeEl(),
   };
   globalThis.window = globalThis;
   globalThis.localStorage = { getItem: () => null, setItem: () => {} };
