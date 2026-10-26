@@ -1,18 +1,27 @@
 [package]
 name = "jarvis-desktop"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
-description = "JARVIS desktop shell: window, tray and notifications over the local daemon"
+description = "JARVIS desktop: native window, tray and notifications over the local daemon"
 publish = false
 
+# Exact pins: the shell is part of a security tool, so a dependency changes
+# only when someone reviews the bump (Cargo.lock records the full tree).
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "=2.7.4", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-notification = "2"
-tauri-plugin-single-instance = "2"
+tauri = { version = "=2.12.5", features = ["tray-icon"] }
+tauri-plugin-notification = "=2.7.0"
+tauri-plugin-single-instance = "=2.5.4"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[features]
+# The production asset protocol. `tauri build` enables it implicitly; a plain
+# `cargo build --release` must pass `--features custom-protocol`, and main.rs
+# refuses to compile a release without it (it would be a development build).
+custom-protocol = ["tauri/custom-protocol"]
 
 [profile.release]
 codegen-units = 1
