@@ -126,6 +126,7 @@ PS_EVASION = load_win_script("evasion.ps1")
 
 def audit(data=None):
     """`data` is a payload already collected (the coverage map's probes)."""
+    live = data is None
     if data is None:
         data = ps_json(PS_EVASION, timeout=300)
     if data is None:
@@ -282,10 +283,19 @@ def audit(data=None):
         out.append(_finding("unicode", "ok", "no invisible characters in command lines",
                             "Run keys, RunMRU and shortcuts are all plain text", ""))
 
+    if live:
+        # Attempts to blind the defenses (collectors/process/tamper.py): read
+        # from Windows' own logs on every live run, never in a probe replay.
+        try:
+            from jarvis.collectors.process import tamper
+            out.extend(tamper.audit())
+        except Exception as exc:     # a broken tamper read must not cost the evasion audit
+            out.append(_finding("visibility", "medium", "Tamper audit failed",
+                                f"{type(exc).__name__}: tampering is unknown, not absent", "tamper"))
     return out
 
 
-CAT_ORDER = {"byovd": 0, "unicode": 1, "ads": 2, "lnk": 3, "c2": 4}
+CAT_ORDER = {"byovd": 0, "tamper": 1, "unicode": 2, "ads": 3, "lnk": 4, "c2": 5}
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
 

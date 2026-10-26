@@ -22,7 +22,8 @@ class MeshError(ValueError):
 def crypto():
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-            Ed25519PrivateKey, Ed25519PublicKey,
+            Ed25519PrivateKey,
+            Ed25519PublicKey,
         )
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     except ImportError as exc:

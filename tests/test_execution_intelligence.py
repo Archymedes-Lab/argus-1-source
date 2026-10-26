@@ -3,7 +3,6 @@
 import unittest
 
 from jarvis.core.execution import adapter, escalate, impossible, kernel_contract
-from jarvis.core.execution import presence as presence_mod
 from jarvis.core.execution.presence import ProcessPresence, reconcile
 
 

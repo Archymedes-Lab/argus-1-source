@@ -51,6 +51,130 @@ class WindowsSysmonImpactTests(unittest.TestCase):
             self.assertEqual([(f["severity"], f["title"]) for f in hit],
                              [(severity, "tool.exe opened LSASS memory")], granted)
 
+    def browser(self, image, granted, target=r"C:\Program Files\Google\Chrome\Application\chrome.exe"):
+        findings = self.audit([{
+            "id": 10, "image": image, "target": target,
+            "granted": granted, "time": "2026-10-22T20:00:00Z",
+        }])
+        return [(f["severity"], f["title"]) for f in findings
+                if f["category"] == "credential access"]
+
+    def test_browser_memory_read_from_a_staging_path_is_high_and_installed_is_medium(self):
+        self.assertEqual(self.browser(r"C:\Users\u\AppData\Local\Temp\katz.exe", "0x1010"),
+                         [("high", "katz.exe opened chrome.exe memory")])
+        self.assertEqual(self.browser(r"C:\Users\Public\tool.exe", "junk"),
+                         [("high", "tool.exe opened chrome.exe memory")])
+        # An installed program reading browser memory is a password manager
+        # more often than a thief; reported, but not as an alarm.
+        self.assertEqual(self.browser(r"C:\Program Files\KeePass\KeePass.exe", "0x1010"),
+                         [("medium", "keepass.exe opened chrome.exe memory")])
+
+    def test_browser_open_without_read_rights_is_medium_and_query_only_is_quiet(self):
+        self.assertEqual(self.browser(r"C:\Users\u\tool.exe", "0x1040"),
+                         [("medium", "tool.exe opened chrome.exe memory")])
+        self.assertEqual(self.browser(r"C:\Users\u\tool.exe", "0x1000"), [])
+        self.assertEqual(self.browser(r"C:\Users\u\tool.exe", "0x101400"), [])
+
+    def test_the_browser_and_windows_own_stack_opening_a_browser_are_not_reported(self):
+        chrome = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        for image in (chrome, r"C:\ProgramData\Microsoft\Windows Defender\Platform\x\MsMpEng.exe",
+                      r"C:\Windows\System32\csrss.exe", r"C:\Windows\explorer.exe"):
+            self.assertEqual(self.browser(image, "0x1fffff"), [], image)
+        # Firefox opened by Edge is not Firefox's own sandbox; Edge is an
+        # installed program, so it is reported at medium, not as an alarm.
+        self.assertEqual(self.browser(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                                      "0x1010", target=r"C:\Program Files\Mozilla Firefox\firefox.exe"),
+                         [("medium", "msedge.exe opened firefox.exe memory")])
+
+    def _titles(self, events, category=None):
+        return [(f["severity"], f["title"], f.get("techniques", [])) for f in self.audit(events)
+                if (category is None or f["category"] == category) and f["severity"] != "ok"]
+
+    def test_unsigned_or_staged_driver_load_is_critical_and_a_signed_one_is_quiet(self):
+        when = "2026-10-23T00:00:00Z"
+        out = self._titles([{"id": 6, "image": "System", "loaded": r"C:\Users\Public\rk.sys",
+                             "signed": "true", "sigstat": "Valid", "time": when}], "tampering")
+        self.assertEqual(out, [("critical", "driver loaded that is unsigned or from a writable path: rk.sys",
+                                ["T1014", "T1068"])])
+        out = self._titles([{"id": 6, "image": "System", "loaded": r"C:\Windows\System32\drivers\x.sys",
+                             "signed": "false", "sigstat": "Unavailable", "time": when}], "tampering")
+        self.assertEqual(out[0][0], "critical")
+        out = self._titles([{"id": 6, "image": "System", "loaded": r"C:\Windows\System32\drivers\x.sys",
+                             "signed": "true", "sigstat": "Expired", "time": when}], "tampering")
+        self.assertEqual(out[0][0], "high")
+        self.assertEqual(self._titles([{"id": 6, "image": "System", "signed": "true", "sigstat": "Valid",
+                                        "loaded": r"C:\Windows\System32\drivers\tcpip.sys",
+                                        "time": when}], "tampering"), [])
+
+    def test_defender_platform_drivers_are_not_staged_unless_their_signature_fails(self):
+        # Live false positive 2026-10-23: Defender's own drivers in its protected
+        # ProgramData platform tree were reported critical as "writable path".
+        when = "2026-10-23T00:00:00Z"
+        platform = r"C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26090.9-0\Drivers"
+        ok = {"id": 6, "image": "System", "signed": "true", "sigstat": "Valid", "time": when}
+        self.assertEqual(self._titles([dict(ok, loaded=platform + r"\WdNisDrv.sys")], "tampering"), [])
+        # The same folder with a broken or missing signature is still staged, so critical...
+        self.assertEqual(self._titles([dict(ok, sigstat="HashMismatch",
+                                            loaded=platform + r"\WdNisDrv.sys")], "tampering")[0][0], "critical")
+        self.assertEqual(self._titles([dict(ok, signed="false", sigstat="Unavailable",
+                                            loaded=platform + r"\evil.sys")], "tampering")[0][0], "critical")
+        # ...and a look-alike outside that exact tree is still a writable path.
+        self.assertEqual(self._titles([dict(ok, loaded=r"C:\ProgramData\Microsoft\Windows Defender Platform\x.sys")],
+                                      "tampering")[0][0], "critical")
+        self.assertEqual(self._titles([dict(ok, loaded=r"C:\ProgramData\Vendor\Platform\x.sys")],
+                                      "tampering")[0][0], "critical")
+
+    def test_startup_folder_and_drivers_folder_writes_are_persistence(self):
+        when = "2026-10-23T00:00:00Z"
+        startup = r"C:\Users\u\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\u.lnk"
+        out = self._titles([{"id": 11, "image": r"C:\Users\u\AppData\Local\Temp\a.exe",
+                             "file": startup, "time": when}], "persistence")
+        self.assertEqual(out, [("high", "a.exe wrote to a Startup folder", ["T1547"])])
+        # Installers and Windows itself write there as part of their job.
+        self.assertEqual(self._titles([{"id": 11, "image": r"C:\Windows\System32\msiexec.exe",
+                                        "file": startup, "time": when}], "persistence"), [])
+        out = self._titles([{"id": 11, "image": r"C:\Users\u\Downloads\drv.exe",
+                             "file": r"C:\Windows\System32\drivers\evil.sys", "time": when}], "persistence")
+        self.assertEqual(out, [("high", "drv.exe wrote into the drivers folder", ["T1014", "T1543"])])
+        self.assertEqual(self._titles([{"id": 11, "image": r"C:\Windows\System32\drvinst.exe",
+                                        "file": r"C:\Windows\System32\drivers\ok.sys", "time": when}],
+                                      "persistence"), [])
+
+    def test_attack_tool_named_pipes_are_reported_and_other_pipes_are_quiet(self):
+        when = "2026-10-23T00:00:00Z"
+        out = self._titles([{"id": 17, "image": r"C:\Windows\PAExec-1-X.exe", "pipe": r"\PAExec-1-X",
+                             "time": when}])
+        self.assertEqual(out, [("high", "named pipe of PAExec remote execution created by paexec-1-x.exe",
+                                ["T1559", "T1021"])])
+        out = self._titles([{"id": 18, "image": r"C:\x\m.exe", "pipe": r"\lsadump", "time": when}])
+        self.assertEqual(out[0][:2], ("critical", "named pipe of LSA secrets dumper connected by m.exe"))
+        self.assertIn("T1003", out[0][2])
+        self.assertEqual(self._titles([{"id": 17, "image": r"C:\x\m.exe", "pipe": r"\mojo.1.2.3",
+                                        "time": when}]), [])
+
+    def test_wmi_subscription_created_is_critical_and_deleted_is_medium(self):
+        when = "2026-10-23T00:00:00Z"
+        base = {"id": 21, "image": r"C:\Windows\System32\wbem\WmiPrvSE.exe", "wmi_operation": "Created",
+                "wmi_name": "Updater", "wmi_type": "Binding", "wmi_consumer": "CommandLineEventConsumer",
+                "wmi_destination": "", "wmi_user": "U", "time": when}
+        out = self._titles([base], "persistence")
+        self.assertEqual(out, [("critical", "WMI event filter-to-consumer binding created: Updater", ["T1546"])])
+        out = self._titles([dict(base, id=20, wmi_operation="Deleted")], "persistence")
+        self.assertEqual(out[0][:2], ("medium", "WMI event consumer deleted: Updater"))
+
+    def test_native_rows_carry_file_pipe_and_wmi_fields(self):
+        rows = sysmon.rows_from_events([
+            {"source_event": 11, "process": {"image": "a.exe"}, "target": {"type": "file", "path": r"C:\s\x.lnk"}},
+            {"source_event": 17, "process": {"image": "p.exe"}, "target": {"type": "pipe", "name": r"\paexec"}},
+            {"source_event": 20, "process": {"image": "w.exe"},
+             "attrs": {"Operation": "Created", "Name": "N", "Type": "Command Line", "Consumer": "C",
+                       "Destination": "cmd", "User": "U"}},
+        ])
+        self.assertEqual((rows[0]["file"], rows[0]["loaded"]), (r"C:\s\x.lnk", r"C:\s\x.lnk"))
+        self.assertEqual(rows[1]["pipe"], r"\paexec")
+        self.assertEqual((rows[2]["wmi_operation"], rows[2]["wmi_consumer"], rows[2]["wmi_destination"]),
+                         ("Created", "C", "cmd"))
+
     def test_stored_query_only_lsass_rows_are_rejudged_and_migrated(self):
         import tempfile
         from pathlib import Path

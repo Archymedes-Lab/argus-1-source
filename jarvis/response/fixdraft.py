@@ -158,15 +158,19 @@ def generate(store, pid, repo=None):
         if err:
             raise ValueError(f"Ollama unavailable: {err}")
     except ValueError as exc:
+        # Bind the message before the closure: an except target is unbound
+        # once the clause ends, so a closure must not capture `exc` itself.
+        error = str(exc)
+
         def failed(item):
             item["status"] = "draft_failed"
             item["generation_state"] = "failed"
-            item["generation_error"] = str(exc)[:1000]
+            item["generation_error"] = error[:1000]
             item["directive_raw"] = redact(raw or "")[:MAX_TOOL_OUTPUT]
             item["draft_finished_at"] = int(time.time())
-            selffix._history(item, "draft_failed", "ollama", str(exc))
+            selffix._history(item, "draft_failed", "ollama", error)
         _save(store, pid, failed)
-        return False, str(exc)
+        return False, error
 
     def directed(item):
         item["directive"] = directive

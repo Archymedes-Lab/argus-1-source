@@ -41,8 +41,8 @@ BLURB = {
 ORDER = (YOU_DO, YOU_CONFIRM, JARVIS)
 
 # Posture-style categories whose finding already carries its fix in `where`.
-_SETTING_CATEGORIES = {"malware defense", "platform integrity", "data at rest",
-                       "account & access", "attack surface", "licensing"}
+_SETTING_CATEGORIES = {"malware defense", "platform integrity", "memory defense",
+                       "data at rest", "account & access", "attack surface", "licensing"}
 
 # Monitoring limits and upkeep: JARVIS keeps checking, restarts what it
 # supervises, and retries refreshes. Nothing here is a task for you.

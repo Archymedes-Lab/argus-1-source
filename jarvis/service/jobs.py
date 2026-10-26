@@ -19,23 +19,29 @@ from jarvis.collectors.host import (
     containers,
     controlwatch,
     dotnet_posture,
+    firmwareaudit,
     geo,
     inputwatch,
+    patches,
     pixel,
     posture,
+    privacyseal,
     spyware,
+    storage,
     toolchain,
+    wslguard,
 )
 from jarvis.collectors.host import intrusion as intrusion_mod
-from jarvis.collectors.identity import bruteforce, impersonation, secrets
-from jarvis.collectors.network import firewall, internetwatch, netwatch, sniffing, webshell
+from jarvis.collectors.identity import bruteforce, impersonation, logins, secrets
+from jarvis.collectors.network import firewall, internetwatch, netflow, netwatch, sniffing, webshell
 from jarvis.collectors.persistence import asep as asep_mod
-from jarvis.collectors.persistence import backdoor, control, implant, startup
+from jarvis.collectors.persistence import backdoor, control, implant, pkgverify, startup
 from jarvis.collectors.process import evasion as evasion_mod
 from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
 from jarvis.collectors.telemetry import (
     auditd,
     evidence,
+    history_verify,
     mirror,
     native,
     reconcile,
@@ -49,7 +55,7 @@ from jarvis.core import mlworker as mlworker_mod
 from jarvis.core.eventlog import LogError
 from jarvis.core.finding import LOCAL_HOST
 from jarvis.core.store import Store
-from jarvis.intel import feeds, gaps, hunt, worldwatch
+from jarvis.intel import distrovuln, feeds, gaps, hunt, worldwatch
 from jarvis.intel import research as intel
 from jarvis.lab import audit as arena_audit
 from jarvis.platform import host
@@ -57,7 +63,7 @@ from jarvis.platform import openvino as openvino_mod
 from jarvis.response import alert, llm, memory_advice
 from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting.cadence import run as report_due
-from jarvis.service import attackmap, connectivity, selfcheck, supervisors
+from jarvis.service import attackmap, connectivity, heartbeat, selfcheck, supervisors, verifyjob
 from jarvis.service import coverage as coverage_mod
 from jarvis.service.schedule import JOBS
 
@@ -162,7 +168,7 @@ def _watchdogs(hosts, db_path):
     # Both halves of the supervision loop: the systemd timer that restarts
     # this daemon, and the Windows task that reports it missing when WSL
     # itself is down.
-    out = []
+    out = alert.channel_findings()       # critical while nothing can page the owner
     if host.has_windows():
         # A machine with no Windows host has no Windows tasks to be watched by.
         out += supervisors.audit_health_monitor()
@@ -175,6 +181,16 @@ def _watchdogs(hosts, db_path):
         return out
     active, enabled_state = selfcheck.timer_state()
     if not active:
+        watchdog_s, restart = selfcheck.systemd_supervision()
+        if watchdog_s and restart == "always":
+            # The server edition's unit: systemd itself is the out-of-process
+            # supervisor (ARGUS-SERVER.md W12, measured in the 2026-10-25 lab run).
+            return out + [{
+                "category": "daemon", "severity": "ok", "host": LOCAL_HOST,
+                "title": "systemd supervises this daemon",
+                "detail": f"{selfcheck.UNIT} has a {watchdog_s} s watchdog and Restart=always: "
+                          f"a wedged or dead daemon is killed and restarted from outside it",
+                "where": selfcheck.UNIT}]
         return out + [{
             "category": "daemon", "severity": "high", "host": LOCAL_HOST,
             "title": "the out-of-daemon watchdog is not installed",
@@ -257,12 +273,18 @@ def _feeds(hosts, db_path):
         results.append(feeds.refresh_attack(store))
         results.append(feeds.refresh_tranco(store))
         out = []
+        # One finding per cause, naming the feeds it hit: an offline server
+        # is one problem, not seventeen (ARGUS-SERVER.md W12, 2026-10-25).
+        by_error = {}
         for r in results:
             if r.get("error"):
-                out.append({"category": "feed", "severity": "medium",
-                            "host": LOCAL_HOST,
-                            "title": f"{r['name']} feed failed",
-                            "detail": r["error"], "where": ""})
+                by_error.setdefault(r["error"], []).append(r["name"])
+        for error, names in sorted(by_error.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            title = (f"{names[0]} feed failed" if len(names) == 1
+                     else f"{len(names)} threat feeds failed")
+            out.append({"category": "feed", "severity": "medium", "host": LOCAL_HOST,
+                        "title": title, "detail": f"{error} — {', '.join(sorted(names))}",
+                        "where": ""})
         kept = sum(r.get("kept", 0) for r in results if not r.get("error"))
         if kept:
             out.append({"category": "feed", "severity": "low", "host": LOCAL_HOST,
@@ -286,6 +308,12 @@ def _feeds(hosts, db_path):
 
 
 def _intel(hosts, db_path):
+    if not intel.load_key():
+        return [{"category": "intel", "severity": "low", "host": LOCAL_HOST,
+                 "title": "threat-intel search is not set up",
+                 "detail": "optional: `jarvis intel --set-key <exa-key>` adds research "
+                           "from security publishers; the free bulk feeds run without it",
+                 "where": ""}]
     with _store(db_path) as store:
         try:
             options = intel.daemon_options(store)
@@ -331,6 +359,14 @@ def _with_store(audit, **kwargs):
     def run(hosts, db_path):
         with _store(db_path) as store:
             return audit(store, hosts=hosts, **kwargs)
+    return run
+
+
+def _store_only(audit):
+    """A job whose collector takes only the store."""
+    def run(hosts, db_path):
+        with _store(db_path) as store:
+            return audit(store)
     return run
 
 
@@ -396,7 +432,17 @@ RUNNERS = {
     "internet": _with_store(internetwatch.audit),
     "controls": _with_store(controlwatch.audit),
     "audio": _with_store(audiowatch.audit),
+    "privacy": _with_store(privacyseal.audit),
+    "wsl": _with_store(wslguard.audit),
+    "storage": _with_store(storage.audit),
     "preos": _with_store(bootintegrity.audit),
+    "fwaudit": _with_store(firmwareaudit.audit),
+    "netflow": _with_store(netflow.audit),
+    "logins": _with_store(logins.audit),
+    "pkgverify": lambda hosts, db_path: pkgverify.audit(),
+    "heartbeat": _store_only(heartbeat.run),
+    "patches": _store_only(patches.audit),
+    "distrovuln": lambda hosts, db_path: distrovuln.refresh(),
     "deep_hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, deep=True)[0],
     "hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, db_path=db_path)[0],
     "firewall": _hosts_only(firewall.audit),
@@ -437,6 +483,8 @@ RUNNERS = {
     "sysmon": _with_store(sysmon.audit, incremental=True),
     "native": _with_store(native.audit),
     "rust_mirror": _with_store(mirror.audit),
+    "history_verify": _with_store(history_verify.verify_history),
+    "verify": _with_store(verifyjob.audit),
     "evidence": _with_store(evidence.audit),
     "canary": _canary,
     "arena": lambda hosts, db_path: arena_audit.audit(hosts=hosts),

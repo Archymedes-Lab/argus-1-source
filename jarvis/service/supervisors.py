@@ -17,8 +17,10 @@ its state file. Each side is the only thing positioned to notice the other's
 failure.
 """
 
+import calendar
 import json
 import os
+import re
 import time
 
 from jarvis.platform import host
@@ -66,6 +68,33 @@ def read_state(path=STATE):
         return data if isinstance(data, dict) else None
     except (OSError, ValueError):
         return None
+
+
+_PAUSED = re.compile(r"^mail\.json\.paused-(\d{8}T\d{6}Z)\.bak$")
+
+
+PAUSE_GRACE_DAYS = 7
+
+
+def pause_age_days(stamp, now):
+    """Whole days since a pause stamp like 20260929T131238Z, or None."""
+    try:
+        when = calendar.timegm(time.strptime(stamp, "%Y%m%dT%H%M%SZ"))
+    except (ValueError, OverflowError):
+        return None
+    return max(0, int(now - when) // 86400)
+
+
+def mail_paused_since(folder):
+    """The stamp of a deliberate mail pause, or "" when mail.json is in place."""
+    try:
+        if os.path.exists(os.path.join(folder, "mail.json")):
+            return ""
+        stamps = sorted(m.group(1) for name in os.listdir(folder)
+                        if (m := _PAUSED.match(name)))
+    except OSError:
+        return ""
+    return stamps[-1] if stamps else ""
 
 
 def audit_health_monitor(path=None, now=None):
@@ -119,11 +148,28 @@ def audit_health_monitor(path=None, now=None):
             "%s (as of %dm ago)" % (state.get("reason") or "no reason recorded",
                                     age // 60), path))
     for field, label in (("mailError", "email"), ("toastError", "toast")):
-        if state.get(field):
+        if not state.get(field):
+            continue
+        paused = mail_paused_since(os.path.dirname(path)) if field == "mailError" else ""
+        if paused:
+            # mail.json was deliberately set aside (renamed with a stamp), so the
+            # send fails on a missing file by design: a pause, not a fault. A
+            # pause is an owner decision, so it reads low at first; one left in
+            # place for longer than PAUSE_GRACE is a notification gap again.
+            days = pause_age_days(paused, now)
+            long = days is None or days > PAUSE_GRACE_DAYS
             out.append(_finding(
-                "medium", "the Windows monitor's %s path is failing" % label,
-                "%s. Outage notification would not reach you by %s."
-                % (state[field], label), path))
+                "medium" if long else "low",
+                "outage email has been paused for %d days" % days if long and days is not None
+                else "outage email is paused",
+                "mail.json was paused on %s and no outage email can be sent until "
+                "it is restored; the monitor still checks and toasts. Restore the "
+                "file to resume." % paused, path))
+            continue
+        out.append(_finding(
+            "medium", "the Windows monitor's %s path is failing" % label,
+            "%s. Outage notification would not reach you by %s."
+            % (state[field], label), path))
     if not out:
         out.append(_finding(
             "ok", "the independent Windows monitor is checking on JARVIS",

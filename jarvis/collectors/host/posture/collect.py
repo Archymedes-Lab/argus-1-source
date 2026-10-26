@@ -64,8 +64,8 @@ def elevated_data(timeout=300):
         "'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',"
         "'-File','" + script_win + "'; exit $p.ExitCode")
     try:
-        subprocess.run([collect_windows._PS, "-NoProfile", "-NonInteractive",
-                        "-Command", launcher],
+        subprocess.run([*collect_windows.interop_launcher(), collect_windows._PS,
+                        "-NoProfile", "-NonInteractive", "-Command", launcher],
                        capture_output=True, timeout=timeout,
                        cwd=host.subprocess_cwd(), **host.spawn_options())
     except subprocess.TimeoutExpired:

@@ -3,7 +3,6 @@
 import unittest
 
 from jarvis.core import temporal
-from jarvis.core.execution import presence as presence_mod
 from jarvis.core.execution import protected
 from jarvis.core.execution.presence import ProcessPresence, reconcile
 from jarvis.lab import visibility_evasion as ve

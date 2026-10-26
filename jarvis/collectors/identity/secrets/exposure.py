@@ -46,7 +46,7 @@ def _world_readable(path):
 # Two git subprocesses per finding is fine for ten findings and unusable for a
 # few hundred — the first full run had not finished after ten minutes. The
 # remote lookup is per repository, not per file, so it is cached.
-_repo_cache = {}
+_repo_cache: dict = {}
 
 
 def _repo_of(directory):

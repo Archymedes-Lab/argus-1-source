@@ -14,6 +14,8 @@ Tiers (Phase 20):
 A pressured host pauses Tier 1/2 maintenance; an idle host on AC resumes it.
 """
 
+from jarvis.core import mechanisms
+
 TIER_0 = ("native telemetry", "critical detection", "event persistence",
           "firewall", "response")
 TIER_1 = ("local model narration", "threat-intel refresh")
@@ -25,11 +27,9 @@ NONCRITICAL = TIER_1 + TIER_2
 # Scheduler job names the governor may defer under pressure. Tier 0 jobs
 # (scan, bridge, native, firewall-adjacent coverage) are never in this set:
 # protection, ingestion and freshness supervision always run.
-GOVERNED_JOBS = frozenset({
-    "intel", "feeds", "secrets", "memscan", "spy", "posture", "toolchain",
-    "webshell", "hunt", "gaps", "attackmap", "arena", "model", "geo", "world",
-    "pixel", "intrusion", "rust_mirror",
-})
+# Declared per collector in core/mechanisms.py (conformance forbids tier 0
+# and fast-lane collectors from being governed).
+GOVERNED_JOBS = frozenset(mechanisms.names(governed=True))
 
 CPU_PRESSURE_PCT = 75.0
 QUEUE_PRESSURE = 50

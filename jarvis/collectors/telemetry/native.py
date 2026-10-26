@@ -10,6 +10,7 @@ limits, so they are findings, not log lines.
 import json
 import time
 
+from jarvis.collectors.telemetry.history_verify import VERIFY_META, VERIFY_OVERDUE
 from jarvis.core import collection, telemetry
 from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
 from jarvis.core.finding import win_finding as _finding
@@ -23,8 +24,12 @@ INSTALL = "windows-sensor\\install.ps1 -Install (elevated PowerShell)"
 GAP_META = "native_gaps"
 GAP_KEEP = 7 * 86400
 GAP_CURRENT = 86400
-VERIFY_META = "eventlog_verified_at"
-VERIFY_EVERY = 86400
+# The daily whole-chain verification is its own job (history_verify, bulk
+# lane, 300 s budget; see history_verify.py). It used to run inside this 45 s
+# fast-lane collector: at 1.5 GiB of history it takes 75 s here, so the worker
+# was killed every run, the completion stamp was never written, and the next
+# run tried again -- native read "unavailable" for hours once a day
+# (2026-10-21, 2026-10-22).
 
 CHANNEL_FIX = {
     "Microsoft-Windows-TaskScheduler/Operational":
@@ -270,17 +275,16 @@ def _health(health):
 
 
 def _verify(store, log):
-    """Re-verify the whole chain daily; history damage is the loudest finding here."""
+    """Visibility only: the ingestion run never verifies the chain itself
+    (see history_verify); it reports when verification is overdue."""
     last = float(store.get_meta(VERIFY_META, 0) or 0)
-    if time.time() - last < VERIFY_EVERY:
-        return []
-    result = log.verify()
-    store.set_meta(VERIFY_META, time.time())
-    store.commit()
-    if result["ok"]:
+    age = time.time() - last
+    if last and age < VERIFY_OVERDUE:
         return []
     return [_finding(
-        "tampering", "critical", "Recorded event history does not verify",
-        "; ".join(result["problems"][:5]) + ". Segments were changed, removed or "
-        "reordered outside retention. Preserve the event log directory before "
-        "anything else writes to it.", str(log.root))]
+        "visibility", "medium", "Recorded event history has not been verified recently",
+        (f"The last whole-chain verification was {age / 3600:.0f} h ago" if last
+         else "The chain has never been verified")
+        + "; the history_verify job runs it daily with its own time budget. "
+        "Until it completes, tampering with sealed segments would not be noticed.",
+        str(log.root))]

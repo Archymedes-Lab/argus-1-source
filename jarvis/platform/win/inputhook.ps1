@@ -891,7 +891,12 @@ $timer.Add_Tick({
     $w  = [JarvisInputHook]::TakeWindowCounters()
     $desk = (Get-Process explorer -EA SilentlyContinue | Select-Object -First 1).SessionId
     if ($null -eq $desk) { $desk = -1 }
-    Add-Content -Path $OutFile -Value ("{""ts"":$ts,""kind"":""heartbeat"",""pid"":$PID,""session"":$ownSession,""desktop"":$desk,""counters"":$c,""window"":$w}")
+    # The sound listener is set up further down; until then, or if its C# did
+    # not compile, the heartbeat says so rather than omitting it.
+    $snd = if ($script:soundOk) { [JarvisSound.Listener]::Counters() }
+           elseif ($null -eq $script:soundOk) { '{"state":"starting"}' }
+           else { '{"state":"unavailable: listener did not compile"}' }
+    Add-Content -Path $OutFile -Value ("{""ts"":$ts,""kind"":""heartbeat"",""pid"":$PID,""session"":$ownSession,""desktop"":$desk,""counters"":$c,""window"":$w,""sound"":$snd}")
 })
 $timer.Start()
 
@@ -1071,6 +1076,753 @@ if ($audioOk) {
     $audioTimer.Interval = 1000
     $audioTimer.Add_Tick($sampleAudio)
     $audioTimer.Start()
+}
+
+# --- brightness state sampler --------------------------------------------------
+# The keyboard hook sees no brightness key at all on most laptops: Fn+brightness
+# goes through ACPI/WMI straight to the display driver and never produces a
+# virtual key. Windows itself moves brightness (adaptive brightness, battery
+# dimming, idle dimming), and any process can set it through WMI with no input
+# event. So the level is sampled, like the volume, and every change is logged
+# with how long ago a control key was seen and how long the whole machine had
+# been idle (GetLastInputInfo: keyboard and mouse, system-wide).
+#
+# The WMI read takes tens of milliseconds, which is too long for the thread that
+# services the low-level hook, so it runs on its own runspace. It shares the
+# hook class's statics and the file lock, so a brightness line can never
+# interleave with a key line mid-write.
+$brightSrc = @'
+using System;
+using System.Runtime.InteropServices;
+public static class JarvisIdle {
+  [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+  [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+  // Seconds since the last keyboard or mouse input anywhere in this session; -1 if unknown.
+  public static long IdleSeconds() {
+    var li = new LASTINPUTINFO(); li.cbSize = (uint)Marshal.SizeOf(li);
+    if (!GetLastInputInfo(ref li)) return -1;
+    return (long)unchecked((uint)Environment.TickCount - li.dwTime) / 1000;
+  }
+}
+'@
+$brightOk = $true
+try { Add-Type -TypeDefinition $brightSrc -ErrorAction Stop } catch { $brightOk = $false }
+if ($brightOk) {
+    $brightWorker = {
+        $cim = $null
+        $last = @{}
+        $failures = 0
+        while ($true) {
+            Start-Sleep -Milliseconds 2000
+            try {
+                if ($null -eq $cim) { $cim = New-CimSession -ErrorAction Stop }
+                $rows = @(Get-CimInstance -CimSession $cim -Namespace root/WMI `
+                            -ClassName WmiMonitorBrightness -ErrorAction Stop)
+                $failures = 0
+            } catch {
+                # No provider (external monitor only, remote session) or a
+                # transient WMI fault. Give up after a run of failures: the
+                # 5-minute controls collector reports the provider as
+                # unobservable; this sampler must not keep paying for it.
+                $failures++
+                if ($cim) { try { $cim | Remove-CimSession } catch { }; $cim = $null }
+                if ($failures -ge 30) { return }
+                continue
+            }
+            foreach ($r in $rows) {
+                $id = [string]$r.InstanceName
+                $v = [int]$r.CurrentBrightness
+                if (-not $last.ContainsKey($id)) { $last[$id] = $v; continue }
+                if ($last[$id] -eq $v) { continue }
+                $gap = [JarvisInputHook]::MsSinceControlKey()
+                $keyed = if ($gap -le 1500) { 1 } else { 0 }
+                $idle = [JarvisIdle]::IdleSeconds()
+                $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+                # The panel id is a PnP string (vendor + uid), not content;
+                # trimmed to its first 24 safe characters.
+                $disp = $id -replace '[^A-Za-z0-9_]', ''
+                if ($disp.Length -gt 24) { $disp = $disp.Substring(0, 24) }
+                $json = '{"ts":' + $ts + ',"kind":"control-state","control":"brightness"' +
+                        ',"from":' + $last[$id] + ',"to":' + $v +
+                        ',"display":"' + $disp + '"' +
+                        ',"idle_s":' + $idle +
+                        ',"keyed":' + $keyed + ',"key_gap_ms":' + $gap +
+                        ',"fg":"' + ([JarvisInputHook]::Foreground() -replace '"','') + '"}'
+                [JarvisInputHook]::WriteState($json)
+                $last[$id] = $v
+            }
+        }
+    }
+    $brightRs = [powershell]::Create()
+    $null = $brightRs.AddScript($brightWorker)
+    $brightHandle = $brightRs.BeginInvoke()
+}
+
+# --- continuous sound listener ------------------------------------------------
+# The 5-minute audio collector meters output for 8 s, about 2.7% of the time, so
+# a beep heard at the desk was almost never on record. This listener reads the
+# same scalar peak meter (IAudioMeterInformation, 0..1) of every active OUTPUT
+# device every 25 ms, all the time, on its own thread. It never opens a stream,
+# never reads audio buffers and never touches a capture (microphone) device:
+# amplitude only, so tone, words and music are never observed.
+#
+# Each app's audio session is metered on its own, so a beep stays a beep while
+# another app plays music on the same device (a whole-device meter measured on
+# 2026-10-23 never went quiet while Firefox played, and caught nothing). A
+# sound episode starts when a session's peak rises from silence and ends after
+# 2 s of silence; an episode whose sound lasted 1.5 s or less is a beep. The
+# session names its owner exactly (pid, process name, start time), or is the
+# shared "system sounds" session, which also carries Beep() tones and console
+# bells, so their calling program is not named here. Sound on a device that no
+# session explains is recorded as a device-level episode with no owner.
+# Episodes are queued here and written by a UI timer through the hook's own
+# locked writer, so a sound line can never interleave with a key line. Its
+# counters ride the heartbeat, so a dead listener and a silent machine are
+# distinguishable.
+#
+# Not seen: sounds shorter than one 25 ms poll (a click); a new app's first
+# sound shorter than the 250 ms session rescan while another app is already
+# playing on that device; anything that does not pass through Windows audio
+# (BIOS/EC beeps); audio a session plays at zero volume.
+$soundSrc = @'
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+namespace JarvisSound {
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class DeviceEnumeratorClass { }
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IDeviceEnumerator {
+    [PreserveSig] int EnumAudioEndpoints(int flow, uint mask, out IDeviceCollection devices);
+    [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IDevice device);
+}
+[Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IDeviceCollection {
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int Item(uint index, out IDevice device);
+}
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IDevice {
+    [PreserveSig] int Activate(ref Guid iid, uint context, IntPtr activation, [MarshalAs(UnmanagedType.IUnknown)] out object result);
+    [PreserveSig] int OpenPropertyStore(uint access, out IntPtr store);
+    [PreserveSig] int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
+}
+[Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISessionManager2 {
+    [PreserveSig] int GetAudioSessionControl(IntPtr guid, uint flags, out IntPtr control);
+    [PreserveSig] int GetSimpleAudioVolume(IntPtr guid, uint flags, out IntPtr volume);
+    [PreserveSig] int GetSessionEnumerator(out ISessionEnumerator enumerator);
+}
+[Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISessionEnumerator {
+    [PreserveSig] int GetCount(out int count);
+    [PreserveSig] int GetSession(int index, out ISessionControl2 control);
+}
+[Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISessionControl2 {
+    [PreserveSig] int GetState(out int state);
+    [PreserveSig] int GetDisplayName(out IntPtr name);
+    [PreserveSig] int SetDisplayName(IntPtr name, IntPtr context);
+    [PreserveSig] int GetIconPath(out IntPtr path);
+    [PreserveSig] int SetIconPath(IntPtr path, IntPtr context);
+    [PreserveSig] int GetGroupingParam(out Guid group);
+    [PreserveSig] int SetGroupingParam(IntPtr group, IntPtr context);
+    [PreserveSig] int RegisterAudioSessionNotification(IntPtr events);
+    [PreserveSig] int UnregisterAudioSessionNotification(IntPtr events);
+    [PreserveSig] int GetSessionIdentifier(out IntPtr id);
+    [PreserveSig] int GetSessionInstanceIdentifier(out IntPtr id);
+    [PreserveSig] int GetProcessId(out uint pid);
+    [PreserveSig] int IsSystemSoundsSession();
+}
+[Guid("C02216F6-8C67-4B5B-9D00-D008E73E0064"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IPeakMeter {
+    [PreserveSig] int GetPeakValue(out float peak);
+}
+// One metered source: an app's audio session, or a device's own meter for
+// sound that no session on it explains (an exclusive-mode or protected stream).
+class Track {
+    public string Key; public IPeakMeter Meter; public object Com; public bool Seen;
+    public bool Active; public long StartMs, LastLoudMs, EndedMs = -1; public double Max; public int Pulses;
+    public bool WasLoud; public long StartUnixMs; public long QuietMs, IdleS;
+    public string DeviceId = "", Source = "session", App = "", ProcStart = "", Fg = "";
+    public uint Pid; public bool Known, Sys;
+    // JSON fragments: who called Beep() for this episode, and whose console it is.
+    public volatile string Caller = ""; public string ConsoleOwner = "";
+}
+class Device {
+    public string Id; public IDevice Com; public IPeakMeter Meter; public object Manager;
+    public List<Track> Sessions = new List<Track>(); public Track Unexplained;
+    public long NextSessionScan, LastSessionScan = -1;
+}
+// Who called Beep(). Measured 2026-10-23: Beep() opens \Device\Beep with read|
+// write-data access, holds it while the tone plays and closes it afterwards;
+// the tone itself is played by the Windows sound service (taskhostw, which keeps
+// its own handle open all the time) through the shared system-sounds session.
+// So at the onset of a system-sounds sound, one snapshot of the system handle
+// table names whoever has \Device\Beep open right now. Holders already present
+// in the quiet baseline, or for 10 s or more, are persistent: reported apart,
+// never as the caller. Only file handles with exactly Beep's access are opened
+// and named; a name is compared and dropped, never kept. Handles this unelevated
+// helper cannot duplicate (elevated or protected processes) are counted, not
+// guessed. The lookup runs on its own thread, at most once a second.
+static class BeepCallers {
+    [DllImport("ntdll.dll")] static extern int NtQuerySystemInformation(int infoClass, IntPtr buffer, int length, out int needed);
+    [DllImport("ntdll.dll")] static extern int NtQueryObject(IntPtr handle, int infoClass, IntPtr buffer, int length, out int needed);
+    [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process, int infoClass, ref BasicInformation info, int length, out int needed);
+    [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")] static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr sourceHandle, IntPtr targetProcess, out IntPtr target, uint access, bool inherit, uint options);
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+    [StructLayout(LayoutKind.Sequential)] struct HandleEntry {
+        public IntPtr Object; public IntPtr UniqueProcessId; public IntPtr HandleValue; public uint GrantedAccess;
+        public ushort CreatorBackTraceIndex; public ushort ObjectTypeIndex; public uint HandleAttributes; public uint Reserved;
+    }
+    [StructLayout(LayoutKind.Sequential)] struct BasicInformation {
+        public IntPtr ExitStatus; public IntPtr PebBaseAddress; public IntPtr AffinityMask; public IntPtr BasePriority;
+        public IntPtr UniqueProcessId; public IntPtr InheritedFromUniqueProcessId;
+    }
+    const int ExtendedHandleInformation = 64, ObjectNameInformation = 1, ProcessBasicInformation = 0;
+    const int MaxBufferBytes = 64 << 20, MinGapMs = 1000, PersistAfterMs = 10000, WedgedMs = 5000, MaxHolders = 4;
+    const uint BeepAccess = 0x3, DupHandle = 0x40, QueryLimited = 0x1000, SameAccess = 2;
+    const int StatusInfoLengthMismatch = unchecked((int)0xC0000004);
+    const string BeepDevice = @"\Device\Beep";
+    static readonly AutoResetEvent Wake = new AutoResetEvent(false);
+    static readonly Stopwatch Clock = Stopwatch.StartNew();
+    static volatile Track Next;
+    static HashSet<string> NotBeep = new HashSet<string>();
+    static HashSet<string> Blocked = new HashSet<string>();
+    static bool Baselined;
+    static Dictionary<string, long> Holders = new Dictionary<string, long>();
+    static HashSet<string> Persistent = new HashSet<string>();
+    static long Lookups, Found, Uninspectable, Skipped, LastMs = -100000, RunningSinceMs = -1, LastLookupMs;
+    static int BufferBytes = 1 << 23;
+    static volatile string PersistentList = "";
+    static volatile string State = "starting";
+
+    public static void Start() {
+        var worker = new Thread(Run);
+        worker.IsBackground = true;
+        worker.Name = "jarvis-beep-callers";
+        worker.Start();
+    }
+
+    public static string Counters() {
+        long since = Interlocked.Read(ref RunningSinceMs);
+        string state = since >= 0 && Clock.ElapsedMilliseconds - since > WedgedMs ? "wedged" : State;
+        return ",\"beep_state\":\"" + Listener.Esc(state) + "\",\"beep_lookups\":" + Interlocked.Read(ref Lookups) +
+               ",\"beep_callers\":" + Interlocked.Read(ref Found) +
+               ",\"beep_uninspectable\":" + Interlocked.Read(ref Uninspectable) +
+               ",\"beep_skipped\":" + Interlocked.Read(ref Skipped) +
+               ",\"beep_lookup_ms\":" + Interlocked.Read(ref LastLookupMs) +
+               ",\"beep_holders\":\"" + Listener.Esc(PersistentList) + "\"";
+    }
+
+    // Ask who is beeping for this sound. While a lookup runs the newest request
+    // waits; closer than a second to the last lookup it is skipped, and says so.
+    public static void Request(Track t) {
+        if (Clock.ElapsedMilliseconds - Interlocked.Read(ref LastMs) < MinGapMs) {
+            t.Caller = "\"caller\":\"skipped\""; Interlocked.Increment(ref Skipped); return;
+        }
+        t.Caller = "\"caller\":\"pending\"";
+        Next = t;
+        Wake.Set();
+    }
+
+    static void Run() {
+        try {
+            Lookup(null);       // the quiet baseline: whoever holds the device now holds it all the time
+            State = "running";
+            while (true) {
+                Wake.WaitOne();
+                Track t = Next;
+                Next = null;
+                if (t == null) continue;
+                Interlocked.Exchange(ref LastMs, Clock.ElapsedMilliseconds);
+                t.Caller = Lookup(t);
+            }
+        } catch (Exception error) { State = "stopped: " + error.GetType().Name; }
+    }
+
+    static string Lookup(Track t) {
+        long now = Clock.ElapsedMilliseconds;
+        Interlocked.Exchange(ref RunningSinceMs, now);
+        Interlocked.Increment(ref Lookups);
+        try { return Scan(t, now); }
+        finally {
+            Interlocked.Exchange(ref LastLookupMs, Clock.ElapsedMilliseconds - now);
+            Interlocked.Exchange(ref RunningSinceMs, -1);
+        }
+    }
+
+    static string Scan(Track t, long now) {
+        IntPtr buffer;
+        while (true) {
+            buffer = Marshal.AllocHGlobal(BufferBytes);
+            int needed;
+            int status = NtQuerySystemInformation(ExtendedHandleInformation, buffer, BufferBytes, out needed);
+            if (status == 0) break;
+            Marshal.FreeHGlobal(buffer);
+            if (status != StatusInfoLengthMismatch || BufferBytes >= MaxBufferBytes) return "\"caller\":\"lookup failed\"";
+            BufferBytes *= 2;
+        }
+        var holders = new List<string>();
+        var notBeep = new HashSet<string>();
+        var blockedNow = new HashSet<string>();
+        int blocked = 0, blockedNew = 0;
+        IntPtr self = GetCurrentProcess();
+        try {
+            long count = Marshal.ReadIntPtr(buffer).ToInt64();
+            int size = Marshal.SizeOf(typeof(HandleEntry));
+            long fits = ((long)BufferBytes - 2 * IntPtr.Size) / size;
+            if (count > fits) count = fits;
+            // Read only the access mask of each of the ~140k entries; decoding
+            // every entry costs over 100 ms, and almost none have Beep's access.
+            int accessAt = (int)Marshal.OffsetOf(typeof(HandleEntry), "GrantedAccess");
+            long first = buffer.ToInt64() + 2 * IntPtr.Size;
+            for (long i = 0; i < count; i++) {
+                if ((uint)Marshal.ReadInt32(new IntPtr(first + i * size + accessAt)) != BeepAccess) continue;
+                var entry = (HandleEntry)Marshal.PtrToStructure(new IntPtr(first + i * size), typeof(HandleEntry));
+                uint pid = (uint)entry.UniqueProcessId.ToInt64();
+                string key = pid + ":" + entry.HandleValue.ToInt64() + ":" + entry.Object.ToInt64();
+                if (NotBeep.Contains(key)) { notBeep.Add(key); continue; }
+                // A handle this helper cannot open stays unopenable: count it,
+                // and count it as new when it was not there last time, which is
+                // what an elevated caller's fresh \Device\Beep handle looks like.
+                if (Blocked.Contains(key)) { blockedNow.Add(key); blocked++; continue; }
+                IntPtr process = OpenProcess(DupHandle, false, pid);
+                IntPtr copy = IntPtr.Zero;
+                bool copied = process != IntPtr.Zero &&
+                    DuplicateHandle(process, entry.HandleValue, self, out copy, 0, false, SameAccess);
+                if (process != IntPtr.Zero) CloseHandle(process);
+                if (!copied) {
+                    blockedNow.Add(key); blocked++;
+                    if (Baselined) blockedNew++;
+                    continue;
+                }
+                string name = ObjectName(copy);
+                CloseHandle(copy);
+                if (name == BeepDevice) holders.Add(key); else notBeep.Add(key);
+            }
+        } finally { Marshal.FreeHGlobal(buffer); }
+        NotBeep = notBeep;      // only handles that still exist stay cached
+        Blocked = blockedNow;
+        Baselined = true;
+
+        var current = new Dictionary<string, long>();
+        for (int i = 0; i < holders.Count; i++) {
+            long first;
+            current[holders[i]] = Holders.TryGetValue(holders[i], out first) ? first : now;
+        }
+        Holders = current;
+        var kept = new HashSet<string>();
+        for (int i = 0; i < holders.Count; i++) {
+            long first = current[holders[i]];
+            if (t == null || Persistent.Contains(holders[i]) || now - first >= PersistAfterMs) kept.Add(holders[i]);
+        }
+        Persistent = kept;
+        var listed = new StringBuilder();
+        int shown = 0;
+        for (int i = 0; i < holders.Count && shown < MaxHolders; i++) {
+            if (!kept.Contains(holders[i])) continue;
+            uint holderPid = PidOf(holders[i]);
+            listed.Append(shown++ > 0 ? " " : "").Append(NameOf(holderPid)).Append(':').Append(holderPid);
+        }
+        PersistentList = listed.ToString();
+        if (t == null) return "";
+        if (blockedNew > 0) Interlocked.Add(ref Uninspectable, blockedNew);
+        string counts = ",\"caller_blocked\":" + blocked + ",\"caller_blocked_new\":" + blockedNew;
+        for (int i = 0; i < holders.Count; i++) {
+            if (kept.Contains(holders[i])) continue;
+            uint callerPid = PidOf(holders[i]);
+            Interlocked.Increment(ref Found);
+            return "\"caller\":\"found\",\"caller_pid\":" + callerPid + ProcessFields(callerPid, "caller") + counts;
+        }
+        // No Beep() caller this helper can see. With no new unopenable handle
+        // either, nobody called Beep(): a Windows event sound or PlaySound.
+        return "\"caller\":\"" + (blockedNew > 0 ? "none visible" : "none") + "\"" + counts;
+    }
+
+    static uint PidOf(string key) { return UInt32.Parse(key.Substring(0, key.IndexOf(':'))); }
+
+    static string NameOf(uint pid) {
+        try { using (Process process = Process.GetProcessById((int)pid)) return process.ProcessName; }
+        catch (Exception) { return "?"; }
+    }
+
+    static string ObjectName(IntPtr handle) {
+        IntPtr buffer = Marshal.AllocHGlobal(1024);
+        try {
+            int needed;
+            if (NtQueryObject(handle, ObjectNameInformation, buffer, 1024, out needed) != 0) return "";
+            int length = Marshal.ReadInt16(buffer) & 0xFFFF;          // UNICODE_STRING.Length, bytes
+            IntPtr text = Marshal.ReadIntPtr(buffer, IntPtr.Size);
+            if (length == 0 || text == IntPtr.Zero) return "";
+            return Marshal.PtrToStringUni(text, length / 2);
+        } finally { Marshal.FreeHGlobal(buffer); }
+    }
+
+    // ",\"<prefix>_app\":...,\"<prefix>_start\":..." for a pid, empty strings if it is gone.
+    public static string ProcessFields(uint pid, string prefix) {
+        string app = "", start = "";
+        try {
+            using (Process process = Process.GetProcessById((int)pid)) {
+                app = process.ProcessName;
+                try { start = process.StartTime.ToUniversalTime().ToString("o"); } catch (Exception) { }
+            }
+        } catch (Exception) { }
+        return ",\"" + prefix + "_app\":\"" + Listener.Esc(app) + "\",\"" + prefix + "_start\":\"" + Listener.Esc(start) + "\"";
+    }
+
+    // The process that created a console host: the program whose bell it plays.
+    // Its start must precede the host's, so a reused pid is never blamed.
+    public static string ConsoleOwner(uint hostPid) {
+        IntPtr process = OpenProcess(QueryLimited, false, hostPid);
+        if (process == IntPtr.Zero) return "";
+        try {
+            var info = new BasicInformation();
+            int needed;
+            if (NtQueryInformationProcess(process, ProcessBasicInformation, ref info, Marshal.SizeOf(typeof(BasicInformation)), out needed) != 0)
+                return "";
+            uint parent = (uint)info.InheritedFromUniqueProcessId.ToInt64();
+            if (parent == 0) return "";
+            using (Process host = Process.GetProcessById((int)hostPid))
+            using (Process owner = Process.GetProcessById((int)parent)) {
+                if (owner.StartTime > host.StartTime) return "";
+                return ",\"console_pid\":" + parent + ProcessFields(parent, "console");
+            }
+        } catch (Exception) { return ""; }
+        finally { CloseHandle(process); }
+    }
+}
+public static class Listener {
+    const int StepMs = 25, QuietEndMs = 2000, MaxBeepMs = 1500, EnumEveryMs = 10000, SessionScanMs = 250;
+    const int MaxEndpoints = 16, MaxSessions = 32, LinesPerMinute = 30, QueueCap = 256;
+    const long OpenSplitMs = 600000;
+    const double OnPeak = 0.01;
+    static readonly ConcurrentQueue<string> Lines = new ConcurrentQueue<string>();
+    static long Samples, Episodes, Beeps, Dropped, Errors, Enumerations, LastSample;
+    static int Endpoints, SessionCount, Pending, MinuteLines;
+    static long MinuteStart;
+    static volatile string State = "starting";
+
+    [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+
+    public static void Start() {
+        var worker = new Thread(Run);
+        worker.IsBackground = true;
+        worker.Name = "jarvis-sound-listener";
+        worker.SetApartmentState(ApartmentState.MTA);
+        worker.Start();
+        BeepCallers.Start();
+    }
+
+    // One queued line, or null when none is waiting.
+    public static string Take() {
+        string line;
+        if (!Lines.TryDequeue(out line)) return null;
+        Interlocked.Decrement(ref Pending);
+        return line;
+    }
+
+    public static string Counters() {
+        return "{\"state\":\"" + Esc(State) + "\",\"samples\":" + Interlocked.Read(ref Samples) +
+               ",\"endpoints\":" + Endpoints + ",\"sessions\":" + SessionCount +
+               ",\"episodes\":" + Interlocked.Read(ref Episodes) +
+               ",\"beeps\":" + Interlocked.Read(ref Beeps) + ",\"dropped\":" + Interlocked.Read(ref Dropped) +
+               ",\"errors\":" + Interlocked.Read(ref Errors) +
+               ",\"enumerations\":" + Interlocked.Read(ref Enumerations) +
+               ",\"last_sample\":" + Interlocked.Read(ref LastSample) + BeepCallers.Counters() + "}";
+    }
+
+    static void Run() {
+        try { Loop(); }
+        catch (Exception error) { State = "stopped: " + error.GetType().Name; }
+    }
+
+    static void Release(object value) {
+        if (value != null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value);
+    }
+
+    static long UnixMs() { return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); }
+
+    static void Loop() {
+        var enumerator = (IDeviceEnumerator)new DeviceEnumeratorClass();
+        var devices = new List<Device>();
+        var clock = Stopwatch.StartNew();
+        long nextEnum = 0;
+        while (true) {
+            long now = clock.ElapsedMilliseconds;
+            if (now >= nextEnum) { devices = RefreshDevices(enumerator, devices); nextEnum = now + EnumEveryMs; }
+            bool failed = false;
+            int sessions = 0;
+            for (int d = 0; d < devices.Count; d++) {
+                Device dev = devices[d];
+                if (now >= dev.NextSessionScan) { RefreshSessions(dev, now); dev.NextSessionScan = now + SessionScanMs; }
+                bool explained = false;
+                for (int i = 0; i < dev.Sessions.Count; i++) {
+                    float peak;
+                    if (!Read(dev.Sessions[i].Meter, out peak)) { failed = true; continue; }
+                    if (peak >= OnPeak) explained = true;
+                    Step(dev.Sessions[i], peak, now);
+                }
+                sessions += dev.Sessions.Count;
+                float level;
+                if (!Read(dev.Meter, out level)) { failed = true; continue; }
+                // Sound on the device that no known session carries: either a
+                // session that started since the last scan (look now), or a
+                // stream with no session at all. Only once the session list is
+                // fresh is it counted as unexplained.
+                bool unexplained = level >= OnPeak && !explained;
+                if (unexplained && now - dev.LastSessionScan > 2 * StepMs) {
+                    dev.NextSessionScan = now; unexplained = false;
+                }
+                Step(dev.Unexplained, unexplained ? level : 0f, now);
+            }
+            SessionCount = sessions;
+            // A meter read failure usually means the device went away: look again soon.
+            if (failed && nextEnum > now + 1000) nextEnum = now + 1000;
+            Interlocked.Exchange(ref LastSample, UnixMs() / 1000);
+            State = devices.Count > 0 ? "running" : "running, no active output device";
+            Thread.Sleep(StepMs);
+        }
+    }
+
+    static bool Read(IPeakMeter meter, out float peak) {
+        int hr;
+        try { hr = meter.GetPeakValue(out peak); } catch (Exception) { hr = -1; peak = 0f; }
+        if (hr != 0 || float.IsNaN(peak) || peak < 0f || peak > 1f) {
+            Interlocked.Increment(ref Errors); peak = 0f; return false;
+        }
+        Interlocked.Increment(ref Samples);
+        return true;
+    }
+
+    static void Step(Track t, float peak, long now) {
+        bool loud = peak >= OnPeak;
+        if (!t.Active) {
+            if (!loud) return;
+            t.Active = true; t.StartMs = now; t.LastLoudMs = now; t.Max = peak; t.Pulses = 1; t.WasLoud = true;
+            t.StartUnixMs = UnixMs();
+            t.QuietMs = t.EndedMs < 0 ? -1 : now - t.EndedMs;
+            t.IdleS = IdleSeconds(); t.Fg = Foreground();
+            t.Caller = "";
+            if (t.Sys) BeepCallers.Request(t);
+        } else if (loud) {
+            if (!t.WasLoud) t.Pulses++;
+            t.WasLoud = true; t.LastLoudMs = now; if (peak > t.Max) t.Max = peak;
+            if (now - t.StartMs >= OpenSplitMs) {
+                Emit(t, true);
+                t.Active = true; t.StartMs = now; t.StartUnixMs = UnixMs(); t.Max = peak; t.Pulses = 1; t.QuietMs = 0;
+            }
+        } else {
+            t.WasLoud = false;
+            if (now - t.LastLoudMs >= QuietEndMs) { Emit(t, false); t.EndedMs = t.LastLoudMs; }
+        }
+    }
+
+    static List<Device> RefreshDevices(IDeviceEnumerator enumerator, List<Device> old) {
+        Interlocked.Increment(ref Enumerations);
+        var fresh = new List<Device>();
+        IDeviceCollection list = null;
+        try {
+            uint count;
+            if (enumerator.EnumAudioEndpoints(0, 1, out list) != 0 || list == null || list.GetCount(out count) != 0) {
+                Interlocked.Increment(ref Errors); return old;
+            }
+            if (count > MaxEndpoints) count = MaxEndpoints;
+            for (uint i = 0; i < count; i++) {
+                IDevice com = null; object meter = null; object manager = null; bool kept = false;
+                try {
+                    string id;
+                    if (list.Item(i, out com) != 0 || com == null || com.GetId(out id) != 0 || String.IsNullOrEmpty(id)) continue;
+                    Device existing = null;
+                    for (int k = 0; k < old.Count; k++) if (old[k].Id == id) existing = old[k];
+                    if (existing != null) { fresh.Add(existing); old.Remove(existing); continue; }
+                    Guid meterIid = typeof(IPeakMeter).GUID;
+                    Guid managerIid = typeof(ISessionManager2).GUID;
+                    if (com.Activate(ref meterIid, 23, IntPtr.Zero, out meter) != 0 || meter == null ||
+                        com.Activate(ref managerIid, 23, IntPtr.Zero, out manager) != 0 || manager == null) {
+                        Interlocked.Increment(ref Errors); continue;
+                    }
+                    var dev = new Device();
+                    dev.Id = id; dev.Com = com; dev.Meter = (IPeakMeter)meter; dev.Manager = manager;
+                    dev.Unexplained = new Track();
+                    dev.Unexplained.Key = "device"; dev.Unexplained.DeviceId = id; dev.Unexplained.Source = "device";
+                    fresh.Add(dev); kept = true;
+                } catch (Exception) { Interlocked.Increment(ref Errors); }
+                finally { if (!kept) { Release(manager); Release(meter); Release(com); } }
+            }
+        } finally { Release(list); }
+        // Devices that went away: close the episodes they were in, then let go.
+        for (int k = 0; k < old.Count; k++) {
+            Device gone = old[k];
+            for (int i = 0; i < gone.Sessions.Count; i++) Drop(gone.Sessions[i], true);
+            if (gone.Unexplained.Active) Emit(gone.Unexplained, true);
+            Release(gone.Manager); Release(gone.Meter); Release(gone.Com);
+        }
+        Endpoints = fresh.Count;
+        return fresh;
+    }
+
+    // A session that goes away ended its sound with it (a console host exits
+    // right after its bell); a device that goes away cut its sound off.
+    static void Drop(Track t, bool cut) {
+        if (t.Active) Emit(t, cut);
+        Release(t.Com);
+    }
+
+    // Keep one track per session for as long as the session exists, so each
+    // app's sound is measured on its own meter: a beep stays a beep even while
+    // another app plays music on the same device.
+    static void RefreshSessions(Device dev, long now) {
+        ISessionEnumerator list = null;
+        try {
+            int count;
+            if (((ISessionManager2)dev.Manager).GetSessionEnumerator(out list) != 0 || list == null ||
+                list.GetCount(out count) != 0 || count < 0) {
+                Interlocked.Increment(ref Errors); return;
+            }
+            if (count > MaxSessions) count = MaxSessions;
+            for (int k = 0; k < dev.Sessions.Count; k++) dev.Sessions[k].Seen = false;
+            for (int i = 0; i < count; i++) {
+                ISessionControl2 session = null; bool kept = false;
+                try {
+                    if (list.GetSession(i, out session) != 0 || session == null) continue;
+                    string key = InstanceKey(session);
+                    if (key.Length == 0) continue;
+                    Track existing = null;
+                    for (int k = 0; k < dev.Sessions.Count; k++) if (dev.Sessions[k].Key == key) existing = dev.Sessions[k];
+                    if (existing != null) { existing.Seen = true; continue; }
+                    var meter = session as IPeakMeter;
+                    if (meter == null) continue;
+                    var t = new Track();
+                    t.Key = key; t.Com = session; t.Meter = meter; t.Seen = true; t.DeviceId = dev.Id;
+                    Describe(t, session);
+                    dev.Sessions.Add(t); kept = true;
+                } catch (Exception) { Interlocked.Increment(ref Errors); }
+                finally { if (!kept) Release(session); }
+            }
+            for (int k = dev.Sessions.Count - 1; k >= 0; k--) {
+                if (dev.Sessions[k].Seen) continue;
+                Drop(dev.Sessions[k], false); dev.Sessions.RemoveAt(k);
+            }
+            dev.LastSessionScan = now;
+        } catch (Exception) { Interlocked.Increment(ref Errors); }
+        finally { Release(list); }
+    }
+
+    static string InstanceKey(ISessionControl2 session) {
+        IntPtr text;
+        if (session.GetSessionInstanceIdentifier(out text) != 0 || text == IntPtr.Zero) return "";
+        try { return Marshal.PtrToStringUni(text) ?? ""; }
+        finally { Marshal.FreeCoTaskMem(text); }
+    }
+
+    // Who the session belongs to, fixed when it is first seen. The shared
+    // system-sounds session (which also carries Beep() tones and console
+    // bells) is reported as such, never as a process.
+    static void Describe(Track t, ISessionControl2 session) {
+        uint pid;
+        int pidHr = session.GetProcessId(out pid);
+        t.Sys = session.IsSystemSoundsSession() == 0;
+        t.Pid = pidHr == 0 ? pid : 0;
+        t.App = t.Sys ? "system sounds" : "";
+        if (pidHr != 0 || t.Sys) return;
+        try {
+            using (Process process = Process.GetProcessById((int)pid)) {
+                t.App = process.ProcessName;
+                t.ProcStart = process.StartTime.ToUniversalTime().ToString("o");
+                t.Known = true;
+            }
+        } catch (Exception) { }
+        if (String.Equals(t.App, "conhost", StringComparison.OrdinalIgnoreCase) ||
+            String.Equals(t.App, "OpenConsole", StringComparison.OrdinalIgnoreCase))
+            t.ConsoleOwner = BeepCallers.ConsoleOwner(t.Pid);
+    }
+
+    static void Emit(Track t, bool open) {
+        t.Active = false;
+        long duration = t.LastLoudMs - t.StartMs + StepMs;
+        bool beep = !open && duration <= MaxBeepMs;
+        Interlocked.Increment(ref Episodes);
+        if (beep) Interlocked.Increment(ref Beeps);
+        long minute = Environment.TickCount / 60000;
+        if (minute != MinuteStart) { MinuteStart = minute; MinuteLines = 0; }
+        if (MinuteLines >= LinesPerMinute || Pending >= QueueCap) { Interlocked.Increment(ref Dropped); return; }
+        MinuteLines++;
+        var line = new StringBuilder(360);
+        line.Append("{\"ts\":").Append(t.StartUnixMs / 1000)
+            .Append(",\"kind\":\"sound\",\"sound\":\"").Append(beep ? "beep" : "sound")
+            .Append("\",\"source\":\"").Append(t.Source)
+            .Append("\",\"ms\":").Append(t.StartUnixMs)
+            .Append(",\"dur_ms\":").Append(duration)
+            .Append(",\"pulses\":").Append(t.Pulses)
+            .Append(",\"peak\":").Append(Math.Round(t.Max, 4).ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .Append(",\"endpoint\":\"").Append(Esc(t.DeviceId))
+            .Append("\",\"pid\":").Append(t.Pid)
+            .Append(",\"app\":\"").Append(Esc(t.App))
+            .Append("\",\"proc_start\":\"").Append(Esc(t.ProcStart))
+            .Append("\",\"known\":").Append(t.Known ? 1 : 0)
+            .Append(",\"sys\":").Append(t.Sys ? 1 : 0)
+            .Append(",\"quiet_ms\":").Append(t.QuietMs)
+            .Append(",\"idle_s\":").Append(t.IdleS)
+            .Append(",\"open\":").Append(open ? 1 : 0)
+            .Append(t.Caller.Length > 0 ? "," + t.Caller : "").Append(t.ConsoleOwner)
+            .Append(",\"fg\":\"").Append(Esc(t.Fg)).Append("\"}");
+        Lines.Enqueue(line.ToString());
+        Interlocked.Increment(ref Pending);
+    }
+
+    static long IdleSeconds() {
+        var li = new LASTINPUTINFO(); li.cbSize = (uint)Marshal.SizeOf(li);
+        if (!GetLastInputInfo(ref li)) return -1;
+        return (long)unchecked((uint)Environment.TickCount - li.dwTime) / 1000;
+    }
+
+    static string Foreground() {
+        try {
+            uint pid;
+            GetWindowThreadProcessId(GetForegroundWindow(), out pid);
+            if (pid == 0) return "";
+            using (Process process = Process.GetProcessById((int)pid)) return process.ProcessName;
+        } catch (Exception) { return ""; }
+    }
+
+    // JSON string body: printable ASCII only, quotes and backslashes dropped, capped.
+    internal static string Esc(string value) {
+        if (String.IsNullOrEmpty(value)) return "";
+        var text = new StringBuilder(value.Length);
+        for (int i = 0; i < value.Length && text.Length < 160; i++) {
+            char c = value[i];
+            if (c >= ' ' && c < (char)127 && c != '"' && c != '\\') text.Append(c);
+        }
+        return text.ToString();
+    }
+}
+}
+'@
+$script:soundOk = $true
+try { Add-Type -TypeDefinition $soundSrc -ErrorAction Stop } catch { $script:soundOk = $false }
+if ($script:soundOk) {
+    [JarvisSound.Listener]::Start()
+    $drainSound = {
+        # Bounded per tick; the listener's own budget caps what can be queued.
+        for ($i = 0; $i -lt 64; $i++) {
+            $line = [JarvisSound.Listener]::Take()
+            if ($null -eq $line) { break }
+            [JarvisInputHook]::WriteState($line)
+        }
+    }
+    $soundTimer = New-Object System.Windows.Forms.Timer
+    $soundTimer.Interval = 1000
+    $soundTimer.Add_Tick($drainSound)
+    $soundTimer.Start()
 }
 
 [System.Windows.Forms.Application]::Run()

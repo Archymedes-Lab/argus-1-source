@@ -19,7 +19,6 @@ Pure, bounded, no IO, no clocks, no model calls.
 
 from dataclasses import dataclass, field
 
-
 VIEWS = ("kernel_create", "kernel_exit", "etw_start", "etw_stop",
          "sysmon_create", "snapshot", "thread_activity", "image_activity",
          "cpu_activity", "network_activity")

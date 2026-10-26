@@ -88,6 +88,49 @@ def _active(store, kind):
 
 # ── the checks ────────────────────────────────────────────────────────────
 
+# One finding per (process, host) for listed peers, not one per peer. A
+# peer-to-peer client talks to hundreds of listed residential addresses a
+# day; on 2026-10-21 that was 232 of 251 criticals and 232 block proposals,
+# which buried every other critical (PROTECTION-REVIEW F4). The worst
+# severity and feed still decide the finding; the count and a sample of
+# addresses stay in the detail; a process with one listed peer reads as before.
+PEER_SAMPLE = 5
+# A process with a handful of listed peers keeps one finding per peer: a
+# genuine command-and-control contact is usually one or two addresses, and
+# must not be folded into a count. Only a peer-to-peer volume collapses.
+PEER_SINGLE_THRESHOLD = 5
+
+
+def collapse_peer_hits(hits):
+    groups = {}
+    for h in hits:
+        groups.setdefault((h["pname"], h["host"]), []).append(h)
+    out = []
+    for (pname, host), rows in sorted(groups.items()):
+        worst = min(rows, key=lambda h: (h["severity"] != "critical", h["ip"]))
+        if len(rows) <= PEER_SINGLE_THRESHOLD:
+            for h in rows:                      # one finding per listed peer, as before
+                out.append(_finding(
+                    "c2 match", h["severity"],
+                    f"contacted a {h['qualifier']} IP: {h['ip']}",
+                    f"{pname} \u2192 {h['ip']}:{h['port']} \u2014 {h['label']} (via {h['feed']})",
+                    h["src"], host))
+            continue
+        crit = sum(1 for h in rows if h["severity"] == "critical")
+        feeds = sorted({h["feed"] for h in rows})
+        sample = ", ".join(f"{h['ip']}:{h['port']}" for h in rows[:PEER_SAMPLE])
+        out.append(_finding(
+            "c2 match", worst["severity"],
+            f"{pname} contacted {len(rows)} listed IPs ({crit} known-attacker)",
+            f"{pname} on {host} reached {len(rows)} addresses on threat lists "
+            f"(via {', '.join(feeds)}); e.g. {sample}"
+            + (" \u2026" if len(rows) > PEER_SAMPLE else "")
+            + ". A peer-to-peer client does this by design; anything else should not. "
+              "Each address can still be blocked individually with jarvis defend.",
+            worst["src"], host))
+    return out
+
+
 def check_peers(store):
     """Do any recorded network peers match attacker infrastructure?
 
@@ -98,6 +141,7 @@ def check_peers(store):
     answer from an index.
     """
     out = []
+    peer_hits = []
 
     # Addresses: one join, served entirely from the (kind, norm) unique index.
     for r in store.db.execute(
@@ -118,11 +162,10 @@ def check_peers(store):
         label = r["fam"] or r["ctx"] or "listed in threat intelligence"
         severity = "critical" if r["confidence"] == "high" else "medium"
         qualifier = "known attacker" if severity == "critical" else "threat-intelligence"
-        out.append(_finding(
-            "c2 match", severity,
-            f"contacted a {qualifier} IP: {r['ip']}",
-            f"{r['pname'] or 'unknown process'} → {r['ip']}:{r['port']} — "
-            f"{label} (via {r['feed']})", r["src"], r["host"]))
+        peer_hits.append({"ip": r["ip"], "port": r["port"], "pname": r["pname"] or "unknown process",
+                          "label": label, "feed": r["feed"], "src": r["src"], "host": r["host"],
+                          "severity": severity, "qualifier": qualifier})
+    out.extend(collapse_peer_hits(peer_hits))
 
     # Domains: exact reverse-DNS match, then parent domains. Only the distinct
     # rdns values are walked, and each parent is a single index probe, so this

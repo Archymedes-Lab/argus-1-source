@@ -24,16 +24,14 @@ only ever ADD suspicion has to hold for every source without exception.
 """
 
 import csv
-import gzip
 import io
 import json
 import re
 import time
 import urllib.error
 import urllib.request
-import zipfile
 
-from jarvis.core import vet
+from jarvis.core import inflate, vet
 from jarvis.core.util import now
 
 UA = "jarvis-feeds/1.0 (+local host monitoring)"
@@ -50,11 +48,18 @@ def feed(name, url, interval, desc, max_bytes=64 * 1024 * 1024):
     return wrap
 
 
-def fetch(url, max_bytes, timeout=180, max_inflated=512 * 1024 * 1024):
+# Largest feed measured inflated: 76 MB (bazaar-full, 2026-10). Twice that, and
+# small enough for the server edition's 768 MB MemoryHigh to survive parsing.
+MAX_INFLATED = 160 * 1024 * 1024
+
+
+def fetch(url, max_bytes, timeout=180, max_inflated=MAX_INFLATED):
     """Download and transparently decompress. The full abuse.ch dumps ship as
     zip archives that expand roughly sevenfold, so the inflated size is capped
     separately from the download — otherwise a feed changing shape upstream
-    could exhaust memory on a machine this is supposed to be protecting."""
+    could exhaust memory on a machine this is supposed to be protecting.
+    Both layers count the bytes they produce (core/inflate.py): neither a gzip
+    bomb nor a zip header that understates its size gets past the cap."""
     req = urllib.request.Request(url, headers={
         "User-Agent": UA, "Accept": "*/*", "Accept-Encoding": "gzip"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -62,17 +67,9 @@ def fetch(url, max_bytes, timeout=180, max_inflated=512 * 1024 * 1024):
         if len(raw) > max_bytes:
             raise ValueError(f"feed exceeds {max_bytes} bytes")
         if resp.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
-            raw = gzip.decompress(raw)
+            raw = inflate.gunzip(raw, max_inflated)
     if raw[:2] == b"PK":
-        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-            names = [n for n in zf.namelist() if not n.endswith("/")]
-            if not names:
-                raise ValueError("empty zip archive")
-            info = zf.getinfo(names[0])
-            if info.file_size > max_inflated:
-                raise ValueError(
-                    f"archive inflates to {info.file_size} bytes, over cap")
-            raw = zf.read(names[0])
+        raw = inflate.zip_first_member(raw, max_inflated)
     return raw
 
 

@@ -15,6 +15,7 @@ Three categories:
 """
 
 import glob
+import hashlib
 import os
 import re
 import subprocess
@@ -25,8 +26,9 @@ except ImportError:      # native Windows: no passwd database, and no caller the
     pwd = None
 from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.core.paths import load_win_script
-from jarvis.core.util import short
+from jarvis.core.util import package_manager, short
 from jarvis.platform import broker, host
+from jarvis.platform import host as machine
 from jarvis.platform.provenance import persistence as managed_persistence
 from jarvis.platform.windows import aslist, ps_json
 
@@ -62,6 +64,7 @@ def _finding(category, severity, title, detail, where=""):
 # ---------------------------------------------------------------------------
 
 PACKAGED_UNIT_DIRS = ("/usr/lib/systemd/system/", "/lib/systemd/system/")
+UNIT_LOAD_PATH = ("/etc/systemd/system", "/usr/lib/systemd/system", "/lib/systemd/system")
 
 SHELL_RC = ["~/.bashrc", "~/.bash_profile", "~/.profile", "~/.zshrc",
             "~/.bash_login", "~/.config/autostart"]
@@ -78,7 +81,14 @@ def audit_linux():
             out.append(_finding("persistence", "medium", "user cron job",
                                 short(line, 100), "crontab -l"))
 
+    stock_cron = []
     for path in glob.glob("/etc/cron.d/*") + ["/etc/crontab"]:
+        if unchanged_package_file(path):
+            # Shipped by a package and byte-identical to what it shipped: the
+            # distribution's schedule, summarised once below. An edited or
+            # unowned file keeps one finding per entry.
+            stock_cron.append(path)
+            continue
         try:
             with open(path, errors="replace") as fh:
                 for line in fh:
@@ -89,16 +99,26 @@ def audit_linux():
                                             short(line, 100), path))
         except OSError:
             pass
+    if stock_cron:
+        out.append(_finding("persistence", "ok", "system cron files are as their packages shipped them",
+                            ", ".join(sorted(os.path.basename(p) for p in stock_cron)),
+                            "/etc/cron.d"))
 
     # -- persistence: systemd ---------------------------------------------
     units = _run(["systemctl", "list-unit-files", "--state=enabled", "--no-pager",
                   "--no-legend"])
-    for line in units.splitlines():
-        unit = line.split()[0] if line.split() else ""
-        if unit and not unit.startswith(("systemd-", "dbus", "getty", "network",
-                                         "ssh.socket", "cron")):
+    enabled = [line.split()[0] for line in units.splitlines() if line.split()]
+    enabled = [u for u in enabled if not u.startswith(("systemd-", "dbus", "getty", "network",
+                                                       "ssh.socket", "cron"))]
+    packaged = packaged_units(enabled)
+    for unit in enabled:
+        if unit not in packaged:
             out.append(_finding("persistence", "low", "enabled systemd unit", unit,
                                 "systemctl"))
+    if packaged:
+        out.append(_finding("persistence", "ok", f"{len(packaged)} enabled units come from installed packages",
+                            ", ".join(sorted(packaged)[:40]) + (" ..." if len(packaged) > 40 else ""),
+                            "systemctl"))
 
     for pattern in ("/etc/systemd/system/*.service", os.path.expanduser(
             "~/.config/systemd/user/*.service")):
@@ -114,7 +134,7 @@ def audit_linux():
                 # `systemctl enable` writes aliases like syslog.service ->
                 # rsyslog.service. The unit itself belongs to a package; a link
                 # to anywhere else stays a custom service below.
-                out.append(_finding("persistence", "low", "systemd alias to a packaged unit",
+                out.append(_finding("persistence", "ok", "systemd alias to a packaged unit",
                                     f"{os.path.basename(path)} -> {target}", path))
                 continue
             proof = _verified_unit(path)
@@ -152,10 +172,17 @@ def audit_linux():
                                 "global library preload set", body,
                                 "/etc/ld.so.preload"))
 
+    # On a plain server the backdoor audit owns SSH keys (one finding per key,
+    # with its options) and the firewall exposure audit owns listeners (weighed
+    # by declared services and the firewall). Repeating them here only doubled
+    # every finding (ARGUS-SERVER.md W2).
+    server = machine.kind() == "linux"
+
     # -- remote: SSH trust -------------------------------------------------
-    for path in glob.glob(os.path.expanduser("~/.ssh/authorized_keys")) + \
-            glob.glob("/home/*/.ssh/authorized_keys") + \
-            glob.glob("/root/.ssh/authorized_keys"):
+    key_files = [] if server else (
+        glob.glob(os.path.expanduser("~/.ssh/authorized_keys"))
+        + glob.glob("/home/*/.ssh/authorized_keys") + glob.glob("/root/.ssh/authorized_keys"))
+    for path in key_files:
         try:
             with open(path, errors="replace") as fh:
                 keys = [l for l in fh if l.strip() and not l.startswith("#")]
@@ -175,7 +202,10 @@ def audit_linux():
         local = f[4]
         if local.startswith(("0.0.0.0", "*", "[::]", ":::")):
             proc = f[6] if len(f) > 6 else ""
-            sev = "high" if REMOTE_AGENTS.search(line) else "medium"
+            agent = REMOTE_AGENTS.search(line)
+            if server and not agent:
+                continue
+            sev = "high" if agent else "medium"
             out.append(_finding("remote", sev, "listening on all interfaces",
                                 f"{local} {short(proc, 60)}", "ss -tulnp"))
 
@@ -234,12 +264,103 @@ def _sha256(path):
     return h.hexdigest()
 
 
+def packaged_units(units, run=None):
+    """The subset of `units` whose unit file a package owns. Two subprocess
+    calls however many units: one systemctl show, one dpkg -S / rpm -qf. Unknown
+    (no package manager, a failed query) owns nothing, so it never hides a unit."""
+    run = run or _run
+    manager = package_manager()
+    if not units or not manager:
+        return set()
+    # The unit file systemd would load, from its load path in order (templates
+    # included); `systemctl show` aborts the whole batch on one template name.
+    paths = {}
+    for unit in units:
+        for d in UNIT_LOAD_PATH:
+            candidate = os.path.join(d, unit)
+            if os.path.lexists(candidate):
+                real = os.path.realpath(candidate)
+                if real != os.devnull:
+                    paths[real] = unit
+                break
+    if not paths:
+        return set()
+    owned = set()
+    # Snap mounts are written by snapd, not shipped by a package: recognised by
+    # what they mount, a squashfs under /var/lib/snapd/snaps.
+    for path, unit in paths.items():
+        if unit.startswith("snap-") and unit.endswith(".mount") and _mounts_a_snap(path):
+            owned.add(path)
+    if manager == "dpkg":
+        # dpkg may have recorded the pre-usrmerge spelling (/lib for /usr/lib).
+        spellings = {}
+        for path in paths:
+            spellings[path] = path
+            if path.startswith("/usr/lib/"):
+                spellings[path[4:]] = path
+        for line in run(["dpkg", "-S", *sorted(spellings)]).splitlines():
+            if ": " in line:
+                recorded = line.split(": ", 1)[1].strip()
+                if recorded in spellings:
+                    owned.add(spellings[recorded])
+    else:
+        for path, line in zip(sorted(paths), run(["rpm", "-qf", *sorted(paths)]).splitlines()):
+            if line and "not owned" not in line:
+                owned.add(path)
+    return {paths[p] for p in paths if p in owned}
+
+
+def _mounts_a_snap(path):
+    try:
+        with open(path, errors="replace") as fh:
+            return any(line.strip().startswith("What=/var/lib/snapd/snaps/") and line.strip().endswith(".snap")
+                       for line in fh)
+    except OSError:
+        return False
+
+
+def unchanged_package_file(path, run=None):
+    """True when a package owns `path` and it is byte-identical to what the
+    package shipped (dpkg conffile md5, or an empty `rpm -Vf`). Anything not
+    proven stays False, so the caller reports the file's contents."""
+    run = run or _run
+    manager = package_manager()
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return False
+    if manager == "dpkg":
+        owner = run(["dpkg", "-S", path]).split(":", 1)[0].strip()
+        if not owner or " " in owner:
+            return False
+        conffiles = run(["dpkg-query", "-W", "-f", "${Conffiles}\n", owner])
+        for line in conffiles.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] == path:
+                return hashlib.md5(data, usedforsecurity=False).hexdigest() == parts[1]
+        return False
+    if manager == "rpm":
+        owner = run(["rpm", "-qf", path]).strip()
+        return bool(owner) and "not owned" not in owner and run(["rpm", "-V", "-f", path]).strip() == ""
+    return False
+
+
 def _unit_show(name, user=False):
     cmd = ["systemctl"] + (["--user"] if user else []) + [
         "show", name, "--no-pager", "-p", "ExecStart,User"]
     props = dict(line.split("=", 1) for line in _run(cmd).splitlines() if "=" in line)
     argv = re.search(r"argv\[\]=([^;]*)", props.get("ExecStart", ""))
     return (argv.group(1).split() if argv else []), props.get("User", "")
+
+
+def _root_only(path):
+    """Owned by root and writable by nobody else, following links."""
+    try:
+        st = os.stat(os.path.realpath(path))
+    except OSError:
+        return False
+    return st.st_uid == 0 and not st.st_mode & 0o022
 
 
 def _verified_unit(path):
@@ -273,6 +394,13 @@ def _verified_unit(path):
                                         "serve", "--port"] or argv[1:4] == ["-m", "jarvis", "serve"]
             if argv[:1] == ["/usr/bin/python3"] and runs_jarvis and user == owner:
                 return f"runs JARVIS as {owner}"
+            # The server edition: the sealed /opt/jarvis/app launcher, as the
+            # dedicated jarvis account, by a root-owned interpreter nobody else
+            # can write (the launcher drops its capabilities otherwise).
+            if (argv[1:5] == ["-I", "/opt/jarvis/app/jarvis-release.py", "serve", "--port"]
+                    and user == "jarvis" and argv and _root_only(argv[0])
+                    and _root_only("/opt/jarvis/app/jarvis-release.py")):
+                return "runs the sealed JARVIS server release as the jarvis account"
     except (OSError, KeyError, ValueError, AttributeError):
         return ""
     return ""

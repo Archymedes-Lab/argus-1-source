@@ -254,7 +254,8 @@ class ResponseValidationTests(unittest.TestCase):
 
     def test_redirect_handler_refuses_redirects(self):
         handler = jev._NoRedirect()
-        with self.assertRaises(Exception):
+        import urllib.error
+        with self.assertRaises(urllib.error.URLError):
             handler.redirect_request(None, None, 302, "Found", {},
                                      "https://attacker.example/")
 

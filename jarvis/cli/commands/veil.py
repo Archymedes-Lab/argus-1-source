@@ -4,6 +4,7 @@ import secrets
 
 from jarvis.core.veil import TOKEN_KEY
 
+
 def cmd_veil(args, store):
     if args.action == "pair":
         token = secrets.token_urlsafe(32)

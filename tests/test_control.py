@@ -133,7 +133,8 @@ class SystemdAliasTests(unittest.TestCase):
                  mock.patch.object(control, "_run", return_value=""):
                 out = {f["where"]: f for f in control.audit_linux()
                        if "systemd" in f["title"] and f["where"] in units}
-        self.assertEqual(out[units[1]]["severity"], "low")       # syslog -> packaged
+        # 2026-10-25: an alias into a packaged unit is inventory, reported ok.
+        self.assertEqual(out[units[1]]["severity"], "ok")        # syslog -> packaged
         self.assertEqual(out[units[0]]["severity"], "medium")    # evil -> elsewhere
         self.assertEqual(out[units[0]]["title"], "custom systemd service")
 

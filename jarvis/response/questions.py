@@ -158,16 +158,16 @@ def answer(store, qid, choice, now=None):
             return True, f"noted, but not acknowledged ({exc})"
         return True, "confirmed as expected — it no longer counts against your score"
 
-    # "No, that was not me." Contain it if we can, else point at the evidence.
+    # "No, that was not me." Propose containment; never run it from here. An
+    # answer arrives over the same unauthenticated local route as any other
+    # request, so it may rank a finding but it cannot authorize an action
+    # (PROTECTION-REVIEW-2026-10-21 C1). Approval is a separate, deliberate step.
     conf = alert.load_conf()
     rung, action, target = defense.decide(finding, job, conf, acknowledge.load(store))
     if action:
         eid, entry, _new = defense._propose(store, conf, finding, job, action, target)
-        ok, detail = defense.approve(store, eid)
-        if ok:
-            return True, f"{action.title.lower()}: {detail}. Undo with jarvis defend undo {eid}"
-        return True, (f"proposed {action.title.lower()} (id {eid}); it could not run now "
-                      f"({detail}). Approve later with jarvis defend approve {eid}")
+        return True, (f"proposed {action.title.lower()} (id {eid}): {entry.get('preview', '')} "
+                      f"Approve with jarvis defend approve {eid}")
     return True, (f"flagged. Inspect it with: {triage.classify(finding, job).get('command') or 'jarvis status'}")
 
 

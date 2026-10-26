@@ -208,7 +208,7 @@ class CanaryJournal:
             filelock.acquire(lock)
         except OSError:
             lock.close()
-            raise CanaryError("another writer holds the canary journal")
+            raise CanaryError("another writer holds the canary journal") from None
         try:
             recs = self._read()               # re-read under the lock
             prev = recs[-1]["hash"] if recs else GENESIS
@@ -230,6 +230,8 @@ class CanaryJournal:
         """Replay to the current view: active tokens, trips, seen callbacks."""
         tokens, retired = {}, set()
         tripped = {}            # token id -> set of reasons already recorded
+        trip_keys = set()       # (token id, reason, path): one record per distinct touch
+        last_trip = {}          # token id -> the most recent trip payload
         callbacks = {}          # token id -> list of hit metadata
         seen_hits = set()
         for rec in self._read():
@@ -242,13 +244,16 @@ class CanaryJournal:
                 retired.add(p.get("id"))
             elif rec.get("kind") == "trip":
                 tripped.setdefault(p.get("id"), set()).add(p.get("reason"))
+                trip_keys.add((p.get("id"), p.get("reason"), norm_path(p.get("path"))))
+                last_trip[p.get("id")] = p
             elif rec.get("kind") == "callback":
                 if p.get("hit_id"):
                     seen_hits.add(p["hit_id"])
                 callbacks.setdefault(p.get("id"), []).append(p)
         active = {tid: t for tid, t in tokens.items() if tid not in retired}
         return {"tokens": tokens, "active": active, "retired": retired,
-                "tripped": tripped, "callbacks": callbacks, "seen_hits": seen_hits}
+                "tripped": tripped, "trip_keys": trip_keys, "last_trip": last_trip,
+                "callbacks": callbacks, "seen_hits": seen_hits}
 
 
 # -- planting -----------------------------------------------------------------
@@ -409,3 +414,178 @@ def anchor_head(journal, *, now=None, last=None, every=21600, network=True,
     (journal.anchors / f"{digest.hex()}.json").write_bytes(body)
     (journal.anchors / f"{digest.hex()}.ots").write_bytes(proof)
     return digest.hex(), None
+
+
+# -- event-log lane: decoy paths seen in normalized file events ---------------
+
+def norm_path(path):
+    """One comparable form for a path seen from WSL or from Windows.
+
+    /mnt/c/Users/x/f and C:\\Users\\x\\f both become c:/users/x/f. Windows paths
+    compare case-insensitively; Linux paths keep their case.
+    """
+    p = str(path or "").strip()
+    if not p:
+        return ""
+    if len(p) > 6 and p.startswith("/mnt/") and p[6:7] in ("/", ""):
+        p = p[5] + ":" + p[6:]
+    p = p.replace("\\", "/")
+    if len(p) > 1 and p[1] == ":":
+        return p.lower()
+    return p
+
+
+def _basename(path):
+    return norm_path(path).rstrip("/").rsplit("/", 1)[-1]
+
+
+# Actions on the decoy's own path, and the trip reason each one means.
+_PATH_ACTIONS = {"delete": "removed", "rename": "removed", "create": "modified",
+                 "write": "modified", "stream_create": "modified",
+                 "time_change": "modified"}
+
+
+def match_file_events(events, active_tokens, *, self_images=()):
+    """Trips for normalized file events that touch a planted decoy. Pure.
+
+    A delete, rename, overwrite or stream on the decoy's own path is a touch. A
+    file created elsewhere under exactly the decoy's name is reported as a
+    probable copy (staging for exfiltration usually keeps the name). Events from
+    JARVIS's own processes (`self_images`) are ignored. Sysmon has no event for
+    an ordinary file open, so a pure read is not visible here; that needs an
+    object-access audit rule on the decoy (Windows event 4663).
+    """
+    decoys = {}
+    names = {}
+    for tid, token in active_tokens.items():
+        if token.get("kind") == "file_decoy" and token.get("path"):
+            decoys[norm_path(token["path"])] = tid
+            names.setdefault(_basename(token["path"]), []).append(tid)
+    if not decoys:
+        return []
+    skip = {norm_path(i) for i in self_images if i}
+    trips = []
+    for ev in events:
+        if not isinstance(ev, dict) or ev.get("category") != "file":
+            continue
+        target = ev.get("target") or {}
+        path = norm_path(target.get("path"))
+        if not path:
+            continue
+        image = norm_path((ev.get("process") or {}).get("image"))
+        if image and image in skip:
+            continue
+        action = ev.get("action")
+        who = (ev.get("process") or {}).get("image") or "an unattributed process"
+        base = {"seq": ev.get("seq"), "event_time": ev.get("time"),
+                "host": ev.get("host"), "image": who}
+        if path in decoys and action in _PATH_ACTIONS:
+            trips.append(dict(base, id=decoys[path], reason=_PATH_ACTIONS[action],
+                              path=target.get("path"),
+                              detail=f"{action} of the decoy by {who}"))
+        elif action == "create":
+            for tid in names.get(_basename(path), ()):
+                trips.append(dict(base, id=tid, reason="copied", path=target.get("path"),
+                                  detail=f"a file with the decoy's name was created at "
+                                         f"{target.get('path')} by {who}"))
+    return trips
+
+
+# -- coverage: is there bait beside each protected class? ---------------------
+
+def coverage_gaps(protect, active_tokens):
+    """Protected classes with no armed file decoy in any of their directories.
+
+    `protect` maps a class name to the directories its real assets live in.
+    A class with no bait is reported, so "no bait here" never reads as safe.
+    """
+    armed_dirs = set()
+    for token in active_tokens.values():
+        if token.get("kind") == "file_decoy" and token.get("path"):
+            armed_dirs.add(norm_path(token["path"]).rstrip("/").rsplit("/", 1)[0])
+    gaps = []
+    for name, dirs in sorted((protect or {}).items()):
+        wanted = {norm_path(d).rstrip("/") for d in (dirs or []) if d}
+        if wanted and not (wanted & armed_dirs):
+            gaps.append({"class": name, "dirs": sorted(dirs)})
+    return gaps
+
+
+# -- listener liveness: a callback that cannot arrive is a blind spot ---------
+
+def listener_state(inbox, heartbeat, *, now=None, max_age=900, stat=os.stat):
+    """Whether off-box callbacks can arrive. -> {"status", "detail"}.
+
+    The owner's listener refreshes `heartbeat` (any file whose modification
+    time it touches). Statuses: unconfigured, unverified, stale, live.
+    """
+    now = now or time.time()
+    if not inbox:
+        return {"status": "unconfigured", "detail": "no callback inbox is configured"}
+    if not heartbeat:
+        return {"status": "unverified",
+                "detail": "the listener has no heartbeat, so its liveness is unknown"}
+    try:
+        age = now - stat(heartbeat).st_mtime
+    except OSError:
+        return {"status": "stale", "detail": f"heartbeat {heartbeat} is missing"}
+    if age > max_age:
+        return {"status": "stale",
+                "detail": f"heartbeat last updated {int(age)} s ago (limit {max_age} s)"}
+    return {"status": "live", "detail": f"heartbeat {int(age)} s old"}
+
+
+# -- the announced layer: monitoring notice that reveals no mechanism ---------
+
+# Accurate on purpose: it claims monitoring and evidence, not that every read is
+# seen, and it names no file, token, path or mechanism.
+NOTICE = (
+    "NOTICE: Activity on this system is monitored and recorded to a "
+    "tamper-evident ledger kept off this machine. Files may be individually "
+    "marked so that copies can be traced. Unauthorised activity is preserved as "
+    "evidence and reported.")
+
+
+# -- which decoys can the event-log lane see at all? ---------------------------
+
+def file_event_rules(xml_text):
+    """Sysmon include rules for file create and delete, from a config's XML.
+
+    -> {"create": [(condition, value)], "delete": [...]}. Only `include`
+    blocks are read; an unparseable config yields no rules, which reports every
+    decoy as unseen rather than as covered.
+    """
+    import xml.etree.ElementTree as ET
+    out = {"create": [], "delete": []}
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return out
+    for tag, kind in (("FileCreate", "create"), ("FileDeleteDetected", "delete"),
+                      ("FileDelete", "delete")):
+        for block in root.iter(tag):
+            if block.get("onmatch") != "include":
+                continue
+            for rule in block:
+                if rule.tag == "TargetFilename" and rule.text:
+                    out[kind].append(((rule.get("condition") or "is").lower(),
+                                      rule.text.strip()))
+    return out
+
+
+def _rule_hit(path, condition, value):
+    p, v = path.lower(), value.replace("\\", "/").lower()
+    return {"contains": v in p, "end with": p.endswith(v),
+            "begin with": p.startswith(v), "is": p == v}.get(condition, False)
+
+
+def sysmon_visible(path, rules):
+    """{"create", "delete"}: would Sysmon on Windows log that event for `path`?
+
+    A Linux-only path is never visible to Windows Sysmon.
+    """
+    p = norm_path(path)
+    if not (len(p) > 1 and p[1] == ":"):
+        return {"create": False, "delete": False}
+    return {kind: any(_rule_hit(p, c, v) for c, v in rules.get(kind, ()))
+            for kind in ("create", "delete")}

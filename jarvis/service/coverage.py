@@ -195,8 +195,9 @@ def daemon_health():
                 f"--priority` moves it to the system manager with nice -10 and "
                 f"OOM immunity", "install.sh --priority"))
 
-    linger = _cmd(["loginctl", "show-user", os.environ.get("USER", ""),
-                   "--property=Linger"])
+    # Linger only keeps a *user* manager alive; a system unit does not need it.
+    linger = "yes" if flag == "--system" else _cmd(
+        ["loginctl", "show-user", os.environ.get("USER", ""), "--property=Linger"])
     if "yes" not in linger.lower():
         out.append(_finding(
             "daemon", "high", "linger is off — the monitor dies with your shell",
@@ -224,12 +225,33 @@ def bridge_status():
     bridge" on purpose: alert.py classifies that as an outage, so it bypasses
     the min-severity filter and the persistence gate and mails immediately.
     """
+    if not host.has_windows():
+        return []           # a Linux server has no Windows side to go blind
     if collect_windows.available():
         via = ("started directly (native Windows)" if host.native_windows()
                else f"reachable via {os.environ.get('WSL_INTEROP', '?')}")
-        return [_finding(
+        out = [_finding(
             "collectors", "ok", "Windows bridge is up", f"powershell.exe {via}",
             collect_windows._PS or "", host="win")]
+        mode = collect_windows.interop_mode()
+        if mode != "direct":
+            # Wording deliberately avoids alert.py's outage markers: the
+            # bridge works through /init, so this must not page as "down".
+            out.append(_finding(
+                "collectors", "medium" if mode == "init" else "critical",
+                "the WSL interop registration was removed from binfmt_misc",
+                "The kernel's WSLInterop entry is missing, so the kernel no "
+                "longer knows how to run a .exe by name. "
+                + ("JARVIS starts PowerShell through /init meanwhile, so "
+                   "collection continues; " if mode == "init" else
+                   "/init is not executable here, so Windows collectors "
+                   "cannot run until it is restored; ")
+                + "a privileged container running its own systemd flushes "
+                "the shared table (seen 2026-10-22). Restore with "
+                "`sudo systemctl restart systemd-binfmt` on the WSL side.",
+                collect_windows.BINFMT_DIR, host="win"))
+        out.extend(_interop_gate_findings())
+        return out
     if host.native_windows():
         # Same category and "is down" wording as below: alert.py pages on it.
         return [_finding(
@@ -249,6 +271,30 @@ def bridge_status():
         "reporting a problem. Usually a WSL interop stall rather than tampering; "
         "`wsl --shutdown` from Windows rebuilds it, and the daemon recovers on "
         "its own once it is back.",
+        "WSL interop", host="win")]
+
+
+def _interop_gate_findings():
+    """The daemon's own interop admission state (platform/interop_gate.py).
+
+    Wording avoids alert.py's outage markers on purpose: the bridge still
+    answers, JARVIS is easing off a slow relay, and Windows collectors are
+    reported as failed while it does, so nothing unobserved reads as clean."""
+    from jarvis.platform import interop_gate
+    st = interop_gate.GATE.state()
+    if not st["degraded"]:
+        return []
+    if st["open"]:
+        now = (f"new launches paused for {st['open_for_s']} s (backoff {round(st['backoff_s'])} s, "
+               f"{st['consecutive_failures']} launches failed in a row)")
+    else:
+        now = f"one launch at a time ({st['recent_failures']} of the last {st['recent']} failed)"
+    return [_finding(
+        "collectors", "medium", "Windows interop is degraded — collectors throttled",
+        f"PowerShell launches through WSL interop are failing or timing out, so JARVIS "
+        f"limits them: {now}; {st['refused']} launches deferred since start. Windows "
+        f"collectors that could not run are reported as failed, not clean. This "
+        f"backpressure is what keeps a slow relay from wedging into a `wsl --shutdown`.",
         "WSL interop", host="win")]
 
 

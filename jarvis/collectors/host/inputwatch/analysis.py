@@ -1,6 +1,7 @@
 """Turning input telemetry into findings about synthetic input."""
 
 import json
+import re
 import statistics
 from collections import Counter
 
@@ -460,6 +461,12 @@ def _typing_findings(store, beat):
 CONTROL_WINDOW = 24 * 3600
 
 
+def _idle_seconds(detail):
+    """The 'idle Ns' suffix the ingest writes on a brightness line, or -1."""
+    m = re.search(r"idle (\d+)s", detail or "")
+    return int(m.group(1)) if m else -1
+
+
 def _control_findings(store, hours=24):
     since = now() - min(hours, 168) * 3600
     try:
@@ -475,8 +482,10 @@ def _control_findings(store, hours=24):
 
     out = []
     keys = [r for r in rows if r["kind"] == "control-key"]
-    states = [r for r in rows if r["kind"] == "control-state" and r["control"] != "app-volume"]
+    states = [r for r in rows if r["kind"] == "control-state"
+              and r["control"] not in ("app-volume", "brightness")]
     apps = [r for r in rows if r["kind"] == "control-state" and r["control"] == "app-volume"]
+    bright = [r for r in rows if r["kind"] == "control-state" and r["control"] == "brightness"]
     injected = [r for r in keys if r["injected"]]
     unkeyed = [r for r in states if r["keyed"] == 0]
 
@@ -531,6 +540,28 @@ def _control_findings(store, hours=24):
             "%d per-app change(s) in %dh; most recent %s at %s, foreground %s"
             % (len(apps), hours, latest["detail"], iso(latest["ts"]),
                latest["fg"] or "unknown"), "control_events"))
+
+    if bright:
+        # Brightness has no keyed/unkeyed tell: on most laptops the brightness
+        # hotkey goes through ACPI and never produces a virtual key, and
+        # Windows moves the level itself (adaptive brightness, battery and
+        # idle dimming). So every change is recorded with its idle context
+        # and reported low; it is a lead for the forensic timeline, never an
+        # impersonation claim on its own. A software-driven change is only
+        # distinguishable by what else the timeline shows around it.
+        latest = bright[0]
+        active = [r for r in bright if "idle" in (r["detail"] or "")
+                  and _idle_seconds(r["detail"]) < 5]
+        out.append(_finding(
+            "input", "low", "display brightness changed",
+            "%d change(s) in %dh, %d while someone was actively using the "
+            "machine; most recent %s at %s, foreground %s. Source is not "
+            "attributed: a hotkey, the Settings slider, adaptive brightness, "
+            "battery or idle dimming, or software setting it through WMI all "
+            "look the same here; the 5-minute controls sample is the cross-check."
+            % (len(bright), hours, len(active), latest["detail"],
+               iso(latest["ts"]), latest["fg"] or "unknown"),
+            "control_events"))
 
     keyed = [r for r in states if r["keyed"] == 1]
     out.append(_finding(

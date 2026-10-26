@@ -4,9 +4,9 @@
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
 
-CAT_ORDER = {"malware defense": 0, "platform integrity": 1, "data at rest": 2,
-             "account & access": 3, "attack surface": 4, "visibility": 5,
-             "licensing": 6, "operations": 7}
+CAT_ORDER = {"malware defense": 0, "platform integrity": 1, "memory defense": 2,
+             "data at rest": 3, "account & access": 4, "attack surface": 5,
+             "visibility": 6, "licensing": 7, "operations": 8}
 
 
 def _finding(category, severity, title, detail, fix="", host="win"):

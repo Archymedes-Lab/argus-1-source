@@ -523,7 +523,7 @@ _SPOKEN_EXTRA = re.compile(
     r"pendulum|nonetheless|nevertheless|decent|still requires)\b|\.\.\.|…", re.I)
 
 SPOKEN_TTL = 600       # the same facts get the same line for ten minutes
-_spoken_cache = {}
+_spoken_cache: dict = {}
 
 
 def _spoken_view(facts):

@@ -8,6 +8,7 @@ so console codepage quirks can't corrupt it.
 """
 
 import base64
+import errno
 import json
 import os
 import re
@@ -18,7 +19,7 @@ import subprocess
 from jarvis.core import collection
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import fingerprint
-from jarvis.platform import host
+from jarvis.platform import host, interop_gate
 
 HOST = "win"
 
@@ -72,6 +73,91 @@ def ensure_interop() -> bool:
         except OSError:
             continue
     return False
+
+
+# How the kernel starts a Windows executable from WSL: a binfmt_misc entry
+# that names /init as the interpreter. The table is shared by everything on
+# the VM, and a privileged container running its own systemd flushes it on
+# boot or shutdown (two such containers on 2026-10-22 17:24 took every
+# PowerShell collector down while the daemon reported the bridge up). The
+# registration cannot be restored without root, but the interpreter can be
+# named explicitly: /init <exe> ... starts the program exactly as the entry
+# would. The launcher is consulted on every spawn, so a flush between two
+# collections costs one failed attempt, not an outage.
+BINFMT_DIR = "/proc/sys/fs/binfmt_misc"
+INTEROP_INIT = "/init"
+
+
+def interop_binfmt_registered() -> bool:
+    """True while a WSLInterop binfmt entry exists and is enabled."""
+    if not host.on_wsl():
+        return True
+    try:
+        names = os.listdir(BINFMT_DIR)
+    except OSError:
+        return False
+    for name in names:
+        if not name.startswith("WSLInterop"):
+            continue
+        try:
+            with open(os.path.join(BINFMT_DIR, name), encoding="ascii", errors="replace") as fh:
+                if fh.readline().strip() == "enabled":
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def interop_launcher() -> list:
+    """argv prefix that starts a Windows program when binfmt cannot."""
+    if not host.on_wsl() or interop_binfmt_registered():
+        return []
+    if os.access(INTEROP_INIT, os.X_OK):
+        return [INTEROP_INIT]
+    return []
+
+
+def interop_mode() -> str:
+    """'direct' (kernel binfmt), 'init' (explicit interpreter) or 'broken'."""
+    if not host.on_wsl() or interop_binfmt_registered():
+        return "direct"
+    return "init" if os.access(INTEROP_INIT, os.X_OK) else "broken"
+
+
+def spawn(args, *, gated=True, expect_output=False, **kwargs):
+    """subprocess.run for a Windows program, through whichever interop path
+    works right now. A binfmt flush between the launcher check and the exec
+    surfaces as ENOEXEC; that one case is retried through /init.
+
+    Over WSL interop the launch passes the admission gate (interop_gate.py):
+    a bounded number at once, and none while the relay is backing off, which
+    raises interop_gate.Refused (an OSError). `gated=False` is for launches
+    that restore protection or wait on the owner. With `expect_output`, an
+    empty stdout counts as a failed launch (the relay's "no payload" mode)."""
+    if not gated or not host.on_wsl():
+        return _spawn(args, **kwargs)
+    timeout = kwargs.get("timeout") or interop_gate.WAIT_MAX
+    interop_gate.GATE.acquire(wait=timeout)
+    ok = False
+    try:
+        result = _spawn(args, **kwargs)
+        out = getattr(result, "stdout", None)
+        ok = not expect_output or bool(out and out.strip())
+        return result
+    finally:
+        # A timeout or launch error leaves ok False: a transport failure.
+        interop_gate.GATE.release(ok)
+
+
+def _spawn(args, **kwargs):
+    prefix = interop_launcher()
+    try:
+        return subprocess.run([*prefix, *args], **kwargs)
+    except OSError as exc:
+        if (exc.errno == errno.ENOEXEC and not prefix and host.on_wsl()
+                and os.access(INTEROP_INIT, os.X_OK)):
+            return subprocess.run([INTEROP_INIT, *args], **kwargs)
+        raise
 
 
 # Where powershell.exe lives when PATH cannot help. A login shell gets the
@@ -147,8 +233,8 @@ def interop_sockets():
 def _run_via(sock, script, timeout):
     env = {**os.environ, "WSL_INTEROP": sock} if sock else None
     try:
-        return subprocess.run([_PS or find_powershell(), "-NoProfile", "-NonInteractive",
-                               "-Command", script],
+        return spawn([_PS or find_powershell(), "-NoProfile", "-NonInteractive",
+                      "-Command", script], gated=False,
                               capture_output=True, text=True, errors="replace",
                               timeout=timeout, cwd=host.subprocess_cwd(), env=env,
                               **host.spawn_options())
@@ -232,6 +318,8 @@ def _script_target(cmd: str, exe_base: str) -> str:
 
 def collect(timeout: int = 45):
     """Return a list of process records for the Windows side (empty if unreachable)."""
+    if not host.has_windows():
+        return []           # no Windows domain here: not applicable, not a failure
     if (reachable := available()) is None:
         collection.failed('windows-processes', UNREACHABLE)
         return []
@@ -239,17 +327,22 @@ def collect(timeout: int = 45):
         collection.failed('windows-processes', UNREACHABLE)
         return []
     try:
-        res = subprocess.run(
-            [_PS, "-NoProfile", "-NonInteractive", "-Command", PS_SCRIPT],
-            capture_output=True,
+        res = spawn(
+            [str(_PS), "-NoProfile", "-NonInteractive", "-Command", PS_SCRIPT],
+            expect_output=True, capture_output=True,
             timeout=timeout,
             cwd=host.subprocess_cwd(), **host.spawn_options(),
         )
+    except interop_gate.Refused as exc:
+        collection.failed('windows-processes', str(exc))
+        return []
     except (subprocess.TimeoutExpired, OSError):
         collection.failed('windows-processes', 'query failed or timed out')
         return []
 
-    blob = res.stdout.decode("ascii", "ignore").strip().replace("\r", "").replace("\n", "")
+    raw = res.stdout
+    text = raw.decode("ascii", "ignore") if isinstance(raw, bytes) else str(raw or "")
+    blob = text.strip().replace("\r", "").replace("\n", "")
     if not blob:
         collection.failed('windows-processes', 'query returned no payload')
         return []
@@ -264,7 +357,7 @@ def collect(timeout: int = 45):
         return []
     collection.succeeded('windows-processes')
 
-    by_pid = {}
+    by_pid: dict = {}
     for c in data.get("conns") or []:
         # Windows reports pid 0 for connections it declines to attribute; that
         # is not the System Idle Process actually talking to the internet.
@@ -338,6 +431,8 @@ def ps_json(script, timeout=120, payload=None):
     WSL_INTEROP can go stale between calls when the session that created it
     ends, and the only symptom is empty output.
     """
+    if not host.has_windows():
+        return None         # no Windows domain here: not applicable, not a failure
     if (reachable := available()) is None:
         collection.failed('windows', UNREACHABLE)
         return None
@@ -350,12 +445,15 @@ def ps_json(script, timeout=120, payload=None):
 
     for attempt in (1, 2):
         try:
-            r = subprocess.run(
+            r = spawn(
                 [_PS, "-NoProfile", "-NonInteractive",
                  "-Command", script],
-                capture_output=True, timeout=timeout,
+                expect_output=True, capture_output=True, timeout=timeout,
                 cwd=host.subprocess_cwd(), **stdin, **host.spawn_options(),
             )
+        except interop_gate.Refused as exc:
+            collection.failed('windows', str(exc))
+            return None
         except (OSError, subprocess.TimeoutExpired):
             collection.failed('windows', 'PowerShell failed or timed out')
             return None
@@ -375,6 +473,8 @@ def ps_json(script, timeout=120, payload=None):
                 return None
 
         if attempt == 1:
+            if interop_gate.GATE.degraded():
+                break           # a retry storm is what wedges a slow relay
             # No output at all: most likely a dead interop socket. Drop the
             # cached value so ensure_interop() picks a fresh one, and retry.
             # Natively there is no socket; the retry is one plain second try.
@@ -382,7 +482,8 @@ def ps_json(script, timeout=120, payload=None):
             if not ensure_interop():
                 collection.failed('windows', 'interop retry unavailable')
                 return None
-    collection.failed('windows', 'PowerShell returned no payload')
+    collection.failed('windows', 'PowerShell returned no payload'
+                      + ('; interop degraded, not retried' if interop_gate.GATE.degraded() else ''))
     return None
 
 

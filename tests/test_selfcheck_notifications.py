@@ -18,7 +18,7 @@ class SelfcheckNotificationTests(unittest.TestCase):
         self.conf.start()
         self.enabled = patch.object(alert, 'enabled', return_value=True)
         self.enabled.start()
-        self.sender = patch.object(alert, 'send_email', return_value='')
+        self.sender = patch.object(alert, 'deliver', return_value='')
         self.send = self.sender.start()
         self.verdict = dict(healthy=False, problems=['stalled'], newest_kind='test',
                             newest_ts=999999, age=1, active_state='active', scope='system')

@@ -5,10 +5,13 @@
 #   1002  SetWindowsHookEx         FilterType 13 keyboard-LL, 14 mouse-LL, ...
 #   1001  RegisterRawInputDevices  UsagePage/Usage/Flags (0x100 = background sink)
 #   1000  SetWinEventHook          focus and window-event watchers
-# Measured on this machine (2026-09-23, build 26200) with a positive control:
-# 1002 and 1001 fire and name the calling process; 1003 (GetAsyncKeyState)
-# does NOT fire, so key-state polling stays invisible. Volume was 4 events in
-# 90 s.
+#   1003  GetAsyncKeyState         written at a key event for a process that
+#         polled at >= 1 call/ms since the previous key event (kernel gate);
+#         fields PID, MsSinceLastKeyEvent, BackgroundCallCount
+# Measured on this machine (build 26200): 1002 and 1001 fire under 0x400 and
+# name the calling process (2026-09-23). 1003 fires only when keyword 0x1000
+# is enabled as well (2026-10-21: 0x400 alone and 0x1000 alone gave none at
+# 14 calls/ms; 0x1400 gave 102 in 45 s, all attributed by EventData.PID).
 #
 # A registration is logged once, when it happens, so this job keeps a trace
 # session running between broker runs ("JarvisInputAudit", real-time to a file
@@ -30,12 +33,21 @@ $Etl = Join-Path $Dir 'session.etl'
 $Old = Join-Path $Dir 'session.prev.etl'
 $Inv = Join-Path $Dir 'inventory.json'
 $MaxRows = 400
+$Keyword = '0x1400'
+$CapMB = 128          # about 52 MB per 15 min was measured; logging stops at the cap, which the output reports
+$WantIds = "*[System[(EventID=1000 or EventID=1001 or EventID=1002 or EventID=1003)]]"
 New-Item -ItemType Directory -Force $Dir | Out-Null
 
 function Unix([datetime]$t) { [DateTimeOffset]::new($t.ToUniversalTime()).ToUnixTimeSeconds() }
 function Running { & logman.exe query $Name -ets *> $null; return $LASTEXITCODE -eq 0 }
 function Start-Session {
-    & logman.exe start $Name -p Microsoft-Windows-Win32k 0x400 0x5 -o $Etl -bs 64 -nb 4 16 -ets | Out-Null
+    # 0x1400: AuditApiCalls (0x400) plus the 0x1000 bit that 1003 (key-state
+    # polling) is gated on. Measured 2026-10-21: 0x400 alone and 0x1000 alone
+    # each gave no 1003 at 14 calls/ms; together, 102 events in 45 s, all
+    # attributed. 0x1000 adds about 450 other Win32k events a second, so the
+    # file is capped and parsed with an event-id filter (0.8 s for 20k events
+    # against 23 s unfiltered).
+    & logman.exe start $Name -p Microsoft-Windows-Win32k $Keyword 0x5 -o $Etl -bs 64 -nb 4 16 -max $CapMB -ets | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "logman start failed ($LASTEXITCODE)" }
 }
 
@@ -116,9 +128,12 @@ $rows = @{}
 foreach ($r in @($state.rows)) { if ($r) { $rows[[string]$r.key] = $r } }
 $parsed = 0; $failed = 0; $seen1003 = 0
 $touched = @{}
+$etlBytes = 0; $capped = $false
 if (Test-Path $Old) {
+    $etlBytes = (Get-Item $Old).Length
+    $capped = $etlBytes -ge ($CapMB * 1MB)
     $events = @()
-    try { $events = @(Get-WinEvent -Path $Old -Oldest -ErrorAction Stop) } catch {
+    try { $events = @(Get-WinEvent -Path $Old -Oldest -FilterXPath $WantIds -ErrorAction Stop) } catch {
         if ($_.Exception.Message -notmatch 'No events') { $failed++ } }
     foreach ($e in $events) {
         try {
@@ -126,6 +141,7 @@ if (Test-Path $Old) {
             $d = @{}
             foreach ($f in @(([xml]$e.ToXml()).Event.EventData.Data)) { if ($f) { $d[[string]$f.Name] = [string]$f.'#text' } }
             $kind = $null; $type = ''; $extra = @{}
+            $procId = [int]$e.ProcessId
             switch ($e.Id) {
                 1002 {
                     $kind = 'hook'; $type = [string](Signed32 $d['FilterType'])
@@ -139,27 +155,37 @@ if (Test-Path $Old) {
                     $extra.visible_windows = Signed32 $d['cVisWindows']
                 }
                 1000 { $kind = 'winevent'; $type = 'any' }
-                1003 { $seen1003++; $kind = 'poll'; $type = 'getasynckeystate' }
+                1003 {
+                    # Written by the kernel at a key event, for a process that called
+                    # the key-state API at >= 1 call/ms since the previous key event.
+                    # The polling process is EventData.PID, not the header pid.
+                    $seen1003++; $kind = 'poll'; $type = 'getasynckeystate'
+                    if ($d['PID']) { $procId = [int]$d['PID'] }
+                    $extra.calls = Signed32 $d['BackgroundCallCount']
+                    $extra.ms = Signed32 $d['MsSinceLastKeyEvent']
+                }
             }
             if (-not $kind) { continue }
-            $who = Identify $e.ProcessId $e.TimeCreated
-            $key = "$kind|$type|$($who.path.ToLower())|$($e.ProcessId)|$($who.start)"
+            $who = Identify $procId $e.TimeCreated
+            $key = "$kind|$type|$($who.path.ToLower())|$procId|$($who.start)"
             $t = Unix $e.TimeCreated
             $touched[$key] = $true
             if ($rows.ContainsKey($key)) {
                 $row = $rows[$key]
                 $row.count = [int]$row.count + 1
                 $row.last = $t
+                if ($null -ne $extra.calls -and $extra.calls -gt [int]$row.calls) { $row.calls = $extra.calls; $row.ms = $extra.ms }
             } else {
                 if ($rows.Count -ge $MaxRows) { continue }
                 $sig = Signer $who.path
                 $row = [pscustomobject]@{
-                    key = $key; kind = $kind; type = $type; pid = [int]$e.ProcessId
+                    key = $key; kind = $kind; type = $type; pid = $procId
                     start = $who.start; path = $who.path; via = $who.via
                     sig = $sig.status; signer = $sig.signer
                     first = $t; last = $t; count = 1
                     lib = [string]$extra.lib; failed = [bool]$extra.failed
-                    visible_windows = $extra.visible_windows }
+                    visible_windows = $extra.visible_windows
+                    calls = $extra.calls; ms = $extra.ms }
                 $rows[$key] = $row
             }
         } catch { $failed++ }
@@ -203,8 +229,10 @@ $o = [ordered]@{
     version = 1; boot = $boot; session_started = [int64]$state.session_started
     fresh_session = $fresh; rotate_gap_ms = $gapMs; runs = $state.runs
     parsed = $parsed; parse_failures = $failed; polling_events = $seen1003
+    keyword = $Keyword; polling_logged = ($Keyword -eq '0x1400')
+    etl_bytes = $etlBytes; etl_capped = $capped
     ended = $ended
-    watchers = @(@($kept) + @($unresolved) + @($gone) | Where-Object { $_ -and $_.kind -ne 'winevent' })
+    watchers = @(@($kept) + @($unresolved) + @($gone) | Where-Object { $_ })
     winevent_watchers = @($kept | Where-Object { $_.kind -eq 'winevent' }).Count
 }
 $json = $o | ConvertTo-Json -Depth 5 -Compress

@@ -15,8 +15,14 @@ from pathlib import Path
 
 from jarvis.core import event
 from jarvis.core.eventlog import (
-    DEFAULT_ROOT, GENESIS, SEAL_BYTES, EventLog, LogError, _canonical,
-    _fsync_dir, header_hash,
+    DEFAULT_ROOT,
+    GENESIS,
+    SEAL_BYTES,
+    EventLog,
+    LogError,
+    _canonical,
+    _fsync_dir,
+    header_hash,
 )
 
 MAX_PROCESSES = 2000

@@ -161,8 +161,13 @@ class ScheduleTests(unittest.TestCase):
         self.assertFalse(set(keep) & schedule.LINUX_ONLY)
         self.assertTrue(all("Linux" in why for why in absent.values()))
         keep, absent = schedule.applicable(False, True)
-        self.assertEqual(set(absent), schedule.WINDOWS_ONLY)
+        # A plain Linux server also drops the workstation-only features (2026-10-25).
+        self.assertEqual(set(absent), schedule.WINDOWS_ONLY | schedule.WORKSTATION_ONLY)
+        self.assertEqual({absent[n] for n in schedule.WORKSTATION_ONLY},
+                         {"a workstation feature; not scheduled on servers"})
         self.assertEqual(set(keep) | set(absent), set(schedule.ALL_JOBS))
+        keep, absent = schedule.applicable(True, True)
+        self.assertLessEqual(schedule.WORKSTATION_ONLY, set(keep))
 
     def test_not_applicable_jobs_earn_no_score_and_no_coverage(self):
         keep, absent = schedule.applicable(True, False)
@@ -315,6 +320,7 @@ class NativeServiceTests(unittest.TestCase):
         ok = [{"category": "daemon", "severity": "ok", "title": "t", "detail": "", "where": "",
                "host": "win"}]
         with as_kind("windows"), \
+                mock.patch.object(jobs.alert, "channel_findings", return_value=[]), \
                 mock.patch.object(jobs.supervisors, "audit_health_monitor", return_value=[]), \
                 mock.patch.object(jobs.supervisors, "audit_native_service", return_value=ok) as native, \
                 mock.patch.object(jobs.supervisors, "audit_reviver") as reviver, \
@@ -328,13 +334,16 @@ class NativeServiceTests(unittest.TestCase):
 
     def test_plain_linux_watchdog_job_reads_no_windows_task_state(self):
         with as_kind("linux"), \
+                mock.patch.object(jobs.alert, "channel_findings", return_value=[]), \
                 mock.patch.object(jobs.supervisors, "audit_health_monitor") as monitor, \
                 mock.patch.object(jobs.supervisors, "audit_broker") as broker, \
-                mock.patch.object(jobs.selfcheck, "timer_state", return_value=("", "")):
+                mock.patch.object(jobs.selfcheck, "timer_state", return_value=("", "")), \
+                mock.patch.object(jobs.selfcheck, "systemd_supervision", return_value=(0, "")):
             out = jobs._watchdogs(("wsl",), ":memory:")
             monitor.assert_not_called()
             broker.assert_not_called()
-            self.assertEqual(out[-1]["severity"], "high")     # no timer is still a finding
+            # No timer and no systemd watchdog is still a finding.
+            self.assertEqual(out[-1]["severity"], "high")
 
     def test_task_declaration_names_the_staged_script_and_checkout(self):
         task = persistence.BY_NAME["jarvis native service"]

@@ -16,7 +16,7 @@ from .kernel import (
     REPLACED_IDENTICAL,
     bpf_hidden_pins,
     bpf_programs,
-    ftrace_hooks,
+    ftrace_hook_list,
     hidden_modules,
     injected_processes,
     io_uring_state,
@@ -205,13 +205,21 @@ def audit_linux(deep=False):
                             f"{h['name']} [pid {h['pid']}] — {', '.join(h['kinds'])}",
                             f"/proc/{h['pid']}/fd"))
 
-    hooks = ftrace_hooks()
-    if hooks:
-        out.append(_finding(
-            "high", "kernel functions are hooked via ftrace",
-            f"{len(hooks)} hooked: {', '.join(hooks[:6])}"
-            + ("…" if len(hooks) > 6 else ""),
-            "/sys/kernel/tracing/enabled_functions"))
+    hooks = ftrace_hook_list()
+    by_kind = {k: [f for f, kind in hooks if kind == k] for k in ("ftrace", "bpf", "kernel_bpf")}
+    for kind, severity, title, why in (
+            ("ftrace", "high", "kernel functions are hooked via ftrace",
+             "an ftrace callback, not an eBPF program: the technique ftrace rootkits use"),
+            ("bpf", "medium", "kernel functions are traced by eBPF programs",
+             "direct calls into eBPF trampolines; see the eBPF programs listed with them"),
+            ("kernel_bpf", "low", "kernel HID-BPF dispatcher is attached",
+             "the HID subsystem's own BPF hook, present on stock kernels with HID-BPF")):
+        names = by_kind[kind]
+        if names:
+            out.append(_finding(
+                severity, title,
+                f"{len(names)}: {', '.join(names[:6])}" + ("…" if len(names) > 6 else "") + f" — {why}",
+                "/sys/kernel/tracing/enabled_functions"))
 
     # -- injected / fileless code -----------------------------------------
     for hit in injected_processes():

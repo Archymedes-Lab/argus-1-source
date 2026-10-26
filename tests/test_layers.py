@@ -19,7 +19,12 @@ from pathlib import Path
 PKG = Path(__file__).resolve().parent.parent / "jarvis"
 
 RANK = {"core": 0, "platform": 1, "collectors": 2, "lab": 3, "intel": 4,
-        "response": 5, "service": 6, "web": 7, "cli": 8}
+        "response": 5, "service": 6, "web": 7, "cli": 8,
+        # Verification harness: drives any layer through its pure functions,
+        # imported by nothing at runtime (tests only), so it sits above all.
+        "verify": 9,
+        # Agent reference monitor: imports only core, so it sits just above it.
+        "argus": 1}
 
 
 def _modules():

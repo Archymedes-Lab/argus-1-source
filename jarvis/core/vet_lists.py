@@ -283,7 +283,7 @@ WINDOWS_SYSTEM_BIN = {
     "icacls.exe", "whoami.exe", "tasklist.exe", "taskkill.exe", "ping.exe",
     "nslookup.exe", "ipconfig.exe", "arp.exe", "route.exe", "netstat.exe",
     "searchprotocolhost.exe", "searchfilterhost.exe", "printui.exe",
-    "printfilterpipelinesvc.exe", "spoolsv.exe", "conhost.exe", "openwith.exe",
+    "printfilterpipelinesvc.exe", "conhost.exe", "openwith.exe",
     "rundll32.exe", "regsvr32.exe", "odbcconf.exe", "installutil.exe",
     "msbuild.exe", "cmstp.exe", "pcalua.exe", "presentationhost.exe",
 }

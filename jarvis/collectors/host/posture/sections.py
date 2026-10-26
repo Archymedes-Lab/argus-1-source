@@ -29,6 +29,26 @@ ASR_KEY = {
     "56a863a9-875e-4185-98a7-b882c64b5ce5":
         "block abuse of vulnerable signed drivers",
 }
+# Rules worth having on a workstation but whose absence is advice, not a
+# medium: several break specific workflows (USB tools, Adobe Reader plug-ins).
+ASR_MORE = {
+    "92e97fa1-2edf-4476-bdd6-9dd0b4dddc7b": "block Win32 API calls from Office macros",
+    "d1e49aac-8f56-4280-b9ba-993a6d77406c": "block process creation from PsExec and WMI",
+    "e6db77e5-3df2-4cf1-b95a-636979351e5b": "block persistence through WMI subscriptions",
+    "c1db55ab-c21a-4637-bb3f-a12568109d35": "advanced ransomware protection",
+    "7674ba52-37eb-4a4f-a9a1-f0f9a1619a2c": "block executable content from email and webmail",
+    "26190899-1602-49e8-8b27-eb1d0a1ce869": "block Office communication apps creating child processes",
+    "be9ba2d9-53ea-4cdc-84e5-9b1eeee46550": "block untrusted or unsigned processes from USB",
+    "75668c1f-73b5-4cf0-bb93-3ecf5cb7cc84": "block Adobe Reader creating child processes",
+    "a8f5898e-1dc8-49a9-9878-85004b8a61e6": "block web shell creation on servers",
+    "33ddedf1-c6e0-47cb-833e-de6133960387": "block rebooting into Safe Mode",
+    "b2b3f03d-6a65-4f7b-a9c7-1c7ef74a9ba4": "block copying or impersonating system tools",
+}
+# ASR action codes: 0 off, 1 block, 2 audit, 6 warn.
+ASR_BLOCK = "1"
+ASR_SOFT = {"2": "audit", "6": "warn"}
+# Get-ProcessMitigation -System vocabulary.
+MIT_ON, MIT_OFF, MIT_DEFAULT = "ON", "OFF", "NOTSET"
 
 
 def _truthy(v):
@@ -150,8 +170,9 @@ def _malware_defense(d):
             "exclusion list will use it"))
 
     ids = [str(x).lower() for x in aslist(pref.get("AttackSurfaceReductionRules_Ids"))]
-    actions = aslist(pref.get("AttackSurfaceReductionRules_Actions"))
-    enabled = {i for i, a in zip(ids, actions) if str(a) == "1"}
+    actions = [str(a) for a in aslist(pref.get("AttackSurfaceReductionRules_Actions"))]
+    action_of = dict(zip(ids, actions))
+    enabled = {i for i, a in action_of.items() if a == ASR_BLOCK}
     missing = [(g, n) for g, n in ASR_KEY.items() if g not in enabled]
     if missing:
         out.append(_finding(
@@ -161,6 +182,111 @@ def _malware_defense(d):
             + ("; …" if len(missing) > 4 else ""),
             "Add-MpPreference -AttackSurfaceReductionRules_Ids <guid> "
             "-AttackSurfaceReductionRules_Actions Enabled"))
+    soft = [(g, n, ASR_SOFT[action_of[g]]) for g, n in ASR_MORE.items()
+            if action_of.get(g) in ASR_SOFT]
+    absent = [n for g, n in ASR_MORE.items() if g not in action_of or action_of[g] == "0"]
+    if soft or absent:
+        parts = []
+        if soft:
+            parts.append(f"{len(soft)} only {'/'.join(sorted({m for _, _, m in soft}))}: "
+                         + "; ".join(n for _, n, _ in soft[:4]))
+        if absent:
+            parts.append(f"{len(absent)} not configured: " + "; ".join(absent[:3])
+                         + ("; …" if len(absent) > 3 else ""))
+        out.append(_finding(
+            "attack surface", "low",
+            f"{len(soft) + len(absent)} further ASR rules are not blocking",
+            " · ".join(parts),
+            "Set-MpPreference -AttackSurfaceReductionRules_Ids <guid> "
+            "-AttackSurfaceReductionRules_Actions Enabled (review each rule's "
+            "workflow impact first)"))
+    return out
+
+
+def _memory_defense(d):
+    """Memory defense: the OS-wide mitigations between a memory bug and code
+    execution, and what keeps credentials out of readable memory. Per-process
+    state (CFG, CET on each running image, unbacked executable memory) is the
+    memory scan's job; this section reads the system defaults and the pins."""
+    out = []
+    m = d.get("mitigations")
+    if not isinstance(m, dict):
+        out.append(_finding(
+            "visibility", "low", "system exploit mitigations could not be read",
+            "Get-ProcessMitigation -System returned nothing; DEP, SEHOP, ASLR, "
+            "CFG and shadow-stack defaults are unverified this run, not known off",
+            "Get-ProcessMitigation -System"))
+    else:
+        def state(key):
+            return str(m.get(key) or "").upper()
+        if state("dep") == MIT_OFF:
+            out.append(_finding(
+                "memory defense", "high", "DEP is disabled system-wide",
+                "data pages are executable, so any stack or heap overflow runs "
+                "shellcode directly",
+                "Set-ProcessMitigation -System -Enable DEP"))
+        elif state("dep") == MIT_DEFAULT:
+            out.append(_finding(
+                "memory defense", "low", "DEP is at its default, not pinned on",
+                "64-bit programs always get DEP; 32-bit programs only opt in. "
+                "Pinning it makes every 32-bit program opt out instead",
+                "Set-ProcessMitigation -System -Enable DEP"))
+        if state("sehop") == MIT_OFF:
+            out.append(_finding(
+                "memory defense", "medium", "SEHOP is disabled system-wide",
+                "exception-handler overwrite, the classic 32-bit exploit path, "
+                "is not checked", "Set-ProcessMitigation -System -Enable SEHOP"))
+        for key, name in (("aslr_bottomup", "bottom-up ASLR"),
+                          ("aslr_highentropy", "high-entropy ASLR")):
+            if state(key) == MIT_OFF:
+                out.append(_finding(
+                    "memory defense", "medium", f"{name} is disabled system-wide",
+                    "addresses become predictable, which is what return-oriented "
+                    "exploits need", "Set-ProcessMitigation -System -Enable "
+                    + ("BottomUp" if key == "aslr_bottomup" else "HighEntropy")))
+        if state("aslr_forcerelocate") != MIT_ON:
+            out.append(_finding(
+                "memory defense", "low", "mandatory ASLR is not forced for all images",
+                "images built without relocation data keep fixed addresses; forcing "
+                "it can break a few old programs, so it is a deliberate choice",
+                "Set-ProcessMitigation -System -Enable ForceRelocateImages"))
+        if state("cfg") == MIT_OFF:
+            out.append(_finding(
+                "memory defense", "medium", "Control Flow Guard is disabled system-wide",
+                "indirect calls are not validated even in programs compiled for it",
+                "Set-ProcessMitigation -System -Enable CFG"))
+        if state("user_shadow_stack") != MIT_ON:
+            out.append(_finding(
+                "memory defense", "low",
+                "hardware shadow stacks are not enforced system-wide",
+                "the memory scan reports which running programs lack CET; the "
+                "system default leaves it to each program. Needs a CET-capable CPU "
+                "(Intel 11th gen or AMD Zen 3 and later)",
+                "Set-ProcessMitigation -System -Enable UserShadowStack"))
+    if not _truthy(d.get("kernelshadow")):
+        out.append(_finding(
+            "memory defense", "low",
+            "kernel-mode hardware-enforced stack protection is not enabled",
+            "return addresses in the kernel are not checked against a shadow stack; "
+            "needs VBS and a CET-capable CPU, and some drivers are incompatible",
+            "Windows Security > Device security > Core isolation > Kernel-mode "
+            "Hardware-enforced Stack Protection"))
+    if str(d.get("wdigest") or "") == "1":
+        out.append(_finding(
+            "memory defense", "high", "WDigest keeps plaintext passwords in LSASS",
+            "UseLogonCredential=1 stores the logon password in clear text in "
+            "memory, where any LSASS read recovers it",
+            r"reg add HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest "
+            r"/v UseLogonCredential /t REG_DWORD /d 0"))
+    lsa = d.get("lsa") or {}
+    if _truthy(lsa.get("runasppl")) and str(lsa.get("runasppl")) != "2" \
+            and not _truthy(lsa.get("runasppl_boot")):
+        out.append(_finding(
+            "memory defense", "low", "LSA protection is on without a UEFI lock",
+            "an administrator can clear RunAsPPL and reboot; the UEFI-locked "
+            "setting (value 2) survives that",
+            "run the LSA protection UEFI lock tool, or set RunAsPPL to 2 on a "
+            "Secure Boot machine"))
     return out
 
 
@@ -324,6 +450,26 @@ def _attack_surface(d):
             "downloaded executables are not reputation-checked",
             "Windows Security > App & browser control > "
             "Reputation-based protection"))
+    # Smart App Control blocks unsigned, unknown binaries: the carrier for most
+    # commodity spyware. 0 off, 1 on, 2 evaluation; the value is protected.
+    sac = d.get("sac")
+    if sac is None:
+        out.append(_finding(
+            "visibility", "low", "Smart App Control state is not readable",
+            "the CI policy value is absent or unreadable this run; unknown, not off",
+            "Windows Security > App & browser control > Smart App Control"))
+    elif str(sac) == "0":
+        out.append(_finding(
+            "attack surface", "medium", "Smart App Control is off",
+            "unsigned, unknown binaries run without a reputation check; unsigned "
+            "developer tools would be blocked once it is on, so trial evaluation mode",
+            "Windows Security > App & browser control > Smart App Control settings"))
+    elif str(sac) == "2":
+        out.append(_finding(
+            "attack surface", "low", "Smart App Control is in evaluation mode",
+            "it is learning and blocks nothing yet; it turns itself off if it decides "
+            "this machine is not a fit, so re-check after a week",
+            "Windows Security > App & browser control > Smart App Control settings"))
     return out
 
 
@@ -394,5 +540,5 @@ def _licensing(d):
 
 
 # In the order they are reported before sorting.
-SECTIONS = (_malware_defense, _platform_integrity, _data_at_rest,
+SECTIONS = (_malware_defense, _platform_integrity, _memory_defense, _data_at_rest,
             _account_access, _attack_surface, _visibility, _licensing)

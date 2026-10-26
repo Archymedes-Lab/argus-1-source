@@ -27,7 +27,9 @@ function Send-JarvisMail([string]$title,[string]$body) {
     # Scheduler. TLS 1.2 is required by the mail API and is not guaranteed to
     # be enabled for Windows PowerShell 5.1 by default.
     [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-    $cfg=Get-Content -LiteralPath (Join-Path $StateRoot 'mail.json') -Raw | ConvertFrom-Json
+    $mailPath=Join-Path $StateRoot 'mail.json'
+    if (-not (Test-Path -LiteralPath $mailPath)) { throw [System.InvalidOperationException]::new('mail paused: mail.json is not present') }
+    $cfg=Get-Content -LiteralPath $mailPath -Raw | ConvertFrom-Json
     $secure=ConvertTo-SecureString $cfg.key
     $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try {

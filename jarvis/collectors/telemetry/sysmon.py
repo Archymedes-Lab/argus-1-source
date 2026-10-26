@@ -85,6 +85,44 @@ LSASS_EXPECTED = {
     "securityhealthservice.exe", "mpcmdrun.exe", "vgk.exe", "vgc.exe",
 }
 
+# Named pipes the Sysmon baseline records: each belongs to one attack tool,
+# so a single event is the tool running, not a heuristic.
+ATTACK_PIPES = (
+    ("\\paexec", "PAExec remote execution", ("T1559", "T1021")),
+    ("\\remcom", "RemCom remote execution", ("T1559", "T1021")),
+    ("\\csexec", "CsExec remote execution", ("T1559", "T1021")),
+    ("\\lsadump", "LSA secrets dumper", ("T1559", "T1003")),
+    ("\\cachedump", "cached-credential dumper", ("T1559", "T1003")),
+    ("\\wceservicepipe", "Windows Credential Editor", ("T1559", "T1003")),
+    ("\\postex_", "Cobalt Strike post-exploitation", ("T1559", "T1071")),
+)
+# Where a Startup-folder drop lands: anything written there runs at the next
+# logon of that user (or every user, under ProgramData).
+STARTUP_FOLDER = "\\start menu\\programs\\startup\\"
+DRIVERS_FOLDER = "\\windows\\system32\\drivers\\"
+# Programs that write drivers and Startup entries as part of their job.
+INSTALLER_IMAGES = {"msiexec.exe", "trustedinstaller.exe", "tiworker.exe", "drvinst.exe",
+                    "dism.exe", "wuauclt.exe", "mousocoreworker.exe", "svchost.exe",
+                    "poqexec.exe", "setup.exe", "windowsupdatebox.exe"}
+
+# Browser processes whose memory holds decrypted cookies and session tokens.
+# The Sysmon baseline records every open of these by a process that is not
+# the same browser (its sandbox opens its own processes constantly). Reading
+# that memory is how ChromeKatz-style theft gets session cookies without ever
+# touching the cookie database on disk.
+BROWSER_IMAGES = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe"}
+# Opens of a browser that carry no signal: the same browser (its sandbox),
+# Windows' own protection stack, the crash handler and the desktop shell
+# probing windows. Another browser is not expected: Edge has no business in
+# Firefox's memory.
+BROWSER_ACCESS_EXPECTED = {
+    "msmpeng.exe", "mssense.exe", "csrss.exe", "svchost.exe", "explorer.exe",
+    "werfault.exe", "werfaultsecure.exe", "taskmgr.exe", "procexp64.exe",
+    "procexp.exe", "sihost.exe", "dwm.exe", "searchhost.exe", "runtimebroker.exe",
+    "applicationframehost.exe", "textinputhost.exe", "ctfmon.exe", "msedgewebview2.exe",
+    "lsass.exe", "wmiprvse.exe", "vgk.exe", "vgc.exe",
+}
+
 # Commands used to destroy Windows recovery paths before encryption. The
 # command and destructive argument must occur together; merely running one of
 # these administration tools is inventory, not ransomware behaviour.
@@ -97,6 +135,11 @@ RANSOM_RECOVERY = re.compile(
     r"reagentc(?:\.exe)?\s+/disable)")
 
 WRITABLE_DLL_DIRS = ("/users/", "/programdata/", "/windows/temp/", "/temp/", "/public/")
+# Under ProgramData but not writable by users: Defender's platform tree, where it
+# installs its own kernel drivers on every platform update (measured 2026-10-23:
+# BUILTIN\Users read/execute only; ksld.sys and WdNisDrv.sys signed "Microsoft
+# Windows", Valid). A driver there counts as staged only if its signature fails.
+PROTECTED_DRIVER_DIRS = ("c:/programdata/microsoft/windows defender/platform/",)
 
 
 # Windows creates threads across its own processes as normal operation — the
@@ -158,7 +201,7 @@ $o.reader = [bool]((whoami /groups) -match 'Event Log Readers')
     return d or {}
 
 
-def _fetch(hours=24, max_events=1200, minutes=None, rare_hours=None):
+def _fetch(hours=24, max_events=1200, minutes=None, rare_hours=None, since_epoch=None):
     """Pull the event types worth reasoning about, already reduced to fields.
 
     Cost here is almost entirely `Get-WinEvent`, and it scales with how many
@@ -177,7 +220,7 @@ $rareSince = __RARE_SINCE__
 # The remaining types split by frequency: 8/10/25 are rare and each one
 # matters, while 1/7/22 are continuous and only need a representative sample.
 function Read-Events($filter, $limit) {
-  try { @(Get-WinEvent -FilterHashtable $filter -MaxEvents $limit -ErrorAction Stop) }
+  try { @(Get-WinEvent -FilterHashtable $filter -MaxEvents $limit -Oldest -ErrorAction Stop) }
   catch {
     if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { $script:readFailed=$true }
     @()
@@ -196,6 +239,11 @@ $o.complete = (-not $readFailed -and $rare.Count -le 800 -and $bulk.Count -le __
 $o.readFailed = $readFailed
 $o.rareComplete = (-not $readFailed -and $rare.Count -le 800)
 $o.capped = ($rare.Count -gt 800 -or $bulk.Count -gt __MAX__)
+# Oldest-first pages: drop the probe event and name the last one kept, so the
+# caller can advance its cursor to the end of what was actually read.
+$o.rareLast = $null; $o.bulkLast = $null
+if ($rare.Count -gt 800) { $rare = @($rare | Select-Object -First 800); $o.rareLast = $rare[-1].TimeCreated.ToUniversalTime().ToString('o') }
+if ($bulk.Count -gt __MAX__) { $bulk = @($bulk | Select-Object -First __MAX__); $o.bulkLast = $bulk[-1].TimeCreated.ToUniversalTime().ToString('o') }
 $ev = @($rare) + @($bulk)
 
 $rows = foreach ($e in $ev) {
@@ -234,7 +282,8 @@ $rows = foreach ($e in $ev) {
 $o.events = @($rows)
 $o.count = @($rows).Count
 """
-    since = (f"(Get-Date).AddMinutes(-{int(minutes)})" if minutes
+    since = (f"[DateTimeOffset]::FromUnixTimeMilliseconds({int(since_epoch * 1000)}).LocalDateTime"
+             if since_epoch else f"(Get-Date).AddMinutes(-{int(minutes)})" if minutes
              else f"(Get-Date).AddHours(-{int(hours)})")
     # rare_hours: re-read the rare events (8, 10, 25) over a longer window
     # than the bulk ones, for a one-time re-judge that must not trip the
@@ -284,11 +333,27 @@ def rows_from_events(events):
             "description": (e.get("attrs") or {}).get("Description") or "",
             "error_id": (e.get("attrs") or {}).get("ID") or "",
             "state": (e.get("attrs") or {}).get("State") or "",
+            # File creation (11), named pipes (17/18) and WMI subscriptions
+            # (19-21) were logged but never judged before 2026-10-23.
+            "file": t.get("path") if eid == 11 else "",
+            "pipe": t.get("name") or "",
+            "wmi_operation": (e.get("attrs") or {}).get("Operation") or "",
+            "wmi_name": (e.get("attrs") or {}).get("Name") or "",
+            "wmi_type": (e.get("attrs") or {}).get("Type") or "",
+            "wmi_consumer": (e.get("attrs") or {}).get("Consumer") or "",
+            "wmi_destination": (e.get("attrs") or {}).get("Destination") or "",
+            "wmi_user": (e.get("attrs") or {}).get("User") or "",
         })
     return rows
 
 
-def _native(store, root=None, since=None, event_ids=None):
+# Most event-log records one incremental native read may load. About 1-2 KB
+# each once parsed, so a page stays under about 200 MB (50 000 measured 463 MB peak); the cursor advances to
+# the page end and the rest is read on later runs, never skipped.
+NATIVE_PAGE = 20_000
+
+
+def _native(store, root=None, since=None, event_ids=None, page=None):
     """Read Sysmon events from the event log, if the sensor is delivering.
 
     New events since this consumer's offset, or with `since` (epoch seconds)
@@ -312,17 +377,22 @@ def _native(store, root=None, since=None, event_ids=None):
         if since is not None:
             offset = 0
             start = datetime.fromtimestamp(since, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        events = [e for e in log.iter_events(after=offset, since=start)
+        page = NATIVE_PAGE if page is None else page
+        until = None
+        if start is None and page and log.last_seq - offset > page:
+            until = offset + page
+        events = [e for e in log.iter_events(after=offset, until=until, since=start)
                   if e.get("channel") == CHANNEL
                   and (start is None or (e.get("time") or "") >= start)
                   and (event_ids is None or e.get("source_event") in event_ids)]
-        through = log.last_seq
-        lost = [a for a, b in log.missing() if b > offset]
+        through = log.last_seq if until is None else until
+        backlog = log.last_seq - through
+        lost = [a for a, b in log.missing() if b > offset and a <= through]
     finally:
         log.close()
     return ({"events": rows_from_events(events), "complete": not lost,
              "rareComplete": not lost, "source": "native sensor",
-             "pruned": bool(lost)}, through)
+             "pruned": bool(lost), "backlog": backlog}, through)
 
 
 # A driver-queue drop reported within this many seconds after the service's
@@ -571,13 +641,17 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
         failed = _query_blocked()
         if failed:
             return failed
+        since_epoch = None
         if incremental and store is not None:
-            last = int(store.get_meta("sysmon_last_run", 0) or 0)
+            last = int(float(store.get_meta("sysmon_last_run", 0) or 0))
+            if last and now() - last < hours * 3600:
+                since_epoch = last - 60
             if last:
                 # A minute of overlap, so an event landing between the query and
                 # the timestamp write is seen twice rather than never.
                 minutes = max(2, min(int((now() - last) / 60) + 1, hours * 60))
-        data = _fetch(hours=hours, minutes=minutes, rare_hours=hours if rejudge else None)
+        data = _fetch(hours=hours, minutes=minutes, rare_hours=hours if rejudge else None,
+                      since_epoch=None if rejudge else since_epoch)
     if 'events' not in data or data.get('readFailed'):
         collection.failed('sysmon', 'event query incomplete; cursor retained')
         return [_finding('visibility', 'high', 'Sysmon event query failed',
@@ -593,6 +667,19 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
         # A failed historical replay cannot erase stored injection verdicts,
         # but it must not obstruct the complete live incremental stream.
         data['rareComplete'] = False
+    # Oldest-first paging (2026-10-11): a capped fallback query used to keep
+    # its cursor and fail on every run, and the reviver re-forced it every
+    # ~30 s, starving the other collectors for hours. The cursor now moves to
+    # the end of the page actually read; the rest is read on later runs.
+    paged_to = None
+    if (native is None and not probing and incremental and not rejudge
+            and store is not None and data.get('capped')
+            and not data.get('complete', False) and not data.get('readFailed')):
+        ends = [_epoch(data[k]) if data.get(k) else query_started
+                for k in ('rareLast', 'bulkLast')]
+        prior = float(store.get_meta('sysmon_last_run', 0) or 0)
+        if None not in ends and min(ends) > prior:
+            paged_to = min(ends)
     events = aslist(data.get("events"))
     replay_complete = (rejudge and data.get('complete') and data.get('rareComplete')
                        and sum(int(e.get('id') or 0) == 8 for e in events)
@@ -604,18 +691,32 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             out.append(_finding('visibility', 'high', 'Sysmon events were removed before analysis',
                                 'Event log retention pruned segments this detector had not '
                                 'read yet; raise the event log budget.', CHANNEL))
+        elif paged_to is not None:
+            collection.succeeded('sysmon')
+            out.append(_finding('visibility', 'medium', 'Sysmon is catching up a backlog',
+                                'The query cap was reached. This run read the oldest '
+                                f'unread events through {datetime.fromtimestamp(paged_to).isoformat(timespec="seconds")}'
+                                ' and advanced the cursor; newer events are read on the '
+                                'next runs, so recent activity is delayed, not skipped.', CHANNEL))
         else:
             collection.failed('sysmon', 'event query capped or completeness unverified; cursor retained')
             out.append(_finding('visibility', 'high', 'Sysmon event coverage is partial',
                                 'The query cap was reached or completeness was not established. '
                                 'The cursor is retained; install the native sensor '
                                 '(windows-sensor/install.ps1) to drain the backlog.', CHANNEL))
+    if native is not None and (data.get('backlog') or 0) > 0:
+        out.append(_finding('visibility', 'medium', 'Sysmon is catching up a backlog',
+                            f"{data['backlog']} newer event-log records are still unread; "
+                            f"each run reads up to {NATIVE_PAGE} and advances the cursor, so "
+                            'recent activity is delayed, not skipped.', CHANNEL))
     window = ("a replay" if probing
               else "the native sensor's full review window" if native is not None and replay_complete
               else "the native sensor since the last run" if native is not None and incremental
               else f"the last {minutes} minutes" if minutes else f"the last {hours}h")
 
     lsass_hits, remote_threads, tampering = [], [], []
+    browser_hits = {}
+    driver_loads, startup_drops, driver_drops, pipe_hits, wmi_events = [], [], [], [], []
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
     technique_hits, discovery_seen = {}, []
@@ -636,7 +737,23 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
         base = _base(image)
 
         if eid == 10:
-            if _base(e.get("target")) != "lsass.exe":
+            target_base = _base(e.get("target"))
+            if target_base in BROWSER_IMAGES:
+                if base == target_base or base in BROWSER_ACCESS_EXPECTED:
+                    continue
+                try:
+                    mask = int(str(e.get("granted") or ""), 16)
+                except ValueError:
+                    mask = None
+                # Query-only opens cannot read memory; they are inventory.
+                if mask is not None and not mask & ~QUERY_ONLY:
+                    continue
+                hit = browser_hits.setdefault((image, target_base), [0, e.get("granted"), e.get("time"), False])
+                hit[0] += 1
+                hit[2] = e.get("time") or hit[2]
+                hit[3] = hit[3] or bool(mask and mask & VM_READ) or mask is None
+                continue
+            if target_base != "lsass.exe":
                 continue
             if base in LSASS_EXPECTED:
                 continue
@@ -664,6 +781,34 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 if (loaded.lower().endswith(".dll") and loader_dir and loader_dir == loaded_dir
                         and any(part in loaded_dir + "/" for part in WRITABLE_DLL_DIRS)):
                     sideloads.append((image, loaded, e.get("time")))
+        elif eid == 6:
+            loaded = e.get("loaded") or ""
+            low = loaded.replace("\\", "/").lower()
+            unsigned_drv = str(e.get("signed") or "").lower() == "false"
+            valid = (e.get("sigstat") or "Valid") == "Valid"
+            staged = any(part in low + "/" for part in WRITABLE_DLL_DIRS) and not (
+                valid and not unsigned_drv and low.startswith(PROTECTED_DRIVER_DIRS))
+            if unsigned_drv or staged or not valid:
+                driver_loads.append((loaded, e.get("signed"), e.get("sigstat"), e.get("time"), staged))
+        elif eid == 11:
+            path = e.get("file") or ""
+            low = path.replace("\\", "/").lower().replace("/", "\\")
+            if STARTUP_FOLDER in low and base not in INSTALLER_IMAGES:
+                startup_drops.append((image, path, e.get("time")))
+            elif DRIVERS_FOLDER in low and base not in INSTALLER_IMAGES \
+                    and not image.lower().startswith("c:\\windows\\"):
+                driver_drops.append((image, path, e.get("time")))
+        elif eid in (17, 18):
+            pipe = (e.get("pipe") or "").lower()
+            for needle, tool, tids in ATTACK_PIPES:
+                if needle in pipe:
+                    pipe_hits.append((image, pipe, tool, tids, eid, e.get("time")))
+                    break
+        elif eid in (19, 20, 21):
+            wmi_events.append((eid, image, e.get("wmi_operation") or "", e.get("wmi_name") or "",
+                               e.get("wmi_type") or "", e.get("wmi_consumer") or "",
+                               e.get("wmi_destination") or "", e.get("wmi_user") or "",
+                               e.get("time")))
         elif eid == 22:
             q = (e.get("query") or "").lower().rstrip(".")
             if q:
@@ -728,6 +873,24 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
         times.append(when)
 
     # -- credential access -------------------------------------------------
+    for (image, target), (count, granted, when, read) in sorted(
+            browser_hits.items(), key=lambda kv: -kv[1][0])[:10]:
+        # A memory read by a program running from a staging path (a user
+        # profile, Temp, ProgramData) is the theft shape; an installed program
+        # under Program Files or Windows doing the same is more often a
+        # password manager or an accessibility tool, so it is medium until
+        # the owner says otherwise.
+        staged = any(part in image.replace("\\", "/").lower() + "/" for part in WRITABLE_DLL_DIRS)
+        out.append(_finding(
+            "credential access", "high" if read and staged else "medium",
+            f"{_base(image)} opened {target} memory",
+            f"{count}× with access {granted}, most recently {iso_of(when)}"
+            + (", including PROCESS_VM_READ: the browser's decrypted cookies and "
+               "session tokens live in that memory, and reading them there is how "
+               "they are stolen without touching the cookie database" if read else
+               ", without memory-read rights")
+            + ". Password managers, accessibility tools and debuggers do this "
+              "legitimately; confirm you recognise the program.", image))
     for image, granted, when, read, query_only, guid in lsass_hits:
         if query_only:
             script = _broker_script(guid, eventlog)
@@ -803,6 +966,63 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             f"unsigned {_base(loaded)} was loaded beside its host executable in a "
             f"user-writable directory at {iso_of(when)}. Portable applications can "
             f"look the same; verify both signatures and origin before containment.", loaded))
+
+    # -- drivers, startup drops, attack-tool pipes, WMI subscriptions ----------
+    # Sysmon 6, 11, 17/18 and 19-21 reached the event log for a month with no
+    # detector reading them (BLIND-SPOTS-2026-10-22 S15).
+    for loaded, signed, sigstat, when, staged in driver_loads[:20]:
+        f = _finding(
+            "tampering", "critical" if (str(signed).lower() == "false" or staged) else "high",
+            f"driver loaded that is unsigned or from a writable path: {_base(loaded)}",
+            f"{loaded} at {iso_of(when)}; signed={signed or '?'}, signature status "
+            f"{sigstat or '?'}. A kernel driver runs with full control of the machine "
+            f"and can hide from every userland check JARVIS makes.", loaded)
+        f["techniques"] = ["T1014", "T1068"]
+        out.append(f)
+    for image, path, when in startup_drops[:20]:
+        f = _finding(
+            "persistence", "high", f"{_base(image) or 'a process'} wrote to a Startup folder",
+            f"{path} at {iso_of(when)}; it runs at the next logon. Installers do this "
+            f"for their own tray helpers; confirm you asked for it.", path)
+        f["techniques"] = ["T1547"]
+        out.append(f)
+    for image, path, when in driver_drops[:20]:
+        f = _finding(
+            "persistence", "high", f"{_base(image) or 'a process'} wrote into the drivers folder",
+            f"{path} at {iso_of(when)} by a program outside Windows; a driver file "
+            f"written here is loaded at the next boot or service start.", path)
+        f["techniques"] = ["T1014", "T1543"]
+        out.append(f)
+    for image, pipe, tool, tids, eid, when in pipe_hits[:20]:
+        # A pipe name is evidence of the tool that normally creates it, not
+        # proof: a decoy, a honeypot or an administrator's own PAExec session
+        # produce the same event. Credential-dump pipes have no routine use.
+        lateral = "T1021" in tids
+        f = _finding(
+            "lateral movement" if lateral else "credential access",
+            "high" if lateral else "critical",
+            f"named pipe of {tool} {'created' if eid == 17 else 'connected'} by {_base(image) or '?'}",
+            f"{pipe} at {iso_of(when)}. This name is the one {tool} uses; confirm whether "
+            f"you or an administrator ran that tool at this time, because a decoy or a "
+            f"renamed binary with the same pipe name looks identical here.", image)
+        f["techniques"] = list(tids)
+        out.append(f)
+    for eid, image, operation, name, kind, consumer, destination, user, when in wmi_events[:20]:
+        what = {19: "filter", 20: "consumer", 21: "filter-to-consumer binding"}[eid]
+        deleted = operation.lower() == "deleted"
+        f = _finding(
+            "persistence", "medium" if deleted else "critical",
+            f"WMI event {what} {operation.lower() or 'changed'}: {name or consumer or '?'}",
+            f"{iso_of(when)}; type {kind or '?'}"
+            + (f"; consumer {consumer}" if consumer else "")
+            + (f"; runs {destination[:200]}" if destination else "")
+            + (f"; by {user}" if user else "")
+            + f"; process {_base(image) or '?'}. A WMI subscription runs its consumer "
+              f"whenever its filter fires, with no file on disk and no autostart key; "
+              f"it is the quietest persistence Windows offers. Nothing JARVIS installs "
+              f"creates one.", image)
+        f["techniques"] = ["T1546"]
+        out.append(f)
 
     for image, cmdline, when in recovery_tamper[:20]:
         out.append(_finding(
@@ -945,6 +1165,10 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
         if native is not None and incremental and data.get('complete'):
             store.set_meta('sysmon_eventlog_seq', through)
             store.set_meta('sysmon_last_run', query_started)
+            store.commit()
+        elif native is None and incremental and paged_to is not None:
+            # Floored: a cursor that re-reads a second is safe, one that skips is not.
+            store.set_meta('sysmon_last_run', int(paged_to))
             store.commit()
         elif native is None and incremental and data.get('complete'):
             # Findings are durable first. A crash here replays evidence instead

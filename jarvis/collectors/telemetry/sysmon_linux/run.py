@@ -1,11 +1,13 @@
 """The audit: rules over new events, remembered hits, and capture-health checks."""
 
 import re
+import sqlite3
 
 from jarvis.core import egress as egress_baseline
 from jarvis.core.finding import finding as _finding
 from jarvis.core.util import now
 
+from . import history
 from .journal import CHANNEL, _event_utc, _parse, _raw, state
 from .rules import (
     DOWNLOAD_RUN,
@@ -212,6 +214,14 @@ def audit(store=None, hours=24, hosts=("wsl", "win"), incremental=False):
     out = _rules(events, store=store) + _health(events, since, incremental)
     if store is not None:
         out = _remember(store, out, hours)
+    if incremental and store is not None:
+        try:
+            history.record(store, events, _event_utc)
+        except sqlite3.Error as exc:
+            out.append(_finding(
+                "telemetry", "low", "Linux start history not recorded this pass",
+                f"the start_images table could not be written ({type(exc).__name__}); /procs judges "
+                "short-lived Linux programs by place only until it can", CHANNEL))
     out.append(_finding(
         "telemetry", "ok",
         f"Sysmon for Linux delivered {len(events)} events since the last pass",

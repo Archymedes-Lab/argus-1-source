@@ -324,6 +324,26 @@ def probe_keyboard_hook():
         "unsigned process with a low-level keyboard hook; a signed one stays low"
 
 
+def probe_attack_pipe():
+    from jarvis.collectors.telemetry import sysmon
+    out = sysmon.audit(events=[{"id": 17, "image": r"C:\Windows\PAExec-1234-HOST.exe",
+                                "pipe": r"\PAExec-1234-HOST", "time": "2026-10-23T00:00:00Z"}])
+    hit = [f for f in out if f["severity"] == "high" and "named pipe" in f["title"]]
+    return bool(hit and "T1559" in hit[0].get("techniques", [])), \
+        "named pipe of a known remote-execution tool reported high"
+
+
+def probe_wmi_subscription():
+    from jarvis.collectors.telemetry import sysmon
+    out = sysmon.audit(events=[{"id": 20, "image": r"C:\Windows\System32\wbem\WmiPrvSE.exe",
+                                "wmi_operation": "Created", "wmi_name": "Updater",
+                                "wmi_type": "Command Line", "wmi_consumer": "Updater",
+                                "wmi_destination": r"powershell -w hidden -f C:\Users\Public\u.ps1",
+                                "wmi_user": "DOMAIN\\user", "time": "2026-10-23T00:00:00Z"}])
+    hit = [f for f in out if f["severity"] == "critical" and "WMI event consumer" in f["title"]]
+    return bool(hit), "a created WMI event consumer reported critical"
+
+
 def _network_events(change):
     """Events netwatch records when one field of a steady connection changes."""
     import importlib
@@ -616,6 +636,10 @@ def _table_probes():
 # tid -> (probe, feeding collector jobs)
 PROBES = {
     "T1055": (probe_injection, ("sysmon", "memscan")),
+    "T1559": (probe_attack_pipe, ("sysmon",)),
+    # T1546 (WMI subscriptions) stays claimed: the detector's field names come
+    # from the Sysmon schema and no WMI event has been recorded on this host
+    # yet, so a replay of a real record is required before it counts.
     "T1105": (probe_download_run, ("sysmon_linux",)),
     "T1070": (probe_log_removal, ("sysmon_linux",)),
     "T1505": (probe_webshell_spawn, ("sysmon_linux", "webshell")),
@@ -705,6 +729,71 @@ _optional("T1200", probe_hardware_addition, ("preos",),
 _optional("T1556", probe_rogue_pam_module, ("implant",),
           lambda: _has("jarvis.collectors.persistence.implant", "unowned_pam_modules")
           and bool(__import__("shutil").which("dpkg")))
+def _tamper_payload(**sources):
+    """A tamper.ps1 payload with every source read cleanly, plus `sources`."""
+    base = {k: {"ok": True, "events": []} for k in
+            ("defender", "sysmon", "services", "system_clear", "app_crashes", "security")}
+    base.update({"writers": {"ok": True, "events": []}, "autologgers": []})
+    base.update({k: {"ok": True, "events": v} for k, v in sources.items()})
+    return base
+
+
+def probe_defender_exclusion():
+    from jarvis.collectors.process import tamper
+    key = r"HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths\C:\Users\Public"
+    added = {"id": 5007, "t": _WHEN,
+             "msg": f"Configuration changed. Old value: \nNew value: {key} = 0x0"}
+    writer = {"t": _WHEN, "id": 13, "image": r"C:\Windows\System32\reg.exe",
+              "target": key, "details": "DWORD (0x00000000)"}
+    out = tamper.findings(dict(_tamper_payload(defender=[added]),
+                               writers={"ok": True, "events": [writer]}))
+    routine = {"id": 5007, "t": _WHEN, "msg": "Configuration changed. New value: HKLM\\SOFTWARE\\"
+               "Microsoft\\Windows Defender\\SpyNet\\LastMAPSFailureTimeString = 2026"}
+    quiet = tamper.findings(_tamper_payload(defender=[routine]))
+    hit = [f for f in out if f["severity"] == "high" and "(T1679)" in f["title"]]
+    return (len(hit) == 1 and "reg.exe" in hit[0]["detail"]
+            and all(f["severity"] == "ok" for f in quiet)), \
+        "Defender exclusion added, attributed to the writing process; a routine setting stays quiet"
+
+
+def probe_security_crash():
+    from jarvis.collectors.process import tamper
+    crash = {"id": 1000, "t": _WHEN, "msg": "Faulting application name: MsMpEng.exe, version: 4.18 "
+             "Exception code: 0xc0000409 Fault offset: 0x1"}
+    died = {"id": 7034, "t": _WHEN,
+            "msg": "The Microsoft Defender Antivirus Service service terminated unexpectedly."}
+    out = tamper.findings(_tamper_payload(app_crashes=[crash], services=[died]))
+    started = {"id": 7036, "t": _WHEN,
+               "msg": "The Microsoft Defender Antivirus Service service entered the running state."}
+    quiet = tamper.findings(_tamper_payload(services=[started]))
+    hit = [f for f in out if f["severity"] == "high" and "(T1687)" in f["title"]]
+    return (len(hit) == 2 and all(f["severity"] == "ok" for f in quiet)), \
+        "security engine crash and its service dying; a service starting stays quiet"
+
+
+def probe_defenses_disabled():
+    from jarvis.collectors.process import tamper
+    out = tamper.findings(dict(
+        _tamper_payload(sysmon=[{"id": 4, "t": _WHEN, "msg": "State: Stopped Version: 15.21"}],
+                        system_clear=[{"id": 104, "t": _WHEN, "msg": "The System log file was cleared."}]),
+        autologgers=[{"name": "EventLog-System", "exists": True, "start": 0, "disabled": []}]))
+    boot = tamper.findings(_tamper_payload(
+        sysmon=[{"id": 4, "t": _WHEN, "msg": "State: Started Version: 15.21"}],
+        security=[{"id": 1100, "t": _WHEN, "msg": "The event logging service has shut down."}]))
+    titles = " | ".join(f["title"] for f in out if f["severity"] == "high")
+    return ("Sysmon service stopped" in titles and "System event log cleared" in titles
+            and "ETW session EventLog-System disabled" in titles
+            and all(f["severity"] == "ok" for f in boot)), \
+        "Sysmon stopped, System log cleared, an event-log ETW session disabled; boot and shutdown stay quiet"
+
+
+_optional("T1679", probe_defender_exclusion, ("evasion",),
+          lambda: _has("jarvis.collectors.process.tamper", "findings"))
+_optional("T1687", probe_security_crash, ("evasion",),
+          lambda: _has("jarvis.collectors.process.tamper", "findings"))
+_optional("T1685", probe_defenses_disabled, ("evasion",),
+          lambda: _has("jarvis.collectors.process.tamper", "findings"))
+
 # Techniques whose only detection is contextual: a discovery command is
 # reported inside a burst and deliberately not alone, so a single `whoami` by
 # an intruder goes unreported. Their probes still run (a broken burst rule is a
@@ -768,6 +857,8 @@ HELD["T1571"] = ("only the port is judged, for a short list of script hosts; a p
                  "its own program or an ordinary port is not seen")
 HELD["T1205"] = ("a raw packet socket is the same observation as a sniffer; a filter on an "
                  "ordinary socket, or a knock sequence, is not seen")
+HELD["T1687"] = ("a security product crashing or its service dying is reported; that is the "
+                 "symptom MITRE's analytic watches for, and no exploit against one has been observed")
 HELD["T1074"] = "an archive written to a few shared directories is reported; staging anywhere else is not seen"
 HELD["T1080"] = "a copy command is reported; this machine uses no shared drive, so nothing has exercised it"
 HELD["T1491"] = "a wallpaper change from a command line is reported; any other defacement is not seen"

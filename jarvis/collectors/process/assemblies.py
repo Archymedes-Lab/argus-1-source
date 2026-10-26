@@ -44,6 +44,8 @@ OWN_SCRIPTS = {
     "hidden.ps1": {},
     "audio_state.ps1": {},
     "window_trace.ps1": {"template": ("__SECONDS__", range(1, 601))},
+    # Launched with -Command only while someone watches /procs.
+    "procfeed.ps1": {},
 }
 
 # Names csc emits for language constructs rather than copying from source:

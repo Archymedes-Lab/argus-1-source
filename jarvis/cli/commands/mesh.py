@@ -1,7 +1,7 @@
 """Opt-in permissioned encrypted process history replication."""
 import json
-import ssl
 import sqlite3
+import ssl
 from functools import partial
 
 from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError

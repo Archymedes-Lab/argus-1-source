@@ -449,6 +449,27 @@ RULES = (
        "container started with the host filesystem, pid namespace or Docker socket",
        ("/usr/bin/docker", "docker run -it -v /:/host alpine chroot /host"),
        [("/usr/bin/docker", "docker run --rm -v /home/u/app:/app node:22 npm test")]),
+    # Container attack surface (DOCKER-ATTACK-SURFACE-2026-10-23): what the
+    # operator of the daemon does, as seen in process creation. The owner is
+    # that operator most of the time; the rules say what was done, not who.
+    _l("T1610 T1611", "docker podman nerdctl",
+       r"\b(run|create)\b.*(--privileged\b|--cap-add[= ]?(CAP_)?(SYS_ADMIN|SYS_PTRACE|SYS_MODULE|ALL)\b"
+       r"|--security-opt[= ]?(seccomp|apparmor)[=:]unconfined)", "high",
+       "container started privileged, with an escape capability, or without seccomp/AppArmor",
+       ("/usr/bin/docker", "docker run -d --privileged --restart=always alpine sh -c 'echo x | base64 -d | sh'"),
+       [("/usr/bin/docker", "docker run --rm --cap-add NET_BIND_SERVICE -p 80:80 nginx:1.27"),
+        ("/usr/bin/docker", "docker run --rm --security-opt no-new-privileges:true alpine id")]),
+    _l("T1609", "docker podman nerdctl",
+       r"\bexec\b.*\b(nsenter|chroot|mount|insmod|modprobe)\b|\bexec\b.*base64\s+(-d|--decode)", "high",
+       "command executed inside a container that enters namespaces, mounts, or loads modules",
+       ("/usr/bin/docker", "docker exec -it app nsenter -t 1 -m -u -i -n sh"),
+       [("/usr/bin/docker", "docker exec -it app sh"), ("/usr/bin/docker", "docker exec db psql -U app")]),
+    _l("T1133 T1552", "dockerd docker",
+       r"(-H|--host)[= ]?tcp://(?!127\.0\.0\.1|localhost|\[::1\])", "critical",
+       "Docker API exposed over TCP without the loopback address",
+       ("/usr/bin/dockerd", "dockerd -H tcp://0.0.0.0:2375 -H unix:///var/run/docker.sock"),
+       [("/usr/bin/dockerd", "dockerd -H fd:// --containerd=/run/containerd/containerd.sock"),
+        ("/usr/bin/docker", "docker -H tcp://127.0.0.1:2375 ps")]),
 
     # ── lateral movement, tunnelling and proxies ────────────────────────────
     _w("T1090", "netsh", r"interface\s+portproxy\s+add\b", "high", "port proxy rule added",
@@ -878,6 +899,43 @@ RULES += (
 )
 
 
+# -- WSL boundary (measured 2026-10-21): any process of the Windows user gets
+# root inside the distro with `wsl.exe -u root` and no prompt; Windows Sysmon
+# records every wsl.exe command line, the Linux side only an unresolved-parent
+# root process that docker also produces thousands of times a day. These rules
+# are the deterministic path; jarvis/collectors/host/wslguard.py samples the
+# facts no event carries. See docs/architecture/WSL-ATTACK-SURFACE.md.
+WSL_EXE = r"C:\Program Files\WSL\wsl.exe"
+WSL_LAUNCHERS = "ubuntu ubuntu2404 ubuntu2204 ubuntu2004 ubuntu1804 debian kali opensuse-leap"
+RULES += (
+    _w("T1564 T1548", "wsl", r"(^|\s)(-u|--user)\s+root\b|(^|\s)--system\b", "high",
+       "WSL started as root from Windows (no password; root inside the distro)",
+       (WSL_EXE, "wsl.exe -d Ubuntu -u root -- bash"),
+       [(WSL_EXE, "wsl.exe -d Ubuntu --exec test -r /mnt/c/Windows/System32/cmd.exe"),
+        (WSL_EXE, "wsl.exe -d Ubuntu -u chris -- id -u"),
+        (WSL_EXE, "wsl.exe ~")]),
+    _w("T1564", "wsl", r"(^|\s)--(import|import-in-place|install|mount|debug-shell)\b", "medium",
+       "a WSL distribution or disk was added, mounted or opened for debugging from Windows",
+       (WSL_EXE, r"wsl.exe --import evil C:\Users\Public\evil C:\Users\Public\evil.tar"),
+       [(WSL_EXE, "wsl.exe -l -v"), (WSL_EXE, "wsl.exe --status"),
+        (WSL_EXE, "wsl.exe --unmount")]),
+    _w("T1489 T1485", "wsl", r"(^|\s)--unregister\b", "critical",
+       "a WSL distribution is being unregistered from Windows (its disk and everything in it are deleted)",
+       (WSL_EXE, "wsl.exe --unregister Ubuntu"),
+       [(WSL_EXE, "wsl.exe --list --verbose")]),
+    _w("T1489", "wsl", r"(^|\s)--(shutdown|terminate)\b", "high",
+       "WSL shut down or a distribution terminated from Windows (stops the JARVIS engine)",
+       (WSL_EXE, "wsl.exe --shutdown"),
+       [(WSL_EXE, "wsl.exe -d Ubuntu -- true")]),
+    _w("T1548", WSL_LAUNCHERS, r"\bconfig\s+--default-user\s+root\b", "high",
+       "a WSL distribution's default user set to root with its launcher",
+       (r"C:\Program Files\WindowsApps\CanonicalGroupLimited.Ubuntu24.04LTS_x64\ubuntu2404.exe",
+        "ubuntu2404.exe config --default-user root"),
+       [(r"C:\Program Files\WindowsApps\CanonicalGroupLimited.Ubuntu24.04LTS_x64\ubuntu2404.exe",
+         "ubuntu2404.exe config --default-user chris")]),
+)
+
+
 # ── registry writes (Sysmon event 13) ───────────────────────────────────────
 # The same change whatever made it: reg.exe, PowerShell, an installer or an API
 # call from an implant. A machine only reports these for the keys its Sysmon
@@ -905,6 +963,9 @@ _ZERO, _ONE, _FOUR = r"^DWORD \(0x0+\)$", r"^DWORD \(0x0*1\)$", r"^DWORD \(0x0*4
 _WRITABLE = r"\\(Users\\|Windows\\Temp\\|Temp\\)"
 _SVC = r"HKLM\System\CurrentControlSet\Services" + "\\"
 SVCHOST = S32 + "svchost.exe"
+_LXSS = r"\\CurrentVersion\\Lxss\\"
+_LXSS_DISTRO = _LXSS + r"\{[0-9a-fA-F-]{36}\}\\"
+_LXSS_USER = r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\Lxss"
 
 REG_RULES = (
     RegRule(("T1686",), r"\\FirewallPolicy\\(Standard|Domain|Public)Profile\\EnableFirewall$", _ZERO,
@@ -964,6 +1025,125 @@ REG_RULES = (
             ((S32 + "reg.exe", r"HKLM\System\CurrentControlSet\Control\SecurityProviders\WDigest\UseLogonCredential",
               "DWORD (0x00000000)"),),
             family=r"\\SecurityProviders\\WDigest\\"),
+    RegRule(("T1123", "T1125", "T1112"),
+            r"\\CapabilityAccessManager\\ConsentStore\\(microphone|webcam)(\\NonPackaged)?\\Value$",
+            r"^Allow$",
+            "medium", "microphone or camera consent switched to Allow in the registry",
+            (r"C:\Users\u\AppData\Local\Temp\a.exe",
+             r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\Value",
+             "Allow"),
+            ((S32 + "svchost.exe",
+              r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\Value",
+              "Deny"),
+             (S32 + "svchost.exe",
+              r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged\C:#Users#u#app.exe\LastUsedTimeStart",
+              "QWORD (0x01dc3a1b-0x9f2c1e40)"),
+             (S32 + "svchost.exe",
+              r"HKU\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\Value",
+              "Allow")),
+            family=r"\\CapabilityAccessManager\\ConsentStore\\"),
+    # WSL registration (user hive, writable by any process of the user) and the
+    # administrator-only service plugins and policy. Measured 2026-10-21.
+    RegRule(("T1548", "T1112"), _LXSS_DISTRO + r"DefaultUid$", _ZERO,
+            "high", "WSL distribution default user set to root in the registry",
+            (S32 + "reg.exe", _LXSS_USER + r"\{3aa60676-2291-4d89-ba9b-a424d3b0a9a2}\DefaultUid",
+             "DWORD (0x00000000)"),
+            ((r"C:\Program Files\WSL\wslservice.exe",
+              _LXSS_USER + r"\{3aa60676-2291-4d89-ba9b-a424d3b0a9a2}\DefaultUid", "DWORD (0x000003e8)"),
+             (r"C:\Program Files\WSL\wslservice.exe", _LXSS_USER + r"\NatIpAddress", "172.26.56.167")),
+            family=_LXSS),
+    RegRule(("T1564", "T1112"), _LXSS_DISTRO + r"BasePath$", r"\S",
+            "high", "WSL distribution disk location changed in the registry",
+            (S32 + "reg.exe", _LXSS_USER + r"\{3aa60676-2291-4d89-ba9b-a424d3b0a9a2}\BasePath",
+             r"C:\Users\Public\evil"),
+            ((r"C:\Program Files\WSL\wslservice.exe",
+              _LXSS_USER + r"\{3aa60676-2291-4d89-ba9b-a424d3b0a9a2}\State", "DWORD (0x00000001)"),),
+            family=_LXSS),
+    RegRule(("T1564", "T1112"), _LXSS_DISTRO + r"Flags$", r"\S",
+            "medium", "WSL distribution flags changed in the registry (interop, drive mounting, Windows PATH)",
+            (S32 + "reg.exe", _LXSS_USER + r"\{3aa60676-2291-4d89-ba9b-a424d3b0a9a2}\Flags",
+             "DWORD (0x0000000f)"),
+            ((r"C:\Program Files\WSL\wslservice.exe",
+              _LXSS_USER + r"\{3aa60676-2291-4d89-ba9b-a424d3b0a9a2}\Version", "DWORD (0x00000002)"),),
+            family=_LXSS),
+    RegRule(("T1547", "T1574"), _LXSS + r"Plugins\\[^\\]+$", r"\S",
+            "critical", "WSL service plugin registered in the registry (a DLL the WSL service loads as SYSTEM)",
+            (S32 + "reg.exe", r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss\Plugins\Updater",
+             r"C:\Users\Public\u.dll"),
+            ((r"C:\Windows\System32\msiexec.exe",
+              r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss\MSI\Version", "2.7.8.0"),),
+            family=_LXSS),
+    RegRule(("T1564", "T1112"), r"\\Policies\\Microsoft\\Windows\\WSL\\[^\\]+$", r"\S",
+            "medium", "WSL group policy value written in the registry",
+            (S32 + "reg.exe", r"HKLM\SOFTWARE\Policies\Microsoft\Windows\WSL\AllowCustomKernelUserSetting",
+             "DWORD (0x00000001)"),
+            ((S32 + "svchost.exe", r"HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer\NoDriveTypeAutoRun",
+              "DWORD (0x000000ff)"),),
+            family=r"\\Policies\\Microsoft\\Windows\\WSL\\"),
+    # Defence tampering and in-process persistence. The Sysmon baseline records
+    # these families since 2026-10-22; until it is applied they prove nothing.
+    RegRule(("T1679", "T1112"),
+            r"\\Windows Defender\\Exclusions\\(Paths|Processes|Extensions|IpAddresses)\\.+$", r"",
+            "high", "Defender exclusion added in the registry",
+            (S32 + "reg.exe",
+             r"HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths\C:\Users\Public",
+             "DWORD (0x00000000)"),
+            ((S32 + "svchost.exe",
+              r"HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths", "DWORD (0x00000000)"),
+             (S32 + "svchost.exe",
+              r"HKLM\SOFTWARE\Microsoft\Windows Defender\Features\TamperProtection", "DWORD (0x00000005)")),
+            family=r"\\Windows Defender\\Exclusions\\"),
+    RegRule(("T1685", "T1112"),
+            r"\\Windows Defender\\(Real-Time Protection\\Disable(RealtimeMonitoring|BehaviorMonitoring"
+            r"|OnAccessProtection|ScanOnRealtimeEnable|IOAVProtection)|DisableAntiSpyware|DisableAntiVirus)$",
+            _ONE, "critical", "Defender real-time protection disabled in the registry",
+            (S32 + "reg.exe",
+             r"HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection\DisableRealtimeMonitoring",
+             "DWORD (0x00000001)"),
+            ((S32 + "svchost.exe",
+              r"HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection\DisableRealtimeMonitoring",
+              "DWORD (0x00000000)"),),
+            family=r"\\Windows Defender\\(Real-Time Protection\\|Disable)"),
+    RegRule(("T1546", "T1574"),
+            r"\\CLSID\\\{[0-9A-Fa-f-]{36}\}\\InprocServer32\\(\(Default\))?$", _WRITABLE,
+            "high", "COM server pointed at a path any user can write (COM hijack)",
+            (S32 + "reg.exe",
+             r"HKU\S-1-5-21-1-2-3-1001\Software\Classes\CLSID\{b5f8350b-0548-48b1-a6ee-88bd00b4a5e7}\InprocServer32\(Default)",
+             r"C:\Users\u\AppData\Local\Temp\x.dll"),
+            ((r"C:\Program Files\App\setup.exe",
+              r"HKLM\SOFTWARE\Classes\CLSID\{b5f8350b-0548-48b1-a6ee-88bd00b4a5e7}\InprocServer32\(Default)",
+              r"C:\Program Files\App\x.dll"),
+             (r"C:\Program Files\App\setup.exe",
+              r"HKLM\SOFTWARE\Classes\CLSID\{b5f8350b-0548-48b1-a6ee-88bd00b4a5e7}\InprocServer32\ThreadingModel",
+              "Apartment")),
+            family=r"\\CLSID\\.*\\InprocServer32"),
+    RegRule(("T1547", "T1556"),
+            r"\\Control\\Lsa\\(Security|Authentication|Notification)\s?Packages$", r"\S",
+            "critical", "LSA package list changed in the registry (a DLL LSASS will load)",
+            (S32 + "reg.exe", r"HKLM\System\CurrentControlSet\Control\Lsa\Security Packages",
+             r"kerberos msv1_0 schannel wdigest tspkg pku2u C:\Users\Public\ssp.dll"),
+            ((S32 + "lsass.exe", r"HKLM\System\CurrentControlSet\Control\Lsa\OfflineJoin\CurrentValue",
+              "DWORD (0x00000001)"),),
+            family=r"\\Control\\Lsa\\"),
+    RegRule(("T1685", "T1112"),
+            r"\\Microsoft\\AMSI\\Providers\\\{[0-9A-Fa-f-]{36}\}(\\[^\\]*)?$", r"",
+            "high", "AMSI provider registered or changed in the registry",
+            (S32 + "reg.exe",
+             r"HKLM\SOFTWARE\Microsoft\AMSI\Providers\{2781761E-28E0-4109-99FE-B9D127C57AFE}\(Default)",
+             "Windows Defender"),
+            ((S32 + "svchost.exe", r"HKLM\SOFTWARE\Microsoft\AMSI\FeatureBits", "DWORD (0x00000002)"),),
+            family=r"\\Microsoft\\AMSI\\Providers\\"),
+    RegRule(("T1685", "T1070"),
+            r"\\WMI\\Autologger\\(EventLog-[^\\]+|Microsoft-Windows-Sysmon[^\\]*|DefenderApiLogger"
+            r"|DefenderAuditLogger|Sysmon[^\\]*)\\Start$", _ZERO,
+            "critical", "event trace session disabled in the registry",
+            (S32 + "reg.exe", r"HKLM\System\CurrentControlSet\Control\WMI\Autologger\EventLog-Security\Start",
+             "DWORD (0x00000000)"),
+            ((S32 + "svchost.exe", r"HKLM\System\CurrentControlSet\Control\WMI\Autologger\EventLog-Security\Start",
+              "DWORD (0x00000001)"),
+             (S32 + "svchost.exe", r"HKLM\System\CurrentControlSet\Control\WMI\Autologger\Diagtrack-Listener\Start",
+              "DWORD (0x00000000)")),
+            family=r"\\WMI\\Autologger\\"),
 )
 
 

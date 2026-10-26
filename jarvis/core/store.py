@@ -62,6 +62,17 @@ class Store:
                           ("malware", "TEXT DEFAULT ''")):
             if col not in have:
                 self.db.execute(f"ALTER TABLE indicators ADD COLUMN {col} {decl}")
+        sounds = {r[1] for r in self.db.execute("PRAGMA table_info(sound_events)")}
+        for col, decl in (("caller", "TEXT NOT NULL DEFAULT ''"),
+                          ("caller_pid", "INTEGER NOT NULL DEFAULT 0"),
+                          ("caller_app", "TEXT NOT NULL DEFAULT ''"),
+                          ("caller_start", "TEXT NOT NULL DEFAULT ''"),
+                          ("caller_blocked_new", "INTEGER NOT NULL DEFAULT -1"),
+                          ("console_pid", "INTEGER NOT NULL DEFAULT 0"),
+                          ("console_app", "TEXT NOT NULL DEFAULT ''"),
+                          ("console_start", "TEXT NOT NULL DEFAULT ''")):
+            if col not in sounds:
+                self.db.execute(f"ALTER TABLE sound_events ADD COLUMN {col} {decl}")
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_ind_source "
                         "ON indicators(source, last_seen)")
         # hunt joins the peer table against indicators by address, so the

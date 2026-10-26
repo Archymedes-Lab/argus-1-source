@@ -9,7 +9,13 @@ import urllib.parse
 import urllib.request
 
 from .protocol import (
-    MAX_WIRE, MeshError, hex_bytes, response, validate_request, validate_response, wire,
+    MAX_WIRE,
+    MeshError,
+    hex_bytes,
+    response,
+    validate_request,
+    validate_response,
+    wire,
 )
 from .store import Ledger, identity
 

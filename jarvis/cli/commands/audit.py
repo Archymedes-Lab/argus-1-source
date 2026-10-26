@@ -2,7 +2,18 @@
 
 import json
 
-from jarvis.collectors.host import audiowatch, bootintegrity, containers, dotnet_posture, inputwatch, intrusion, pixel, posture, spyware, toolchain
+from jarvis.collectors.host import (
+    audiowatch,
+    bootintegrity,
+    containers,
+    dotnet_posture,
+    inputwatch,
+    intrusion,
+    pixel,
+    posture,
+    spyware,
+    toolchain,
+)
 from jarvis.collectors.identity import bruteforce, secrets
 from jarvis.collectors.network import firewall, netwatch, sniffing, webshell
 from jarvis.collectors.persistence import asep, backdoor, control, implant, startup

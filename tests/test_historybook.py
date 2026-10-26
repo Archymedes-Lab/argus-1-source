@@ -8,12 +8,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from jarvis.cli.commands.history import cmd_history
+from jarvis.cli.parser import build_parser
 from jarvis.core import event, historybook
 from jarvis.core.eventlog import EventLog, LogCapacityError, LogError
-from jarvis.cli.parser import build_parser
-from jarvis.cli.commands.history import cmd_history
 from jarvis.platform.native import ingest
-from tests.test_native import batch, DIR
+from tests.test_native import DIR, batch
 
 
 def sample(n=1, time="2026-10-01T12:00:00Z"):
@@ -210,8 +210,8 @@ class HistoryTests(unittest.TestCase):
         with mock.patch("builtins.print"): self.assertEqual(cmd_history(args, None), 2)
 
     def test_scheduled_scan_records_history_and_failure_keeps_scan_findings(self):
-        from jarvis.service import jobs
         from jarvis.core.store import Store
+        from jarvis.service import jobs
         db = self.root / "service.db"
         Store(str(db)).close()
         res = {"ts": 1000, "processes": [{"host": "wsl", "pid": 22, "exe": "/bin/test"}],
