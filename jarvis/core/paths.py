@@ -47,6 +47,9 @@ SOURCE_ROOT = _source_root()
 WIN_SCRIPTS_DIR = PACKAGE_DIR / "platform" / "win"
 # The dashboard page and its assets.
 STATIC_DIR = PACKAGE_DIR / "web" / "static"
+# The owner's settings file. response/alert.py reads it for delivery; lower
+# layers that need one setting read it here instead of importing upward.
+CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
 
 
 def win_script(name):

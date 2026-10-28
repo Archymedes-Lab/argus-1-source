@@ -341,6 +341,18 @@ COLLECTORS = (
     _c("distrovuln", 86400, "Distribution security data", None, 0, 4, "medium", 300,
        command="status", domain="linux", lane="bulk", governed=True,
        cost_s=25.0, unscored=_KNOWLEDGE),
+    # ARGUS-SERVER.md W12: every codebase on the server, its dependencies
+    # against OSV, risky code, credentials, writable code and web-root leaks.
+    # One bounded audit (200 000 files; 180 s for walk, rules and tools, so a
+    # slow 1-vCPU host still ends inside the 300 s timeout), daily, deferrable.
+    _c("appcode", 86400, "Application code vulnerabilities", None, 0, 4, "medium", 300,
+       command="appcode", domain="linux", lane="bulk", governed=True,
+       unscored="source-tested; heuristic code rules not yet soaked on real server codebases"),
+    # Daily download of the public OSV dumps for the ecosystems appcode found,
+    # streamed to disk and filtered to the inventory (npm 219 MB, 2026-10-28).
+    _c("osv", 86400, "Dependency advisories (OSV)", None, 0, 4, "medium", 300,
+       command="appcode", domain="linux", lane="bulk", governed=True,
+       unscored=_KNOWLEDGE),
     # One loopback GET (or one bridge round trip), never a generation. Its
     # command, `ask model status`, runs the same ping through the assistant.
     _c("model", 1800, "Local model availability", None, 0, 3, "medium", 180,

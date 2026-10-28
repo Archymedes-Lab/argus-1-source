@@ -4,6 +4,7 @@
     logins      successful SSH logins, new networks and keys
     sshwatch    sshd policy, authorised and host keys, live SSH tunnels
     opshealth   failed services, expiring TLS certificates, OOM kills, crashes
+    appcode     every codebase: vulnerable dependencies, risky code, secrets  [PATH ...]
     pkgverify   packaged-file integrity of intruder targets
     services    the declared services file, and what listens now
     netstate    write the firewall snapshot      (argus-netstate unit; no store)
@@ -11,6 +12,7 @@
 """
 
 import json
+import os
 import sys
 
 
@@ -51,6 +53,19 @@ def cmd_opshealth(args, store):
 def cmd_pkgverify(args, store):
     from jarvis.collectors.persistence import pkgverify
     _print(pkgverify.audit(), args.json)
+
+
+def cmd_appcode(args, store):
+    from jarvis.collectors import appcode
+    if args.paths:
+        missing = [p for p in args.paths if not os.path.isdir(p)]
+        if missing:
+            sys.exit(f"not a folder: {', '.join(missing)}")
+        findings = appcode.audit(store, roots=[os.path.abspath(p) for p in args.paths],
+                                 web_roots=[], extra_roots=[], exclude=[], write_inventory=False)
+    else:
+        findings = appcode.audit(store)
+    _print(findings, args.json)
 
 
 def cmd_services(args, store):
@@ -101,6 +116,11 @@ def add_parser(sub):
         p = sub.add_parser(name, help=text)
         p.add_argument("--json", action="store_true")
         p.set_defaults(fn=fn)
+    p = sub.add_parser("appcode", help="every codebase on this server: vulnerable or malicious "
+                       "dependencies, risky code, credentials, writable code, web-root leaks")
+    p.add_argument("paths", nargs="*", help="scan only these folders (default: the whole server)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_appcode)
     p = sub.add_parser("services", help="declared services and what listens now")
     p.add_argument("--suggest", action="store_true",
                    help="print a services.conf starting point from current listeners")

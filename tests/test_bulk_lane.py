@@ -27,6 +27,8 @@ RUNNER_MODULES = {
     "verify": "jarvis.service.verifyjob",
     "pkgverify": "jarvis.collectors.persistence.pkgverify",
     "distrovuln": "jarvis.intel.distrovuln",
+    "appcode": "jarvis.collectors.appcode",
+    "osv": "jarvis.intel.osv",
 }
 INTEROP = re.compile(r"\bps_json\b|\brun_ps\b|\b_ps\(|powershell(\.exe)?['\"]", re.I)
 

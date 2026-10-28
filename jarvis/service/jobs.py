@@ -11,6 +11,7 @@ scheduler's worker thread, and a sqlite handle must not cross threads.
 import time
 from contextlib import contextmanager
 
+from jarvis.collectors import appcode
 from jarvis.collectors.host import (
     accelerator,
     audiowatch,
@@ -56,7 +57,7 @@ from jarvis.core import mlworker as mlworker_mod
 from jarvis.core.eventlog import LogError
 from jarvis.core.finding import LOCAL_HOST
 from jarvis.core.store import Store
-from jarvis.intel import distrovuln, feeds, gaps, hunt, worldwatch
+from jarvis.intel import distrovuln, feeds, gaps, hunt, osv, worldwatch
 from jarvis.intel import research as intel
 from jarvis.lab import audit as arena_audit
 from jarvis.platform import host
@@ -446,6 +447,8 @@ RUNNERS = {
     "heartbeat": _store_only(heartbeat.run),
     "patches": _store_only(patches.audit),
     "distrovuln": lambda hosts, db_path: distrovuln.refresh(),
+    "appcode": _store_only(appcode.audit),
+    "osv": lambda hosts, db_path: osv.refresh(),
     "deep_hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, deep=True)[0],
     "hidden": lambda hosts, db_path: hidden.audit(hosts=hosts, db_path=db_path)[0],
     "firewall": _hosts_only(firewall.audit),
