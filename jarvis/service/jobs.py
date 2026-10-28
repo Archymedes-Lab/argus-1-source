@@ -22,6 +22,7 @@ from jarvis.collectors.host import (
     firmwareaudit,
     geo,
     inputwatch,
+    opshealth,
     patches,
     pixel,
     posture,
@@ -32,7 +33,7 @@ from jarvis.collectors.host import (
     wslguard,
 )
 from jarvis.collectors.host import intrusion as intrusion_mod
-from jarvis.collectors.identity import bruteforce, impersonation, logins, secrets
+from jarvis.collectors.identity import bruteforce, impersonation, logins, secrets, sshwatch
 from jarvis.collectors.network import firewall, internetwatch, netflow, netwatch, sniffing, webshell
 from jarvis.collectors.persistence import asep as asep_mod
 from jarvis.collectors.persistence import backdoor, control, implant, pkgverify, startup
@@ -439,6 +440,8 @@ RUNNERS = {
     "fwaudit": _with_store(firmwareaudit.audit),
     "netflow": _with_store(netflow.audit),
     "logins": _with_store(logins.audit),
+    "sshwatch": _with_store(sshwatch.audit),
+    "opshealth": _with_store(opshealth.audit),
     "pkgverify": lambda hosts, db_path: pkgverify.audit(),
     "heartbeat": _store_only(heartbeat.run),
     "patches": _store_only(patches.audit),

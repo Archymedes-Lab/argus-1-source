@@ -2,6 +2,8 @@
 
     netflow     what the packet sensor saw, judged          (reads the daemon store)
     logins      successful SSH logins, new networks and keys
+    sshwatch    sshd policy, authorised and host keys, live SSH tunnels
+    opshealth   failed services, expiring TLS certificates, OOM kills, crashes
     pkgverify   packaged-file integrity of intruder targets
     services    the declared services file, and what listens now
     netstate    write the firewall snapshot      (argus-netstate unit; no store)
@@ -34,6 +36,16 @@ def cmd_netflow(args, store):
 def cmd_logins(args, store):
     from jarvis.collectors.identity import logins
     _print(logins.audit(store), args.json)
+
+
+def cmd_sshwatch(args, store):
+    from jarvis.collectors.identity import sshwatch
+    _print(sshwatch.audit(store), args.json)
+
+
+def cmd_opshealth(args, store):
+    from jarvis.collectors.host import opshealth
+    _print(opshealth.audit(store), args.json)
 
 
 def cmd_pkgverify(args, store):
@@ -81,6 +93,10 @@ def cmd_netsensor(args, store):
 def add_parser(sub):
     for name, fn, text in (("netflow", cmd_netflow, "incoming packets the sensor saw, judged"),
                            ("logins", cmd_logins, "successful SSH logins: new networks, new keys, guesses that worked"),
+                           ("sshwatch", cmd_sshwatch,
+                            "SSH server policy, every authorised key, host keys and live tunnels"),
+                           ("opshealth", cmd_opshealth,
+                            "failed services, expiring TLS certificates, OOM kills, crashes"),
                            ("pkgverify", cmd_pkgverify, "changed files in the packages intruders replace")):
         p = sub.add_parser(name, help=text)
         p.add_argument("--json", action="store_true")

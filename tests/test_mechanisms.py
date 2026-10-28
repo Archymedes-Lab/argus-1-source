@@ -32,6 +32,8 @@ ADDED_AFTER_GOLDEN = {
     "fwaudit": "HP firmware audit log via the elevated broker (2026-10-23)",
     "netflow": "incoming packet windows from the server packet sensor (ARGUS-SERVER.md W5, 2026-10-24)",
     "logins": "successful SSH logins, new networks and keys (ARGUS-SERVER.md W3, 2026-10-24)",
+    "sshwatch": "effective sshd policy, authorised and host key drift, live SSH tunnels (2026-10-28)",
+    "opshealth": "failed units, TLS certificate expiry, kernel OOM kills, unclean reboots (2026-10-28)",
     "pkgverify": "dpkg --verify / rpm -V of intruder-targeted packages (ARGUS-SERVER.md W3, 2026-10-24)",
     "heartbeat": "off-box dead-man ping (ARGUS-SERVER.md W10, 2026-10-25)",
     "patches": "fixable CVEs, pending updates and reboots (ARGUS-SERVER.md W11, 2026-10-25)",

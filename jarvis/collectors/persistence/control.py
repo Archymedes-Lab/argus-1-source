@@ -397,10 +397,12 @@ def _verified_unit(path):
             # The server edition: the sealed /opt/jarvis/app launcher, as the
             # dedicated jarvis account, by a root-owned interpreter nobody else
             # can write (the launcher drops its capabilities otherwise).
-            if (argv[1:5] == ["-I", "/opt/jarvis/app/jarvis-release.py", "serve", "--port"]
-                    and user == "jarvis" and argv and _root_only(argv[0])
-                    and _root_only("/opt/jarvis/app/jarvis-release.py")):
-                return "runs the sealed JARVIS server release as the jarvis account"
+            # The packaged edition ships the launcher compiled (.pyc, no source).
+            for launcher in ("/opt/jarvis/app/jarvis-release.py", "/opt/jarvis/app/jarvis-release.pyc"):
+                if (argv[1:5] == ["-I", launcher, "serve", "--port"]
+                        and user == "jarvis" and argv and _root_only(argv[0])
+                        and _root_only(launcher)):
+                    return "runs the sealed JARVIS server release as the jarvis account"
     except (OSError, KeyError, ValueError, AttributeError):
         return ""
     return ""

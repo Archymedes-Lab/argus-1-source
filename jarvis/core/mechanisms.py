@@ -312,6 +312,16 @@ COLLECTORS = (
     _c("logins", 300, "SSH logins", None, 0, 2, "medium", 60,
        command="logins", domain="linux", cost_s=0.5,
        unscored="source-tested only; new-network and new-key learning not yet soaked"),
+    # Effective sshd policy, every account's authorised keys and host keys
+    # (learned, then drift), and the tunnels sshd and ssh clients hold open now.
+    _c("sshwatch", 300, "SSH server, keys and tunnels", None, 0, 2, "medium", 60,
+       command="sshwatch", domain="linux", cost_s=0.1,
+       unscored="source-tested only; never run against a real internet-facing sshd"),
+    # The daily checks operators most want automated (Exa research 2026-10-28):
+    # failed units, TLS certificate expiry, kernel OOM kills, unclean reboots.
+    _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
+       command="opshealth", domain="linux", cost_s=0.6,
+       unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),
     # dpkg --verify / rpm -V over the packages intruders replace; IO-heavy, so
     # daily, deferrable and in the bulk lane.
     _c("pkgverify", 86400, "Package file integrity", None, 0, 4, "medium", 300,

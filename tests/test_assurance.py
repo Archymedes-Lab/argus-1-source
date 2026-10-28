@@ -55,11 +55,13 @@ class AssuranceTests(unittest.TestCase):
         # 2026-10-25: +1 unverified metrics_export (a read-out, no observing job),
         # +1 unverified interop_backpressure (self-protection, no observing job).
         # +2 unverified off_box_heartbeat and patch_cve_awareness (W10, W11).
-        self.assertEqual(gaps['implementation_unverified'], 20)
+        # 2026-10-28: +1 unverified server_ssh_watch (sshwatch job).
+        # 2026-10-29: +1 unverified server_ops_health (opshealth job).
+        self.assertEqual(gaps['implementation_unverified'], 22)
         self.assertEqual(gaps['implementation_partial'], 20)
         self.assertEqual(gaps['observation_mapping_missing'], 17)
-        self.assertEqual(gaps['containment_not_validated'], 40)
-        self.assertEqual(gaps['validation_date_missing'], 40)
+        self.assertEqual(gaps['containment_not_validated'], 42)  # +2 sshwatch, opshealth 2026-10-29
+        self.assertEqual(gaps['validation_date_missing'], 42)  # +2 sshwatch, opshealth 2026-10-29
         self.assertFalse(result['complete'])
 
     def test_missing_or_stale_optional_sensor_is_explicit(self):

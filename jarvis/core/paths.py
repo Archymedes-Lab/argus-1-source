@@ -63,8 +63,14 @@ def load_win_script(name):
     script then shows up as that collector's "unavailable" finding instead of
     stopping the daemon and every other collector with it.
     """
-    with open(win_script(name), encoding="utf-8", errors="replace", newline="") as fh:
-        return fh.read()
+    try:
+        with open(win_script(name), encoding="utf-8", errors="replace", newline="") as fh:
+            return fh.read()
+    except FileNotFoundError:
+        # The Linux server edition ships no Windows payloads. A payload that
+        # throws keeps the absence explicit: a collector that ever ran it would
+        # report itself unavailable, never an empty clean result.
+        return f'throw "{name} is not part of this edition"\n'
 
 
 def repo_file(name):
