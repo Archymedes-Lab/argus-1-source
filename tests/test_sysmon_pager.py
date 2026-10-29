@@ -14,6 +14,23 @@ from unittest import mock
 from jarvis.collectors.telemetry import sysmon
 from jarvis.core.store import Store
 
+# Never ask the live Windows host for Sysmon's service state from a unit test;
+# an empty answer judges nothing (sysmon._service_findings).
+_status_patch = None
+
+
+def setUpModule():
+    global _status_patch
+    from unittest import mock as _mock
+
+    from jarvis.collectors.telemetry import sysmon as _sysmon
+    _status_patch = _mock.patch.object(_sysmon, "status", return_value={})
+    _status_patch.start()
+
+
+def tearDownModule():
+    _status_patch.stop()
+
 NOW = 1_791_700_000.0
 LAST = NOW - 3 * 3600          # cursor three hours behind
 

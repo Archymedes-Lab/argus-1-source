@@ -149,7 +149,13 @@ export class ProcState {
   setBaseline(doc) {
     this.baseline = doc;
     const nowS = this.wallMs() / 1000;
-    for (const p of this.procs.values()) { p.cls = classify(doc, p.h, p.name, nowS); this.judge(p); }
+    for (const p of this.procs.values()) {
+      p.cls = classify(doc, p.h, p.name, nowS);
+      this.judge(p);
+      // the snapshot usually arrives before the baseline: watched processes
+      // already running count as seen, or their exit could never be missed
+      if (!p.dying && this.everSeen[p.h] && this.isWatched(p.h, p.name)) this.everSeen[p.h].add(p.name.toLowerCase());
+    }
     this.changed = true;
   }
 

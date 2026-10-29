@@ -15,6 +15,23 @@ from jarvis.core.store import Store
 from jarvis.platform.native import ingest, normalize
 from jarvis.platform.native.store import BatchError, validate
 
+# Never ask the live Windows host for Sysmon's service state from a unit test;
+# an empty answer judges nothing (sysmon._service_findings).
+_status_patch = None
+
+
+def setUpModule():
+    global _status_patch
+    from unittest import mock as _mock
+
+    from jarvis.collectors.telemetry import sysmon as _sysmon
+    _status_patch = _mock.patch.object(_sysmon, "status", return_value={})
+    _status_patch.start()
+
+
+def tearDownModule():
+    _status_patch.stop()
+
 SYSMON = normalize.SYSMON
 DIR = "461b8df16acfb5cc"
 
@@ -380,7 +397,10 @@ class SysmonConsumerTests(Fixture):
         self.run_ingest()
 
     def audit(self):
-        with mock.patch.object(sysmon, "status", side_effect=AssertionError("fallback used")):
+        # The native path may ask for the service state, never for events:
+        # the PowerShell event query is the fallback this must not use.
+        with mock.patch.object(sysmon, "_fetch", side_effect=AssertionError("fallback used")), \
+                mock.patch.object(sysmon, "status", return_value={}):
             return sysmon.audit(self.store, hosts=("win",), incremental=True,
                                 eventlog=self.logdir)
 

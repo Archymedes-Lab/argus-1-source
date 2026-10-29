@@ -58,8 +58,58 @@ def _capture_procs_linux():
     return procs
 
 
-def _packet_sockets():
-    """Processes holding an AF_PACKET socket, via `ss`."""
+def _packet_sockets(proc="/proc", max_pids=65536):
+    """(pid, name) of each process holding an AF_PACKET socket."""
+    return packet_socket_scan(proc, max_pids)[0]
+
+
+def packet_socket_scan(proc="/proc", max_pids=65536):
+    """(holders, unattributed): (pid, name) pairs, and how many packet sockets
+    no readable process accounts for (their holder is unknown, never absent).
+
+    Read natively: /proc/net/packet lists every packet socket's inode, and the
+    holders come from /proc/<pid>/fd with this process's own CAP_SYS_PTRACE.
+    `ss -p` was used before, but programs this daemon launches do not inherit
+    its capabilities, so on a server ss could not name a root-owned holder and
+    a root implant was never listed (found 2026-10-29). ss stays the fallback
+    when /proc/net/packet cannot be read."""
+    try:
+        with open(f"{proc}/net/packet", errors="replace") as fh:
+            rows = fh.read(4 * 1024 * 1024).splitlines()[1:]
+    except OSError:
+        return _packet_sockets_ss(), 0
+    inodes = {parts[-1] for parts in (r.split() for r in rows) if parts and parts[-1].isdigit()}
+    if not inodes:
+        return [], 0
+    holders, found = [], set()
+    try:
+        pids = [p for p in os.listdir(proc) if p.isdigit()][:max_pids]
+    except OSError:
+        return _packet_sockets_ss(), 0
+    for pid in pids:
+        try:
+            fds = os.listdir(f"{proc}/{pid}/fd")
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                target = os.readlink(f"{proc}/{pid}/fd/{fd}")
+            except OSError:
+                continue
+            if target.startswith("socket:[") and target[8:-1] in inodes:
+                found.add(target[8:-1])
+                if not holders or holders[-1][0] != pid:
+                    try:
+                        with open(f"{proc}/{pid}/comm", errors="replace") as fh:
+                            name = fh.read().strip()
+                    except OSError:
+                        name = "?"
+                    holders.append((pid, name))
+    return holders, len(inodes - found)
+
+
+def _packet_sockets_ss():
+    """Processes holding an AF_PACKET socket, via `ss` (fallback)."""
     try:
         r = subprocess.run(["ss", "-0", "-p", "-a", "-H"],
                            capture_output=True, text=True,
@@ -72,6 +122,56 @@ def _packet_sockets():
         if m:
             holders.append((m.group(2), m.group(1)))
     return holders
+
+
+# Daemons that hold packet sockets by design (DHCP, link management, mDNS).
+# A name is what the attacker chooses (BPFdoor runs under a fixed fake daemon
+# name), so a name alone never exempts: the image must be a root-owned file a
+# package installed, in a system directory, and not deleted.
+PACKET_DAEMONS = ("systemd-networkd", "NetworkManager", "dhclient", "dhcpcd",
+                  "wpa_supplicant", "avahi-daemon")
+SYSTEM_DIRS = ("/usr/", "/bin/", "/sbin/", "/lib/")
+SENSOR_LAUNCHERS = ("/opt/jarvis/app/jarvis-release.py", "/opt/jarvis/app/jarvis-release.pyc",
+                    "/opt/jarvis/current/jarvis-release.py")
+
+
+def _root_only(path):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    return st.st_uid == 0 and not st.st_mode & 0o022
+
+
+def packet_holder_identity(pid, name, proc="/proc", owner=None):
+    """"verified" (an expected holder, proven by its image), "unverified" (its
+    image cannot be read: unknown, never exempt) or "unexpected"."""
+    if owner is None:
+        from jarvis.core.util import dpkg_owns as owner
+    try:
+        exe = os.readlink(f"{proc}/{pid}/exe")
+    except OSError:
+        return "unverified"
+    if exe.endswith(" (deleted)") or exe.startswith("/memfd:"):
+        return "unexpected"
+    # Matched on the image's file name: the process name is truncated to 15
+    # characters (systemd-networkd shows as "systemd-network", found in the
+    # 2026-10-29 VM run) and is the attacker's to choose anyway.
+    if os.path.basename(exe) in PACKET_DAEMONS:
+        if exe.startswith(SYSTEM_DIRS) and _root_only(exe) and owner(exe):
+            return "verified"
+        return "unexpected"
+    # This monitor's own packet sensor: the sealed launcher, run by a root-owned
+    # interpreter, with the netsensor command.
+    try:
+        with open(f"{proc}/{pid}/cmdline", "rb") as fh:
+            argv = [a.decode("utf-8", "replace") for a in fh.read(4096).split(b"\0") if a]
+    except OSError:
+        return "unverified"
+    if (len(argv) >= 4 and argv[1] == "-I" and argv[2] in SENSOR_LAUNCHERS and argv[3] == "netsensor"
+            and _root_only(exe) and _root_only(argv[2])):
+        return "verified"
+    return "unexpected"
 
 
 def _promisc_ifaces():
@@ -87,14 +187,22 @@ def _promisc_ifaces():
     return out
 
 
-def _linux(tools=None, sockets=None, promisc=None):
+def _linux(tools=None, sockets=None, promisc=None, identity=None):
     """Findings for the Linux side. The arguments replace what is read from this
     machine, so the coverage map can show the rules fire; the rules are the same."""
     out = []
     tools = _capture_procs_linux() if tools is None else tools
-    sockets = [(pid, name) for pid, name in (_packet_sockets() if sockets is None else sockets)
-               if name not in ("systemd-networkd", "NetworkManager", "dhclient",
-                               "dhcpcd", "wpa_supplicant", "avahi-daemon")]
+    identity = identity or packet_holder_identity
+    held, unverified, unattributed = [], [], 0
+    if sockets is None:
+        sockets, unattributed = packet_socket_scan()
+    for pid, name in sockets:
+        who = identity(pid, name)
+        if who == "unexpected":
+            held.append((pid, name))
+        elif who == "unverified":
+            unverified.append((pid, name))
+    sockets = held
     promisc = _promisc_ifaces() if promisc is None else promisc
     phys_promisc = [i for i in promisc
                     if not any(i.startswith(b) for b in BENIGN_IFACE)
@@ -114,6 +222,21 @@ def _linux(tools=None, sockets=None, promisc=None):
             f"{name} (pid {pid}) is holding a raw packet socket",
             "an AF_PACKET socket reads frames off the wire directly — normal "
             "for a sniffer, unexpected for anything else", f"/proc/{pid}"))
+
+    for pid, name in unverified:
+        out.append(_finding(
+            "sniffing", "medium",
+            f"{name} (pid {pid}) holds a raw packet socket; its identity is not verified",
+            "its executable could not be read (needs CAP_SYS_PTRACE), so it is neither cleared "
+            "nor accused by name: an implant can take any daemon's name", f"/proc/{pid}"))
+
+    if unattributed:
+        out.append(_finding(
+            "visibility", "medium",
+            f"{unattributed} raw packet socket(s) held by a process that could not be read",
+            "the socket exists (/proc/net/packet) but no readable process accounts for it, so its "
+            "holder is unknown, not absent (reading other accounts' descriptors needs CAP_SYS_PTRACE)",
+            "/proc/net/packet"))
 
     for iface in phys_promisc:
         explained = bool(tools or sockets)

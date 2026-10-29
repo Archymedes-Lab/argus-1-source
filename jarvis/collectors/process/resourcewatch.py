@@ -13,6 +13,9 @@ from . import monitor
 
 _META = "resourcewatch_sample_v1"
 PROFILE_META = "resource_profile_v1"
+# Where this engine runs from, so its processes are named wherever it is installed.
+_ENGINE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))))).lower() + "/"
 
 
 def _owner(proc):
@@ -25,7 +28,7 @@ def _owner(proc):
         return "browser"
     if "jarvis.service.collector_worker" in text:
         return "collector workers"
-    if "-m jarvis" in text or "/home/chris/jarvis" in text:
+    if "-m jarvis" in text or _ENGINE_ROOT in text or "/opt/jarvis/" in text:
         return "jarvis engine"
     if "powershell" in name and "jarvis" in text:
         return "collector interop"

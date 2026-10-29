@@ -26,9 +26,48 @@ def _winpath(path):
 
 
 def _ps_args(script):
-    """PowerShell argv immune to WSL/Windows command-line quote rewriting."""
+    """PowerShell argv immune to WSL/Windows command-line quote rewriting.
+
+    Progress is silenced: over a pipe PowerShell serialises it as CLIXML
+    ("Preparing modules for first use") into stderr, which reached the user."""
+    script = "$ProgressPreference='SilentlyContinue';" + script
     encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
     return [win._PS, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
+
+
+STAGE_TRIES = 3
+STAGE_TIMEOUT_S = 60
+
+
+def _clean(text):
+    """PowerShell output without CLIXML serialisation noise."""
+    return "\n".join(line for line in (text or "").splitlines()
+                     if not line.startswith(("#< CLIXML", "<Objs "))).strip()
+
+
+def _make_stage(prefix):
+    """A fresh folder under the Windows user's TEMP: (path, "") or ("", why).
+
+    Retried: right after a daemon restart or a task registration the interop
+    bridge can refuse one call (2026-10-27: "could not create a staging
+    folder", fine seconds later), and the real error used to be discarded."""
+    script = (f"$d=Join-Path $env:TEMP ('{prefix}-'+[guid]::NewGuid());"
+              "New-Item -ItemType Directory $d | Out-Null; $d")
+    why = ""
+    for attempt in range(STAGE_TRIES):
+        if attempt:
+            time.sleep(3 * attempt)
+        try:
+            r = subprocess.run(_ps_args(script), capture_output=True, text=True,
+                               errors="replace", cwd="/", timeout=STAGE_TIMEOUT_S)
+        except (OSError, subprocess.SubprocessError) as exc:
+            why = f"{type(exc).__name__}: {exc}"
+            continue
+        stage = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ""
+        if r.returncode == 0 and stage:
+            return stage, ""
+        why = _clean(r.stderr)[-400:] or f"PowerShell exited {r.returncode} with no output"
+    return "", f"could not create a staging folder on Windows after {STAGE_TRIES} tries: {why}"
 
 
 def _elevated_files(files, entry, args, timeout=240):
@@ -40,12 +79,9 @@ def _elevated_files(files, entry, args, timeout=240):
     """
     if not win.available():
         return 1, "the Windows interop bridge is not available"
-    stage_script = ("$d=Join-Path $env:TEMP ('jarvis-elevated-'+[guid]::NewGuid());"
-                    "New-Item -ItemType Directory $d | Out-Null; $d")
-    stage = subprocess.run(_ps_args(stage_script),
-                           capture_output=True, text=True, errors="replace", cwd="/").stdout.strip()
+    stage, why = _make_stage("jarvis-elevated")
     if not stage:
-        return 1, "could not create a staging folder on Windows"
+        return 1, why
     copy = ";".join(f"Copy-Item -LiteralPath '{_winpath(path)}' -Destination '{stage}\\{name}'"
                     for name, path in files.items())
     argline = ",".join(f"'{a}'" for a in (["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
@@ -58,7 +94,7 @@ def _elevated_files(files, entry, args, timeout=240):
                            capture_output=True, text=True, errors="replace", timeout=timeout, cwd="/")
     except subprocess.TimeoutExpired:
         return 1, "timed out waiting for the UAC prompt"
-    return r.returncode, (r.stdout + r.stderr).strip()
+    return r.returncode, _clean(r.stdout + "\n" + r.stderr)
 
 
 def _sysmon_baseline():
@@ -88,12 +124,9 @@ def _elevated(args, timeout=240):
     """
     if not win.available():
         return 1, "the Windows interop bridge is not available"
-    stage_script = ("$d=Join-Path $env:TEMP ('jarvis-broker-'+[guid]::NewGuid());"
-                    "New-Item -ItemType Directory $d | Out-Null; $d")
-    stage = subprocess.run(_ps_args(stage_script),
-                           capture_output=True, text=True, errors="replace", cwd="/").stdout.strip()
+    stage, why = _make_stage("jarvis-broker")
     if not stage:
-        return 1, "could not create a staging folder on Windows"
+        return 1, why
     names = [broker.BROKER_SCRIPT] + list(broker.SCRIPTS.values())
     copy = ";".join(
         f"Copy-Item -LiteralPath '{_winpath((REPO_ROOT if n == broker.BROKER_SCRIPT else WIN_SCRIPTS_DIR) / n)}' "
@@ -107,7 +140,7 @@ def _elevated(args, timeout=240):
                            capture_output=True, text=True, errors="replace", timeout=timeout, cwd="/")
     except subprocess.TimeoutExpired:
         return 1, "timed out waiting for the UAC prompt"
-    return r.returncode, (r.stdout + r.stderr).strip()
+    return r.returncode, _clean(r.stdout + "\n" + r.stderr)
 
 
 def cmd_broker(args, store=None):

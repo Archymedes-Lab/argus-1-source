@@ -250,17 +250,141 @@ class StateTests(NodeCase):
         self.assertEqual(out, [0, []])
 
 
+class LateBaselineTests(NodeCase):
+    def test_a_watched_process_in_the_snapshot_before_the_baseline_can_still_go_missing(self):
+        out = self.run_js(f"""
+          let wall = {NOW} * 1000;
+          const st = new s.ProcState({{ wallMs: () => wall, monoMs: () => 0 }});
+          st.apply({{ k: 'status', sources: {{ win: {{ state: 'live' }} }} }});
+          st.apply({{ k: 'snap', h: 'win', t: wall, p: [['9:1', 9, 1, 'MsMpEng.exe', wall - 9000, 0, 1, 0, null]] }});
+          st.setBaseline({{ ok: true, watch: {{ win: ['msmpeng.exe'] }},
+            hosts: {{ win: {{ rows: 1, names: {{ 'msmpeng.exe': [1, 1, 1, 0] }} }} }} }});
+          const before = st.tally().missing;
+          st.apply({{ k: 'd', h: 'win', t: wall, a: [], x: ['9:1'], u: [] }});
+          for (const p of st.procs.values()) if (p.dying) st.remove(p.id);
+          console.log(JSON.stringify([before, st.tally().missing]));""")
+        self.assertEqual(out, [0, 1])
+
+
+LAYOUT_PRELUDE = f"import * as L from {json.dumps((STATIC / 'procs-layout.js').as_uri())};\n" + """
+  // a seeded generator, so every run draws the same tables
+  let seed = 12345;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const table = (n, families, hosts = ['win', 'lin']) => Array.from({ length: n }, (_, i) => ({
+    id: 'p' + i, h: hosts[Math.floor(rnd() * hosts.length)], order: Math.floor(rnd() * 1e6),
+    family: 'f' + Math.floor(rnd() ** 2 * families) }));
+  const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+  const flat = (g) => JSON.stringify([[...g.cells].sort(), g.blocks, g.domains]);
+  // every invariant at once: [problems]
+  const check = (items, g) => {
+    const bad = [];
+    const used = new Set();
+    for (const it of items) {
+      const c = g.cells.get(it.id);
+      if (!c) { bad.push('unplaced ' + it.id); continue; }
+      const k = c.col + ',' + c.row;
+      if (used.has(k)) bad.push('collision ' + k);
+      used.add(k);
+      const b = g.blocks[c.block], d = g.domains[c.h];
+      if (c.h !== it.h || b.h !== it.h) bad.push('wrong domain ' + it.id);
+      if (c.col < b.col || c.col >= b.col + b.cols || c.row < b.row || c.row >= b.row + b.rows) bad.push('outside block ' + it.id);
+      if (c.col < d.col || c.col >= d.col + d.cols || c.row < d.row || c.row >= d.row + d.rows) bad.push('outside domain ' + it.id);
+    }
+    if (g.cells.size !== items.length) bad.push('extra cells');
+    g.blocks.forEach((a, i) => g.blocks.forEach((b, j) => {
+      if (i < j && a.col < b.col + b.cols && b.col < a.col + a.cols && a.row < b.row + b.rows && b.row < a.row + a.rows) bad.push('overlap ' + i + ' ' + j);
+    }));
+    const ds = Object.values(g.domains).sort((a, b) => a.col - b.col);
+    for (let i = 1; i < ds.length; i++) if (ds[i].col < ds[i - 1].col + ds[i - 1].cols) bad.push('domains overlap');
+    return bad;
+  };
+"""
+
+
+class LayoutTests(NodeCase):
+    def layout(self, body):
+        r = subprocess.run(["node", "--input-type=module", "-e", LAYOUT_PRELUDE + body], capture_output=True,
+                           text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout)
+
+    def test_every_size_is_placed_without_collision_inside_its_block_and_district(self):
+        out = self.layout("""
+          const rows = [];
+          for (const [n, fam] of [[0, 1], [1, 1], [2, 1], [7, 3], [60, 9], [300, 40], [360, 25], [2000, 150]]) {
+            const items = table(n, fam);
+            const g = L.gridLayout(items);
+            const side = Math.max(0, ...Object.values(g.domains).map((d) => Math.max(d.cols, d.rows)));
+            rows.push([n, check(items, g), side]);
+          }
+          console.log(JSON.stringify(rows));""")
+        for n, problems, side in out:
+            self.assertEqual(problems, [], f"{n} processes")
+            # bounded: a district's side grows like the square root of the count
+            self.assertLessEqual(side, 2.2 * (n ** 0.5) + 8, f"{n} processes: side {side}")
+
+    def test_the_same_table_in_any_order_gives_the_same_grid(self):
+        out = self.layout("""
+          const items = table(300, 30);
+          const a = flat(L.gridLayout(items));
+          console.log(JSON.stringify([1, 2, 3, 4, 5].map(() => flat(L.gridLayout(shuffle(items))) === a)));""")
+        self.assertEqual(out, [True] * 5)
+
+    def test_a_new_process_moves_nothing_else_unless_its_block_grows(self):
+        # A family of 10 is a 4 x 3 block with two free cells: an 11th process
+        # takes the next one, and no other process on either host may move.
+        out = self.layout("""
+          const base = [];
+          for (let i = 0; i < 10; i++) base.push({ id: 'a' + i, h: 'win', family: 'alpha', order: i });
+          for (let i = 0; i < 40; i++) base.push({ id: 'b' + i, h: 'win', family: 'beta', order: i });
+          for (let i = 0; i < 25; i++) base.push({ id: 'c' + i, h: 'win', family: 'gamma', order: i });
+          for (let i = 0; i < 20; i++) base.push({ id: 'l' + i, h: 'lin', family: 'init', order: i });
+          const g0 = L.gridLayout(base);
+          const g1 = L.gridLayout([...base, { id: 'new', h: 'win', family: 'alpha', order: 99 }]);
+          const moved = base.filter((it) => JSON.stringify(g0.cells.get(it.id)) !== JSON.stringify(g1.cells.get(it.id)));
+          console.log(JSON.stringify([moved.map((it) => it.id), !!g1.cells.get('new')]));""")
+        self.assertEqual(out, [[], True])
+
+    def test_small_families_share_one_block_and_missing_keeps_its_own(self):
+        out = self.layout("""
+          const items = [
+            { id: '1', h: 'win', family: 'solo', order: 1 }, { id: '2', h: 'win', family: 'pair', order: 2 },
+            { id: '3', h: 'win', family: 'pair', order: 3 }, { id: 'm', h: 'win', family: '#missing', order: 0 },
+            ...Array.from({ length: 5 }, (_, i) => ({ id: 's' + i, h: 'win', family: 'services.exe', order: i }))];
+          const g = L.gridLayout(items);
+          console.log(JSON.stringify(g.blocks.map((b) => [b.key, b.n])));""")
+        self.assertEqual(out, [["#missing", 1], ["services.exe", 5], ["", 3]])
+
+    def test_heights_and_footprints_are_monotonic_and_bounded(self):
+        out = self.layout("""
+          const cpus = [-5, 0, 0.1, 1, 5, 25, 50, 100, 400, NaN, 'x'];
+          const mems = [0, 1, 1024, 102400, 1048576, 16777216, 1e12, NaN];
+          console.log(JSON.stringify([cpus.map(L.cpuHeight), mems.map(L.memSide), L.familyOf(null),
+            L.familyOf({ name: 'Relay(46877)' }), L.familyOf({ name: ' Services.EXE ' })]));""")
+        heights, sides, orphan, relay, services = out
+        self.assertEqual(heights[0], heights[1])                 # negative CPU is idle
+        self.assertEqual(heights[-1], heights[1])                # NaN and junk are idle
+        self.assertEqual(heights[-2], heights[1])
+        self.assertTrue(all(a < b for a, b in zip(heights[1:8], heights[2:8])))
+        self.assertEqual(heights[8], heights[7])                 # capped at 100%
+        self.assertTrue(all(0.3 < s < 0.95 for s in sides))
+        self.assertTrue(all(a <= b for a, b in zip(sides[:7], sides[1:7])))
+        self.assertEqual([orphan, relay, services], ["(no parent)", "relay(#)", "services.exe"])
+
+
 class WiringTests(unittest.TestCase):
     def test_every_page_module_is_served_and_imported_by_absolute_path(self):
         from jarvis.web import server
-        for name in ("procs.js", "procs-model.js", "procs-state.js", "procs-scene.js"):
+        for name in ("procs.js", "procs-model.js", "procs-state.js", "procs-scene.js", "procs-layout.js"):
             self.assertIn(f"/static/{name}", server.COVERAGE_ASSETS)
         page = (STATIC / "procs.js").read_text()
         for name in ("procs-model.js", "procs-state.js", "procs-scene.js"):
             self.assertIn(f"from '/static/{name}'", page)
+        scene = (STATIC / "procs-scene.js").read_text()
+        self.assertIn("from '/static/procs-layout.js'", scene)
 
     def test_the_page_never_names_a_path_or_hash_field(self):
-        for name in ("procs.js", "procs-state.js", "procs-scene.js", "procs-model.js"):
+        for name in ("procs.js", "procs-state.js", "procs-scene.js", "procs-model.js", "procs-layout.js"):
             text = (STATIC / name).read_text()
             for field in ("sha256", ".path", "cmdline", "CommandLine"):
                 self.assertNotIn(field, text, f"{name} mentions {field}")

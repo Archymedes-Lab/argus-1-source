@@ -34,12 +34,14 @@ ADDED_AFTER_GOLDEN = {
     "logins": "successful SSH logins, new networks and keys (ARGUS-SERVER.md W3, 2026-10-24)",
     "sshwatch": "effective sshd policy, authorised and host key drift, live SSH tunnels (2026-10-28)",
     "opshealth": "failed units, TLS certificate expiry, kernel OOM kills, unclean reboots (2026-10-28)",
+    "bootchain": "Linux boot-chain persistence and kernel attack surface (2026-10-29)",
+    "keyreaders": "Linux keyboard, raw HID and uinput readers by image; hidden staging (2026-10-29)",
     "pkgverify": "dpkg --verify / rpm -V of intruder-targeted packages (ARGUS-SERVER.md W3, 2026-10-24)",
     "heartbeat": "off-box dead-man ping (ARGUS-SERVER.md W10, 2026-10-25)",
     "patches": "fixable CVEs, pending updates and reboots (ARGUS-SERVER.md W11, 2026-10-25)",
     "distrovuln": "daily distribution OVAL security data (ARGUS-SERVER.md W11, 2026-10-25)",
-    "osv": "daily public OSV dumps for the ecosystems found (ARGUS-SERVER.md W12, 2026-10-28)",
     "appcode": "codebases, dependency CVEs, code rules, secrets and web-root leaks (ARGUS-SERVER.md W12, 2026-10-28)",
+    "osv": "daily public OSV dumps for the ecosystems found (ARGUS-SERVER.md W12, 2026-10-28)",
 }
 
 

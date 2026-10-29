@@ -28,6 +28,7 @@ never by name or command line, which anyone can imitate.
 
 import ntpath
 
+from jarvis.core import collection
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
 from jarvis.platform import broker
@@ -187,11 +188,17 @@ def audit(own_pids=(), result=None, clock=None):
     """Findings from the broker's watcher inventory. `result` is injectable."""
     data, why = result if result is not None else broker.result("inputaudit")
     if data is None:
+        # Blind to keyboard hooks is a coverage failure, not a footnote: the
+        # run must not read "complete" (2026-10-27: the broker timed out on a
+        # 70 MB trace for hours while every input run was recorded complete).
+        collection.failed("inputaudit", why)
         return [_finding(
-            "input", "low", "input watcher audit unavailable",
-            f"{why}. Without it, which processes hook the keyboard and mouse is "
-            f"unknown. Install or refresh the broker with `jarvis broker install`.",
+            "input", "medium", "input watcher audit unavailable",
+            f"{why}. Until it runs again, a program that starts watching the "
+            f"keyboard or mouse is not seen. Install or refresh the broker with "
+            f"`jarvis broker install`.",
             "broker")]
+    collection.succeeded("inputaudit")
     t = clock if clock is not None else now()
     out = []
     watchers = [r for r in (data.get("watchers") or []) if isinstance(r, dict)]

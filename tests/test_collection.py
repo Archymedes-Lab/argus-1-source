@@ -11,6 +11,23 @@ from jarvis.platform import windows as collect_windows
 from jarvis.service import coverage
 from jarvis.service.protection import health
 
+# Never ask the live Windows host for Sysmon's service state from a unit test;
+# an empty answer judges nothing (sysmon._service_findings).
+_status_patch = None
+
+
+def setUpModule():
+    global _status_patch
+    from unittest import mock as _mock
+
+    from jarvis.collectors.telemetry import sysmon as _sysmon
+    _status_patch = _mock.patch.object(_sysmon, "status", return_value={})
+    _status_patch.start()
+
+
+def tearDownModule():
+    _status_patch.stop()
+
 
 class CollectionTests(unittest.TestCase):
     def test_daemon_health_commands_do_not_inherit_notify_authority(self):

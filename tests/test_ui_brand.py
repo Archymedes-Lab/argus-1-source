@@ -1,0 +1,166 @@
+"""The interface says ARGUS-1, and real object names keep their spelling.
+
+The product was renamed ARGUS-1 on 2026-10-27. Daemon text still says JARVIS in
+places on purpose: finding titles are part of incident identity, acknowledgements
+and history. The pages, the desktop UI and the desktop shell therefore re-brand
+at display time with one rule, implemented three times (web JS, TypeScript,
+Rust). This keeps the copies in step, runs the real web rule, and checks the
+static pages themselves. scripts/dev/ui_check.py does the same on rendered pages
+in a browser against the live daemon.
+"""
+import html.parser
+import json
+import re
+import shutil
+import subprocess
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+STATIC = ROOT / "jarvis" / "web" / "static"
+BRANDED_PAGES = ("dashboard.html", "geo.html", "coverage.js")
+KEEP = ["input hook", "independent health monitor", "connectivity guard", "native sensor",
+        "Jarvis"]
+CASES = {
+    "JARVIS is up": "ARGUS-1 is up",
+    "JARVIS's view of JARVIS": "ARGUS-1's view of ARGUS-1",
+    "JARVIS input hook": "JARVIS input hook",
+    "JARVIS independent health monitor stalled": "JARVIS independent health monitor stalled",
+    "JARVIS connectivity guard": "JARVIS connectivity guard",
+    "JARVIS native sensor": "JARVIS native sensor",
+    "JARVIS JarvisSensorDefender collector": "JARVIS JarvisSensorDefender collector",
+    "restart jarvis.service": "restart jarvis.service",
+    "C:\\ProgramData\\Jarvis\\Broker": "C:\\ProgramData\\Jarvis\\Broker",
+    "JARVIS_NET_DIR": "JARVIS_NET_DIR",
+    "": "",
+}
+
+
+def block(path):
+    text = path.read_text(encoding="utf-8")
+    start, end = text.index("// brand:begin"), text.index("// brand:end")
+    return text[start:end]
+
+
+class VisibleText(html.parser.HTMLParser):
+    """Text and labels a person sees; not scripts or styles."""
+
+    def __init__(self):
+        super().__init__()
+        self.skip = 0
+        self.out = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style"):
+            self.skip += 1
+        for name, value in attrs:
+            if name in ("title", "aria-label", "placeholder", "alt") and value:
+                self.out.append(value)
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style"):
+            self.skip -= 1
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.out.append(data)
+
+
+class BrandRuleTests(unittest.TestCase):
+    def test_every_web_page_carries_the_identical_rule(self):
+        blocks = {name: block(STATIC / name) for name in BRANDED_PAGES}
+        self.assertEqual(len(set(blocks.values())), 1, list(blocks))
+
+    def test_escape_helpers_brand_their_input(self):
+        for name in BRANDED_PAGES:
+            text = (STATIC / name).read_text(encoding="utf-8")
+            esc = re.search(r"const esc = .*", text).group(0)
+            self.assertIn("brand(s)", esc, name)
+
+    def test_desktop_copies_keep_the_same_names(self):
+        web = re.search(r"BRAND_KEEP = /\^ \((.*?)\)/", block(STATIC / "dashboard.html")).group(1)
+        ts = (ROOT / "desktop/ui/src/lib/brand.ts").read_text(encoding="utf-8")
+        rs = (ROOT / "desktop/src/brand.rs").read_text(encoding="utf-8")
+        self.assertEqual(web.split("|"), KEEP)
+        self.assertIn(f"BRAND_KEEP = /^ ({web})/", ts)
+        rust = re.findall(r'" ([A-Za-z ]+)"', rs[rs.index("const KEEP"):rs.index("];")])
+        self.assertEqual(rust, KEEP)
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_the_web_rule_itself(self):
+        script = block(STATIC / "dashboard.html") + (
+            f"\nconst cases = {json.dumps(list(CASES))};"
+            "\nprocess.stdout.write(JSON.stringify(cases.map(brand)));")
+        out = subprocess.run(["node", "-e", script], capture_output=True, text=True,
+                             timeout=30, check=True).stdout
+        self.assertEqual(json.loads(out), list(CASES.values()))
+
+    def run_rule(self, block_text, inputs):
+        script = block_text + (f"\nconst cases = {json.dumps(inputs)};"
+                               "\nprocess.stdout.write(JSON.stringify(cases.map(brand)));")
+        out = subprocess.run(["node", "-e", script], capture_output=True, text=True,
+                             timeout=30, check=True).stdout
+        return json.loads(out)
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_the_rule_is_idempotent(self):
+        once = list(CASES.values())
+        self.assertEqual(self.run_rule(block(STATIC / "dashboard.html"), once), once)
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_the_argus_build_rename_never_produces_argus_1_1(self):
+        # archymedes-site/scripts/argus/build.py rewrites JARVIS -> ARGUS in the
+        # whole tree (rename_text). The rule then reads \bARGUS\b, which also
+        # matches inside "ARGUS-1"; page text already says ARGUS-1.
+        renamed = block(STATIC / "dashboard.html").replace("JARVIS", "ARGUS") \
+            .replace("Jarvis", "Argus").replace("jarvis", "argus")
+        got = self.run_rule(renamed, ["ARGUS-1 is waking up", "ARGUS is up",
+                                      "ARGUS input hook", "ARGUS-1's view"])
+        self.assertEqual(got, ["ARGUS-1 is waking up", "ARGUS-1 is up",
+                               "ARGUS input hook", "ARGUS-1's view"])
+
+    def test_null_never_renders_as_text(self):
+        # brand() feeds esc(); a missing field must stay empty, not "null".
+        self.assertIn('String(s ?? "")', block(STATIC / "dashboard.html"))
+
+
+class StaticTextTests(unittest.TestCase):
+    # `(?!-1)`: the Argus build renames JARVIS to ARGUS, and "ARGUS-1" is the
+    # correct product name there, not a leftover (2026-10-27 renamed suite).
+    def test_no_page_shows_the_old_name(self):
+        for page in sorted(STATIC.glob("*.html")):
+            parser = VisibleText()
+            parser.feed(page.read_text(encoding="utf-8"))
+            visible = " ".join(parser.out)
+            self.assertNotRegex(visible, r"\bJARVIS\b(?!-1)", page.name)
+            self.assertIn("ARGUS-1", visible, page.name)
+
+    def test_scripts_use_the_old_name_only_in_the_rule(self):
+        # Uppercase JARVIS in page code would be visible text sooner or later;
+        # the only allowed copies are inside the brand rule itself.
+        for page in sorted([*STATIC.glob("*.html"), *STATIC.glob("*.js")]):
+            text = page.read_text(encoding="utf-8")
+            if "// brand:begin" in text:
+                text = text.replace(block(page), "")
+            self.assertNotRegex(text, r"\bJARVIS\b(?!_|-1)", page.name)
+
+    def test_desktop_interface_strings(self):
+        ui = ROOT / "desktop" / "ui"
+        for path in [ui / "index.html", *(ui / "src").rglob("*.svelte")]:
+            self.assertNotRegex(path.read_text(encoding="utf-8"), r"\bJARVIS\b(?!-1)", path.name)
+        conf = json.loads((ROOT / "desktop/tauri.conf.json").read_text(encoding="utf-8"))
+        self.assertEqual(conf["productName"], "ARGUS-1")
+        # The identifier names the app's data folder: renaming it would orphan
+        # the settings of anyone who already ran the app.
+        self.assertEqual(conf["identifier"], "local.jarvis.desktop")
+
+    def test_preferences_survive_the_rename(self):
+        # localStorage keys are not shown; renaming them would reset every
+        # viewer's theme, voice and seen-alert memory.
+        text = (STATIC / "dashboard.html").read_text(encoding="utf-8")
+        for key in ('"jarvis.theme"', '"jarvis.seenCriticals"', '"jarvis.voice"'):
+            self.assertIn(key, text)
+
+
+if __name__ == "__main__":
+    unittest.main()

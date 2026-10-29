@@ -6,10 +6,12 @@ is collected, because a case reviewed weeks later is read by someone who was
 not present.
 """
 
-import os
+from jarvis.platform import host
 
 WINEVT = r"C:\Windows\System32\winevt\Logs"
-APPDATA = r"C:\Users\%s\AppData" % os.environ.get("WSL_USER", "chris")
+# An unknown account stays unknown: the target is then reported unreachable,
+# never read from another person's profile.
+APPDATA = r"C:\Users\%s\AppData" % (host.windows_user() or "unknown Windows user")
 
 #: profile -> [(target path, kind, why)]
 PROFILES = {

@@ -26,12 +26,14 @@ only ever ADD suspicion has to hold for every source without exception.
 import csv
 import io
 import json
+import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
-from jarvis.core import inflate, vet
+from jarvis.core import inflate, paths, vet
 from jarvis.core.util import now
 
 UA = "jarvis-feeds/1.0 (+local host monitoring)"
@@ -53,6 +55,43 @@ def feed(name, url, interval, desc, max_bytes=64 * 1024 * 1024):
 MAX_INFLATED = 160 * 1024 * 1024
 
 
+# abuse.ch has required a free account Auth-Key on its exports since
+# 2025-06-30; without one URLhaus, ThreatFox and MalwareBazaar answered
+# "410 Gone" here from 2026-10-21 while the job still read complete.
+ABUSECH_KEY_ENV = "ABUSECH_AUTH_KEY"
+ABUSECH_KEY_CONF = "abuse_ch_auth_key"
+
+
+def abusech_key():
+    """The owner's abuse.ch Auth-Key, or "". Never logged or echoed."""
+    key = os.environ.get(ABUSECH_KEY_ENV, "").strip()
+    if key:
+        return key
+    try:
+        with open(paths.CONFIG_PATH, encoding="utf-8", errors="replace") as fh:
+            conf = json.load(fh) or {}
+        return str(conf.get(ABUSECH_KEY_CONF) or "").strip() if isinstance(conf, dict) else ""
+    except (OSError, ValueError):
+        return ""
+
+
+def _is_abusech_url(url):
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    return host == "abuse.ch" or host.endswith(".abuse.ch")
+
+
+def is_abusech(name):
+    """Whether a scheduled feed is served by abuse.ch (needs the Auth-Key)."""
+    return _is_abusech_url((FEEDS.get(name) or {}).get("url", ""))
+
+
+def _auth_headers(url):
+    if _is_abusech_url(url):
+        key = abusech_key()
+        return {"Auth-Key": key} if key else {}
+    return {}
+
+
 def fetch(url, max_bytes, timeout=180, max_inflated=MAX_INFLATED):
     """Download and transparently decompress. The full abuse.ch dumps ship as
     zip archives that expand roughly sevenfold, so the inflated size is capped
@@ -61,7 +100,8 @@ def fetch(url, max_bytes, timeout=180, max_inflated=MAX_INFLATED):
     Both layers count the bytes they produce (core/inflate.py): neither a gzip
     bomb nor a zip header that understates its size gets past the cap."""
     req = urllib.request.Request(url, headers={
-        "User-Agent": UA, "Accept": "*/*", "Accept-Encoding": "gzip"})
+        "User-Agent": UA, "Accept": "*/*", "Accept-Encoding": "gzip",
+        **_auth_headers(url)})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read(max_bytes + 1)
         if len(raw) > max_bytes:
@@ -341,7 +381,14 @@ def ingest(store, name, spec, max_rows=250000):
     try:
         parsed = spec["parse"](raw)
     except Exception as exc:
-        return {"name": name, "error": f"parse failed: {exc}", "rows": 0, "kept": 0}
+        error = f"parse failed: {exc}"[:200]
+        store.db.execute(
+            """INSERT INTO feed_runs(name,last_run,rows,kept,bytes,error)
+               VALUES(?,?,0,0,0,?)
+               ON CONFLICT(name) DO UPDATE SET last_run=excluded.last_run,
+                   error=excluded.error""", (name, now(), error))
+        store.commit()
+        return {"name": name, "error": error, "rows": 0, "kept": 0}
 
     ts = now()
     batch, seen, rejected = [], set(), 0
@@ -419,6 +466,18 @@ def refresh_attack(store, force=False):
                error=''""", (now(), n, n, len(raw)))
     store.commit()
     return {"name": "attack", "kept": n, "bytes": len(raw)}
+
+
+def failing(store):
+    """{feed: error} for every scheduled feed whose last attempt failed.
+
+    A feed is retried once per interval, so the run that saw the failure is
+    the only one that would mention it; this reads the persisted state so
+    every run reports it until a fetch succeeds."""
+    names = set(FEEDS) | {"attack", "tranco"}
+    return {r["name"]: r["error"] for r in store.db.execute(
+        "SELECT name, error FROM feed_runs WHERE error != ''")
+        if r["name"] in names}
 
 
 def prune(store, days=90):

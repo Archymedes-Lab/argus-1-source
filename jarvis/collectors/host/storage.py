@@ -323,9 +323,13 @@ LINUX_MAX_MOUNTS = 32
 LINUX_HISTORY_META = "storage_linux_free_history_v1"
 
 
-def linux_mounts(mounts_text=None, statvfs=os.statvfs, stat=os.stat):
+def linux_mounts(mounts_text=None, statvfs=None, stat=os.stat):
     """[(mountpoint, fstype, free, total, ifree, itotal)] for real writable mounts,
     one per device; (mounts, unreadable) with the mountpoints statvfs refused."""
+    # Looked up here, not as a default: Windows Python has no os.statvfs, and a
+    # default is evaluated at import, which broke every Windows install of the
+    # 2026-10-25 and 2026-10-27 builds (tests/test_windows_import.py).
+    statvfs = statvfs or os.statvfs
     if mounts_text is None:
         try:
             with open("/proc/self/mounts", errors="replace") as fh:
@@ -421,7 +425,7 @@ def _linux_history(store, now, mounts):
     return before
 
 
-def audit_linux(store, now=None, mounts_text=None, statvfs=os.statvfs, stat=os.stat):
+def audit_linux(store, now=None, mounts_text=None, statvfs=None, stat=os.stat):
     now = time.time() if now is None else now
     mounts, unreadable = linux_mounts(mounts_text, statvfs=statvfs, stat=stat)
     history = _linux_history(store, now, mounts)

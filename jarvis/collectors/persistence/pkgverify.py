@@ -23,9 +23,12 @@ MAX_REPORTED = 40
 PACKAGES = {
     "dpkg": ("openssh-server", "openssh-client", "sudo", "libc6", "libc-bin", "libpam-modules",
              "libpam-runtime", "login", "passwd", "coreutils", "util-linux", "procps", "systemd",
-             "bash", "iproute2", "cron"),
+             "bash", "iproute2", "cron",
+             # curlRAT (2025) replaces atd and polkitd (spyware research 2026-10-29);
+             # a name that is not installed is skipped by dpkg --verify.
+             "at", "polkitd", "policykit-1", "pkexec"),
     "rpm": ("openssh-server", "openssh-clients", "sudo", "glibc", "pam", "shadow-utils", "coreutils",
-            "util-linux", "procps-ng", "systemd", "bash", "iproute", "cronie"),
+            "util-linux", "procps-ng", "systemd", "bash", "iproute", "cronie", "at", "polkit"),
 }
 # dpkg --verify: "??5??????   /usr/bin/x" or "??5?????? c /etc/x"; rpm -V the same
 # shape with dots, or "missing   /path".

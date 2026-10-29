@@ -188,11 +188,40 @@ def program_data(*parts):
     return _join(base, parts)
 
 
+# Profile folders that are never a person's.
+_NOT_PEOPLE = {"all users", "default", "default user", "public", "defaultapppool",
+               "wdagutilityaccount"}
+
+
 def windows_user():
-    """The Windows account whose profile holds JARVIS's per-user state."""
+    """The Windows account whose profile holds JARVIS's per-user state.
+
+    In WSL: an explicit JARVIS_WINDOWS_USER or WSL_USER; else the Linux account
+    name when a Windows profile of that name exists (the usual WSL setup); else
+    the only real profile on the machine. Otherwise "" (unknown): callers then
+    read nothing rather than another person's profile."""
     if KIND == "windows":
         return os.environ.get("USERNAME") or ""
-    return os.environ.get("JARVIS_WINDOWS_USER") or os.environ.get("WSL_USER") or "chris"
+    explicit = os.environ.get("JARVIS_WINDOWS_USER") or os.environ.get("WSL_USER")
+    if explicit:
+        return explicit
+    users = users_dir()
+    if not users or not os.path.isdir(users):
+        return ""
+    try:
+        import pwd
+        login = pwd.getpwuid(os.getuid()).pw_name
+    except (ImportError, KeyError, OSError):
+        login = ""
+    if login and os.path.isdir(os.path.join(users, login, "AppData", "Local")):
+        return login
+    try:
+        people = [n for n in os.listdir(users)
+                  if n.lower() not in _NOT_PEOPLE
+                  and os.path.isdir(os.path.join(users, n, "AppData", "Local"))]
+    except OSError:
+        return ""
+    return people[0] if len(people) == 1 else ""
 
 
 def users_dir():

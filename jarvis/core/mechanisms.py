@@ -64,6 +64,11 @@ class Collector:
     elevated: the broker script that runs this collector's elevated half, if any.
     servers: False for workstation features (a news globe, a local model) that a
     plain Linux server neither has nor wants; there they are not applicable.
+    boot_scoped: its evidence describes state a reboot activates or resets
+    (startup entries, services, drivers, boot chain, live processes, firewall),
+    so a result taken before the current boot does not describe this machine
+    now. The scheduler counts such a result as at least one cadence late, and
+    boot readiness waits for a post-boot result (scheduler.boot_readiness).
     """
     name: str
     interval: int
@@ -86,6 +91,7 @@ class Collector:
     health_limit_s: int = 0
     elevated: str = ""
     servers: bool = True
+    boot_scoped: bool = False
 
 
 def _c(name, interval, label, area, rank, tier, crit, timeout, **kw):
@@ -155,7 +161,7 @@ COLLECTORS = (
     _c("preos", 1800, "Pre-OS boot integrity", None, 0, 3, "medium", 180,
        command="preos",
        domain="windows", cost_s=3.0,
-       unscored="measured-boot drift is reported, not yet scored (owner decision pending)"),
+       unscored="measured-boot drift is reported, not yet scored (owner decision pending)", boot_scoped=True),
     # Reads the elevated broker's copy of the HP Sure Start audit log (the
     # broker refreshes it every 15 min); local file reads only.
     _c("fwaudit", 1800, "HP firmware audit log", None, 0, 3, "medium", 60,
@@ -163,26 +169,26 @@ COLLECTORS = (
        domain="windows", cost_s=0.1,
        unscored="firmware audit records are reported, not yet scored (unsoaked; owner decision pending)"),
     _c("deep_hidden", 86400, "Deep process cross-view scan", AT, 5, 4, "low", 300,
-       command="hidden --deep"),
+       command="hidden --deep", boot_scoped=True),
     _c("hidden", 300, "Hidden processes", AT, 4, 2, "high", 60, cost_s=14.0,
-       command="hidden"),
+       command="hidden", boot_scoped=True),
     _c("firewall", 2400, "Firewall & inbound", OS, 1, 3, "high", 240,
        command="firewall",
-       depends_on=("windows-bridge",), cost_s=18.0),
+       depends_on=("windows-bridge",), cost_s=18.0, boot_scoped=True),
     _c("control", 1800, "Control surfaces", PA, 0, 3, "high", 180,
        command="control",
-       depends_on=("windows-bridge",), cost_s=16.0),
+       depends_on=("windows-bridge",), cost_s=16.0, boot_scoped=True),
     # One registry/environment read, about 1 s: CLR profiler, startup-hook,
     # AppDomainManager and runtime-ETW settings, and the AMSI providers.
     _c("dotnet", 1800, ".NET runtime hijack points", PA, 6, 3, "medium", 180,
        command="dotnet",
-       domain="windows", cost_s=1.0),
+       domain="windows", cost_s=1.0, boot_scoped=True),
     _c("asep", 3600, "Autostart points", PA, 1, 3, "high", 300,
        command="asep",
-       domain="windows", depends_on=("windows-bridge",)),
+       domain="windows", depends_on=("windows-bridge",), boot_scoped=True),
     _c("spy", 5400, "Spyware & capabilities", DP, 1, 3, "medium", 300,
        command="spy",
-       governed=True, depends_on=("windows-bridge",), cost_s=22.0),
+       governed=True, depends_on=("windows-bridge",), cost_s=22.0, boot_scoped=True),
     _c("pixel", 3600, "Screen capture & tracking pixels", DP, 2, 3, "medium", 300,
        command="pixel",
        governed=True),
@@ -193,12 +199,12 @@ COLLECTORS = (
        domain="windows", governed=True, depends_on=("windows-bridge",), cost_s=106.0),
     _c("evasion", 1200, "Evasion & kernel integrity", AT, 6, 3, "high", 120,
        command="evasion",
-       domain="windows", depends_on=("windows-bridge",)),
+       domain="windows", depends_on=("windows-bridge",), boot_scoped=True),
     _c("coverage", 600, "Self-audit & blind spots", MO, 0, 3, "high", 60,
        command="coverage",
        evidence=False, cost_s=0.5),
     _c("boot", 21600, "Startup analysis", PA, 2, 4, "medium", 300, domain="windows",
-       command="boot"),
+       command="boot", boot_scoped=True),
     # Local and cheap: compare what intel knows against what is on the box.
     _c("hunt", 1800, "Threat-intel indicator hunt", AT, 0, 3, "medium", 180,
        command="hunt",
@@ -223,7 +229,7 @@ COLLECTORS = (
        lane="bulk", governed=True, cost_s=90.0, unscored=_KNOWLEDGE),
     _c("implant", 3600, "Interception & boundary bypass", OS, 2, 3, "high", 300,
        command="implant",
-       depends_on=("windows-bridge",), cost_s=15.0),
+       depends_on=("windows-bridge",), cost_s=15.0, boot_scoped=True),
     # Short interval on purpose: the value is a continuous record, and a drop
     # between two samples cannot be investigated.
     # Windows-only by nature: Wi-Fi state and the Windows network logs, read
@@ -233,10 +239,10 @@ COLLECTORS = (
        depends_on=("scheduler",), cost_s=10.0),
     _c("posture", 7200, "Windows security posture", OS, 0, 3, "high", 300,
        command="posture", elevated="posture.ps1",
-       domain="windows", governed=True, depends_on=("windows-bridge",), cost_s=14.0),
+       domain="windows", governed=True, depends_on=("windows-bridge",), cost_s=14.0, boot_scoped=True),
     _c("backdoor", 3600, "Backdoors & access grants", PA, 3, 3, "high", 300,
        command="backdoor",
-       depends_on=("windows-bridge",)),
+       depends_on=("windows-bridge",), boot_scoped=True),
     # The developer trust surface: MCP servers, agent hooks, editor extensions,
     # git hooks, .pth files. Local only, but it walks $HOME.
     _c("toolchain", 3600, "Developer toolchain trust", DT, 0, 3, "medium", 300,
@@ -254,7 +260,7 @@ COLLECTORS = (
     # Walks every readable process's address space; expensive, so rare.
     _c("memscan", 7200, "Memory & instruction level", AT, 3, 3, "medium", 300,
        command="memscan", elevated="memscan.ps1",
-       domain="windows", governed=True, cost_s=90.0),
+       domain="windows", governed=True, cost_s=90.0, boot_scoped=True),
     # Walks the home directory; secrets do not appear by the minute.
     _c("secrets", 43200, "Plaintext credentials", DP, 0, 4, "low", 300,
        command="secrets", health="optional", health_limit_s=90000,
@@ -270,7 +276,7 @@ COLLECTORS = (
     # Is the Linux syscall-interception layer present and recording?
     _c("auditd", 7200, "Syscall interception posture", OS, 3, 3, "medium", 300,
        command="auditd",
-       domain="linux"),
+       domain="linux", boot_scoped=True),
     # eBPF syscall interception on Linux, read incrementally like sysmon.
     # Tier 0 by contract but on the main lane: recorded as found 2026-10-23.
     _c("sysmon_linux", 600, "Sysmon for Linux (eBPF)", AT, 2, 0, "critical", 45,
@@ -301,7 +307,7 @@ COLLECTORS = (
     # `docker inspect` per container, read-only.
     _c("containers", 900, "Container privilege and exposure inventory", None, 0, 3, "medium", 90,
        command="containers",
-       domain="linux", unscored="inventory pending its own scoring decision"),
+       domain="linux", unscored="inventory pending its own scoring decision", boot_scoped=True),
     # Linux servers (ARGUS-SERVER.md, 2026-10-24). Unscored until soaked on a
     # real internet-facing server: their thresholds are unmeasured there.
     # Reads the packet sensor's spool (a separate CAP_NET_RAW unit); cheap.
@@ -322,6 +328,17 @@ COLLECTORS = (
     _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
        command="opshealth", domain="linux", cost_s=0.6,
        unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),
+    # Boot-chain persistence (GRUB, grub.d, initramfs hooks, dracut modules,
+    # kernel and initramfs images) and kernel attack surface (Exa threat
+    # research 2026-10-29). Stat signatures for images keep a run cheap.
+    _c("bootchain", 1800, "Boot chain & kernel attack surface", None, 0, 3, "medium", 90,
+       command="bootchain", domain="linux", cost_s=0.1, boot_scoped=True,
+       unscored="source-tested only; package-update attribution not yet soaked on real servers"),
+    # Processes reading the keyboard, raw HID or uinput, judged by their image;
+    # hidden staging in /var/log, /run, /dev/shm and /tmp (spyware research 2026-10-29).
+    _c("keyreaders", 900, "Keyboard readers & hidden staging", None, 0, 3, "medium", 60,
+       command="keyreaders", domain="linux", cost_s=0.1, boot_scoped=True,
+       unscored="source-tested only; expected-reader list not yet soaked on desktops and servers"),
     # dpkg --verify / rpm -V over the packages intruders replace; IO-heavy, so
     # daily, deferrable and in the bulk lane.
     _c("pkgverify", 86400, "Package file integrity", None, 0, 4, "medium", 300,
@@ -405,6 +422,11 @@ def score_areas():
     return tuple((area, tuple(c.name for c in sorted(
         (c for c in COLLECTORS if c.area == area), key=lambda c: c.area_rank)))
         for area in AREAS)
+
+
+def boot_scoped():
+    """Collectors whose pre-boot evidence is not evidence about this boot."""
+    return tuple(c.name for c in COLLECTORS if c.boot_scoped)
 
 
 def dependencies():

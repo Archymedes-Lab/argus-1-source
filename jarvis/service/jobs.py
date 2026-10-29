@@ -8,6 +8,7 @@ Jobs that touch the database open their own store: they run inside the
 scheduler's worker thread, and a sqlite handle must not cross threads.
 """
 
+import re
 import time
 from contextlib import contextmanager
 
@@ -15,6 +16,7 @@ from jarvis.collectors import appcode
 from jarvis.collectors.host import (
     accelerator,
     audiowatch,
+    bootchain,
     bootintegrity,
     canary,
     containers,
@@ -23,6 +25,7 @@ from jarvis.collectors.host import (
     firmwareaudit,
     geo,
     inputwatch,
+    keyreaders,
     opshealth,
     patches,
     pixel,
@@ -277,16 +280,27 @@ def _feeds(hosts, db_path):
         out = []
         # One finding per cause, naming the feeds it hit: an offline server
         # is one problem, not seventeen (ARGUS-SERVER.md W12, 2026-10-25).
+        # Persisted failures count too: a feed retries once a day, and the
+        # hourly runs between must not read "complete" over stale indicators.
+        failed = {r["name"]: r["error"] for r in results if r.get("error")}
+        failed.update({n: e for n, e in feeds.failing(store).items() if n not in failed})
         by_error = {}
-        for r in results:
-            if r.get("error"):
-                by_error.setdefault(r["error"], []).append(r["name"])
+        for name, error in failed.items():
+            collection.failed(f"feed:{name}", error)
+            if feeds.is_abusech(name):
+                if not feeds.abusech_key() and re.search(r"\b(401|403|410)\b", error):
+                    error = (f"{error}. abuse.ch requires a free Auth-Key since 2025-06-30: "
+                             f"create an account at auth.abuse.ch and set "
+                             f"\"{feeds.ABUSECH_KEY_CONF}\" in ~/.jarvis/config.json")
+            by_error.setdefault(error, []).append(name)
         for error, names in sorted(by_error.items(), key=lambda kv: (-len(kv[1]), kv[0])):
             title = (f"{names[0]} feed failed" if len(names) == 1
                      else f"{len(names)} threat feeds failed")
             out.append({"category": "feed", "severity": "medium", "host": LOCAL_HOST,
                         "title": title, "detail": f"{error} — {', '.join(sorted(names))}",
                         "where": ""})
+        if any(not r.get("error") for r in results):
+            collection.succeeded("feeds")
         kept = sum(r.get("kept", 0) for r in results if not r.get("error"))
         if kept:
             out.append({"category": "feed", "severity": "low", "host": LOCAL_HOST,
@@ -443,6 +457,8 @@ RUNNERS = {
     "logins": _with_store(logins.audit),
     "sshwatch": _with_store(sshwatch.audit),
     "opshealth": _with_store(opshealth.audit),
+    "bootchain": _with_store(bootchain.audit),
+    "keyreaders": _with_store(keyreaders.audit),
     "pkgverify": lambda hosts, db_path: pkgverify.audit(),
     "heartbeat": _store_only(heartbeat.run),
     "patches": _store_only(patches.audit),

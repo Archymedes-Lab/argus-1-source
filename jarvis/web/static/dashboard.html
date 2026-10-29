@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JARVIS</title>
+<title>ARGUS-1</title>
 <style id="ui">
 /* compiled from jarvis/web/styles/dashboard.css by scripts/dev/build_ui.sh; do not edit here */
 /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
@@ -12,7 +12,7 @@
 </head>
 <body>
 <header>
-  <span class="brand">JARVIS</span>
+  <span class="brand">ARGUS-1</span>
   <span id="status" class="status s-ok">—</span>
   <span class="live"><span id="beat" class="beat on"></span><span id="livetxt">live</span></span>
   <span class="spacer"></span>
@@ -159,7 +159,7 @@
     <summary>Assistant <span class="cnt">ask, listen, decide · local model · takes no action</span></summary>
     <div class="grid">
     <div class="card jarvis" id="chatcard">
-      <h2>JARVIS <span class="cnt">local data · offline model · takes no action</span>
+      <h2>ARGUS-1 <span class="cnt">local data · offline model · takes no action</span>
         <span class="spacer"></span>
         <select id="voicesel" onchange="pickVoice()" title="Speaking voice" aria-label="Speaking voice"></select>
       </h2>
@@ -172,9 +172,9 @@
         <button onclick="briefNow()">Brief me</button>
       </div>
       <div class="opener" id="opener"></div>
-      <div class="chat-answer" id="askanswer" aria-live="polite">JARVIS is reading the current state…</div>
+      <div class="chat-answer" id="askanswer" aria-live="polite">ARGUS-1 is reading the current state…</div>
       <form class="chat" onsubmit="askJarvis(event)">
-        <input id="askq" autocomplete="off" maxlength="4000" aria-label="Ask JARVIS"
+        <input id="askq" autocomplete="off" maxlength="4000" aria-label="Ask ARGUS-1"
                placeholder="What needs me? What's my score? Explain a finding…">
         <button id="askbtn" type="submit">Ask</button>
       </form>
@@ -297,7 +297,7 @@ function notifyCriticals(s) {
   for (const f of fresh.slice(0, 3)) {
     toast(`Critical: ${f.title}`, "warn", `${f.job} · ${f.host || ""}`);
     if (notifyOn()) {
-      try { const n = new Notification("JARVIS: " + String(f.title).slice(0, 90),
+      try { const n = new Notification("ARGUS-1: " + brand(f.title).slice(0, 90),
               { body: `${f.job}: ${String(f.detail || "").slice(0, 160)}`, tag: critKey(f).slice(0, 120) });
             n.onclick = () => { window.focus(); setSev("critical"); jump("findings-section"); }; } catch (_) {}
     }
@@ -317,7 +317,19 @@ function jump(id) {
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-const esc = s => String(s ?? "").replace(/[&<>"']/g,
+// brand:begin -- identical in every page; tests/test_ui_brand.py keeps the copies equal.
+// The product is ARGUS-1. Server text can still say JARVIS (finding titles keep their
+// identity for acknowledgements and history), so it is re-branded at display time.
+// Real Windows objects keep their spelling so they can be found in Task Scheduler
+// and Services; lowercase commands (jarvis ..., jarvis.service) are never touched.
+// Idempotent: a name already followed by -1 is left alone, so text that went
+// through the rule twice, or a build that renames JARVIS to ARGUS, never reads ARGUS-1-1.
+const BRAND = "ARGUS-1";
+const BRAND_KEEP = /^ (input hook|independent health monitor|connectivity guard|native sensor|Jarvis)/;
+const brand = (s) => String(s ?? "").replace(/\bJARVIS\b(?!-1)/g,
+  (m, i, all) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
+// brand:end
+const esc = s => brand(s).replace(/[&<>"']/g,
   c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function ago(ts) {
@@ -389,7 +401,7 @@ function renderPriorities(s) {
     <div class="card you"><div class="big">${youCount}</div><div class="lbl">Needs your decision</div>
       ${prioList([...(() => {
                     const by = new Map();
-                    for (const q of qs) { const k = q.prompt || "A question from JARVIS"; by.set(k, (by.get(k) || 0) + 1); }
+                    for (const q of qs) { const k = q.prompt || "A question from ARGUS-1"; by.set(k, (by.get(k) || 0) + 1); }
                     return [...by].slice(0, 3).map(([k, n]) => ({ title: k, sub: n > 1 ? `Question · ${n} of them` : "Question" }));
                   })(),
                   ...fx.slice(0, 2).map(f => ({ title: f.title || f.id, sub: "Proposed fix · " + (f.status || "waiting") }))], "Nothing is waiting on you")}
@@ -410,8 +422,8 @@ function renderAlertBar(s) {
   bar.hidden = false;
   document.getElementById("alertcount").textContent = n;
   document.getElementById("alerttext").textContent = live.length
-    ? `live alert${live.length > 1 ? "s" : ""}: ${live[0].title}`
-    : `critical finding${crit.length > 1 ? "s" : ""} need attention: ${crit[0].title}`;
+    ? `live alert${live.length > 1 ? "s" : ""}: ${brand(live[0].title)}`
+    : `critical finding${crit.length > 1 ? "s" : ""} need attention: ${brand(crit[0].title)}`;
   document.getElementById("alertsub").textContent = live.length
     ? "something is happening on this machine right now"
     : "these lower the score most and can mean an active problem";
@@ -558,7 +570,7 @@ const ICON = { critical: "◆", high: "▲", medium: "●", low: "○", ok: "✓
 const pill = sev => `<span class="pill ${esc(sev)}"><span aria-hidden="true">${ICON[sev] || ""}</span>${esc(sev)}</span>`;
 
 function wakeHTML(h, now = Date.now() / 1000) {
-  // While JARVIS re-checks after a wake or restart, the held figure is the last
+  // While ARGUS-1 re-checks after a wake or restart, the held figure is the last
   // verified result, labelled as such; progress replaces the partial live score.
   const pr = h.progress || {checked: (h.live || {}).observed || 0, total: (h.live || {}).jobs || 0,
                             pending: [], retrying: [], running: []};
@@ -656,7 +668,7 @@ function renderHealth(s) {
 
   const top = (h.next_steps || [])[0];
   document.getElementById("healthsub").textContent =
-    waking ? "JARVIS is waking up and re-checking every collector"
+    waking ? "ARGUS-1 is waking up and re-checking every collector"
     : verifying ? "re-checking collectors before updating the score"
     : pr.score > 0 ? "climbing, nicely done"
     : h.score >= 90 ? "in fine shape"
@@ -680,7 +692,7 @@ function renderWins(h) {
     : h.verifying ? `<li class="static"><span class="rank">…</span><span class="t">Re-verifying collectors.</span>
          <span class="a">Next steps will return with fresh evidence.</span></li>`
     : `<li class="static"><span class="rank">✓</span><span class="t">Nothing left to gain here.</span>
-         <span class="a">Splendid. JARVIS keeps watching.</span></li>`;
+         <span class="a">Splendid. ARGUS-1 keeps watching.</span></li>`;
   document.getElementById("winsfoot").textContent = steps.length
     ? "Click one to see its evidence below. The first is worth the most." : "";
 }
@@ -1234,7 +1246,7 @@ function renderOps() {
     ]],
   ];
   document.getElementById("side").innerHTML =
-    `<div class="panelnote">Commands run on the host, not in the browser. Click a row to copy. Paths are relative to the JARVIS checkout.</div>` +
+    `<div class="panelnote">Commands run on the host, not in the browser. Click a row to copy. Paths are relative to the checkout (~/jarvis).</div>` +
     groups.map(([name, rows]) => `
       <div class="groupname">${esc(name)}</div>
       <table><tbody>${rows.map(([label, cmd]) => `
@@ -1278,7 +1290,7 @@ async function askJarvis(event) {
   if (!question) return;
   button.disabled = true;
   button.textContent = "thinking…";
-  output.textContent = "Reading current JARVIS state…";
+  output.textContent = "Reading current ARGUS-1 state…";
   try {
     const response = await fetch("/api/ask", {
       method: "POST", headers: {"Content-Type": "application/json"},
@@ -1289,7 +1301,7 @@ async function askJarvis(event) {
     output.dataset.kind = "answer";
     output.innerHTML = esc(data.answer) + `<div class="chat-source">${
       data.source === "ollama" ? "offline Ollama synthesis · no action taken" :
-      data.source === "builtin" ? "exact answer from JARVIS data" :
+      data.source === "builtin" ? "exact answer from ARGUS-1 data" :
       data.source === "busy" ? "local model busy" :
       "local model unavailable"}</div>`;
   } catch (error) {
@@ -1317,9 +1329,9 @@ async function scoreCoach() {
   }
 }
 
-/* ---------- JARVIS speaks first ----------
+/* ---------- ARGUS-1 speaks first ----------
    The chat opens with a briefing built from live data on the server (no model,
-   so it is instant and cannot invent a status), and any question JARVIS is
+   so it is instant and cannot invent a status), and any question ARGUS-1 is
    waiting on comes with its answer buttons. */
 function showJarvis(text, pending, source) {
   const buttons = pending ? `
@@ -1359,7 +1371,7 @@ async function greet(speak = true) {
     if (speak && voice) briefAloud(data.text.split("\n").slice(0, 3));
   } catch (error) {
     document.getElementById("askanswer").textContent =
-      "JARVIS could not brief you yet: " + error.message;
+      "ARGUS-1 could not brief you yet: " + error.message;
   }
 }
 
@@ -1374,7 +1386,7 @@ async function answerProtocol(button) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || data.error || response.status);
     const next = data.pending ? "\n\n" + data.pending.question : "";
-    showJarvis(data.message + next, data.pending, "answer recorded by JARVIS");
+    showJarvis(data.message + next, data.pending, "answer recorded by ARGUS-1");
     document.getElementById("askanswer").dataset.kind = "answer";
     say(data.message);
   } catch (error) {
@@ -1393,7 +1405,7 @@ async function answerQuestion(id, choice) {
     if (!response.ok) throw new Error(data.message || data.error || response.status);
     output.dataset.kind = "answer";
     output.innerHTML = esc(data.message) +
-      `<div class="chat-source">explicit answer recorded by JARVIS</div>`;
+      `<div class="chat-source">explicit answer recorded by ARGUS-1</div>`;
     toast(data.message, "good", "answer recorded");
     await tick();
   } catch (error) {
@@ -1451,7 +1463,8 @@ function idleCaption() {
 
 function say(text) {
   if (!voice || !text || !window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(text);
+  // Spoken, the name is "Argus One": voices read "ARGUS-1" as letters or "minus one".
+  const u = new SpeechSynthesisUtterance(brand(text).replace(/\bARGUS-1\b/g, "Argus One"));
   const v = chosenVoice();
   if (v) u.voice = v;
   u.lang = v ? v.lang : "en-GB"; u.rate = 1.02; u.pitch = 0.95;
@@ -1470,7 +1483,7 @@ function toast(text, kind, note) {
   while (box.children.length > 3) box.firstChild.remove();
   setTimeout(() => el.remove(), 9000);
 }
-function announce(text, kind, note) { toast(text, kind, note); say(text); }
+function announce(text, kind, note) { text = brand(text); toast(text, kind, note); say(text); }
 
 /* The model writes only the opening line. It is fetched first, then the
    deterministic lines follow, so facts never wait on or come from the model;
@@ -1492,8 +1505,8 @@ async function briefAloud(lines) {
   clearTimeout(timer);
   if (token !== briefToken || !voice) return;
   const op = document.getElementById("opener");
-  op.textContent = opener;
-  op.title = byModel ? "written by the local model, checked against the facts" : "JARVIS's written-in line";
+  op.textContent = brand(opener);
+  op.title = byModel ? "written by the local model, checked against the facts" : "ARGUS-1's written-in line";
   if (opener) say(opener);
   lines.filter(Boolean).forEach(say);
   if (!opener && !lines.length) idleCaption();
@@ -1694,14 +1707,14 @@ async function tick() {
     if (!r.ok) throw new Error(r.status);
     render(await r.json());
     loadNotice("");
-    if (lostConn) { lostConn = false; announce("Reconnected to the JARVIS daemon. Back on watch.", "good"); }
+    if (lostConn) { lostConn = false; announce("Reconnected to the ARGUS-1 daemon. Back on watch.", "good"); }
   } catch (e) {
     loadNotice(e && e.name === "AbortError"
-      ? `JARVIS did not answer within ${STATE_TIMEOUT_MS / 1000} seconds. Retrying automatically.`
-      : "Could not load JARVIS state. Retrying automatically.");
+      ? `ARGUS-1 did not answer within ${STATE_TIMEOUT_MS / 1000} seconds. Retrying automatically.`
+      : "Could not load ARGUS-1 state. Retrying automatically.");
     document.getElementById("meta").textContent = "daemon unreachable — retrying";
     document.getElementById("beat").className = "beat off";
-    if (!lostConn) { lostConn = true; announce("Lost connection to the JARVIS daemon. Retrying.", "warn"); }
+    if (!lostConn) { lostConn = true; announce("Lost connection to the ARGUS-1 daemon. Retrying.", "warn"); }
   } finally {
     clearTimeout(guard);
     tickPending = false;

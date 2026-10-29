@@ -107,10 +107,15 @@ class ClassifyTests(unittest.TestCase):
 
 class AuditTests(unittest.TestCase):
     def test_unavailable_broker_is_stated_not_clean(self):
-        out = watchers.audit(result=(None, "the elevated broker is not installed"))
+        # Blind to keyboard hooks is medium and a coverage failure (2026-10-27:
+        # a broker timeout read as a complete run with a low note for hours).
+        from jarvis.core import collection
+        with collection.observe() as obs:
+            out = watchers.audit(result=(None, "the elevated broker is not installed"))
         self.assertEqual(len(out), 1)
-        self.assertEqual(out[0]["severity"], "low")
-        self.assertIn("unknown", out[0]["detail"])
+        self.assertEqual(out[0]["severity"], "medium")
+        self.assertIn("not seen", out[0]["detail"])
+        self.assertIn("inputaudit", obs.error)
 
     def test_summary_always_carries_the_polling_blind_spot(self):
         data = {"boot": 1000, "session_started": 1100, "watchers": [], "parse_failures": 0}

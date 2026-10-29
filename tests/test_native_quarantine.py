@@ -176,6 +176,51 @@ class LogClearReuseTests(unittest.TestCase):
         self.assertEqual(records[:len(head)], [r["record_id"] for r in head])
         self.assertEqual(records[len(head):], [r["record_id"] for r in tail])
 
+    def test_clear_straddle_after_an_existing_cursor_loses_nothing(self):
+        # The channel has already committed up to record 278567. The next batch
+        # holds 2 more pre-clear records, then the log is cleared and IDs
+        # restart at 1: every post-clear record is a new observation even
+        # though its ID is below record_through. Before 2026-10-29 reuse_at was
+        # never set, so all of them were dropped as "duplicates".
+        chan = "Microsoft-Windows-Sysmon/Operational"
+        first = {"schema": 1, "sensor_id": "sensor-c", "host_id": "host-c", "channel": chan,
+                 "generation": "gen-1", "created_at": "2026-10-29T01:00:00.000Z",
+                 "sequence": 1, "previous_sequence": 0, "status": "complete", "bookmark": "b",
+                 "events": [self.record(278560 + i, "01:00") for i in range(8)]}
+        self.publish(1, first)
+        ingest.run(log=self.log, spool=self.spool)
+        head = [self.record(278568 + i, "01:05") for i in range(2)]
+        tail = [self.record(1 + i, "01:06") for i in range(10)]
+        second = {**first, "sequence": 2, "previous_sequence": 1,
+                  "created_at": "2026-10-29T01:06:00.000Z", "events": head + tail}
+        self.publish(2, second)
+        ch = ingest.run(log=self.log, spool=self.spool)["channels"][0]
+        self.assertIsNone(ch["error"])
+        self.assertEqual(ch["duplicates"], 0)
+        self.assertEqual(ch["events"], len(head) + len(tail))
+        records = [e["record"] for e in self.log.iter_events()]
+        self.assertEqual(records[-12:], [r["record_id"] for r in head + tail])
+        # The gap says what was lost without an impossible ID range.
+        self.assertIn("restarted at record 1", ch["gaps"][0])
+        self.assertNotIn("278570-0", ch["gaps"][0])
+
+    def test_redelivered_pre_clear_records_are_still_duplicates(self):
+        chan = "Microsoft-Windows-Sysmon/Operational"
+        first = {"schema": 1, "sensor_id": "sensor-d", "host_id": "host-d", "channel": chan,
+                 "generation": "gen-1", "created_at": "2026-10-29T01:00:00.000Z",
+                 "sequence": 1, "previous_sequence": 0, "status": "complete", "bookmark": "b",
+                 "events": [self.record(100 + i, "01:00") for i in range(5)]}
+        self.publish(1, first)
+        ingest.run(log=self.log, spool=self.spool)
+        # 103-104 redelivered, then 105-106 new, then a clear and 1-3.
+        second = {**first, "sequence": 2, "previous_sequence": 1,
+                  "events": [self.record(i, "01:01") for i in (103, 104, 105, 106, 1, 2, 3)]}
+        self.publish(2, second)
+        ch = ingest.run(log=self.log, spool=self.spool)["channels"][0]
+        self.assertIsNone(ch["error"])
+        self.assertEqual(ch["duplicates"], 2)
+        self.assertEqual(ch["events"], 5)
+
     def test_genuinely_malformed_ids_still_quarantine(self):
         # Duplicate IDs at TWO boundaries: no single split makes both blocks
         # sound, so this is corruption, not a log clear — quarantine it.

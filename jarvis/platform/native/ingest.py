@@ -286,11 +286,20 @@ def ingest_channel(log, spool, directory, budget, files=None, published_through=
                 head, tail = _split_at_reuse(parsed["events"])
             reuse_at = 0
             if tail:
+                # Index of the first post-clear record. It must survive to the
+                # redelivery filter below: post-clear IDs reuse pre-clear ones,
+                # so filtering them against the cursor's record_through drops
+                # new observations as "duplicates" (silent loss, found by the
+                # formal-verification review 2026-10-29).
+                reuse_at = len(head)
                 head_end, tail_start = head[-1]["record_id"], tail[0]["record_id"]
+                # IDs restart after a clear, so there is no ID range for what
+                # was lost: anything logged after record head_end and before the
+                # clear is gone, and the log restarted at tail_start.
                 reuse = (f"record IDs reset within batch {seq}: the event log was "
-                         f"cleared or wrapped between record {head_end} and record "
-                         f"{tail_start}; {len(head)} pre-clear records ingested, "
-                         f"records {head_end + 1}-{tail_start - 1} were lost in the clear")
+                         f"cleared or wrapped after record {head_end}; {len(head)} pre-clear "
+                         f"records ingested, any records written after {head_end} and before "
+                         f"the clear were lost, and the log restarted at record {tail_start}")
                 if parsed.get("gap"):
                     reuse = f"{parsed['gap']}; {reuse}"
                 validate({**parsed, "events": head})
@@ -327,7 +336,6 @@ def ingest_channel(log, spool, directory, budget, files=None, published_through=
         if batch["sequence"] != seq:
             result["error"] = f"{path.name}: file name and sequence disagree"
             break
-        reuse_at = 0
         result["channel"] = batch["channel"]
         identity = (batch["sensor_id"], batch["channel"])
         digest = hashlib.sha256(raw).hexdigest()

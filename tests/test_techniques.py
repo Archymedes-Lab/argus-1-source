@@ -26,6 +26,23 @@ from jarvis.core.store import Store
 from jarvis.intel import feeds
 from jarvis.service import attackmap, schedule
 
+# Never ask the live Windows host for Sysmon's service state from a unit test;
+# an empty answer judges nothing (sysmon._service_findings).
+_status_patch = None
+
+
+def setUpModule():
+    global _status_patch
+    from unittest import mock as _mock
+
+    from jarvis.collectors.telemetry import sysmon as _sysmon
+    _status_patch = _mock.patch.object(_sysmon, "status", return_value={})
+    _status_patch.start()
+
+
+def tearDownModule():
+    _status_patch.stop()
+
 # Every audit JARVIS has; a release from before the per-machine schedule has only JOBS.
 ALL_JOBS = getattr(schedule, "ALL_JOBS", schedule.JOBS)
 
@@ -489,14 +506,17 @@ class CollectorSeamTests(unittest.TestCase):
         import importlib
         sniffing = importlib.import_module("jarvis.collectors.network.sniffing")
         with mock.patch.object(sniffing, "_capture_procs_linux") as tools, \
-                mock.patch.object(sniffing, "_packet_sockets") as sockets, \
+                mock.patch.object(sniffing, "packet_socket_scan") as sockets, \
                 mock.patch.object(sniffing, "_promisc_ifaces") as promisc:
-            out = sniffing._linux(tools=[], sockets=[("9", "kworker"), ("7", "NetworkManager")], promisc=[])
+            def ident(pid, name):
+                return "verified" if name in sniffing.PACKET_DAEMONS else "unexpected"
+            out = sniffing._linux(tools=[], sockets=[("9", "kworker"), ("7", "NetworkManager")], promisc=[],
+                                  identity=ident)
             for reader in (tools, sockets, promisc):
                 reader.assert_not_called()                 # a probe never reads this machine
             self.assertEqual([f["title"] for f in out], ["kworker (pid 9) is holding a raw packet socket"])
-            tools.return_value, sockets.return_value, promisc.return_value = [], [("5", "implant")], []
-            live = sniffing._linux()                       # the real path still reads all three
+            tools.return_value, sockets.return_value, promisc.return_value = [], ([("5", "implant")], 0), []
+            live = sniffing._linux(identity=lambda pid, name: "unexpected")   # the real path still reads all three
             for reader in (tools, sockets, promisc):
                 reader.assert_called_once()
             self.assertEqual([f["severity"] for f in live], ["high"])

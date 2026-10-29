@@ -55,7 +55,12 @@ class NativeContentionTests(unittest.TestCase):
         self.assertEqual(self.sleep_mock.call_count, native.LOCK_RETRIES)
 
     def test_audit_reports_busy_without_raising(self):
-        with mock.patch.object(native, "_open_writer", return_value=(None, {
+        # Hermetic: without this the real spool decides, and a machine without
+        # the sensor stops at "not installed" before the writer is reached.
+        from jarvis.platform.native import ingest
+        with mock.patch.object(ingest, "preflight", return_value={"installed": True}), \
+                mock.patch.object(native.mounts, "under_windows_drive", return_value=False), \
+                mock.patch.object(native, "_open_writer", return_value=(None, {
                 "category": "visibility", "severity": "medium",
                 "title": "Event log is busy or unavailable",
                 "detail": "x", "where": "y"})):

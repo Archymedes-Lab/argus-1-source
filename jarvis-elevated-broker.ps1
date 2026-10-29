@@ -55,7 +55,11 @@ $Jobs = [ordered]@{
     sysmon_policy = @{ script = 'sysmon_policy.ps1'; timeout = 30 }
     sysmon_pressure = @{ script = 'sysmon_pressure.ps1'; timeout = 120 }
     vault    = @{ script = 'vault.ps1';          timeout = 120 }
-    inputaudit = @{ script = 'inputaudit.ps1';   timeout = 120 }
+    # Scanning the trace costs 0.7-1.7 s per MB whatever the reader (measured
+    # 2026-10-27: Get-WinEvent and EventLogReader both 24 s on 34 MB; 70 MB
+    # under load passed 120 s and every run failed). The trace is capped at
+    # 128 MB, so 400 s covers the worst case measured.
+    inputaudit = @{ script = 'inputaudit.ps1';   timeout = 400 }
     fwaudit  = @{ script = 'hp_firmware_audit.ps1'; timeout = 120 }
 }
 

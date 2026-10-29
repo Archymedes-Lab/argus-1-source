@@ -56,13 +56,16 @@ class WakeScriptTests(unittest.TestCase):
                              "a non-empty string is truthy, including 'false'")
 
     def test_unit_state_pipeline_is_wrapped_in_an_array_subexpression(self):
-        self.assertIn(
-            '$lines = @(@($raw) | ForEach-Object { "$_".Trim() }', self.code)
+        # One line of output is one item, not an array; without @() the [-1]
+        # below indexed a character. ConvertTo-UnitState is also exercised in
+        # Windows PowerShell with single-line input (tests/windows/supervisors.Tests.ps1).
+        self.assertIn('$lines = @(@("$text" -split "`n") | ForEach-Object {', self.code)
+        self.assertIn("return ConvertTo-UnitState", self.code)
 
     def test_unit_state_is_cast_before_lowercasing(self):
         self.assertNotInCode("return $lines[-1].ToLower()",
                              "[char] has no ToLower() in Windows PowerShell")
-        self.assertIn("([string]$lines[-1]).ToLower()", self.code)
+        self.assertIn("$last = [string]$lines[-1]", self.code)
 
     def test_an_unreadable_state_does_not_trigger_a_restart(self):
         """'could not read' is not the same claim as 'the unit is stopped'."""

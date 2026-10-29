@@ -10,7 +10,7 @@ function Check([bool]$ok, [string]$name) { if (-not $ok) { $script:fail++; Write
 # --- reviver decisions, loaded from the real script ------------------------
 $StartGrace = 300; $KickMin = 30; $KickMax = 600
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $Dir 'jarvis-reviver.ps1'), [ref]$null, [ref]$null)
-$wanted = 'ConvertTo-UnitAge','Test-StartGrace','Test-ShouldKick','Get-KickWait'
+$wanted = 'ConvertTo-UnitAge','ConvertTo-UnitState','Test-StartGrace','Test-ShouldKick','Get-KickWait'
 foreach ($f in $ast.FindAll({ $args[0] -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
     if ($wanted -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) }
 }
@@ -22,6 +22,27 @@ Check ($null -eq (ConvertTo-UnitAge '100.0 0')) 'never-active unit has no age'
 Check ($null -eq (ConvertTo-UnitAge '10.0 20000000')) 'start after uptime is not an age'
 Check ($null -eq (ConvertTo-UnitAge 'garbage')) 'unparseable output has no age'
 Check ($null -eq (ConvertTo-UnitAge '')) 'empty output has no age'
+
+# Unit state: only a real systemctl state is a state. wsl.exe prints its own
+# service timeout on stdout; read as a state it restarted a running daemon.
+function Test-UnitStateParser([string]$who) {
+    Check ((ConvertTo-UnitState "active") -eq 'active') "$who`: active"
+    Check ((ConvertTo-UnitState "warning: x`nFailed`n") -eq 'failed') "$who`: last line, case-folded"
+    Check ((ConvertTo-UnitState "inactive`r`n") -eq 'inactive') "$who`: CRLF inactive"
+    Check ((ConvertTo-UnitState 'error code: wsl/service/0x8007274c') -eq '') "$who`: WSL timeout is unknown, not stopped"
+    Check ((ConvertTo-UnitState "active`nerror code: wsl/service/0x8007274c") -eq '') "$who`: trailing WSL error is unknown"
+    Check ((ConvertTo-UnitState 'The Windows Subsystem for Linux has not been enabled.') -eq '') "$who`: WSL banner is unknown"
+    Check ((ConvertTo-UnitState '') -eq '') "$who`: empty is unknown"
+}
+Test-UnitStateParser 'reviver'
+$wakeAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $Dir 'jarvis-wake-watchdog.ps1'), [ref]$null, [ref]$null)
+$wakeFn = @($wakeAst.FindAll({ $args[0] -is [Management.Automation.Language.FunctionDefinitionAst] -and $args[0].Name -eq 'ConvertTo-UnitState' }, $true))
+Check ($wakeFn.Count -eq 1) 'wake watchdog defines ConvertTo-UnitState'
+if ($wakeFn.Count -eq 1) { . ([scriptblock]::Create($wakeFn[0].Extent.Text)); Test-UnitStateParser 'wake watchdog' }
+$wakeText = Get-Content -LiteralPath (Join-Path $Dir 'jarvis-wake-watchdog.ps1') -Raw
+Check ($wakeText -match 'return ConvertTo-UnitState') 'wake watchdog reads unit state through the parser'
+$reviverText = Get-Content -LiteralPath (Join-Path $Dir 'jarvis-reviver.ps1') -Raw
+Check ($reviverText -match 'return ConvertTo-UnitState') 'reviver reads unit state through the parser'
 
 Check (Test-StartGrace 0) 'just started is in grace'
 Check (Test-StartGrace 299) 'under grace holds'

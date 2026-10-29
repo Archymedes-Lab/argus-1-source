@@ -9,6 +9,7 @@ from jarvis.core.observation import TRANSIENT
 from jarvis.platform import privilege, topology
 from jarvis.platform.linux import signal_zero
 
+from . import ebpf
 from .common import DEFAULT_SWEEP, PROC, _finding
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
@@ -64,7 +65,7 @@ def _still_alive(pid):
     return True
 
 
-def audit_linux(deep=False):
+def audit_linux(deep=False, db_path=None):
     out = []
     sweep_limit = pid_max() if deep else min(DEFAULT_SWEEP, pid_max())
 
@@ -200,6 +201,12 @@ def audit_linux(deep=False):
             f"{p['name']} [{p.get('type')}] id={p.get('id')}"
             + (f" pids={[x.get('pid') for x in p['pids']]}" if p.get("pids") else ""),
             "bpftool prog list"))
+    # Independent of bpftool, which most machines lack: kallsyms against a baseline.
+    try:
+        out.extend(ebpf.findings(holders, db_path=db_path))
+    except Exception as exc:
+        out.append(_finding("medium", "eBPF program inventory unavailable",
+                            f"inventory failed: {type(exc).__name__}", "/proc/kallsyms"))
     for h in holders:
         out.append(_finding("low", "process holds eBPF handles",
                             f"{h['name']} [pid {h['pid']}] — {', '.join(h['kinds'])}",
@@ -356,7 +363,7 @@ def audit(hosts=("wsl", "win"), deep=False, db_path=None):
         except Exception:
             pass
     if "wsl" in hosts:
-        out += audit_linux(deep=deep)
+        out += audit_linux(deep=deep, db_path=db_path)
     if "win" in hosts:
         res = audit_windows()
         if isinstance(res, tuple):

@@ -1,4 +1,4 @@
-// JARVIS live process map: the page. It wires three modules together:
+// ARGUS-1 live process map: the page. It wires three modules together:
 //
 //   procs-state.js  the live table from /api/procs/stream (web/procview.py):
 //                   births, exits, short-lived starts, verdicts, missing
@@ -97,7 +97,7 @@ function renderLensState() {
   const parts = [];
   if (!b) parts.push('Loading the baseline…');
   else if (!b.ok) parts.push(`${b.reason || 'Baseline unavailable'}. Names are shown as unknown, never as new.`);
-  else parts.push('Compared with what JARVIS has recorded: ' + HOSTS.map((h) => (hostReady(b, h)
+  else parts.push('Compared with what ARGUS-1 has recorded: ' + HOSTS.map((h) => (hostReady(b, h)
     ? `${label(h)} ${b.hosts[h].rows} names` : `${label(h)}: no baseline yet`)).join(' · ') + '.');
   const id = state.identity;
   if (!id || !id.on) parts.push('Image identity is not checked.');
@@ -192,9 +192,48 @@ $('lists').addEventListener('click', (e) => {
 });
 $('find').addEventListener('input', (e) => { scene.query = e.target.value.trim().toLowerCase(); scene.wake(); });
 $('only-changes').addEventListener('change', (e) => { scene.onlyChanges = e.target.checked; scene.wake(); });
-addEventListener('keydown', (e) => { if (e.key === 'f' && document.activeElement !== $('find')) scene.fit(); });
-addEventListener('resize', () => scene.resize(innerWidth, innerHeight));
+addEventListener('keydown', (e) => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'f' || e.key === 'F') scene.fit();
+  else if (e.key === 'Escape') { scene.focused = null; scene.wake(); }
+  else if (!scene.key(e)) return;
+  e.preventDefault();
+});
+// The scene is centred between the side panels when they are shown.
+function fitPanels() {
+  const shown = (el) => el && getComputedStyle(el).display !== 'none';
+  const left = shown($('head')) ? $('head').getBoundingClientRect().right : 0;
+  const right = shown($('lists')) ? innerWidth - $('lists').getBoundingClientRect().left : 0;
+  scene.setInsets(left, right);
+}
+addEventListener('resize', fitPanels);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => scene.readPalette());
+
+// ---- theme: the dashboard's switch (same key), system setting by default -------------
+
+const THEME_KEY = 'jarvis.theme', THEMES = ['auto', 'light', 'dark'];
+function readTheme() {
+  const forced = new URLSearchParams(location.hash.slice(1)).get('theme');
+  if (THEMES.includes(forced)) return forced;
+  try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch { return 'auto'; }
+}
+function applyTheme(t) {
+  if (!THEMES.includes(t)) t = 'auto';
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  $('theme').textContent = t === 'auto' ? 'Auto theme' : t === 'light' ? 'Light' : 'Dark';
+  $('theme').dataset.t = t;
+  scene.readPalette();
+}
+$('theme').addEventListener('click', () => {
+  const t = THEMES[(THEMES.indexOf($('theme').dataset.t) + 1) % THEMES.length];
+  try { localStorage.setItem(THEME_KEY, t); } catch { /* storage may be blocked */ }
+  applyTheme(t);
+});
+applyTheme(readTheme());
+// Capture and measurement only: the scene's draw-call and frame-time readout.
+if (/(^|[#&])debug(=|&|$)/.test(location.hash)) window.procsDebug = { scene, state };
 
 // ---- loop: render only when something moved ------------------------------------------
 
@@ -205,7 +244,7 @@ function loop(now) {
   state.settleStarts(now);
   if (lastFrame && now - lastFrame > STALE_MS) {
     setSync(document.body.dataset.sync === 'connecting' ? 'connecting' : 'stale',
-      `No update from JARVIS for ${Math.round((now - lastFrame) / 1000)} s; the map is frozen.`);
+      `No update from ARGUS-1 for ${Math.round((now - lastFrame) / 1000)} s; the map is frozen.`);
   }
   const live = document.body.dataset.sync === 'live';
   scene.pulses(now, live);
@@ -215,7 +254,7 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-scene.resize(innerWidth, innerHeight);
+fitPanels();
 loadBaseline();
 connect();
 requestAnimationFrame(loop);

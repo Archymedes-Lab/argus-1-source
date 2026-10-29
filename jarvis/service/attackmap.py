@@ -495,8 +495,12 @@ def probe_removable_write():
 def probe_raw_socket():
     import importlib
     sniffing = importlib.import_module("jarvis.collectors.network.sniffing")
-    held = sniffing._linux(tools=[], sockets=[("4242", "kworker")], promisc=[])
-    usual = sniffing._linux(tools=[], sockets=[("77", "systemd-networkd")], promisc=[])
+    # The identity check reads /proc, so the probe states it: an expected daemon
+    # verified by its image, anything else not (tests/test_sniffing_identity.py).
+    def ident(pid, name):
+        return "verified" if name in sniffing.PACKET_DAEMONS else "unexpected"
+    held = sniffing._linux(tools=[], sockets=[("4242", "kworker")], promisc=[], identity=ident)
+    usual = sniffing._linux(tools=[], sockets=[("77", "systemd-networkd")], promisc=[], identity=ident)
     return (any("raw packet socket" in f["title"] and f["severity"] == "high" for f in held)
             and all(f["severity"] == "ok" for f in usual)), \
         "an unexpected process holding a raw packet socket; the network daemons that need one are quiet"

@@ -59,6 +59,7 @@ COVERAGE_ASSETS = {
     "/static/procs-model.js": ("procs-model.js", "text/javascript; charset=utf-8", None),
     "/static/procs-state.js": ("procs-state.js", "text/javascript; charset=utf-8", None),
     "/static/procs-scene.js": ("procs-scene.js", "text/javascript; charset=utf-8", None),
+    "/static/procs-layout.js": ("procs-layout.js", "text/javascript; charset=utf-8", None),
     "/static/vendor/world-50m.json": (
         "vendor/world-50m.json", "application/json",
         "bd89e13c5073e3fba5dbe16ca9231a1d7d7de5844961f426e9d35d95b4ec4a28"),

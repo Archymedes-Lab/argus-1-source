@@ -4,8 +4,10 @@
     logins      successful SSH logins, new networks and keys
     sshwatch    sshd policy, authorised and host keys, live SSH tunnels
     opshealth   failed services, expiring TLS certificates, OOM kills, crashes
-    appcode     every codebase: vulnerable dependencies, risky code, secrets  [PATH ...]
+    bootchain   boot-chain persistence (GRUB, initramfs hooks, kernel images), kernel attack surface
+    keyreaders  who reads the keyboard, raw HID or uinput; hidden staging files
     pkgverify   packaged-file integrity of intruder targets
+    appcode     every codebase: vulnerable dependencies, risky code, secrets  [PATH ...]
     services    the declared services file, and what listens now
     netstate    write the firewall snapshot      (argus-netstate unit; no store)
     netsensor   run the packet sensor            (argus-netsensor unit; no store)
@@ -48,6 +50,16 @@ def cmd_sshwatch(args, store):
 def cmd_opshealth(args, store):
     from jarvis.collectors.host import opshealth
     _print(opshealth.audit(store), args.json)
+
+
+def cmd_bootchain(args, store):
+    from jarvis.collectors.host import bootchain
+    _print(bootchain.audit(store), args.json)
+
+
+def cmd_keyreaders(args, store):
+    from jarvis.collectors.host import keyreaders
+    _print(keyreaders.audit(store), args.json)
 
 
 def cmd_pkgverify(args, store):
@@ -112,6 +124,10 @@ def add_parser(sub):
                             "SSH server policy, every authorised key, host keys and live tunnels"),
                            ("opshealth", cmd_opshealth,
                             "failed services, expiring TLS certificates, OOM kills, crashes"),
+                           ("bootchain", cmd_bootchain,
+                            "boot-chain persistence and kernel attack surface"),
+                           ("keyreaders", cmd_keyreaders,
+                            "who reads the keyboard, raw HID or uinput; hidden staging files"),
                            ("pkgverify", cmd_pkgverify, "changed files in the packages intruders replace")):
         p = sub.add_parser(name, help=text)
         p.add_argument("--json", action="store_true")

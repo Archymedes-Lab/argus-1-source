@@ -327,6 +327,7 @@ def rows_from_events(events):
             "initiated": t.get("initiated"), "dns_status": str(t.get("status") or ""),
             "reg_key": t.get("key") or "", "reg_details": str(t.get("details") or ""),
             "cmdline": p.get("cmdline") or "", "type": t.get("tamper") or "",
+            "original_name": p.get("original_name") or "",
             "start_module": t.get("start_module") or "",
             "start_function": t.get("start_function") or "",
             "start_address": t.get("start_address") or "",
@@ -565,9 +566,39 @@ def _base(path):
     return p.replace("/", "\\").rsplit("\\", 1)[-1].lower()
 
 
-def _query_blocked():
+def _service_findings(st):
+    """A stopped Sysmon or a disabled channel, from a status() answer. Pure.
+
+    status() always read the service state and channel switch, but nothing
+    judged them: a stopped Sysmon whose old log was still readable passed as
+    healthy, and on the native-sensor path status() was never asked at all
+    (2026-10-27 coverage audit). An empty answer judges nothing either way."""
+    if not st or not st.get("installed"):
+        return []
+    out = []
+    state = str(st.get("state") or "")
+    if state and state.lower() != "running":
+        collection.failed("sysmon-service", f"service {state}")
+        out.append(_finding(
+            "visibility", "high", "Sysmon is installed but not running",
+            f"the Sysmon service is {state}. Process, network and registry events "
+            f"stop being recorded, which looks exactly like a quiet machine; "
+            f"stopping it is a known first step before an attack (T1562.001). "
+            f"Start it with `sc start Sysmon64` in an elevated shell and find who "
+            f"stopped it in the System log (event 7036/7040).", "Sysmon64"))
+    if str(st.get("enabled") or "").lower() == "false":
+        collection.failed("sysmon-channel", "event channel disabled")
+        out.append(_finding(
+            "visibility", "high", "Sysmon's event log channel is disabled",
+            "the driver may still run, but nothing it sees is written anywhere. "
+            "Re-enable it with `wevtutil sl Microsoft-Windows-Sysmon/Operational /e:true` "
+            "(elevated).", CHANNEL))
+    return out
+
+
+def _query_blocked(st=None):
     """Findings that stop the PowerShell fallback before it queries, or []."""
-    st = status()
+    st = status() if st is None else st
     if not st:
         collection.failed('sysmon', 'status unavailable')
         return [_finding("visibility", "medium", "Sysmon status unavailable",
@@ -631,16 +662,24 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 replay_data = replay[0]
     query_started = now()
     minutes = None
+    service = []
     if probing:
         through = None
         data = {"events": list(events), "complete": True, "rareComplete": True}
     elif native is not None:
         data, through = native
+        # The native sensor reads the log, not the service: a stopped Sysmon
+        # leaves an intact, quiet log behind. Ask Windows directly.
+        service = _service_findings(status())
     else:
         through = None
-        failed = _query_blocked()
+        st = status()
+        failed = _query_blocked(st)
         if failed:
             return failed
+        # Stopped is not unreadable: the events already in the log still need
+        # reading, so this reports alongside the query instead of blocking it.
+        service = _service_findings(st)
         since_epoch = None
         if incremental and store is not None:
             last = int(float(store.get_meta("sysmon_last_run", 0) or 0))
@@ -684,7 +723,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     replay_complete = (rejudge and data.get('complete') and data.get('rareComplete')
                        and sum(int(e.get('id') or 0) == 8 for e in events)
                        <= REJUDGE_REMOTE_MAX)
-    out = []
+    out = list(service)
     if not data.get('complete', False):
         if native is not None:
             collection.failed('sysmon', 'event log retention removed unread events')
@@ -720,6 +759,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
     unsigned, dns_names, proc_hashes = {}, {}, {}
     recovery_tamper, sideloads = [], []
     technique_hits, discovery_seen = {}, []
+    renamed = {}                    # (image, original) -> [count, first time]
     off_runs, off_copies = [], []       # process starts naming a drive not known to be internal
     judge_drives = volumes is not None or not probing
     known_volumes, known_at = ((volumes, now()) if volumes is not None
@@ -837,11 +877,24 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             cmdline = e.get("cmdline") or ""
             if RANSOM_RECOVERY.search(cmdline):
                 recovery_tamper.append((image, cmdline, e.get("time")))
-            for rule, span in techniques.match(image, cmdline, techniques.WIN,
-                                               e.get("parent") or ""):
-                hit = technique_hits.setdefault((rule, image), [0, span, e.get("time")])
-                hit[0] += 1
-                hit[2] = e.get("time") or hit[2]
+            # A renamed system utility is judged under its real name too: every
+            # rule matches on the image name, so a renamed copy slipped past all.
+            original = techniques.original_base(e.get("original_name"))
+            as_images = [image]
+            if original in techniques.RENAMED_WATCH and original != techniques.image_base(image):
+                seen_r = renamed.setdefault((image, original), [0, e.get("time")])
+                seen_r[0] += 1
+                as_images.append(original + ".exe")
+            matched = set()
+            for as_image in as_images:
+                for rule, span in techniques.match(as_image, cmdline, techniques.WIN,
+                                                   e.get("parent") or ""):
+                    if rule in matched:
+                        continue
+                    matched.add(rule)
+                    hit = technique_hits.setdefault((rule, image), [0, span, e.get("time")])
+                    hit[0] += 1
+                    hit[2] = e.get("time") or hit[2]
             if judge_drives:
                 if techniques.drive_letter(image) not in internal | {""}:
                     off_runs.append((image, e.get("time")))
@@ -1030,6 +1083,17 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             f"{iso_of(when)} — {cmdline[:240]}. Destroying shadow copies or recovery "
             f"configuration commonly precedes ransomware encryption; confirm whether an "
             f"administrator or backup tool initiated it.", image))
+
+    # -- renamed system utilities (T1036.003) --------------------------------
+    for (image, original), (count, when) in sorted(renamed.items()):
+        f = _finding(
+            "technique", "high", f"a renamed copy of {original}.exe ran",
+            f"{image} is {original}.exe under another name (Sysmon's original file name) "
+            f"at {iso_of(when)}" + (f", {count} times" if count > 1 else "")
+            + ". Renaming a system tool is done to slip past rules that match on its "
+              "name; its command line was also judged as the real tool.", image)
+        f["techniques"] = ["T1036"]
+        out.append(f)
 
     # -- techniques recognisable from one process start ----------------------
     for (rule, image), (count, span, when) in technique_hits.items():

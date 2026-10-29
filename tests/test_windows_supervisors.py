@@ -51,7 +51,8 @@ class WindowsSupervisorTests(unittest.TestCase):
         return out.returncode, (out.stdout + out.stderr).replace("\r", "")
 
     def test_reviver_and_health_monitor_outage_decisions(self):
-        for name in ("jarvis-reviver.ps1", "jarvis-health-monitor.ps1"):
+        for name in ("jarvis-reviver.ps1", "jarvis-health-monitor.ps1",
+                     "jarvis-wake-watchdog.ps1"):
             shutil.copy(ROOT / name, self.work / name)
         harness = self.work / "supervisors.Tests.ps1"
         shutil.copy(ROOT / "tests" / "windows" / "supervisors.Tests.ps1", harness)
