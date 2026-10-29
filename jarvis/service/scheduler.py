@@ -98,10 +98,13 @@ def _isolated_job(name, hosts, db_path, timeout):
     """
     command = [sys.executable, "-m", "jarvis.service.collector_worker",
                name, db_path, *hosts]
+    # From the package root: `-m` resolves against the working directory, and
+    # the Argus unit runs from "/" (found 2026-10-29), where it would not import.
+    from jarvis.core.paths import PACKAGE_DIR
     try:
         done = subprocess.run(command, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True,
-                              errors="replace",
+                              errors="replace", cwd=str(PACKAGE_DIR.parent),
                               timeout=max(1.0, timeout), check=False)
     except subprocess.TimeoutExpired:
         return [], (f"collector exceeded its {timeout:.0f}s process deadline; "
