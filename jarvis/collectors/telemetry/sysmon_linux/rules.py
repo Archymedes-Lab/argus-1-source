@@ -175,8 +175,10 @@ def _without_quoted_heredocs(cmd):
     for m in re.finditer(r"<<-?\s*(?:'([^']+)'|\"([^\"]+)\"|\\(\w+))[^\n]*\n", cmd or ""):
         if m.start() < pos:
             continue
-        line_start = cmd.rfind("\n", 0, m.start()) + 1
-        if _HEREDOC_READER.search(cmd[line_start:m.end()]):
+        # The command that owns the heredoc: back to the last separator, and the
+        # rest of its line (`cat <<'E' | sh` pipes the body into a shell).
+        seg = max(cmd.rfind(c, 0, m.start()) for c in ";&|(`\n") + 1
+        if _HEREDOC_READER.search(cmd[seg:m.start()]) or _HEREDOC_READER.search(m.group(0)):
             continue                        # a shell or interpreter reads the body: it runs
         tag = m.group(1) or m.group(2) or m.group(3)
         end = re.compile(r"^\s*" + re.escape(tag) + r"\s*$", re.M).search(cmd, m.end())
