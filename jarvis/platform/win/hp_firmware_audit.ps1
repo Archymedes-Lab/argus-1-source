@@ -76,7 +76,7 @@ try {
     $maker = [string](Get-CimInstance Win32_ComputerSystem).Manufacturer
     if ($maker -notmatch '^(HP|Hewlett)') { $out.reason = "not an HP machine ($maker)"; Emit; return }
 
-    $base = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
+    $base = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'WindowsPowerShell\Modules'
     $versions = @(Get-ChildItem -LiteralPath (Join-Path $base 'HP.Firmware') -Directory -ErrorAction SilentlyContinue |
                   Where-Object { $_.Name -as [version] } | Sort-Object { [version]$_.Name } -Descending)
     if (-not $versions) {
@@ -118,7 +118,7 @@ try {
         Emit; return
     }
 
-    $env:PSModulePath = "$base;$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules"
+    $env:PSModulePath = "$base;$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules"
     foreach ($i in 0..2) {
         Import-Module -Name (Join-Path $roots[$i] "$($Modules[$i]).psd1") -Force -DisableNameChecking `
             -WarningAction SilentlyContinue | Out-Null

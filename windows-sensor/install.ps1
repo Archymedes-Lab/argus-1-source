@@ -31,11 +31,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Locations from the operating system, not environment variables, which an
+# elevated shell inherits from the (unelevated) user's own environment.
+$Sys32 = [Environment]::SystemDirectory
+$WinDir = Split-Path -Parent $Sys32
+$ProgramFilesDir = [Environment]::GetFolderPath('ProgramFiles')
+$ProgramDataDir = Join-Path ([IO.Path]::GetPathRoot($Sys32)) 'ProgramData'
 $Name = 'JarvisNativeSensor'
 $Account = "NT SERVICE\$Name"
-$Bin = Join-Path $env:ProgramFiles 'Jarvis\Sensor'
+$Bin = Join-Path $ProgramFilesDir 'Jarvis\Sensor'
 $Exe = Join-Path $Bin 'JarvisSensor.exe'
-$Spool = Join-Path $env:ProgramData 'Jarvis\Sensor'
+$Spool = Join-Path $ProgramDataDir 'Jarvis\Sensor'
 $Acks = Join-Path $Spool 'acks'
 
 function Test-Admin {
@@ -46,7 +52,11 @@ function Test-Admin {
 
 function Grant-Folder([string]$path, [string[]]$grants) {
     # No inheritance from the parent: ProgramData lets Users create files.
-    & icacls.exe $path /inheritance:r /grant:r @grants | Out-Null
+    # Owner Administrators: a folder the user created before the install
+    # would otherwise stay theirs, and an owner can rewrite the ACL.
+    & (Join-Path $Sys32 'icacls.exe') $path /setowner '*S-1-5-32-544' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls /setowner failed on $path ($LASTEXITCODE)" }
+    & (Join-Path $Sys32 'icacls.exe') $path /inheritance:r /grant:r @grants | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "icacls failed on $path ($LASTEXITCODE)" }
 }
 
@@ -74,17 +84,37 @@ function Remove-AsrExclusion([string]$path) {
     try { Remove-MpPreference -AttackSurfaceReductionOnlyExclusions $path -ErrorAction SilentlyContinue } catch {}
 }
 
+function New-AdminOnlyDirectory([string]$prefix) {
+    # A fresh folder under %SystemRoot%\Temp, created with its ACL in one call
+    # (SYSTEM and Administrators only, nothing inherited). The user's %TEMP%
+    # is writable by the unelevated user, who could edit a policy file there
+    # between its writing and secedit applying it.
+    $sid = { param($v) New-Object Security.Principal.SecurityIdentifier($v) }
+    $sec = New-Object Security.AccessControl.DirectorySecurity
+    $sec.SetOwner((& $sid 'S-1-5-32-544'))
+    $sec.SetAccessRuleProtection($true, $false)
+    foreach ($s in @('S-1-5-18', 'S-1-5-32-544')) {
+        $sec.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((& $sid $s),
+            [Security.AccessControl.FileSystemRights]::FullControl,
+            [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+            [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)))
+    }
+    $path = Join-Path (Join-Path $WinDir 'Temp') ($prefix + [guid]::NewGuid().ToString('N'))
+    if (Test-Path -LiteralPath $path) { throw "refusing: $path already exists" }
+    [void][IO.Directory]::CreateDirectory($path, $sec)
+    return $path
+}
+
 function Grant-LogonAsService([string]$sid) {
     # A virtual service account needs SeServiceLogonRight or the service fails
     # to start with "Access is denied". sc.exe does not reliably grant it, so
     # add it through the local security policy. SIDs in a secedit INF are
     # written with a leading '*'.
-    $tmp = Join-Path $env:TEMP ('jarvis-secedit-' + [guid]::NewGuid())
-    New-Item -ItemType Directory -Force $tmp | Out-Null
+    $tmp = New-AdminOnlyDirectory 'jarvis-secedit-'
     try {
         $inf = Join-Path $tmp 'export.inf'
         $db  = Join-Path $tmp 'secedit.sdb'
-        & secedit.exe /export /cfg $inf /areas USER_RIGHTS | Out-Null
+        & (Join-Path $Sys32 'secedit.exe') /export /cfg $inf /areas USER_RIGHTS | Out-Null
         $content = Get-Content -LiteralPath $inf
         $line = $content | Where-Object { $_ -match '^SeServiceLogonRight' }
         if ($line -and $line -match [regex]::Escape($sid)) { return }   # already granted
@@ -94,10 +124,10 @@ function Grant-LogonAsService([string]$sid) {
             $content = $content -replace '(\[Privilege Rights\])', "`$1`r`nSeServiceLogonRight = *$sid"
         }
         Set-Content -LiteralPath $inf -Value $content -Encoding Unicode
-        & secedit.exe /configure /db $db /cfg $inf /areas USER_RIGHTS | Out-Null
+        & (Join-Path $Sys32 'secedit.exe') /configure /db $db /cfg $inf /areas USER_RIGHTS | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "secedit could not grant the logon right ($LASTEXITCODE)" }
     } finally {
-        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -114,7 +144,7 @@ if (-not (Test-Admin)) { throw 'Run this from an elevated PowerShell.' }
 if ($Install -eq $Remove) { throw 'Choose exactly one of -Install or -Remove.' }
 
 if ($Remove) {
-    if (Stop-Sensor) { & sc.exe delete $Name | Out-Null }
+    if (Stop-Sensor) { & (Join-Path $Sys32 'sc.exe') delete $Name | Out-Null }
     Remove-AsrExclusion $Exe
     Remove-Item -LiteralPath $Bin -Recurse -Force -ErrorAction SilentlyContinue
     if ($PurgeSpool) { Remove-Item -LiteralPath $Spool -Recurse -Force -ErrorAction SilentlyContinue }
@@ -123,7 +153,7 @@ if ($Remove) {
 }
 
 $source = Join-Path $PSScriptRoot 'JarvisSensor.cs'
-$compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$compiler = Join-Path $WinDir 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) { throw '64-bit .NET Framework compiler is unavailable' }
 
 $existing = Stop-Sensor
@@ -152,12 +182,12 @@ if (-not $existing) {
         -StartupType Automatic | Out-Null
 }
 # password= "" is required for a virtual account, or the change half-applies.
-& sc.exe config $Name obj= $Account password= "" | Out-Null
-& sc.exe sidtype $Name unrestricted | Out-Null
+& (Join-Path $Sys32 'sc.exe') config $Name obj= $Account password= "" | Out-Null
+& (Join-Path $Sys32 'sc.exe') sidtype $Name unrestricted | Out-Null
 $sid = (New-Object System.Security.Principal.NTAccount($Account)).Translate(
     [System.Security.Principal.SecurityIdentifier]).Value
 Grant-LogonAsService $sid
-& sc.exe failure $Name reset= 86400 actions= restart/5000/restart/5000/restart/60000 | Out-Null
+& (Join-Path $Sys32 'sc.exe') failure $Name reset= 86400 actions= restart/5000/restart/5000/restart/60000 | Out-Null
 $readers = Get-LocalGroupMember -SID 'S-1-5-32-573' -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -eq $Account }
 if (-not $readers) { Add-LocalGroupMember -SID 'S-1-5-32-573' -Member $Account }
@@ -169,10 +199,10 @@ Grant-Folder $Acks @('*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F', "${Accoun
                 "${User}:(OI)(CI)M")
 
 if ($EnableTaskLog) {
-    & wevtutil.exe sl 'Microsoft-Windows-TaskScheduler/Operational' /e:true
+    & (Join-Path $Sys32 'wevtutil.exe') sl 'Microsoft-Windows-TaskScheduler/Operational' /e:true
 }
 if ($SysmonLogMB -gt 0) {
-    & wevtutil.exe sl 'Microsoft-Windows-Sysmon/Operational' /ms:$([int64]$SysmonLogMB * 1MB)
+    & (Join-Path $Sys32 'wevtutil.exe') sl 'Microsoft-Windows-Sysmon/Operational' /ms:$([int64]$SysmonLogMB * 1MB)
 }
 
 try {

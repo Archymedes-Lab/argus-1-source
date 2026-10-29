@@ -46,8 +46,31 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Root = Join-Path $env:ProgramData 'Jarvis\Broker'
+# Paths come from the operating system, never from environment variables: an
+# elevated process started with the user's token inherits the user's own
+# environment (HKCU\Environment), so %ProgramData%, %SystemRoot%, %TEMP% and
+# %PSModulePath% are whatever the unelevated user set them to.
+$Sys32 = [Environment]::SystemDirectory
+$WinDir = Split-Path -Parent $Sys32
+$ProgramDataDir = Join-Path ([IO.Path]::GetPathRoot($Sys32)) 'ProgramData'
+$PowerShellExe = Join-Path $Sys32 'WindowsPowerShell\v1.0\powershell.exe'
+# Module autoloading searches PSModulePath, whose first entry is normally the
+# user's Documents folder; only the administrator-only folders remain.
+$env:PSModulePath = (Join-Path $Sys32 'WindowsPowerShell\v1.0\Modules') + ';' +
+    (Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'WindowsPowerShell\Modules')
+$env:ProgramData = $ProgramDataDir
+$env:ALLUSERSPROFILE = $ProgramDataDir
+$env:SystemRoot = $WinDir
+$env:windir = $WinDir
+$JarvisDir = Join-Path $ProgramDataDir 'Jarvis'
+$Root = Join-Path $JarvisDir 'Broker'
 $Out = Join-Path $Root 'out'
+$Tmp = Join-Path $Root 'tmp'
+$BrokerCopy = Join-Path $Root 'jarvis-elevated-broker.ps1'
+# Owners allowed for anything the elevated task runs or reads: SYSTEM,
+# Administrators and TrustedInstaller.
+$TrustedOwners = @('S-1-5-18', 'S-1-5-32-544',
+                   'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
 $Jobs = [ordered]@{
     posture  = @{ script = 'posture.ps1';       timeout = 400 }
     memscan  = @{ script = 'memscan.ps1';       timeout = 600 }
@@ -70,11 +93,40 @@ function Test-Admin {
 }
 
 function Lock-Folder([string]$path) {
-    # SYSTEM and Administrators: full. Users: read and execute. No inheritance
-    # from ProgramData, whose default ACL lets Users create files.
-    & icacls.exe $path /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' `
-        '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "icacls failed on $path ($LASTEXITCODE)" }
+    # SYSTEM and Administrators: full. Users: read and execute. Owner
+    # Administrators. The whole DACL is replaced, not merged: a folder someone
+    # created before the install (ProgramData lets Users create folders, and
+    # the creator owns them) keeps neither its owner nor any extra entry.
+    $sid = { param($v) New-Object Security.Principal.SecurityIdentifier($v) }
+    $acl = New-Object Security.AccessControl.DirectorySecurity
+    $acl.SetOwner((& $sid 'S-1-5-32-544'))
+    $acl.SetAccessRuleProtection($true, $false)
+    $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    foreach ($grant in @(@('S-1-5-18', 'FullControl'), @('S-1-5-32-544', 'FullControl'),
+                         @('S-1-5-32-545', 'ReadAndExecute'))) {
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+            (& $sid $grant[0]), [Security.AccessControl.FileSystemRights]$grant[1], $inherit,
+            [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)))
+    }
+    [IO.Directory]::SetAccessControl($path, $acl)
+}
+
+function Find-Untrusted([string]$path, [switch]$Recurse) {
+    # The first entry that is a link or is owned by anyone but SYSTEM,
+    # Administrators or TrustedInstaller; $null when there is none. Links are
+    # reported, never followed.
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    $item = Get-Item -LiteralPath $path -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return "$path is a link" }
+    $owner = (Get-Acl -LiteralPath $path).GetOwner([Security.Principal.SecurityIdentifier]).Value
+    if ($TrustedOwners -notcontains $owner) { return "$path is owned by $owner" }
+    if ($Recurse -and $item.PSIsContainer) {
+        foreach ($child in @(Get-ChildItem -LiteralPath $path -Force)) {
+            $why = Find-Untrusted $child.FullName -Recurse
+            if ($why) { return $why }
+        }
+    }
+    return $null
 }
 
 if ($Remove) {
@@ -88,9 +140,24 @@ if ($Remove) {
 if ($Install) {
     if (-not (Test-Admin)) { throw 'run -Install from an elevated shell' }
     if (-not $Source -or -not (Test-Path -LiteralPath $Source)) { throw "-Source folder not found: $Source" }
-    New-Item -ItemType Directory -Path $Out -Force | Out-Null
+    if (-not (Test-Path -LiteralPath $JarvisDir)) { New-Item -ItemType Directory -Path $JarvisDir | Out-Null }
+    if ((Get-Item -LiteralPath $JarvisDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "refusing: $JarvisDir is a link"
+    }
+    Lock-Folder $JarvisDir
+    # A broker folder holding anything an unelevated account created or owns
+    # is set aside (kept as evidence, never run) and a fresh one is made.
+    $why = Find-Untrusted $Root -Recurse
+    if ($why) {
+        $aside = "$Root.untrusted-" + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+        Move-Item -LiteralPath $Root -Destination $aside
+        Write-Output "set aside $aside ($why)"
+    }
+    if (-not (Test-Path -LiteralPath $Root)) { New-Item -ItemType Directory -Path $Root | Out-Null }
     Lock-Folder $Root
-    Copy-Item -LiteralPath $MyInvocation.MyCommand.Path -Destination (Join-Path $Root 'jarvis-elevated-broker.ps1') -Force
+    New-Item -ItemType Directory -Path $Out -Force | Out-Null
+    New-Item -ItemType Directory -Path $Tmp -Force | Out-Null
+    Copy-Item -LiteralPath $MyInvocation.MyCommand.Path -Destination $BrokerCopy -Force
     foreach ($job in $Jobs.Values) {
         Copy-Item -LiteralPath (Join-Path $Source $job.script) -Destination (Join-Path $Root $job.script) -Force
     }
@@ -98,10 +165,9 @@ if ($Install) {
     # user's own Defender view) matches what the unelevated collectors see.
     $user = (Get-CimInstance Win32_ComputerSystem).UserName
     if (-not $user) { $user = "$env:USERDOMAIN\$env:USERNAME" }
-    $script = Join-Path $Root 'jarvis-elevated-broker.ps1'
-    $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument (
-        '--headless "' + "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" +
-        '" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script + '" -Run')
+    $action = New-ScheduledTaskAction -Execute (Join-Path $Sys32 'conhost.exe') -Argument (
+        '--headless "' + $PowerShellExe +
+        '" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $BrokerCopy + '" -Run')
     $triggers = @((New-ScheduledTaskTrigger -AtLogOn -User $user),
                   (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
                      -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650)))
@@ -120,7 +186,23 @@ if ($Install) {
 }
 
 if ($Run) {
+    # Only the protected copy runs jobs, and only while its folders are still
+    # owned by administrators: a copy elsewhere, or a folder that changed
+    # hands, runs nothing.
+    if (-not [string]::Equals([IO.Path]::GetFullPath($PSCommandPath), $BrokerCopy,
+                              [StringComparison]::OrdinalIgnoreCase)) {
+        throw "refusing to run from $PSCommandPath; only $BrokerCopy runs jobs"
+    }
+    foreach ($dir in @($JarvisDir, $Root)) {
+        $why = Find-Untrusted $dir
+        if ($why) { throw "refusing to run: $why" }
+    }
     New-Item -ItemType Directory -Path $Out -Force | Out-Null
+    New-Item -ItemType Directory -Path $Tmp -Force | Out-Null
+    # Collectors that compile C# (Add-Type) write and load files in TEMP; the
+    # user's TEMP would let the unelevated user swap the compiled code.
+    $env:TEMP = $Tmp
+    $env:TMP = $Tmp
     $status = [ordered]@{ started = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); admin = (Test-Admin); jobs = [ordered]@{} }
     foreach ($name in $Jobs.Keys) {
         $job = $Jobs[$name]
@@ -128,7 +210,7 @@ if ($Run) {
         $tmp = Join-Path $Out "$name.b64.new"
         $err = Join-Path $Out "$name.err"
         try {
-            $p = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+            $p = Start-Process -FilePath $PowerShellExe `
                 -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Root $job.script)) `
                 -RedirectStandardOutput $tmp -RedirectStandardError $err -WindowStyle Hidden -PassThru
             if (-not $p.WaitForExit($job.timeout * 1000)) {

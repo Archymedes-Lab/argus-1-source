@@ -21,7 +21,10 @@
 # copies read-only and reports any that fail. Output: base64 JSON, counts only.
 
 $ErrorActionPreference = 'Stop'
-$Vault = Join-Path $env:ProgramData 'Jarvis\Vault'
+$Sys32 = [Environment]::SystemDirectory
+# The vault path comes from the system drive, not %ProgramData%, which the
+# user's own environment can redefine for this elevated process.
+$Vault = Join-Path ([IO.Path]::GetPathRoot($Sys32)) 'ProgramData\Jarvis\Vault'
 $Inbox = Join-Path $env:LOCALAPPDATA 'Jarvis\VaultInbox'
 $MaxBytes = 20GB
 $BudgetSeconds = 90
@@ -49,10 +52,89 @@ function Lock-Folder([string]$path) {
   # SYSTEM and Administrators: full. The owning user (whose elevated token
   # runs the broker): read, so the daemon can verify. No other account: the
   # history holds command lines. No inherited ProgramData ACEs.
+  # Owner Administrators: a folder created before the first run by the
+  # unelevated user would otherwise stay theirs, and its owner can rewrite
+  # the ACL.
   $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-  & icacls.exe $path /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' `
+  & (Join-Path $Sys32 'icacls.exe') $path /setowner '*S-1-5-32-544' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "icacls /setowner failed on $path ($LASTEXITCODE)" }
+  & (Join-Path $Sys32 'icacls.exe') $path /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' `
       "*${owner}:(OI)(CI)RX" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "icacls failed on $path ($LASTEXITCODE)" }
+}
+
+# The inbox is written by the unelevated user, and this job runs elevated. A
+# junction, mount point or hard link planted in the inbox would make it read
+# a file the user cannot, and copy it into the vault the user can read. Every
+# inbox file is therefore opened once, checked through its handle (the path
+# Windows resolved must be the one asked for, with a single link), and read
+# only through that handle.
+$HandleTypeError = ''
+try { Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+public static class JarvisInboxHandle {
+    [StructLayout(LayoutKind.Sequential)]
+    struct ByHandleInfo {
+        public uint Attributes; public long Created; public long Accessed; public long Written;
+        public uint Volume; public uint SizeHigh; public uint SizeLow; public uint Links;
+        public uint IndexHigh; public uint IndexLow;
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern uint GetFinalPathNameByHandleW(SafeFileHandle h, StringBuilder buf, uint len, uint flags);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetFileInformationByHandle(SafeFileHandle h, out ByHandleInfo info);
+    public static string FinalPath(FileStream fs) {
+        StringBuilder sb = new StringBuilder(1024);
+        uint n = GetFinalPathNameByHandleW(fs.SafeFileHandle, sb, (uint)sb.Capacity, 0);
+        if (n == 0 || n >= sb.Capacity) throw new IOException("final path unavailable");
+        string s = sb.ToString();
+        if (s.StartsWith(@"\\?\UNC\")) return @"\\" + s.Substring(8);
+        if (s.StartsWith(@"\\?\")) return s.Substring(4);
+        return s;
+    }
+    public static uint Links(FileStream fs) {
+        ByHandleInfo info;
+        if (!GetFileInformationByHandle(fs.SafeFileHandle, out info)) throw new IOException("file information unavailable");
+        return info.Links;
+    }
+}
+'@ } catch { $HandleTypeError = [string]$_.Exception.Message }
+
+function Open-InboxFile([string]$path) {
+  $fs = New-Object IO.FileStream($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+  try {
+    $final = [JarvisInboxHandle]::FinalPath($fs)
+    if (-not [string]::Equals($final, [IO.Path]::GetFullPath($path), [StringComparison]::OrdinalIgnoreCase)) {
+      throw "refused: staged $path resolves to another location"
+    }
+    if ([JarvisInboxHandle]::Links($fs) -ne 1) { throw "refused: staged $path is a hard link" }
+    return $fs
+  } catch { $fs.Dispose(); throw }
+}
+
+function Read-InboxBytes([string]$path) {
+  $fs = Open-InboxFile $path
+  try {
+    $ms = New-Object IO.MemoryStream
+    $fs.CopyTo($ms)
+    return ,$ms.ToArray()
+  } finally { $fs.Dispose() }
+}
+
+function Get-InboxSha256([string]$path) {
+  $fs = Open-InboxFile $path
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { return [BitConverter]::ToString($sha.ComputeHash($fs)).Replace('-', '').ToLowerInvariant() }
+  finally { $sha.Dispose(); $fs.Dispose() }
+}
+
+function Get-InboxLength([string]$path) {
+  $fs = Open-InboxFile $path
+  try { return $fs.Length } finally { $fs.Dispose() }
 }
 
 function Get-Sha256([byte[]]$bytes, [int]$count) {
@@ -73,13 +155,18 @@ function Add-Bytes([string]$path, [byte[]]$bytes) {
 function Install-Copy([string]$source, [string]$target) {
   $temp = "$target.partial"
   if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
-  Copy-Item -LiteralPath $source -Destination $temp
+  $in = Open-InboxFile $source
+  try {
+    $out = New-Object IO.FileStream($temp, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $in.CopyTo($out); $out.Flush($true) } finally { $out.Dispose() }
+  } finally { $in.Dispose() }
   # Move fails rather than replacing: a file already in the vault stays.
   [IO.File]::Move($temp, $target)
   (Get-Item -LiteralPath $target).IsReadOnly = $true
 }
 
 try {
+  if ($HandleTypeError) { throw "inbox handle checks unavailable: $HandleTypeError" }
   $clock = [Diagnostics.Stopwatch]::StartNew()
   $segDir = Join-Path $Vault 'eventlog\segments'
   foreach ($dir in @($Vault, $segDir, (Join-Path $Vault 'anchors'), (Join-Path $Vault 'divergence'))) {
@@ -95,7 +182,7 @@ try {
   if (Test-Path -LiteralPath $chainPath) { $vaulted = [IO.File]::ReadAllBytes($chainPath) }
   $inboxChain = Join-Path $Inbox 'eventlog\chain.jsonl'
   $staged = $null
-  if (Test-Path -LiteralPath $inboxChain) { [byte[]]$staged = [IO.File]::ReadAllBytes($inboxChain) }
+  if (Test-Path -LiteralPath $inboxChain) { [byte[]]$staged = Read-InboxBytes $inboxChain }
 
   if ($null -ne $staged) {
     $prefix = $staged.Length -ge $vaulted.Length -and
@@ -121,13 +208,13 @@ try {
         $source = Join-Path $Inbox "eventlog\segments\$name"
         $target = Join-Path $segDir $name
         if (Test-Path -LiteralPath $target) {
-          if ((Test-Path -LiteralPath $source) -and (Get-FileSha256 $source) -ne (Get-FileSha256 $target)) {
+          if ((Test-Path -LiteralPath $source) -and (Get-InboxSha256 $source) -ne (Get-FileSha256 $target)) {
             $result.diverged = $true
             $result.divergence = "staged $name differs from its vaulted copy"
             break
           }
         } elseif (Test-Path -LiteralPath $source) {
-          if ($size + (Get-Item -LiteralPath $source).Length -ge $MaxBytes) { $result.full = $true; break }
+          if ($size + (Get-InboxLength $source) -ge $MaxBytes) { $result.full = $true; break }
           Install-Copy $source $target
           $size += (Get-Item -LiteralPath $target).Length
           Add-Bytes $digestPath ([Text.Encoding]::ASCII.GetBytes("$name $(Get-FileSha256 $target)`n"))
@@ -152,7 +239,7 @@ try {
       if ($file.Name -notmatch $AnchorPattern) { continue }
       $target = Join-Path $Vault "anchors\$($file.Name)"
       if (Test-Path -LiteralPath $target) {
-        if ((Get-FileSha256 $file.FullName) -ne (Get-FileSha256 $target)) { $result.anchor_conflicts++ }
+        if ((Get-InboxSha256 $file.FullName) -ne (Get-FileSha256 $target)) { $result.anchor_conflicts++ }
       } else {
         Install-Copy $file.FullName $target
         $result.new_anchors++
