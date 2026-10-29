@@ -43,6 +43,7 @@ ADDED_AFTER_GOLDEN = {
     "distrovuln": "daily distribution OVAL security data (ARGUS-SERVER.md W11, 2026-10-25)",
     "appcode": "codebases, dependency CVEs, code rules, secrets and web-root leaks (ARGUS-SERVER.md W12, 2026-10-28)",
     "osv": "daily public OSV dumps for the ecosystems found (ARGUS-SERVER.md W12, 2026-10-28)",
+    "selfguard": "tamper evidence that survives source disclosure (DETECTION-CONTENT.md, 2026-10-30)",
 }
 
 
