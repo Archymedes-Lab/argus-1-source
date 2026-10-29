@@ -70,6 +70,14 @@ class StageTests(unittest.TestCase):
                 stage.main()
         self.assertIn("staging-", str(cm.exception))
 
+    def test_cli_accepts_files_after_the_name_as_the_workflow_writes_them(self):
+        seen = {}
+        argv = ["stage.py", "upload", "--name", "staging-3", "a.deb", "b.json"]
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(stage, "upload", lambda name, files: seen.update(name=name, files=files)):
+            stage.main()
+        self.assertEqual(seen, {"name": "staging-3", "files": ["a.deb", "b.json"]})
+
     def test_no_redirect_keeps_the_token_off_storage_hosts(self):
         handler = stage._NoRedirect()
         self.assertIsNone(handler.redirect_request(None, None, 302, "Found", {}, "https://storage.example/x"))

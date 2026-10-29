@@ -161,7 +161,9 @@ def main():
     ap.add_argument("--sha")
     ap.add_argument("--dir")
     ap.add_argument("files", nargs="*")
-    args = ap.parse_args()
+    # Intermixed: the workflow writes `upload --name N FILE...`, which plain
+    # parse_args rejects (positionals after an option).
+    args = ap.parse_intermixed_args()
     if not args.name.startswith("staging-"):
         sys.exit("staging releases are named staging-<run id>")
     if args.action == "create":
