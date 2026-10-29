@@ -1244,7 +1244,7 @@ function markRead(store, key) {
 const visibleNotifications = store => (store.items || []).filter(i => !i.dismissed);
 const unreadCount = store => visibleNotifications(store).filter(i => !i.read).length;
 
-// ---- investigation reports (assistant checks, JARVIS and coding-agent output) --------------------
+// ---- investigation reports (assistant checks, ARGUS-1 and coding-agent output) --------------------
 // Fixed order and wording; "what I have not done" is always present, so a report never hides or implies an action.
 const REPORT_SECTIONS = [["checked", "What I checked"], ["found", "What I found"], ["meaning", "What this might mean"],
   ["certainty", "How certain I am"], ["recommendation", "What I recommend"], ["not_done", "What I have not done"]];
