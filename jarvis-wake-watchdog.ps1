@@ -215,6 +215,21 @@ if ($RepoRoot) {
 # permanently "stale" while the unit itself never actually stopped. Take the
 # last non-empty line, and treat the transient states systemd passes through
 # during a legitimate restart as healthy so we do not race our own backstop.
+# The states `systemctl is-active` can print. Anything else on its output is
+# not a unit state: when wsl.exe itself cannot reach the WSL service it prints
+# "error code: wsl/service/0x8007274c" (WSAETIMEDOUT) on stdout, and reading
+# that as "the unit is not active" made this watchdog restart a running daemon
+# about 30 times between 2026-10-13 and 2026-10-27. Unknown means unknown.
+function ConvertTo-UnitState([string]$text) {
+    $known = @('active', 'reloading', 'inactive', 'failed', 'activating',
+               'deactivating', 'maintenance', 'refreshing')
+    $lines = @(@("$text" -split "`n") | ForEach-Object { "$_".Trim().ToLower() } | Where-Object { $_ -ne '' })
+    if ($lines.Count -eq 0) { return '' }
+    $last = [string]$lines[-1]
+    if ($known -contains $last) { return $last }
+    return ''
+}
+
 function Get-UnitState {
     $raw = (& wsl.exe -d $Distro --exec systemctl is-active jarvis.service 2>$null)
     # Wrap the whole pipeline in @(), not just $raw. A pipeline that emits one
@@ -223,9 +238,7 @@ function Get-UnitState {
     # PowerShell. The method-not-found exception left the function returning
     # nothing, the caller read that as "the unit is not running", and the
     # watchdog restarted a healthy daemon every five minutes.
-    $lines = @(@($raw) | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
-    if ($lines.Count -eq 0) { return '' }
-    return ([string]$lines[-1]).ToLower()
+    return ConvertTo-UnitState (@($raw) -join "`n")
 }
 
 # Read it until it answers. An empty result means the query itself failed --

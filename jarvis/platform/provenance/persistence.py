@@ -90,8 +90,12 @@ MANAGED_TASKS = (
         args=POWERSHELL_PREFIX + r'-File "{local}\WSLKeepalive\jarvis-wake-watchdog.ps1" '
                                  r'-Distro "Ubuntu" -RepoRoot "{checkout}" -RecoverInterop true'),
     ManagedTask(
+        # Reviewed 2026-10-27 against the pre-edit copy (.bak-2026-10-11, which
+        # matched the old pin 45c0e95c): the 2026-10-11 edit only adds bounded
+        # exponential back-off on fast failures and log summarising; the wsl.exe
+        # command, distro and keepalive target are unchanged.
         name="wsl ide keepalive", script="wsl-ide-keepalive-supervisor.ps1", logon="s4u",
-        fixed_hash="45c0e95c0bb388c7091d0ce2d3b83e6e692ac954791fcfb6ab1039fd5e6011d5",
+        fixed_hash="08a7fbaf6c40cc947fe60286a2de1251ec7709072a3fd3f6951073303ddfb1ec",
         args=POWERSHELL_PREFIX + r'-File "{local}\WSLKeepalive\wsl-ide-keepalive-supervisor.ps1"'),
     ManagedTask(
         name="wsl ide keepalive watchdog", script="wsl-ide-keepalive-watchdog.ps1", logon="s4u",

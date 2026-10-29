@@ -174,14 +174,27 @@ function Test-DistroRunning {
     return ($r.out -replace "`0", '') -match [regex]::Escape($Distro)
 }
 
+# The states `systemctl is-active` can print. Anything else on its output is
+# not a unit state: when wsl.exe itself cannot reach the WSL service it prints
+# "error code: wsl/service/0x8007274c" (WSAETIMEDOUT) on stdout, and reading
+# that as "the unit is not active" made the wake watchdog restart a running daemon
+# about 30 times between 2026-10-13 and 2026-10-27. Unknown means unknown.
+function ConvertTo-UnitState([string]$text) {
+    $known = @('active', 'reloading', 'inactive', 'failed', 'activating',
+               'deactivating', 'maintenance', 'refreshing')
+    $lines = @(@("$text" -split "`n") | ForEach-Object { "$_".Trim().ToLower() } | Where-Object { $_ -ne '' })
+    if ($lines.Count -eq 0) { return '' }
+    $last = [string]$lines[-1]
+    if ($known -contains $last) { return $last }
+    return ''
+}
+
 function Get-UnitState {
     # Not the UTF-16 listing: systemctl's own output is UTF-8, so read it plainly.
     $j = Start-Job -ScriptBlock { param($d) (& wsl.exe -d $d --exec systemctl is-active jarvis.service 2>$null) -join "`n" } -ArgumentList $Distro
     if (Wait-Job $j -Timeout 20) {
         $out = "$(Receive-Job $j)"; Remove-Job $j -Force -ErrorAction SilentlyContinue
-        $lines = @(@($out -split "`n") | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
-        if ($lines.Count -eq 0) { return '' }
-        return ([string]$lines[-1]).ToLower()
+        return ConvertTo-UnitState $out
     }
     Stop-Job $j -ErrorAction SilentlyContinue; Remove-Job $j -Force -ErrorAction SilentlyContinue
     return ''
