@@ -85,7 +85,9 @@ def decide(finding, job, conf, acks):
         target = action.match(f, job)
         if not target:
             continue
-        strong = f.get("severity") in AUTO_MIN_SEVERITY
+        # A finding raised by signed detection content (core/rulepack.py) is
+        # evidence, never authority: it may be proposed, never acted on unasked.
+        strong = f.get("severity") in AUTO_MIN_SEVERITY and f.get("origin") != "rulepack"
         if _enabled(conf, action) and strong and action.auto_eligible(f, job, target):
             return AUTO, action, target
         return PROPOSE, action, target

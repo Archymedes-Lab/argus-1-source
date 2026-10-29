@@ -17,11 +17,12 @@ import ctypes
 import os
 import sys
 
-# The modules run as `-m`: two child processes of the daemon
-# (service/scheduler.py _isolated_job, collectors/host/fridaydefender.py) and
-# the installer's self-verification (property and model checks).
+# The modules run as `-m`: three child processes of the daemon
+# (service/scheduler.py _isolated_job, collectors/host/fridaydefender.py, and
+# core/rulepack.py's regex timing child) and the installer's self-verification
+# (property and model checks).
 CHILD_MODULES = ("jarvis.service.collector_worker", "jarvis.collectors.host.fridaydefender",
-                 "jarvis.verify")
+                 "jarvis.verify", "jarvis.core.rulepack")
 
 
 def sealed_problems(root):
@@ -69,6 +70,9 @@ def run_child(module, args):
     if module == "jarvis.verify":
         from jarvis.verify.report import main as verify_main
         return verify_main(args)
+    if module == "jarvis.core.rulepack":
+        from jarvis.core import rulepack
+        return rulepack._main(args)
     from jarvis.collectors.host import fridaydefender
     if len(args) == 4 and args[0] == "review":
         try:
