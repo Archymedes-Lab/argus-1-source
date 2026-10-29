@@ -138,6 +138,7 @@ class BruteForceAttribution(unittest.TestCase):
 
     def test_journal_lines_from_unprivileged_writers_are_ignored(self):
         import json
+
         from jarvis.collectors.identity import bruteforce
         forged = "Failed password for x from 192.0.2.10 port 1 ssh2"
         out = "\n".join(json.dumps(e) for e in (
