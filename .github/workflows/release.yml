@@ -116,6 +116,10 @@ jobs:
     needs: [verify, stage, server]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      # Draft releases are visible only to tokens that can write; the token is
+      # given to the download step alone, never to the install that follows.
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
