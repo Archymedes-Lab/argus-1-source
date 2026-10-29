@@ -33,6 +33,10 @@ import re, sys, pathlib
 page, css, mode = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]).read_text(), sys.argv[3]
 html = page.read_text()
 banner = "/* compiled from jarvis/web/styles/dashboard.css by scripts/dev/build_ui.sh; do not edit here */\n"
+# The application shell (sidebar, views, plain-language Overview) is plain CSS in
+# shell.css; it is appended verbatim so the page still carries one stylesheet.
+shell = pathlib.Path("jarvis/web/styles/shell.css").read_text().strip()
+css = css.strip() + "\n/* shell.css: plain CSS appended by build_ui.sh */\n" + shell
 new = re.sub(r'(<style id="ui">)(.*?)(</style>)', lambda m: m.group(1) + "\n" + banner + css.strip() + "\n" + m.group(3),
              html, count=1, flags=re.S)
 if new == html and '<style id="ui">' not in html:

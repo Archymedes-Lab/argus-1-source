@@ -27,13 +27,13 @@ from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.platform import procfeed
-from jarvis.response import acknowledge, alert, assistant, protocols, questions, remediation
+from jarvis.response import acknowledge, advisor, alert, assistant, protocols, questions, remediation
 from jarvis.response.reporting import score, voice
-from jarvis.service import attackmap, sdnotify
+from jarvis.service import attackmap, detectorhealth, sdnotify
 from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
-from jarvis.service.schedule import JOBS
+from jarvis.service.schedule import JOBS, NOT_APPLICABLE
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
 from jarvis.web import procview, stream
 from jarvis.web import token as api_token
@@ -236,7 +236,7 @@ def build_state(db_path, scheduler):
                         all_checks.append({**f, "job": name})
                     elif sev:
                         counts[sev] = counts.get(sev, 0) + 1
-                        all_findings.append({**f, "job": name})
+                        all_findings.append({**f, "job": name, "id": acknowledge.finding_id(f, name)})
             jobs.append({
                 "name": name, "label": label, "interval": interval,
                 "ts": s["ts"] if s else 0,
@@ -321,6 +321,7 @@ def build_state(db_path, scheduler):
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
             "reliability": _reliability_state(scheduler, snaps),
+            "detector_health": _detector_health(store, scheduler, snaps),
             "performance": {**_performance_state(jobs, scheduler),
                             "subsystems": _meta_object(store, "resource_profile_v1"),
                             "accelerator": _meta_object(store, "accelerator_probe_v2")
@@ -339,6 +340,19 @@ def _wake_phase(scheduler):
         return fn() if callable(fn) else {}
     except Exception:
         return {}
+
+
+def _detector_health(store, scheduler, snaps):
+    """Per-detector health for the dashboard panel. Never raises."""
+    try:
+        status_fn = getattr(scheduler, "reliability_status", None)
+        statuses = status_fn(snapshots=snaps).get("statuses", {}) if callable(status_fn) else {}
+        rep = detectorhealth.report(JOBS, snaps, statuses, NOT_APPLICABLE)
+        detectorhealth.record_transitions(store, rep)
+        return rep
+    except Exception:
+        return {"detectors": [], "counts": {}, "total": 0, "attention": [],
+                "summary": "Detector health is unavailable right now."}
 
 
 def _reliability_state(scheduler, snaps):
@@ -434,6 +448,11 @@ class Handler(BaseHTTPRequestHandler):
         else:
             name = host.rsplit(":", 1)[0] if ":" in host else host
         return name.lower() in ALLOWED_HOSTS
+
+    def _runner(self):
+        """Queue one audit for the assistant, or None when no scheduler is attached."""
+        scheduler = getattr(self, "scheduler", None)
+        return scheduler.force if scheduler is not None else None
 
     def _same_origin(self):
         """Reject cross-site calls. Browsers that send Sec-Fetch-Site make this
@@ -642,9 +661,26 @@ class Handler(BaseHTTPRequestHandler):
             if payload is None:
                 return self._send(400, json.dumps({"error": "invalid request"}))
             question = str(payload.get("question") or "")[:4000]
+            offer = payload.get("offer") if isinstance(payload.get("offer"), dict) else None
             store = Store(self.db_path)
             try:
-                result = assistant.answer(store, question, jobs=JOBS)
+                result = assistant.answer(store, question, jobs=JOBS, offer=offer,
+                                          runner=self._runner())
+            finally:
+                store.close()
+            return self._send(200, json.dumps(result))
+        if url.path == "/api/assistant/action":
+            # The assistant's only door to doing anything. advisor validates the
+            # action against its capability table; changes need propose+approve.
+            payload = self._json_body(4096)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                result = advisor.handle_action(
+                    store, JOBS, str(payload.get("op") or "")[:12], payload.get("action"),
+                    payload.get("target"), str(payload.get("token") or "")[:64],
+                    runner=self._runner(), conf=alert.load_conf())
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
