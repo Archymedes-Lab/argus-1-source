@@ -2,6 +2,8 @@ import pathlib
 import unittest
 import xml.etree.ElementTree as ET
 
+from jarvis.collectors.telemetry import sysmon_policy, techniques
+
 POLICY = pathlib.Path(__file__).parents[1] / "windows-sysmon" / "jarvis-windows-baseline.xml"
 INSTALLER = pathlib.Path(__file__).parents[1] / "scripts" / "repair" / "apply-jarvis-sysmon-policy.ps1"
 
@@ -37,8 +39,54 @@ class WindowsSysmonPolicyTests(unittest.TestCase):
     def test_registry_collection_is_high_signal_not_unbounded(self):
         event = self.registry("include")
         targets = [node.text for node in event.findall("TargetObject")]
-        self.assertIn("\\CurrentControlSet\\Services\\", targets)
         self.assertIn("\\Image File Execution Options\\", targets)
+        # The bare Services subtree was 93% of registry volume and overflowed
+        # the driver queue at boot 187 (2026-10-27); it must not come back.
+        self.assertNotIn("\\CurrentControlSet\\Services\\", targets)
+
+    def recorded(self, event_type, key):
+        return sysmon_policy.registry_recorded(self.root, event_type, key)
+
+    def test_service_persistence_and_tampering_are_still_recorded(self):
+        svc = "HKLM\\System\\CurrentControlSet\\Services\\"
+        for key in ("Evil\\ImagePath", "Evil\\Parameters\\ServiceDll", "WinDefend\\Start",
+                    "Evil\\Type", "Evil\\FailureCommand", "Evil\\ObjectName",
+                    "WinDefend\\Security\\Security", "Evil\\DependOnService",
+                    "Tcpip\\Parameters\\NameServer",
+                    "Tcpip\\Parameters\\Interfaces\\{0}\\NameServer",
+                    "Tcpip\\Parameters\\DataBasePath", "W32Time\\Parameters\\NtpServer",
+                    "W32Time\\TimeProviders\\Evil\\DllName",
+                    "Evil\\NetworkProvider\\ProviderPath",
+                    "WinSock2\\Parameters\\NameSpace_Catalog5\\Catalog_Entries\\1\\LibraryPath",
+                    "DNS\\Parameters\\ServerLevelPluginDll",
+                    "LanmanServer\\Parameters\\NullSessionPipes",
+                    "SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules\\{1}",
+                    "PortProxy\\v4tov4\\tcp\\0.0.0.0/445",
+                    "SysmonDrv\\Parameters\\Rules", "JarvisNativeSensor\\Start",
+                    "EventLog\\Security\\MaxSize", "Evil\\Parameters\\Application",
+                    "Evil\\Parameters\\AppParameters"):
+            self.assertTrue(self.recorded("SetValue", svc + key), key)
+        self.assertTrue(self.recorded("DeleteKey", svc + "WinDefend"))
+
+    def test_measured_service_noise_is_no_longer_recorded(self):
+        svc = "HKLM\\System\\CurrentControlSet\\Services\\"
+        for key in ("DisplayEnhancementService\\State\\ScreenBrightnessPercent",
+                    "Tcpip\\Parameters\\Interfaces\\{0}\\DhcpIPAddress",
+                    "Tcpip\\Parameters\\Interfaces\\{0}\\LeaseObtainedTime",
+                    "WFPLWFS\\Parameters\\SkipNdisAdaptersKeyGeneration",
+                    "UmPass\\Enum\\Count", "NetBT\\Linkage\\Bind",
+                    "hns\\State\\HostComputeNetwork\\x"):
+            self.assertFalse(self.recorded("SetValue", svc + key), key)
+        # A new service key alone is still the excluded CreateKey noise; its
+        # ImagePath write is what records it.
+        self.assertFalse(self.recorded("CreateKey", svc + "Evil"))
+
+    def test_every_registry_detector_sample_is_recorded_by_the_baseline(self):
+        # A detector that reads a key the policy does not record is blind
+        # without failing: prove each one's positive sample reaches the log.
+        for rule in techniques.REG_RULES:
+            _image, key, _details = rule.sample
+            self.assertTrue(self.recorded("SetValue", key), (rule.title, key))
 
     def test_wsl_boundary_keys_and_files_are_recorded(self):
         # The registration keys any user process can write (DefaultUid, BasePath,
@@ -78,8 +126,7 @@ class WindowsSysmonPolicyTests(unittest.TestCase):
                        "\\CurrentVersion\\Run", "Winlogon", "NtpServer",
                        "ConsentStore\\microphone\\Value", "\\Value"):
             self.assertFalse(any(signal in value for value in excluded), signal)
-        self.assertEqual(sum(1 for event in self.events.iter("RegistryEvent")
-                             for _ in event.iter("EventType")
+        self.assertEqual(sum(1 for _ in self.registry("exclude").iter("EventType")
                              if _.text in ("DeleteKey", "DeleteValue", "RenameKey")), 0)
 
     def test_credential_access_and_injection_evidence_remain_enabled(self):

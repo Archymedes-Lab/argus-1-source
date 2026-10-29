@@ -207,6 +207,56 @@ def matching_rule(policy, process):
     return None
 
 
+def _condition(condition, actual, expected):
+    """One Sysmon filter condition, case-insensitive as Sysmon applies it."""
+    left, right = actual.casefold(), expected.casefold()
+    parts = [p for p in right.split(";") if p]
+    return {
+        "is": lambda: left == right,
+        "is not": lambda: left != right,
+        "is any": lambda: left in parts,
+        "contains": lambda: right in left,
+        "contains any": lambda: any(p in left for p in parts),
+        "contains all": lambda: all(p in left for p in parts),
+        "excludes": lambda: right not in left,
+        "excludes any": lambda: any(p not in left for p in parts),
+        "excludes all": lambda: all(p not in left for p in parts),
+        "begin with": lambda: left.startswith(right),
+        "not begin with": lambda: not left.startswith(right),
+        "end with": lambda: left.endswith(right),
+        "not end with": lambda: not left.endswith(right),
+    }.get(condition, lambda: False)()
+
+
+def _filters_match(node, fields):
+    """A Rule (its groupRelation) or a whole onmatch block (any child)."""
+    results = []
+    for child in node:
+        if child.tag == "Rule":
+            results.append(_filters_match(child, fields))
+        else:
+            results.append(_condition(child.attrib.get("condition", "is"),
+                                      fields.get(child.tag, ""), child.text or ""))
+    if node.tag == "Rule" and node.attrib.get("groupRelation", "or").lower() == "and":
+        return bool(results) and all(results)
+    return any(results)
+
+
+def registry_recorded(root, event_type, target_object, image=""):
+    """Would this Sysmon policy record the registry event? Pure; for replays
+    and for proving the baseline still feeds the registry detectors.
+
+    root is the parsed <Sysmon> element. Recorded means some include block
+    matches and no exclude block does (Sysmon: exclude wins)."""
+    fields = {"EventType": event_type, "TargetObject": target_object, "Image": image}
+    blocks = [e for e in root.iter("RegistryEvent")]
+    included = any(_filters_match(b, fields) for b in blocks
+                   if b.attrib.get("onmatch") == "include")
+    excluded = any(_filters_match(b, fields) for b in blocks
+                   if b.attrib.get("onmatch") == "exclude")
+    return included and not excluded
+
+
 def gap_cause(policy, dropped_process_create=False, process=None):
     """Likely cause of a snapshot-without-start gap. Advisory only."""
     state = (policy or {}).get("event1", "unknown")

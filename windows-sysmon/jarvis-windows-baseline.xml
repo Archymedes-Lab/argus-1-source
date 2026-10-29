@@ -120,7 +120,131 @@
       <RegistryEvent onmatch="include">
         <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
         <TargetObject condition="contains">\CurrentVersion\RunOnce</TargetObject>
-        <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+        <!-- Services: persistence lives in these values, not in the whole subtree.
+             The bare \Services\ include was 93% of retained registry volume
+             (7 days to 2026-10-27, 43273 of 46582: Tcpip, hns/vmsmp, Dnscache,
+             TriggerInfo, TPM WMI state) and boot 187 still overflowed the 50000
+             driver queue, dropping 102 ProcessCreate. Replay keeps 18.4% of it. -->
+        <Rule name="service-imagepath" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\ImagePath</TargetObject>
+        </Rule>
+        <Rule name="service-servicedll" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\ServiceDll</TargetObject>
+        </Rule>
+        <Rule name="service-start" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\Start</TargetObject>
+        </Rule>
+        <Rule name="service-type" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\Type</TargetObject>
+        </Rule>
+        <Rule name="service-failurecommand" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\FailureCommand</TargetObject>
+        </Rule>
+        <Rule name="service-failureactions" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\FailureActions</TargetObject>
+        </Rule>
+        <Rule name="service-objectname" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\ObjectName</TargetObject>
+        </Rule>
+        <Rule name="service-security" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\Security</TargetObject>
+        </Rule>
+        <Rule name="service-requiredprivileges" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\RequiredPrivileges</TargetObject>
+        </Rule>
+        <Rule name="service-dependonservice" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\DependOnService</TargetObject>
+        </Rule>
+        <Rule name="service-servicemain" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\ServiceMain</TargetObject>
+        </Rule>
+        <Rule name="service-group" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\Group</TargetObject>
+        </Rule>
+        <Rule name="service-launchprotected" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\LaunchProtected</TargetObject>
+        </Rule>
+        <Rule name="service-delayedautostart" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\DelayedAutostart</TargetObject>
+        </Rule>
+        <Rule name="service-servicesidtype" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\ServiceSidType</TargetObject>
+        </Rule>
+        <!-- Service wrappers (srvany, NSSM) keep the real payload here, not in ImagePath. -->
+        <Rule name="service-application" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\Application</TargetObject>
+        </Rule>
+        <Rule name="service-appparameters" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\AppParameters</TargetObject>
+        </Rule>
+        <Rule name="service-appdirectory" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\AppDirectory</TargetObject>
+        </Rule>
+        <Rule name="service-nameserver" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\NameServer</TargetObject>
+        </Rule>
+        <Rule name="service-ntpserver" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\NtpServer</TargetObject>
+        </Rule>
+        <Rule name="service-databasepath" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\DataBasePath</TargetObject>
+        </Rule>
+        <Rule name="service-providerpath" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\ProviderPath</TargetObject>
+        </Rule>
+        <Rule name="service-librarypath" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\LibraryPath</TargetObject>
+        </Rule>
+        <Rule name="service-packedcatalogitem" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\PackedCatalogItem</TargetObject>
+        </Rule>
+        <Rule name="service-dllname" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\DllName</TargetObject>
+        </Rule>
+        <Rule name="service-serverlevelplugindll" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\ServerLevelPluginDll</TargetObject>
+        </Rule>
+        <Rule name="service-nullsessionpipes" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\NullSessionPipes</TargetObject>
+        </Rule>
+        <Rule name="service-nullsessionshares" groupRelation="and">
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+          <TargetObject condition="end with">\NullSessionShares</TargetObject>
+        </Rule>
+        <!-- Whole subtrees whose every write matters: firewall policy and rules,
+             port proxies, and the configuration of the sensors JARVIS relies on. -->
+        <TargetObject condition="contains any">\Services\SharedAccess\Parameters\FirewallPolicy\;\Services\PortProxy\;\Services\SysmonDrv\;\Services\Sysmon64\;\Services\JarvisNativeSensor\;\Services\EventLog\</TargetObject>
+        <Rule name="service-removed" groupRelation="and">
+          <EventType condition="is">DeleteKey</EventType>
+          <TargetObject condition="contains">\CurrentControlSet\Services\</TargetObject>
+        </Rule>
         <TargetObject condition="contains">\Windows NT\CurrentVersion\Winlogon</TargetObject>
         <TargetObject condition="contains">\Image File Execution Options\</TargetObject>
         <TargetObject condition="contains">\CurrentVersion\Policies\Explorer\Run</TargetObject>
@@ -144,6 +268,9 @@
         <TargetObject condition="contains all">\CLSID\;\InprocServer32</TargetObject>
         <TargetObject condition="contains all">\Control\Lsa\;Packages</TargetObject>
         <TargetObject condition="contains">\Microsoft\AMSI\Providers\</TargetObject>
+        <!-- T1003 WDigest plaintext caching: the techniques rule read this key
+             but no include recorded it (found 2026-10-27 by the sample-coverage test). -->
+        <TargetObject condition="contains">\Control\SecurityProviders\WDigest\</TargetObject>
         <TargetObject condition="contains all">\WMI\Autologger\;\Start</TargetObject>
       </RegistryEvent>
     </RuleGroup>

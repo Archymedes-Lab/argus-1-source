@@ -10,10 +10,12 @@ import json
 import sys
 import traceback
 
-from jarvis.core import collection
+from jarvis.core import collection, mechanisms
 from jarvis.service.jobs import run_job
 
-ALLOWED = {"native"}
+# Only collectors declared isolated in the registry may run here; the parent
+# passes a name, never a command.
+ALLOWED = frozenset(mechanisms.names(isolated=True))
 
 
 def main(argv=None):

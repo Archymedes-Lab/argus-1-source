@@ -35,7 +35,7 @@
 <div class="flex flex-col gap-8">
   <section>
     <h2 class="mb-1 text-heading-20">Questions</h2>
-    <p class="mb-4 text-copy-13 text-gray-900">Your answer tells JARVIS whether something is expected on this machine. It records intent; it changes nothing on the system.</p>
+    <p class="mb-4 text-copy-13 text-gray-900">Your answer tells ARGUS-1 whether something is expected on this machine. It records intent; it changes nothing on the system.</p>
     {#if !groups.length}
       <div class="card empty">No questions are waiting.</div>
     {:else}

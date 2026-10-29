@@ -62,6 +62,13 @@ RESUME_JUMP_S = 60.0
 RETRY_S = 60
 # How overdue (as a share of its cadence) a forced job counts as, at least.
 FORCED_FLOOR = 1.0
+# How overdue a boot-scoped collector whose evidence predates the current boot
+# counts as, at least: due now, competing on criticality like any job whose
+# cadence just expired. Not the never-ran 99, which would put ~8 min of serial
+# boot audits ahead of tier-0 sysmon ingestion. Measured 2026-10-27: with no
+# floor, memscan/posture/spy still carried pre-reboot results 20 min after boot.
+BOOT_FLOOR = 1.0
+BOOT_SCOPED = frozenset(mechanisms.boot_scoped()) & set(JOBS)
 HOLD_MAX = 3
 RETRY_META = "collector_retry_"
 # Lateness (as a share of cadence) at which a collector is starving: its
@@ -91,10 +98,13 @@ def _isolated_job(name, hosts, db_path, timeout):
     """
     command = [sys.executable, "-m", "jarvis.service.collector_worker",
                name, db_path, *hosts]
+    # From the package root: `-m` resolves against the working directory, and
+    # the Argus unit runs from "/" (found 2026-10-29), where it would not import.
+    from jarvis.core.paths import PACKAGE_DIR
     try:
         done = subprocess.run(command, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True,
-                              errors="replace",
+                              errors="replace", cwd=str(PACKAGE_DIR.parent),
                               timeout=max(1.0, timeout), check=False)
     except subprocess.TimeoutExpired:
         return [], (f"collector exceeded its {timeout:.0f}s process deadline; "
@@ -113,6 +123,57 @@ def _isolated_job(name, hosts, db_path, timeout):
         return findings, error, status
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return [], f"isolated collector returned invalid evidence: {exc}", "unavailable"
+
+
+BOOT_META = "host_boot_v1"
+
+
+def host_boot_time():
+    """Guest boot time from /proc/stat btime, or None. Never raises.
+
+    btime is realtime minus uptime, so it moves whenever the WSL clock is
+    stepped (374 s between two reads on 2026-10-27); use host_boot()."""
+    try:
+        with open("/proc/stat", encoding="ascii", errors="replace") as fh:
+            for line in fh:
+                if line.startswith("btime "):
+                    return float(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _boot_id():
+    try:
+        with open("/proc/sys/kernel/random/boot_id", encoding="ascii", errors="replace") as fh:
+            return fh.read().strip() or None
+    except OSError:
+        return None
+
+
+def host_boot(db_path):
+    """Boot time of the current guest boot, fixed for the life of that boot.
+
+    Read once per kernel boot id, seconds after boot when clock drift is
+    smallest, and kept in the store, so later clock steps and daemon restarts
+    do not move it. Falls back to a live btime read. Never raises."""
+    boot_id, btime = _boot_id(), host_boot_time()
+    if not boot_id:
+        return btime
+    try:
+        store = Store(db_path)
+        try:
+            saved = json.loads(store.get_meta(BOOT_META) or "null")
+            if isinstance(saved, dict) and saved.get("boot_id") == boot_id \
+                    and isinstance(saved.get("at"), (int, float)):
+                return float(saved["at"])
+            if btime:
+                store.set_meta(BOOT_META, json.dumps({"boot_id": boot_id, "at": btime}))
+        finally:
+            store.close()
+    except Exception:
+        pass
+    return btime
 
 
 class Scheduler(threading.Thread):
@@ -172,6 +233,10 @@ class Scheduler(threading.Thread):
         self.bulk_thread = None
         self.outages = None
         self.started_at = time.time()
+        # The VM boots after Windows, so the guest boot bounds both: a result
+        # older than it predates the current Windows boot too.
+        self.boot_at = host_boot(db_path)
+        self._boot_ready = None          # (boot_at, ready_at) once fully verified
         self.lock = threading.Lock()
         self._clock = (time.time(), time.monotonic())
         self.resumed_at = None
@@ -230,7 +295,70 @@ class Scheduler(threading.Thread):
         basis = max(self.evidence_ts.get(name, 0.0), self.last_attempt.get(name, 0.0))
         if basis <= 0:
             return 99.0
-        return max(0.0, now - basis) / interval
+        late = max(0.0, now - basis) / interval
+        if name in BOOT_SCOPED and self.boot_at and basis < self.boot_at:
+            late = max(late, BOOT_FLOOR)
+        return late
+
+    def boot_readiness(self, snapshots):
+        """Whether every boot-scoped collector has evidence from this boot.
+
+        Derived from persisted snapshots alone, so a daemon restart inside
+        one boot reports the same answer. pending: no result since boot;
+        failed: the post-boot result is an error. ready_at is when the last of
+        them first had a usable post-boot result (from the run receipts, which
+        never change), so ready_after_s is boot -> fully verified and does not
+        creep as the audits keep running. This is evidence currency, not a
+        compromise verdict."""
+        boot_at = self.boot_at
+        if not boot_at:
+            return {"known": False, "ready": False, "boot_at": None,
+                    "pending": sorted(BOOT_SCOPED), "failed": [],
+                    "reason": "host boot time unreadable; boot currency unknown"}
+        pending, failed, last = [], [], 0.0
+        for name in sorted(BOOT_SCOPED):
+            snap = snapshots.get(name) or {}
+            try:
+                ts = float(snap.get("ts") or 0)
+            except (TypeError, ValueError):
+                ts = 0.0
+            if ts < boot_at:
+                pending.append(name)
+            elif snap.get("error"):
+                failed.append(name)
+            else:
+                last = max(last, ts)
+        ready = not pending and not failed
+        if ready:
+            last = self._first_verified(boot_at, last)
+        return {"known": True, "ready": ready, "boot_at": boot_at,
+                "pending": pending, "failed": failed,
+                "ready_at": last if ready else None,
+                "ready_after_s": round(last - boot_at, 1) if ready else None}
+
+    def _first_verified(self, boot_at, fallback):
+        """Time each boot audit first returned usable evidence this boot; the
+        latest of those. Cached per boot. Falls back to snapshot time when the
+        receipts cannot be read (never raises)."""
+        cached = self._boot_ready
+        if cached and cached[0] == boot_at:
+            return cached[1]
+        try:
+            store = Store(self.db_path)
+            try:
+                firsts = [store.db.execute(
+                    "SELECT MIN(observed_at) FROM defender_runs WHERE job=? AND observed_at>=? "
+                    "AND coverage!='unavailable'", (name, boot_at)).fetchone()[0]
+                    for name in BOOT_SCOPED]
+            finally:
+                store.close()
+        except Exception:
+            return fallback
+        if any(f is None for f in firsts):
+            return fallback
+        value = max(float(f) for f in firsts)
+        self._boot_ready = (boot_at, value)
+        return value
 
     def _lane_of(self, name):
         return "fast" if name in FAST else "bulk" if name in BULK else "main"
@@ -402,7 +530,8 @@ class Scheduler(threading.Thread):
                 "statuses": self.reliability.all_statuses(snapshots),
                 "summary": {**self.reliability.summary(snapshots),
                             "starving": sorted(n for n, v in lateness.items()
-                                               if v >= STARVING)},
+                                               if v >= STARVING),
+                            "boot": self.boot_readiness(snapshots)},
                 "resume": resume,
                 "outages": outage,
             }

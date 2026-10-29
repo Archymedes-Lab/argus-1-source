@@ -1,4 +1,4 @@
-// JARVIS world watch, drawn from /api/world.
+// ARGUS-1 world watch, drawn from /api/world.
 //
 // What in the scene carries meaning:
 //   land          a dot per 0.75 degree cell of land (Natural Earth), with
@@ -15,14 +15,14 @@
 //   focus         with a place or zone pinned, everything outside it dims.
 //   zone          an outline around a cluster of located reports from several
 //                 publishers. It is where reports cluster, not a front line.
-//   teal marker   this device or a trusted zone, as JARVIS knows it locally,
+//   teal marker   this device or a trusted zone, as ARGUS-1 knows it locally,
 //                 and an arc to the nearest zone with the distance.
 //
 // The page talks to this origin only. Report links open in a new tab when the
 // owner clicks one; nothing is fetched from a publisher by the page itself.
 // All feed text is written with textContent, never parsed as markup.
 //
-// When the data is old or JARVIS stops answering, the colour drains, pulses
+// When the data is old or ARGUS-1 stops answering, the colour drains, pulses
 // stop and the banner says so.
 //
 // The design was ranked with Jev (scripts/reviews/world_view_design.py). It
@@ -466,7 +466,7 @@ function describeSpot(spot, compact) {
   return frag;
 }
 // Feeds carry about a day of items, so a day-on-day comparison means something
-// only once JARVIS has itself collected for the whole two-day window.
+// only once ARGUS-1 has itself collected for the whole two-day window.
 function rising(zone) { return data.trend_ready && zone.last_24h > zone.prior_24h * 1.5 + 1; }
 function trend(zone) {
   if (!data.trend_ready) return 'trend after two days of collecting';
@@ -489,7 +489,7 @@ function describeZone(zone, compact) {
     const chart = el('div', 'hist'), top = Math.max(1, ...zone.history);
     for (const n of zone.history) { const bar = el('i'); bar.style.height = `${Math.max(4, 100 * n / top)}%`; bar.title = `${n} reports`; chart.append(bar); }
     frag.append(chart, el('div', 'histaxis', '48 h ago · reports per 6 h · now'));
-    if (!data.trend_ready) frag.append(el('div', 'caveat', 'JARVIS has collected for less than two days. Older bars hold only what the feeds still carried, so they undercount.'));
+    if (!data.trend_ready) frag.append(el('div', 'caveat', 'ARGUS-1 has collected for less than two days. Older bars hold only what the feeds still carried, so they undercount.'));
   }
   frag.append(el('div', 'meta', `Places named: ${zone.places.join(', ')}`));
   if (!compact) {
@@ -810,7 +810,7 @@ async function poll() {
     apply(await res.json(), !loaded);
     loaded = true;
   } catch (err) {
-    status('down', 'not answering'); banner('JARVIS is not answering. The map shows the last reports it sent.');
+    status('down', 'not answering'); banner('ARGUS-1 is not answering. The map shows the last reports it sent.');
   }
 }
 async function boot() {

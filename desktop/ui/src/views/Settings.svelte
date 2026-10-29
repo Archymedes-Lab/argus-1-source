@@ -25,11 +25,11 @@
 
   {@render group("Notifications", [
     ["Critical findings", "Native notification when one appears"],
-    ["Monitoring outages", "Native notification when JARVIS stops answering"],
+    ["Monitoring outages", "Native notification when ARGUS-1 stops answering"],
     ["Tray", "Coloured dot: green, amber, red; grey when unreachable"],
   ])}
   {@render group("How this app works", [
-    ["Monitoring", "Done by the JARVIS service, with or without this window"],
+    ["Monitoring", "Done by the ARGUS-1 service, with or without this window"],
     ["Closing the window", "Hides it to the tray; monitoring continues"],
     ["Connection", "127.0.0.1 only, through the app's own commands"],
     ["Actions offered", "Run a collector, answer, ask, approve or reject a fix"],

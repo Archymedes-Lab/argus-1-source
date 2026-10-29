@@ -1040,6 +1040,8 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
     # reads, never for the programs we launch. See platform/privilege.py.
     from jarvis.platform import privilege
     privilege.drop_ambient()
+    # Before any child exists: children must not inherit the notify socket.
+    sdnotify.capture()
     scheduler = Scheduler(db_path, hosts)
     scheduler.start()
     # Execution identities (docs/architecture/EVIDENCE-FABRIC.md): issued only

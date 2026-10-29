@@ -361,8 +361,10 @@ COLLECTORS = (
        unscored="source-tested; scored after it has run on a real server"),
     # Daily download of the release's own OVAL security data. Debian 12 parses at
     # ~85 MB above baseline and returns to +6 MB once freed (measured 2026-10-25).
+    # Isolated (2026-10-29): parsing a large dump inside the daemon stalled it
+    # entirely on a busy host; a child process gets a deadline it can be killed at.
     _c("distrovuln", 86400, "Distribution security data", None, 0, 4, "medium", 300,
-       command="status", domain="linux", lane="bulk", governed=True,
+       command="status", domain="linux", lane="bulk", governed=True, isolated=True,
        cost_s=25.0, unscored=_KNOWLEDGE),
     # ARGUS-SERVER.md W12: every codebase on the server, its dependencies
     # against OSV, risky code, credentials, writable code and web-root leaks.
@@ -373,8 +375,11 @@ COLLECTORS = (
        unscored="source-tested; heuristic code rules not yet soaked on real server codebases"),
     # Daily download of the public OSV dumps for the ecosystems appcode found,
     # streamed to disk and filtered to the inventory (npm 219 MB, 2026-10-28).
+    # Isolated (2026-10-29): the npm dump is 219 MB and ~220 000 files; parsed
+    # in-process it ran 1031 s on a busy WSL host and froze the whole Argus
+    # daemon, dashboard included, with its 300 s timeout unenforceable.
     _c("osv", 86400, "Dependency advisories (OSV)", None, 0, 4, "medium", 300,
-       command="appcode", domain="linux", lane="bulk", governed=True,
+       command="appcode", domain="linux", lane="bulk", governed=True, isolated=True,
        unscored=_KNOWLEDGE),
     # One loopback GET (or one bridge round trip), never a generation. Its
     # command, `ask model status`, runs the same ping through the assistant.
@@ -694,8 +699,8 @@ def conformance(root=None, files=True):
             out.append(f"{where}: scored and also given an unscored reason")
         if c.governed and (c.tier == 0 or c.lane == "fast"):
             out.append(f"{where}: tier 0 and fast-lane collectors must never be governed")
-        if c.isolated and c.lane != "fast":
-            out.append(f"{where}: isolation is only defined for the fast lane")
+        if c.isolated and c.lane == "main":
+            out.append(f"{where}: isolation is defined for the fast and bulk lanes only")
         if not c.command:
             out.append(f"{where}: needs the CLI command that audits the same ground")
         if c.health not in ("", "required", "optional"):

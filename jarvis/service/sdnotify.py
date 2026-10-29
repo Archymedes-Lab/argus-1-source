@@ -18,11 +18,33 @@ _SOCK = None
 _ADDR = None
 
 
+_CAPTURED = {}
+_NOTIFY_VARS = ("NOTIFY_SOCKET", "WATCHDOG_USEC", "WATCHDOG_PID")
+
+
+def capture():
+    """Take the notify settings out of the environment, keeping them here.
+
+    Children inherit the environment; with NOTIFY_SOCKET in it, any child that
+    speaks the protocol pings systemd as if it were the service, which
+    NotifyAccess=main rejects and logs ("reception only permitted for main
+    PID", seen on JARVIS and Argus 2026-10-29). Call once at startup, before
+    anything is launched."""
+    for name in _NOTIFY_VARS:
+        value = os.environ.pop(name, None)
+        if value is not None:
+            _CAPTURED[name] = value
+
+
+def _env(name, default=None):
+    return _CAPTURED.get(name, os.environ.get(name, default))
+
+
 def _ensure():
     global _SOCK, _ADDR
     if _SOCK is not None:
         return _SOCK
-    addr = os.environ.get("NOTIFY_SOCKET")
+    addr = _env("NOTIFY_SOCKET")
     if not addr:
         return None
     # Abstract namespace sockets start with '@' -> NUL byte.
@@ -46,7 +68,7 @@ def _send(msg: str) -> bool:
 
 
 def available() -> bool:
-    return bool(os.environ.get("NOTIFY_SOCKET"))
+    return bool(_env("NOTIFY_SOCKET"))
 
 
 def ready():
@@ -64,6 +86,6 @@ def status(text: str):
 def watchdog_usec() -> int:
     """WatchdogSec, in microseconds, as systemd exported it — 0 if disabled."""
     try:
-        return int(os.environ.get("WATCHDOG_USEC", "0"))
+        return int(_env("WATCHDOG_USEC", "0"))
     except ValueError:
         return 0
