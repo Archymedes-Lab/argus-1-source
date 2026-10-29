@@ -61,7 +61,7 @@ Anyone with write access to Argus-1 who is a releaser:
 
 ```sh
 git switch main && git pull                      # the commit must be on main
-git tag -s v2026.11.01 -m "Argus 2026.11.01"     # vYYYY.MM.DD, -2 for a second one that day
+git tag -a v2026.11.01 -m "Argus 2026.11.01"     # vYYYY.MM.DD, -2 for a second one that day (-s if you sign git tags)
 git push origin v2026.11.01
 ```
 
