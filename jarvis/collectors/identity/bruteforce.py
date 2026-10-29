@@ -18,6 +18,7 @@ is the signal. It cannot see a slow, low-volume guess that stays under the
 threshold, and it says so.
 """
 
+import json
 import re
 import subprocess
 
@@ -59,10 +60,15 @@ def _refusal(status, sub):
         return POLICY_REFUSALS[sub]
     return POLICY_REFUSALS.get(status, "")
 
+# The username is chosen by the remote client and may contain " from <ip>": the
+# source is the address in sshd's own trailing " from IP port N", so the user
+# part is greedy and the line is anchored at its end. pam_unix writes rhost=
+# before user=, so its first rhost= is pam's own.
+_SSHD_TAIL = r" from (?P<{ip}>\S+) port \d+(?: ssh2)?(?: \[preauth\])?\]?\s*$"
 _LINUX_FAIL = re.compile(
-    r"Failed password for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+)"
-    r"|authentication failure;.*?(?:user=(?P<user2>\S+))?.*?rhost=(?P<ip2>\S+)"
-    r"|Invalid user (?P<user3>\S+) from (?P<ip3>\S+)")
+    r"Failed password for (?:invalid user )?(?P<user>.*?)" + _SSHD_TAIL.format(ip="ip")
+    + r"|authentication failure;.*?rhost=(?P<ip2>\S+)(?:.*?\buser=(?P<user2>\S+))?"
+    r"|Invalid user (?P<user3>.*?)" + _SSHD_TAIL.format(ip="ip3"))
 
 
 def sort_findings(f):
@@ -71,17 +77,43 @@ def sort_findings(f):
 
 # ── Linux ───────────────────────────────────────────────────────────────────
 
+def _journal_messages(stdout):
+    """MESSAGE of each `journalctl -o json` entry written by a root process.
+
+    Any local user can put authpriv lines in the journal (`logger -p
+    authpriv.notice "Failed password for x from <ip> port 1 ssh2"`) and invent
+    a brute force from an innocent address; _UID is set by journald itself and
+    cannot be forged. sshd, sshd-session, sudo and pam all log as root."""
+    out = []
+    for raw in stdout.splitlines():
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict) or entry.get("_UID") != "0":
+            continue
+        msg = entry.get("MESSAGE")
+        if isinstance(msg, list):                  # non-UTF-8 messages come as byte arrays
+            try:
+                msg = bytes(b for b in msg if isinstance(b, int) and 0 <= b < 256).decode("utf-8", "replace")
+            except ValueError:
+                continue
+        if isinstance(msg, str):
+            out.append(msg)
+    return out
+
+
 def _linux_lines():
     """Recent auth lines, from the journal if present, else the flat logs."""
     since = f"{WINDOW_H} hours ago"
     try:
         r = subprocess.run(
             ["journalctl", "--since", since, "--no-pager", "-q",
-             "SYSLOG_FACILITY=10", "-o", "cat"],
+             "SYSLOG_FACILITY=10", "-o", "json", "--output-fields=MESSAGE,_UID"],
             capture_output=True, text=True,
             errors="replace", timeout=30)
         if r.returncode == 0 and r.stdout.strip():
-            return r.stdout.splitlines()
+            return _journal_messages(r.stdout)
     except (OSError, subprocess.SubprocessError):
         pass
     lines = []

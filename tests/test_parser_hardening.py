@@ -109,5 +109,47 @@ class PrivateKeyBlocks(unittest.TestCase):
             self.assertEqual([r[2] for r in credentials._private_blocks(text)], [w[3] for w in want])
 
 
+class BruteForceAttribution(unittest.TestCase):
+    """The SSH username is chosen by the remote client; the journal's authpriv
+    facility is writable by any local user. Neither may pick the source."""
+
+    def test_username_cannot_name_the_source_address(self):
+        from jarvis.collectors.identity import bruteforce
+        lines = [f"sshd[9]: Failed password for invalid user admin from 192.0.2.10 from 203.0.113.{i % 2} "
+                 f"port 4{i:04d} ssh2" for i in range(bruteforce.SPIKE_ONE_SOURCE * 2)]
+        titles = " ".join(f["title"] for f in bruteforce._linux(lines=lines))
+        self.assertNotIn("192.0.2.10", titles)
+        self.assertIn("203.0.113.0", titles)
+
+    def test_sshd_formats_still_count(self):
+        from jarvis.collectors.identity import bruteforce
+        for line, ip, user in (
+                ("sshd[9]: Failed password for root from 203.0.113.5 port 22 ssh2", "203.0.113.5", "root"),
+                ("Failed password for invalid user bob from 2001:db8::1 port 22 ssh2", "2001:db8::1", "bob"),
+                ("message repeated 2 times: [ Failed password for root from 203.0.113.5 port 22 ssh2]",
+                 "203.0.113.5", "root"),
+                ("sshd[9]: Invalid user oracle from 203.0.113.7 port 5000", "203.0.113.7", "oracle"),
+                ("pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= "
+                 "rhost=203.0.113.8  user=root", "203.0.113.8", "root")):
+            m = bruteforce._LINUX_FAIL.search(line)
+            self.assertTrue(m, line)
+            self.assertEqual(m.group("ip") or m.group("ip2") or m.group("ip3"), ip, line)
+            self.assertEqual(m.group("user") or m.group("user2") or m.group("user3"), user, line)
+
+    def test_journal_lines_from_unprivileged_writers_are_ignored(self):
+        import json
+        from jarvis.collectors.identity import bruteforce
+        forged = "Failed password for x from 192.0.2.10 port 1 ssh2"
+        out = "\n".join(json.dumps(e) for e in (
+            {"_UID": "1000", "MESSAGE": forged},
+            {"_UID": "0", "MESSAGE": "Failed password for root from 203.0.113.5 port 22 ssh2"},
+            {"_UID": "0", "MESSAGE": list(b"Failed password for \xff from 203.0.113.6 port 22 ssh2")},
+            {"MESSAGE": forged}, "not an object")) + "\nnot json"
+        msgs = bruteforce._journal_messages(out)
+        self.assertEqual(len(msgs), 2)
+        self.assertNotIn(forged, msgs)
+        self.assertIn("203.0.113.6", msgs[1])
+
+
 if __name__ == "__main__":
     unittest.main()
