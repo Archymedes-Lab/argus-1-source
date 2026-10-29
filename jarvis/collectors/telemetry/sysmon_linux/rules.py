@@ -521,6 +521,8 @@ def _rules(events, store=None):
             + " — the action is what is reported; whether it was authorised is for "
               "you to confirm", CHANNEL)
         f["techniques"] = list(rule.tids)
+        if rule.origin:
+            f["origin"] = "rulepack"     # content, not authority: never acted on unasked
         out.append(f)
     for parent, tids, commands in techniques.bursts(discovery_seen):
         f = _finding("sysmon-linux", "medium", techniques.burst_title(parent),

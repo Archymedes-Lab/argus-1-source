@@ -410,6 +410,13 @@ COLLECTORS = (
     # callback hits. Cheap and local, frequent so a trip surfaces quickly.
     _c("canary", 300, "Canary tokens & tripwires", MO, 7, 2, "medium", 60,
        command="canary status"),
+    # Tamper evidence that holds when the source is public (DETECTION-CONTENT.md):
+    # Python startup hooks, Argus's own code against RELEASE.json, its units,
+    # its state directory's writers and the signed rule-pack channel. Hashes
+    # the release tree, about 1.2 s cold and 0.1 s warm (measured 2026-10-30).
+    _c("selfguard", 1800, "Argus self-protection & tamper evidence", None, 0, 3, "high", 120,
+       command="status", domain="linux", cost_s=1.2,
+       unscored="source-tested and measured once read-only on one host; not yet soaked"),
 )
 
 BY_NAME = {c.name: c for c in COLLECTORS}

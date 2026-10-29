@@ -36,6 +36,7 @@ for rules marked `quiet`: those command lines carry passwords.
 """
 
 import re
+import time
 from dataclasses import dataclass
 
 WIN, LINUX = "win", "linux"
@@ -68,6 +69,7 @@ class Rule:
     not_images: tuple = ()  # images this rule never applies to
     parents: tuple = ()     # when set, the parent's image must be one of these
     sample_parent: str = ""  # parent image the sample runs under
+    origin: str = ""        # "" built in; "rulepack:<version>:<id>" from a signed pack
 
     def regex(self):
         return _compiled(self.pattern)
@@ -1406,21 +1408,64 @@ def _args(cmdline):
     return (cmdline or "")[:MAX_CMDLINE]
 
 
-def match(image, cmdline, platform, parent=""):
-    """Rules this one process start is evidence of. -> [(rule, quoted span)]."""
+# Rules from a signed rule pack (core/rulepack.py) run after the built-in
+# ones and never replace them. A pack rule whose single search ever takes
+# longer than this is suspended for the life of the loaded pack and reported
+# by the selfguard collector: slow matching is either a bad pattern or a
+# command line built to stall the matcher, and both are worth saying.
+PACK_SLOW_MS = 250.0
+_PACK = {"digest": None, "rules": ()}
+PACK_SUSPENDED = {}            # origin -> worst ms that suspended it
+
+
+def pack_rules():
+    """Rule objects for the active signed pack, cached per pack digest."""
+    try:
+        from jarvis.core import rulepack
+        pack = rulepack.current(block=False).get("pack")
+    except Exception:
+        return ()
+    if not pack:
+        return ()
+    if _PACK["digest"] != pack["digest"]:
+        _PACK["rules"] = tuple(
+            Rule(r["tids"], r["platform"], r["images"], r["pattern"], r["severity"], r["title"],
+                 r["sample"], r["benign"], quiet=r["quiet"], parents=r["parents"],
+                 origin=f"rulepack:{pack['version']}:{r['id']}")
+            for r in pack["rules"])
+        _PACK["digest"] = pack["digest"]
+        PACK_SUSPENDED.clear()
+    return _PACK["rules"]
+
+
+def match(image, cmdline, platform, parent="", extra=None):
+    """Rules this one process start is evidence of. -> [(rule, quoted span)].
+
+    Built-in RULES always run; `extra` (default: the active signed pack's rules)
+    are added after them."""
     base, cmd = image_base(image), _args(cmdline)
     if not base or not cmd:
         return []
     pbase = image_base(parent)
     out = []
-    for rule in RULES:
+    added = pack_rules() if extra is None else tuple(extra)
+    for rule in (RULES + added) if added else RULES:
         if rule.platform != platform or base in rule.not_images:
             continue
         if rule.images and base not in rule.images:
             continue
         if rule.parents and pbase not in rule.parents:
             continue
-        m = rule.regex().search(cmd)
+        if rule.origin:
+            if rule.origin in PACK_SUSPENDED:
+                continue
+            started = time.perf_counter()
+            m = rule.regex().search(cmd)
+            took = (time.perf_counter() - started) * 1000.0
+            if took > PACK_SLOW_MS:
+                PACK_SUSPENDED[rule.origin] = round(took, 1)
+        else:
+            m = rule.regex().search(cmd)
         if m:
             # a pattern that only asks "is there a command" quotes the command, not one letter
             found = m.group(0).strip()
@@ -1457,6 +1502,8 @@ def ways(tid, recorded=()):
 
 
 def finding_title(rule):
+    if rule.origin:
+        return f"{rule.title} ({', '.join(rule.tids)}) [rule pack {rule.origin.rsplit(':', 1)[-1]}]"
     return f"{rule.title} ({', '.join(rule.tids)})"
 
 

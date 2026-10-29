@@ -110,11 +110,12 @@ class RepositorySigners(unittest.TestCase):
 
 
 class LauncherRefusesArbitraryModules(unittest.TestCase):
-    def test_only_the_three_named_modules_run(self):
+    def test_only_the_four_named_modules_run(self):
         sys.path.insert(0, str(ROOT / "release"))
         import launcher
         self.assertEqual(set(launcher.CHILD_MODULES), {
-            "jarvis.service.collector_worker", "jarvis.collectors.host.fridaydefender", "jarvis.verify"})
+            "jarvis.service.collector_worker", "jarvis.collectors.host.fridaydefender", "jarvis.verify",
+            "jarvis.core.rulepack"})
         r = subprocess.run([sys.executable, str(ROOT / "release" / "launcher.py"), "-m", "os"],
                            capture_output=True, text=True, env={"JARVIS_QUIET_SEAL": "1", "PATH": "/usr/bin:/bin"},
                            cwd=str(ROOT), timeout=60)

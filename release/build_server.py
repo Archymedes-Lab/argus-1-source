@@ -64,7 +64,7 @@ def nuitka(tree, work, jobs):
            f"--report={work}/nuitka-report.xml", "--remove-output",
            # The daemon runs its collector workers and the self-check by calling this program
            # with `-m <module>`. Nuitka refuses any such self-call unless told otherwise; the
-           # launcher itself allows only the three modules in launcher.CHILD_MODULES
+           # launcher itself allows only the four modules in launcher.CHILD_MODULES
            # (tests/test_release_signing.py: "-m os" exits 2), so the guard is not what limits it.
            "--no-deployment-flag=self-execution",
            # C accelerators the daemon leans on (Nuitka's anti-bloat drops them).

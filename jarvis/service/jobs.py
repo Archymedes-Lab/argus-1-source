@@ -32,6 +32,7 @@ from jarvis.collectors.host import (
     pixel,
     posture,
     privacyseal,
+    selfguard,
     spyware,
     storage,
     toolchain,
@@ -400,6 +401,14 @@ def _canary(hosts, db_path):
         return canary.audit(store, conf=conf)
 
 
+def _selfguard(hosts, db_path):
+    # The technique matcher's suspended pack rules live in telemetry; the
+    # service layer passes them to the host-domain collector.
+    from jarvis.collectors.telemetry import techniques
+    with _store(db_path) as store:
+        return selfguard.audit(store, hosts=hosts, suspended=dict(techniques.PACK_SUSPENDED))
+
+
 def _sorted(module):
     """A job whose collector takes no arguments and ships its own ordering."""
     return lambda hosts, db_path: module.sort_findings(module.audit())
@@ -459,6 +468,7 @@ RUNNERS = {
     "sshwatch": _with_store(sshwatch.audit),
     "opshealth": _with_store(opshealth.audit),
     "bootchain": _with_store(bootchain.audit),
+    "selfguard": _selfguard,
     "keyreaders": _with_store(keyreaders.audit),
     "friday_defender": _with_store(fridaydefender.audit),
     "pkgverify": lambda hosts, db_path: pkgverify.audit(),
