@@ -161,11 +161,23 @@ ROTATION_PARENT = re.compile(r"(^|[/\s])(savelog|logrotate)(\s|$)")
 # `cat > approvals.test.ts <<'EOF'` with test source mentioning `curl | sh`
 # raised "download-and-run". Unquoted heredocs are left in place — `$(curl …)`
 # inside one does execute.
+#
+# Verbatim is not inert when a shell or interpreter reads it: `bash <<'E'`,
+# `cat <<'E' | sh` or `python3 - <<'E'` run the body. Such a heredoc stays in
+# the command line (the leaked source made this bypass easy to find).
+_HEREDOC_READER = re.compile(
+    r"(?:^|[\s/;&|(`])(?:(?:ba|da|z|k|c|tc|fi|a)?sh|busybox|python[\d.]*|perl[\d.]*|ruby|node|nodejs|deno|bun"
+    r"|php[\d.]*|lua[\d.]*|tclsh|expect|pwsh|source|eval|exec|su|ssh|at|batch|crontab)(?=$|[\s;&|)`])")
+
+
 def _without_quoted_heredocs(cmd):
     out, pos = [], 0
     for m in re.finditer(r"<<-?\s*(?:'([^']+)'|\"([^\"]+)\"|\\(\w+))[^\n]*\n", cmd or ""):
         if m.start() < pos:
             continue
+        line_start = cmd.rfind("\n", 0, m.start()) + 1
+        if _HEREDOC_READER.search(cmd[line_start:m.end()]):
+            continue                        # a shell or interpreter reads the body: it runs
         tag = m.group(1) or m.group(2) or m.group(3)
         end = re.compile(r"^\s*" + re.escape(tag) + r"\s*$", re.M).search(cmd, m.end())
         out.append(cmd[pos:m.end()])

