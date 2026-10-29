@@ -81,6 +81,9 @@ jobs:
       - name: Build tools (pinned by hash)
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # manylinux ships no shared libpython; Nuitka links the static one,
+          # which the image keeps in an archive for exactly this.
+          (cd /opt/_internal && tar xf static-libs-for-embedding-only.tar.xz)
           $PY -m pip install --disable-pip-version-check --require-hashes -r release/build-tools.txt
           $PY -m pip install --disable-pip-version-check --require-hashes --no-build-isolation -r release/requirements-build.txt
       - name: Static libpython for Nuitka (supplied by the pinned image)
@@ -95,10 +98,12 @@ jobs:
             out/server/*.deb
             out/server/server-build.json
           if-no-files-found: error
+          retention-days: 3
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nuitka-report
           path: out/server/nuitka-report.xml
+          retention-days: 3
 
   server-install-test:
     needs: [verify, server]
@@ -138,6 +143,7 @@ jobs:
           name: desktop-linux
           path: out/desktop-linux
           if-no-files-found: error
+          retention-days: 3
 
   desktop-windows:
     needs: verify
@@ -163,6 +169,7 @@ jobs:
           name: desktop-windows
           path: out/desktop-windows
           if-no-files-found: error
+          retention-days: 3
 
   draft:
     needs: [verify, server, server-install-test, desktop-linux, desktop-windows]
