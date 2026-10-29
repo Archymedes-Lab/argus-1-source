@@ -61,12 +61,45 @@ class AssuranceTests(unittest.TestCase):
         # 2026-10-29: +1 unverified linux_boot_chain (bootchain job).
         # 2026-10-29: +1 unverified linux_keyboard_readers (keyreaders job).
         # 2026-10-29: +1 unverified friday_defender_reviews (friday_defender job).
+        # 2026-10-29: +3 partial guided_assistant, detector_health and
+        # plain_language_overview (browser- and daemon-exercised on one machine,
+        # not validated, no observing job).
+        # 2026-10-29: +2 partial in_app_notifications and investigation_reports.
         self.assertEqual(gaps['implementation_unverified'], 26)
-        self.assertEqual(gaps['implementation_partial'], 20)
-        self.assertEqual(gaps['observation_mapping_missing'], 17)
-        self.assertEqual(gaps['containment_not_validated'], 46)  # +1 friday_defender_reviews 2026-10-29
-        self.assertEqual(gaps['validation_date_missing'], 46)  # +1 friday_defender_reviews 2026-10-29
+        self.assertEqual(gaps['implementation_partial'], 25)
+        self.assertEqual(gaps['observation_mapping_missing'], 22)
+        self.assertEqual(gaps['containment_not_validated'], 51)  # +1 friday_defender_reviews 2026-10-29
+        self.assertEqual(gaps['validation_date_missing'], 51)  # +1 friday_defender_reviews 2026-10-29
         self.assertFalse(result['complete'])
+
+    def test_assistant_detector_health_and_overview_claim_no_more_than_was_measured(self):
+        report = assurance.report({name: {'status': 'complete'} for required in
+                                   assurance.OBSERVATION_REQUIREMENTS.values() for name in required})
+        for name in ('guided_assistant', 'detector_health', 'plain_language_overview', 'in_app_notifications',
+                     'investigation_reports'):
+            entry = report['capabilities'][name]
+            self.assertEqual(entry['implementation'], 'partial', name)
+            self.assertFalse(entry['validated_containment'], name)
+            self.assertIsNone(entry['last_validation'], name)
+            self.assertNotIn(name, assurance.OBSERVATION_REQUIREMENTS)     # a UI/service view, not a sensor
+            self.assertEqual(entry['live_telemetry'], 'unverified', name)
+        gap = {n: report['capabilities'][n]['blind_spot'] for n in
+               ('guided_assistant', 'detector_health', 'plain_language_overview', 'in_app_notifications',
+                'investigation_reports')}
+        # The limits that were found must stay written down.
+        self.assertIn('Ollama was not installed', gap['guided_assistant'])
+        self.assertIn('simulated errors only', gap['guided_assistant'])
+        self.assertIn('Jev advisory review has not been run', gap['guided_assistant'])
+        self.assertIn('keyword based', gap['detector_health'])
+        self.assertIn('simulated through schedule applicability', gap['detector_health'])
+        self.assertIn('best-effort', gap['plain_language_overview'])
+        self.assertIn('no per-finding confidence score and none is invented', gap['plain_language_overview'])
+        self.assertIn('there is no background service', gap['in_app_notifications'])
+        self.assertIn('were not exercised with real permission states', gap['in_app_notifications'])
+        self.assertIn('not wrapped in it', gap['investigation_reports'])
+        self.assertIn('Execution started is not a separately observable state', gap['guided_assistant'])
+        for text in gap.values():
+            self.assertNotRegex(text.lower(), r'validated on|fully validated|proven|guarantee')
 
     def test_missing_or_stale_optional_sensor_is_explicit(self):
         self.assertEqual(assurance.report()['capabilities']['browser_privacy_veil']['live_telemetry'],

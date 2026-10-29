@@ -9,7 +9,7 @@ import json
 import re
 import time
 
-from jarvis.response import acknowledge, alert, llm, protocols
+from jarvis.response import acknowledge, advisor, alert, llm, protocols
 from jarvis.response.reporting import diff, score, triage, voice
 
 
@@ -341,28 +341,58 @@ def _ollama(store, question, conf, jobs=None):
     # the same test, matching why emails already prefer it over the 1B model.
     model = (conf.get("ask_model") or conf.get("email_voice_model")
             or llm.model_name(conf))
+    if llm.cooling_down():
+        # A recent attempt failed: skip the model instead of making this
+        # question wait out another connection timeout.
+        return "", "unavailable"
     text, error = llm.chat(conf, system, user, model=model, num_predict=170)
     if error == llm.BUSY:
         return ("The local model is still answering another question. Try again shortly, "
                 "or ask what needs you, your score, or what changed."), "busy"
     if error:
-        return ("The deterministic assistant does not know that question, and the local "
-                f"Ollama model `{llm.model_name(conf)}` is unavailable: {error}."), "unavailable"
+        # Name the cause (stopped, model missing, refused) from the error we
+        # already have, so a dead model costs one attempt, not two. The raw
+        # error stays out of the conversation.
+        llm.note_failure(llm.classify_failure(error))
+        return "", "unavailable"
+    llm.note_success()
     return guardrails_mod.scrub(text), "ollama"
 
 
-def answer(store, question, conf=None, jobs=None):
-    """Return {answer, source}. This function has no mutation path."""
+def _with_model(result, conf):
+    result["model"] = advisor.model_summary(conf)
+    return result
+
+
+def _run_offer(store, jobs, route, runner, conf):
+    return advisor.handle_action(store, jobs, route["op"], route["action"], route["target"],
+                                 runner=runner, conf=conf)
+
+
+def answer(store, question, conf=None, jobs=None, offer=None, runner=None):
+    """Return {answer, source, ...}. The only mutation path is advisor.handle_action,
+    reached through an offer the user accepted, and it needs its own approval
+    for anything that changes state. `runner` queues an audit (None: no service).
+    """
     conf = conf or alert.load_conf()
     jobs = jobs or {}
     q = " ".join((question or "").strip().lower().split())
     if not q:
-        return {"answer": "Ask what needs you, your score, what changed, or explain a finding ID.",
-                "source": "builtin"}
+        return _with_model(advisor.greeting(store, jobs), conf)
+    routed = advisor.route(store, jobs, q, offer=offer, runner_available=runner is not None,
+                           conf=conf)
+    if routed is not None:
+        if routed.get("_run"):
+            routed = _run_offer(store, jobs, routed, runner, conf)
+        elif routed.get("answer") and "score" in q and routed["answer"].startswith("I can help you improve"):
+            # Plain-English plan first; the coach's exact projection follows.
+            detail = score_coach(store, jobs)
+            routed["sections"].append(advisor._section("verified", detail))
+            routed["answer"] += "\n\n" + detail
+        return _with_model(routed, conf)
     if any(p in q for p in ("what needs me", "needs my attention", "need me to do")):
         return {"answer": _needs(store), "source": "builtin"}
-    # The coach intents are checked before the plain score intent: "how do I
-    # raise my score" contains "score" and must not stop at the bare number.
+    # Exact-phrase operational intents (kept: the CLI and tests rely on them).
     if any(p in q for p in ("raise my score", "raise the score", "improve my score",
                             "improve the score", "increase my score", "increase the score",
                             "move the bar", "how do i get to", "what gains the most",
@@ -384,4 +414,8 @@ def answer(store, question, conf=None, jobs=None):
                            "`jarvis answer` or `jarvis ack <id> --reason \"...\"` after you "
                            "verify the finding."), "source": "builtin"}
     text, source = _ollama(store, question, conf, jobs=jobs)
-    return {"answer": text, "source": source}
+    if source == "unavailable":
+        # Layer 4: not understood and no model. Say so plainly and ask one
+        # question; never present this as an AI answer.
+        return _with_model(advisor.clarify(store, jobs), conf)
+    return _with_model({"answer": text, "source": source}, conf)

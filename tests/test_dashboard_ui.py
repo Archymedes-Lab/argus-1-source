@@ -74,7 +74,7 @@ class DashboardUITests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is not installed")
     def test_page_scripts_parse(self):
         for i, script in enumerate(re.findall(r"<script>(.*?)</script>", self.html, re.S)):
-            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as fh:
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
                 fh.write(script)
             r = subprocess.run(["node", "--check", fh.name], capture_output=True, text=True)
             Path(fh.name).unlink()

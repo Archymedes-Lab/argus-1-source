@@ -27,13 +27,21 @@ from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.platform import procfeed
-from jarvis.response import acknowledge, alert, assistant, protocols, questions, remediation
+from jarvis.response import (
+    acknowledge,
+    advisor,
+    alert,
+    assistant,
+    protocols,
+    questions,
+    remediation,
+)
 from jarvis.response.reporting import score, voice
-from jarvis.service import attackmap, sdnotify
+from jarvis.service import attackmap, detectorhealth, sdnotify
 from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
-from jarvis.service.schedule import JOBS
+from jarvis.service.schedule import JOBS, NOT_APPLICABLE
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
 from jarvis.web import procview, stream
 from jarvis.web import token as api_token
@@ -236,7 +244,7 @@ def build_state(db_path, scheduler):
                         all_checks.append({**f, "job": name})
                     elif sev:
                         counts[sev] = counts.get(sev, 0) + 1
-                        all_findings.append({**f, "job": name})
+                        all_findings.append({**f, "job": name, "id": acknowledge.finding_id(f, name)})
             jobs.append({
                 "name": name, "label": label, "interval": interval,
                 "ts": s["ts"] if s else 0,
@@ -321,6 +329,8 @@ def build_state(db_path, scheduler):
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
             "reliability": _reliability_state(scheduler, snaps),
+            "detector_health": _detector_health(store, scheduler, snaps),
+            "assistant": _assistant_state(store),
             "performance": {**_performance_state(jobs, scheduler),
                             "subsystems": _meta_object(store, "resource_profile_v1"),
                             "accelerator": _meta_object(store, "accelerator_probe_v2")
@@ -341,6 +351,29 @@ def _wake_phase(scheduler):
         return {}
 
 
+def _assistant_state(store):
+    """Recent assistant activity, open proposals and what ARGUS-1 has changed. Never raises."""
+    try:
+        return {"audit": advisor.audit_log(store)[-25:],
+                "pending": advisor.pending_proposals(store, JOBS),
+                "changes": advisor.changes_summary(store)}
+    except Exception:
+        return {"audit": [], "pending": [], "changes": None}
+
+
+def _detector_health(store, scheduler, snaps):
+    """Per-detector health for the dashboard panel. Never raises."""
+    try:
+        status_fn = getattr(scheduler, "reliability_status", None)
+        statuses = status_fn(snapshots=snaps).get("statuses", {}) if callable(status_fn) else {}
+        rep = detectorhealth.report(JOBS, snaps, statuses, NOT_APPLICABLE)
+        detectorhealth.record_transitions(store, rep)
+        return rep
+    except Exception:
+        return {"detectors": [], "counts": {}, "total": 0, "attention": [],
+                "summary": "Detector health is unavailable right now."}
+
+
 def _reliability_state(scheduler, snaps):
     """Collector reliability plane for the dashboard. Never raises."""
     try:
@@ -358,10 +391,11 @@ def _reliability_state(scheduler, snaps):
 def _fix_state(db_path):
     """Open self-fix proposals waiting on the operator. Never raises."""
     try:
+        from jarvis.response import report as agent_report
         from jarvis.response import selffix
         store = Store(db_path)
         try:
-            return [{"id": e["id"], "title": e.get("title", ""),
+            return [{"report": agent_report.fix_report(e), "id": e["id"], "title": e.get("title", ""),
                      "status": e.get("status", ""), "problem": e.get("problem", ""),
                      "created_at": e.get("created_at", 0),
                      "generation_state": e.get("generation_state", ""),
@@ -434,6 +468,11 @@ class Handler(BaseHTTPRequestHandler):
         else:
             name = host.rsplit(":", 1)[0] if ":" in host else host
         return name.lower() in ALLOWED_HOSTS
+
+    def _runner(self):
+        """Queue one audit for the assistant, or None when no scheduler is attached."""
+        scheduler = getattr(self, "scheduler", None)
+        return scheduler.force if scheduler is not None else None
 
     def _same_origin(self):
         """Reject cross-site calls. Browsers that send Sec-Fetch-Site make this
@@ -642,9 +681,26 @@ class Handler(BaseHTTPRequestHandler):
             if payload is None:
                 return self._send(400, json.dumps({"error": "invalid request"}))
             question = str(payload.get("question") or "")[:4000]
+            offer = payload.get("offer") if isinstance(payload.get("offer"), dict) else None
             store = Store(self.db_path)
             try:
-                result = assistant.answer(store, question, jobs=JOBS)
+                result = assistant.answer(store, question, jobs=JOBS, offer=offer,
+                                          runner=self._runner())
+            finally:
+                store.close()
+            return self._send(200, json.dumps(result))
+        if url.path == "/api/assistant/action":
+            # The assistant's only door to doing anything. advisor validates the
+            # action against its capability table; changes need propose+approve.
+            payload = self._json_body(4096)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                result = advisor.handle_action(
+                    store, JOBS, str(payload.get("op") or "")[:12], payload.get("action"),
+                    payload.get("target"), str(payload.get("token") or "")[:64],
+                    runner=self._runner(), conf=alert.load_conf())
             finally:
                 store.close()
             return self._send(200, json.dumps(result))

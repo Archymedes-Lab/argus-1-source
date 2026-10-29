@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function makeEl() {
-  const el = { dataset: {}, style: {}, children: [] };
+  const el = { dataset: {}, style: {}, children: [],
+               classList: { add() {}, remove() {}, toggle() {}, contains: () => false } };
   return new Proxy(el, {
     get(t, p) {
       if (p in t) return t[p];
@@ -32,8 +33,17 @@ export function loadPage(relPath, exportNames) {
     querySelector: () => makeEl(),
     querySelectorAll: () => [],
     documentElement: makeEl(),
+    body: makeEl(),
+    activeElement: makeEl(),
   };
   globalThis.window = globalThis;
+  // The application shell wires the router, drawer and media query at load.
+  globalThis.addEventListener = () => {};
+  globalThis.matchMedia = () => ({ matches: false, addEventListener: () => {} });
+  globalThis.location = { hash: "", port: "8787", origin: "http://127.0.0.1:8787", href: "http://127.0.0.1:8787/" };
+  globalThis.history = { pushState: () => {} };
+  globalThis.scrollTo = () => {};
+  globalThis.requestAnimationFrame = () => 0;
   globalThis.localStorage = { getItem: () => null, setItem: () => {} };
   globalThis.fetch = () => new Promise(() => {});
   globalThis.setInterval = () => 0;

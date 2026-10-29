@@ -8,6 +8,14 @@
 # Development-only: the Tailwind standalone CLI (v4.3.3, verified against the
 # release's sha256sums.txt) lives in ~/.cache/jarvis-ui-tools, outside the
 # repository and outside every release. The product ships the compiled CSS.
+# It is a Linux x64 binary and is downloaded on first use: run this from Linux
+# or WSL, with network access you are content to grant for that one download.
+#
+# The page's stylesheet is the Tailwind output followed by
+# jarvis/web/styles/shell.css (plain CSS, appended verbatim after a marker
+# comment), so the page still carries one stylesheet. tests/test_dashboard_shell.py
+# keeps the appended tail equal to shell.css. Python here reads files with the
+# platform default encoding: on Windows set PYTHONUTF8=1.
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
 TW_VERSION=v4.3.3
@@ -33,6 +41,10 @@ import re, sys, pathlib
 page, css, mode = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]).read_text(), sys.argv[3]
 html = page.read_text()
 banner = "/* compiled from jarvis/web/styles/dashboard.css by scripts/dev/build_ui.sh; do not edit here */\n"
+# The application shell (sidebar, views, plain-language Overview) is plain CSS in
+# shell.css; it is appended verbatim so the page still carries one stylesheet.
+shell = pathlib.Path("jarvis/web/styles/shell.css").read_text().strip()
+css = css.strip() + "\n/* shell.css: plain CSS appended by build_ui.sh */\n" + shell
 new = re.sub(r'(<style id="ui">)(.*?)(</style>)', lambda m: m.group(1) + "\n" + banner + css.strip() + "\n" + m.group(3),
              html, count=1, flags=re.S)
 if new == html and '<style id="ui">' not in html:
