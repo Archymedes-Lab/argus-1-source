@@ -61,7 +61,12 @@ def nuitka(tree, work, jobs):
            "--include-package=cryptography",
            "--python-flag=isolated", "--python-flag=safe_path",
            "--file-reference-choice=runtime", "--lto=no", f"--jobs={jobs}",
-           f"--report={work}/nuitka-report.xml", "--remove-output"]
+           f"--report={work}/nuitka-report.xml", "--remove-output",
+           # The daemon runs its collector workers and the self-check by calling this program
+           # with `-m <module>`. Nuitka refuses any such self-call unless told otherwise; the
+           # launcher itself allows only the three modules in launcher.CHILD_MODULES
+           # (tests/test_release_signing.py: "-m os" exits 2), so the guard is not what limits it.
+           "--no-deployment-flag=self-execution"]
     pkg = tree / "argus"
     for pattern in DATA_KEEP:
         for f in sorted(pkg.glob(pattern)):
