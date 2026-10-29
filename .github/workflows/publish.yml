@@ -14,6 +14,10 @@ on:
       tag:
         description: "Signed release tag to publish (an earlier one rolls back)"
         required: true
+      rollback:
+        description: "Allow an equal or older release than the live one (a deliberate rollback)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,6 +49,6 @@ jobs:
           path: site
           ssh-key: ${{ secrets.SITE_DEPLOY_KEY }}
       - name: Check and publish to the site
-        run: python3 release/publish.py --release release --site site --tag "$TAG"
+        run: python3 release/publish.py --release release --site site --tag "$TAG" ${{ inputs.rollback && '--rollback' || '' }}
       - name: Read the live site back
         run: python3 release/publish.py --readback --version "${TAG#v}" --timeout 1500

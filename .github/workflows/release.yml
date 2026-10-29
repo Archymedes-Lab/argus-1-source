@@ -59,6 +59,11 @@ jobs:
         run: python -m pip install --disable-pip-version-check --require-hashes -r release/requirements-runtime.txt
       - run: scripts/dev/static_gate.sh
       - run: python scripts/dev/ci_suite.py
+      - name: Host-bound tests were run on their host and signed by a releaser
+        if: github.ref_type == 'tag'
+        env:
+          ARGUS_RELEASE_SIGNERS: ${{ vars.ARGUS_RELEASE_SIGNERS }}
+        run: python release/host_attest.py check
 
   server:
     needs: verify
@@ -78,6 +83,8 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           $PY -m pip install --disable-pip-version-check --require-hashes -r release/build-tools.txt
           $PY -m pip install --disable-pip-version-check --require-hashes --no-build-isolation -r release/requirements-build.txt
+      - name: Static libpython for Nuitka (supplied by the pinned image)
+        run: cd /opt/_internal && tar xf static-libs-for-embedding-only.tar.xz
       - name: Native server program
         run: $PY release/build_server.py --version "${{ needs.verify.outputs.version }}" --out out/server --jobs 4
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

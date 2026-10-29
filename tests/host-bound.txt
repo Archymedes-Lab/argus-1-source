@@ -1,17 +1,12 @@
-# Tests that fail on a clean Linux CI runner (scripts/dev/ci_suite.py).
-# CI fails on any failure not listed here, and on a listed test that passes:
-# remove its line when it is fixed. Reviewed 2026-10-29.
+# Host-bound tests: they pass only on a WSL2 host with the Windows side reachable
+# (kernel string contains "microsoft", /mnt/c mounted), because the code under test
+# decides what to do from that. On a plain Linux CI runner they fail for that reason
+# alone, so CI does not run them; it says so in its output and release.yml requires
+# a signed host attestation (release/host_attest.py) for the tagged commit.
 #
-# 1. Waiting for committed files: tests/test_ui_brand.py checks desktop brand
-#    files (desktop/ui/src/lib/brand.ts, desktop/src/brand.rs) that are still
-#    uncommitted work in the owner's checkout.
-test_ui_brand.BrandRuleTests.test_desktop_copies_keep_the_same_names
-test_ui_brand.StaticTextTests.test_desktop_interface_strings
-#
-# 2. Bound to the owner's WSL host: each fails identically on WSL when the
-#    kernel reads as plain Linux (measured 2026-10-29: 66 of 66), because the
-#    job registry, interop and /mnt/c only exist there. Fix: make each test
-#    pin the host kind it needs (jarvis.platform.host) instead of the machine's.
+# Environment: wsl2-windows-interop  (see docs/guides/HOST-TESTS.md)
+# Run them there:   python3 scripts/dev/ci_suite.py --host
+# Add a test here only with a reason in HOST-TESTS.md; remove it when it no longer needs the host.
 test_audiowatch.AudioWatchTests.test_registered_with_bounded_schedule
 test_boot_readiness.FirstVerifiedTests.test_first_usable_receipt_not_the_latest_snapshot
 test_boot_readiness.LatenessTests.test_post_boot_attempt_restores_normal_lateness

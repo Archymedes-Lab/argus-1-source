@@ -8,7 +8,7 @@ export const inApp = typeof window !== "undefined" && "__TAURI_INTERNALS__" in w
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (inApp) return invoke<T>(cmd, args);
   if (import.meta.env.DEV) return preview<T>(cmd);
-  throw new Error("This interface runs inside the JARVIS app.");
+  throw new Error("This interface runs inside the ARGUS-1 app.");
 }
 
 // Development preview in a plain browser: read-only, from a saved state file.

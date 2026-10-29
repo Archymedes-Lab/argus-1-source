@@ -33,6 +33,28 @@ problem instead of allowing only known-good content).
 6. **Reversible.** Every signed release stays in GitHub Releases (Argus-1,
    private). Rolling back is publishing an earlier tag again.
 
+## Version order
+
+A tag is `vYYYY.MM.DD`, or `vYYYY.MM.DD-N` for the Nth release that day (no suffix is the
+first). Order is by that rule, not by string: `2026.10.31-10` is newer than `2026.10.31-9`.
+`release/publish.py` reads the version the site serves now (the site checkout's
+`public/downloads/argus/manifest.json`) and **refuses** a candidate that is equal, older, or
+not a valid tag version (for example the dotted `2026.10.29.1`), before the site is touched.
+Releases made before tagging (`2026.10.30`) still order correctly as the live side. A deliberate
+rollback is the only way back: `publish.yml` with `rollback: true`. Tests: `tests/test_release_version.py`.
+
+## Host-bound tests
+
+A few tests (see `docs/guides/HOST-TESTS.md`) only pass on a WSL2 host, so CI lists them as NOT RUN.
+Before tagging, on that host: commit, `python3 release/host_attest.py make`, sign
+`release/host-attestation.json` with your releaser key, commit both files. `release.yml` refuses a
+tag whose attestation is missing, unsigned by a pinned releaser, incomplete, or older than a code change.
+
+## Releaser keys
+
+Adding a second releaser, a lost or compromised key, revocation and rotation:
+`docs/guides/RELEASER-KEYS.md`.
+
 ## Making a release
 
 Anyone with write access to Argus-1 who is a releaser:

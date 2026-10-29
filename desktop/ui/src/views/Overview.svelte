@@ -26,7 +26,7 @@
 </script>
 
 {#if !d}
-  <div class="empty">{app.error || "Reading JARVIS…"}</div>
+  <div class="empty">{app.error || "Reading ARGUS-1…"}</div>
 {:else}
   <div class="flex flex-col gap-8">
     {#if counts.critical}

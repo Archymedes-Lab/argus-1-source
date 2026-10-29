@@ -25,8 +25,8 @@
 
 <div class="mx-auto flex max-w-[760px] flex-col gap-4">
   <div>
-    <h2 class="text-heading-24">Ask JARVIS</h2>
-    <p class="mt-1 text-copy-14 text-gray-900">Answers come from JARVIS's own data and a local model. It reads; it never acts on what it says.</p>
+    <h2 class="text-heading-24">Ask ARGUS-1</h2>
+    <p class="mt-1 text-copy-14 text-gray-900">Answers come from ARGUS-1's own data and a local model. It reads; it never acts on what it says.</p>
   </div>
   <form class="card flex items-center gap-2 p-2" onsubmit={(e) => { e.preventDefault(); ask(); }}>
     <input class="input input-bare h-10 flex-1 text-copy-14" bind:value={q} maxlength="4000" placeholder="Ask anything about this machine" aria-label="Question" />

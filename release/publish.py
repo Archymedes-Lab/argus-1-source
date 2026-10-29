@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish a signed release to the site, then read the live site back.
 
-    python3 release/publish.py --release DIR --site SITE_CHECKOUT --tag T
+    python3 release/publish.py --release DIR --site SITE_CHECKOUT --tag T [--rollback]
     python3 release/publish.py --readback --version V [--timeout 1200]
 
 Run by .github/workflows/publish.yml when a releaser publishes a signed draft.
@@ -35,6 +35,7 @@ sys.path.insert(0, str(HERE))
 import check  # noqa: E402
 import gate  # noqa: E402
 import signers  # noqa: E402
+import versioning  # noqa: E402
 
 LIVE = os.environ.get("ARGUS_LIVE_BASE", "https://www.archymedes.xyz/downloads/argus/")
 DOWNLOADS = Path("public/downloads/argus")
@@ -53,7 +54,17 @@ def git(site, *args):
     return subprocess.run(["git", "-C", str(site), *args], check=True, capture_output=True, text=True).stdout
 
 
-def publish(release, site, tag):
+def live_version(site):
+    """The version the site's master serves now: its published manifest."""
+    try:
+        return json.loads((site / DOWNLOADS / "manifest.json").read_text()).get("version") or ""
+    except FileNotFoundError:
+        return ""
+    except ValueError:
+        sys.exit("the site's current manifest.json is not valid JSON: refusing to publish over it")
+
+
+def publish(release, site, tag, rollback=False):
     allowed = signers.ALLOWED.read_text()
     problems, _counts, signer = check.check(release, allowed, pinned())
     if problems:
@@ -64,6 +75,10 @@ def publish(release, site, tag):
     manifest = json.loads((release / "manifest.json").read_text())
     if manifest.get("tag") != tag:
         sys.exit(f"the manifest is for {manifest.get('tag')}, not {tag}")
+    try:
+        versioning.check_ordering(manifest["version"], live_version(site), rollback)
+    except versioning.VersionError as exc:
+        sys.exit(f"REFUSED  {exc}: the site was not changed")
     lines, _ = signers.trusted_lines(allowed, pinned())
     (release / "allowed_signers").write_text("\n".join(lines) + "\n")
     dest = site / DOWNLOADS
@@ -130,6 +145,7 @@ def main():
     ap.add_argument("--release")
     ap.add_argument("--site")
     ap.add_argument("--tag")
+    ap.add_argument("--rollback", action="store_true", help="allow an equal or older signed release")
     ap.add_argument("--readback", action="store_true")
     ap.add_argument("--version")
     ap.add_argument("--timeout", type=int, default=1200)
@@ -137,7 +153,7 @@ def main():
     if args.readback:
         readback(args.version, args.timeout)
     else:
-        publish(Path(args.release), Path(args.site), args.tag)
+        publish(Path(args.release), Path(args.site), args.tag, args.rollback)
 
 
 if __name__ == "__main__":

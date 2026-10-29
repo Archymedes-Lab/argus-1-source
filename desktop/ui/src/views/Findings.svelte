@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { brand } from "../lib/brand";
   import { Dialog } from "bits-ui";
   import X from "@lucide/svelte/icons/x";
   import Search from "@lucide/svelte/icons/search";
@@ -50,8 +51,8 @@
           <button class="row row-click w-full items-start text-left {app.selected === f ? 'bg-gray-100' : ''}" onclick={() => (app.selected = f)}>
             <span class="w-[76px] shrink-0 pt-px"><Pill severity={f.severity} /></span>
             <span class="min-w-0 flex-1">
-              <span class="block truncate text-label-13">{f.title}</span>
-              <span class="block truncate text-copy-13 text-gray-900">{f.detail}</span>
+              <span class="block truncate text-label-13">{brand(f.title)}</span>
+              <span class="block truncate text-copy-13 text-gray-900">{brand(f.detail)}</span>
             </span>
             <span class="flex shrink-0 items-center gap-1.5 pt-px"><span class="tag">{f.job}</span><span class="tag">{f.host}</span></span>
           </button>
@@ -73,12 +74,12 @@
         <div class="flex items-start gap-3 border-b border-gray-300 p-5">
           <div class="min-w-0 flex-1">
             <Pill severity={f.severity} />
-            <Dialog.Title class="selectable mt-2 text-heading-20">{f.title}</Dialog.Title>
+            <Dialog.Title class="selectable mt-2 text-heading-20">{brand(f.title)}</Dialog.Title>
           </div>
           <Dialog.Close class="btn btn-ghost w-8 justify-center px-0" aria-label="Close"><X size={16} /></Dialog.Close>
         </div>
         <div class="selectable flex-1 overflow-auto p-5">
-          <Dialog.Description class="text-copy-14 text-gray-1000">{f.detail}</Dialog.Description>
+          <Dialog.Description class="text-copy-14 text-gray-1000">{brand(f.detail)}</Dialog.Description>
           <dl class="mt-5 grid grid-cols-[96px_1fr] gap-x-4 gap-y-2.5 text-copy-13">
             <dt class="text-gray-900">Collector</dt><dd><span class="tag">{f.job}</span></dd>
             <dt class="text-gray-900">Host</dt><dd>{f.host === "win" ? "Windows" : f.host === "wsl" ? "WSL" : f.host}</dd>
