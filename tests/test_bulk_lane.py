@@ -29,6 +29,7 @@ RUNNER_MODULES = {
     "distrovuln": "jarvis.intel.distrovuln",
     "appcode": "jarvis.collectors.appcode",
     "osv": "jarvis.intel.osv",
+    "friday_defender": "jarvis.collectors.host.fridaydefender",
 }
 INTEROP = re.compile(r"\bps_json\b|\brun_ps\b|\b_ps\(|powershell(\.exe)?['\"]", re.I)
 

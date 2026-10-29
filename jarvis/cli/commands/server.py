@@ -6,6 +6,7 @@
     opshealth   failed services, expiring TLS certificates, OOM kills, crashes
     bootchain   boot-chain persistence (GRUB, initramfs hooks, kernel images), kernel attack surface
     keyreaders  who reads the keyboard, raw HID or uinput; hidden staging files
+    defender    Friday Defender reviews of your codebases: enable (asks), disable, status, run
     pkgverify   packaged-file integrity of intruder targets
     appcode     every codebase: vulnerable dependencies, risky code, secrets  [PATH ...]
     services    the declared services file, and what listens now
@@ -60,6 +61,64 @@ def cmd_bootchain(args, store):
 def cmd_keyreaders(args, store):
     from jarvis.collectors.host import keyreaders
     _print(keyreaders.audit(store), args.json)
+
+
+def cmd_defender(args, store):
+    """Owner consent for Friday Defender reviews (collectors/host/fridaydefender.py).
+
+    Only this command, run by a person in a terminal, can grant consent or
+    install Friday; the daemon can only read or withdraw it."""
+    import shutil
+    import subprocess
+    import time
+
+    from jarvis.collectors.host import fridaydefender as fd
+    if args.action == "status":
+        c = fd.load_consent()
+        print(f"friday:  {fd.find_friday() or 'not installed'}")
+        print(f"consent: {'granted ' + time.strftime('%Y-%m-%d', time.gmtime(c['granted_at'])) if c else 'none'}")
+        if c:
+            print(f"folders: {', '.join(c['roots']) if c.get('roots') else 'every codebase appcode found'}")
+            print(f"budget:  {c.get('budget')} per review, one codebase at a time, each at most weekly")
+            print(f"model:   agreed {c.get('provider')}/{c.get('model')}; Friday now {'/'.join(map(str, fd.friday_provider()))}")
+        for f in fd.feed_findings(time.time()):
+            print(f"feed:    {f['title']}")
+        return
+    if args.action == "disable":
+        fd.revoke("disabled by the owner")
+        print("Friday Defender reviews are off.")
+        return
+    if args.action == "run":
+        _print(fd.audit(store), args.json)
+        return
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        sys.exit("jarvis defender enable asks you to confirm, so it needs a terminal")
+    friday = fd.find_friday()
+    roots = [os.path.abspath(r) for r in (args.folders or [])]
+    print("Friday Defender reviews\n")
+    print("  What happens: once a week per codebase, while the machine is idle, Argus runs your Friday")
+    print("  install in defender mode on one codebase. Friday reads the code and reports vulnerabilities;")
+    print("  it is not allowed to change anything, and Argus checks the folder is untouched afterwards.")
+    provider, model = fd.friday_provider()
+    print(f"  Where your code goes: {provider or 'Friday default'} / {model or 'its default model'}"
+          " (the provider set in Friday; changing it pauses reviews until you confirm again).")
+    print(f"  Folders: {', '.join(roots) if roots else 'every codebase the appcode scan found'}")
+    print(f"  Budget: {args.budget} per review. Findings are advice (at most medium), never acted on.")
+    if not friday:
+        print(f"\n  Friday is not installed. Enabling installs it with: {' '.join(fd.INSTALL)}")
+    if input("\nAllow this? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("Nothing changed.")
+        return
+    if not friday:
+        if not shutil.which("npm"):
+            sys.exit("npm is not installed, so Friday cannot be installed here; install Node.js first")
+        if subprocess.run(fd.INSTALL, check=False).returncode or not fd.find_friday():
+            sys.exit("Friday did not install; consent not recorded")
+    provider, model = fd.friday_provider()
+    fd.write_consent({"v": 1, "granted_at": time.time(), "granted_by": "owner (interactive terminal)",
+                      "roots": roots or None, "budget": args.budget, "provider": provider, "model": model,
+                      "revoked": False})
+    print("Enabled. `jarvis defender status` shows the state; `jarvis defender disable` turns it off.")
 
 
 def cmd_pkgverify(args, store):
@@ -137,6 +196,12 @@ def add_parser(sub):
     p.add_argument("paths", nargs="*", help="scan only these folders (default: the whole server)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_appcode)
+    p = sub.add_parser("defender", help="Friday Defender reviews of your codebases (needs your consent)")
+    p.add_argument("action", choices=("enable", "disable", "status", "run"))
+    p.add_argument("folders", nargs="*", help="enable: only these folders (default: every codebase found)")
+    p.add_argument("--budget", default="0.50", help="enable: spending cap per review")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_defender)
     p = sub.add_parser("services", help="declared services and what listens now")
     p.add_argument("--suggest", action="store_true",
                    help="print a services.conf starting point from current listeners")

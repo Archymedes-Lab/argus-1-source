@@ -36,6 +36,7 @@ ADDED_AFTER_GOLDEN = {
     "opshealth": "failed units, TLS certificate expiry, kernel OOM kills, unclean reboots (2026-10-28)",
     "bootchain": "Linux boot-chain persistence and kernel attack surface (2026-10-29)",
     "keyreaders": "Linux keyboard, raw HID and uinput readers by image; hidden staging (2026-10-29)",
+    "friday_defender": "consented Friday Defender reviews of found codebases, advisory (2026-10-29)",
     "pkgverify": "dpkg --verify / rpm -V of intruder-targeted packages (ARGUS-SERVER.md W3, 2026-10-24)",
     "heartbeat": "off-box dead-man ping (ARGUS-SERVER.md W10, 2026-10-25)",
     "patches": "fixable CVEs, pending updates and reboots (ARGUS-SERVER.md W11, 2026-10-25)",

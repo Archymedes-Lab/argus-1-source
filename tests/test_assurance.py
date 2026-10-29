@@ -60,11 +60,12 @@ class AssuranceTests(unittest.TestCase):
         # 2026-10-29: +1 unverified server_ops_health (opshealth job).
         # 2026-10-29: +1 unverified linux_boot_chain (bootchain job).
         # 2026-10-29: +1 unverified linux_keyboard_readers (keyreaders job).
-        self.assertEqual(gaps['implementation_unverified'], 25)
+        # 2026-10-29: +1 unverified friday_defender_reviews (friday_defender job).
+        self.assertEqual(gaps['implementation_unverified'], 26)
         self.assertEqual(gaps['implementation_partial'], 20)
         self.assertEqual(gaps['observation_mapping_missing'], 17)
-        self.assertEqual(gaps['containment_not_validated'], 45)  # +1 linux_keyboard_readers 2026-10-29
-        self.assertEqual(gaps['validation_date_missing'], 45)  # +1 linux_keyboard_readers 2026-10-29
+        self.assertEqual(gaps['containment_not_validated'], 46)  # +1 friday_defender_reviews 2026-10-29
+        self.assertEqual(gaps['validation_date_missing'], 46)  # +1 friday_defender_reviews 2026-10-29
         self.assertFalse(result['complete'])
 
     def test_missing_or_stale_optional_sensor_is_explicit(self):

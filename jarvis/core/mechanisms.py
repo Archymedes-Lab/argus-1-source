@@ -339,6 +339,12 @@ COLLECTORS = (
     _c("keyreaders", 900, "Keyboard readers & hidden staging", None, 0, 3, "medium", 60,
        command="keyreaders", domain="linux", cost_s=0.1, boot_scoped=True,
        unscored="source-tested only; expected-reader list not yet soaked on desktops and servers"),
+    # Friday Defender reviews of the codebases appcode found, with the owner's
+    # consent (`jarvis defender enable`). Each pass collects finished reviews and
+    # starts at most one detached review; deferrable, so only when idle.
+    _c("friday_defender", 3600, "Friday Defender code reviews", None, 0, 3, "medium", 60,
+       command="defender status", lane="bulk", governed=True, cost_s=0.3,
+       unscored="advisory model findings, capped at medium; not a measured state of this machine"),
     # dpkg --verify / rpm -V over the packages intruders replace; IO-heavy, so
     # daily, deferrable and in the bulk lane.
     _c("pkgverify", 86400, "Package file integrity", None, 0, 4, "medium", 300,
