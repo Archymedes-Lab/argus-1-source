@@ -148,6 +148,17 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(len(devices.active(reg)), devices.MAX_DEVICES - 1)
             self.assertFalse(devices.revoke("nothing", reg))
 
+    def test_empty_short_or_ambiguous_prefix_revokes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            reg = os.path.join(d, "n", "devices.json")
+            devices.add({"dev": "abcd1111"}, reg)
+            devices.add({"dev": "abcd2222"}, reg)
+            for prefix in ("", "a", "abcd"):
+                self.assertFalse(devices.revoke(prefix, reg), prefix)
+            self.assertEqual(len(devices.active(reg)), 2)
+            self.assertEqual(devices.revoke("abcd2", reg), "abcd2222")
+            self.assertEqual([x["dev"] for x in devices.active(reg)], ["abcd1111"])
+
 
 class PairCliTests(unittest.TestCase):
     def test_pairing_refuses_without_a_terminal(self):
@@ -162,6 +173,20 @@ class PairCliTests(unittest.TestCase):
         self.assertEqual(relay.base_url({"notify_url": "http://127.0.0.1:9466/"}), "http://127.0.0.1:9466")
         with self.assertRaises(relay.RelayError):
             relay.base_url({"notify_url": "http://relay.example"})
+        # A prefix test let plaintext HTTP reach any host named 127.0.0.1.<anything>.
+        for bad in ("http://127.0.0.1.attacker.example", "http://127.0.0.1@attacker.example",
+                    "https://user:pw@relay.example", "ftp://relay.example", "https://"):
+            with self.assertRaises(relay.RelayError, msg=bad):
+                relay.base_url({"notify_url": bad})
+
+    def test_claimed_name_cannot_put_escape_sequences_on_the_terminal(self):
+        from jarvis.cli.commands import notify as cli
+        fake = "\n\n      123 456\x1b[8m"
+        shown = cli._printable(fake)
+        self.assertNotIn("\x1b", shown)
+        self.assertNotIn("\n", shown)
+        self.assertEqual(cli._printable("\x07\x1b"), "phone")
+        self.assertEqual(cli._printable("Pixel 9"), "Pixel 9")
 
 
 if __name__ == "__main__":

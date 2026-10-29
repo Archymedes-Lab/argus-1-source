@@ -3,6 +3,7 @@
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DEFAULT_URL = "https://argus.archymedes.xyz"
@@ -17,7 +18,15 @@ class RelayError(RuntimeError):
 
 def base_url(conf):
     url = (conf.get("notify_url") or DEFAULT_URL).strip().rstrip("/")
-    if not url.startswith("https://") and not url.startswith("http://127.0.0.1"):
+    # Judge the parsed host, not a prefix: "http://127.0.0.1.example.net" starts
+    # with "http://127.0.0.1" and is a plaintext request to someone else's host.
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        raise RelayError("notify_url is not a URL") from None
+    local = parts.scheme == "http" and host == "127.0.0.1"
+    if not host or (parts.scheme != "https" and not local) or parts.username or parts.password:
         raise RelayError("notify_url must be https (http only for 127.0.0.1 tests)")
     return url
 

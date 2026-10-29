@@ -32,6 +32,16 @@ server are shown.
   keys (self-certifying); every envelope is signed by the server key the phone pinned at pairing;
   a device becomes active only after the owner confirms a 6-digit code on the server that the
   phone also shows, derived from both sides' keys.
+- **Limit of N2/N3 (security review 2026-10-30).** N2 and N3 hold against a relay that stores,
+  drops or tampers with API traffic while serving the app unchanged. The relay also *serves* the
+  phone app (`public/`, same origin, same deployment): whoever can change that deployment can
+  ship app code that uses the phone's (non-extractable, but usable) keys to decrypt, or that
+  shows the owner whatever 6-digit code the server shows. Against that operator the comparison
+  proves nothing. A second, narrower gap: the SAS has no commitment step, so a relay that
+  rewrites only API traffic sees the phone's keys before it must present device keys to the
+  server and can grind an X25519 key (about 10^6 tries) whose SAS matches. Closing either needs
+  app code delivered independently of the relay (a signed bundle or a native app) plus a
+  commit-then-reveal nonce in the SAS; until then the relay deployment is trusted code.
 - **N4 Bounded.** Envelope ≤ 8 KiB, ≤ 500 pending per device, ≤ 20 devices per mailbox, 7-day
   expiry, pairing codes single-use for 10 minutes with ≤ 10 attempts; request timestamps within
   300 s, replayed request signatures refused.
