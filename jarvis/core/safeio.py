@@ -48,3 +48,12 @@ def read_regular(path, limit, follow=True):
         return b"".join(chunks)
     finally:
         os.close(fd)
+
+
+def read_text(path, limit, follow=True, errors="replace"):
+    """read_regular decoded as UTF-8 with universal newlines, like open(path)
+    in text mode. None when the file holds more than `limit` bytes."""
+    data = read_regular(path, limit, follow=follow)
+    if len(data) > limit:
+        return None
+    return data.decode("utf-8", errors).replace("\r\n", "\n").replace("\r", "\n")

@@ -124,7 +124,7 @@ def _secrets(walk, roots, stop):
         if time.monotonic() > stop:
             walk["truncated"] = True
             break
-        for kind, value, line, sev in credentials.scan_file(path):
+        for kind, value, line, sev in credentials.scan_file(path, follow=False):
             project = discover.project_of(path, roots, cb)
             hits.setdefault(project, []).append(
                 (CAP.get(sev, sev), f"{_rel(path, project)}:{line} {kind} "

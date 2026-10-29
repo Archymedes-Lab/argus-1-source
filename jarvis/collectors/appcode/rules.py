@@ -13,6 +13,8 @@ matches. Findings name file:line only, never the code itself.
 import os
 import re
 
+from jarvis.core import safeio
+
 MAX_LINE = 800
 LANG = {".py": "py", ".php": "php", ".phtml": "php", ".js": "js", ".mjs": "js", ".cjs": "js",
         ".ts": "js", ".jsx": "js", ".tsx": "js", ".rb": "rb", ".go": "go", ".java": "java",
@@ -128,10 +130,16 @@ def scan_text(text, ext):
     return out
 
 
+MAX_FILE_BYTES = 512 * 1024        # discover.MAX_SOURCE_BYTES, judged again at read time
+
+
 def scan_file(path):
+    # The walk lstat'ed a regular file, but the repository's owner can swap it
+    # for a FIFO, a device or a link before this open: refuse all three here.
     try:
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            text = fh.read()
+        text = safeio.read_text(path, MAX_FILE_BYTES, follow=False)
     except OSError:
+        return None
+    if text is None:
         return None
     return scan_text(text, os.path.splitext(path)[1])
