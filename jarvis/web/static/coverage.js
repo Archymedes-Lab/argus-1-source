@@ -936,7 +936,7 @@ function feed() {
   const recent = cs.filter((c) => c.ts).sort((a, b) => b.ts - a.ts).slice(0, 7);
   const just = new Set(fired.filter((f) => Date.now() - f.at < 2500).map((f) => f.job));
   $('runs').innerHTML = recent.map((c) =>
-    `<li class="${just.has(c.job) ? 'fired' : ''}"><i class="dot ${c.state}"></i><span>${esc(c.label)}</span><time class="num">${ago(c.ts)}</time></li>`).join('');
+    `<li class="${just.has(c.job) ? 'fired' : ''}"><i class="dot ${esc(c.state)}"></i><span>${esc(c.label)}</span><time class="num">${ago(c.ts)}</time></li>`).join('');
 }
 
 // ── focus, picking, tooltip, detail ────────────────────────────────────────

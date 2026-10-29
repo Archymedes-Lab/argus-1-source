@@ -457,6 +457,13 @@ class Handler(BaseHTTPRequestHandler):
     hub = None          # stream.Hub, shared by every /api/pulse and /api/stream client
     cover_hub = None    # stream.Hub for the /coverage page's live state
 
+    # Every socket operation of a connection is bounded: a client that opens a
+    # connection and then stalls (no request line, or a Content-Length it never
+    # delivers) loses it after this many seconds instead of pinning one of the
+    # daemon's threads for ever. Live streams only block on a write the viewer
+    # is not reading, and a viewer that stalled that long has gone.
+    timeout = 30
+
     def log_message(self, *a):
         pass  # the dashboard polls constantly; access logs would be noise
 
@@ -468,6 +475,18 @@ class Handler(BaseHTTPRequestHandler):
         else:
             name = host.rsplit(":", 1)[0] if ":" in host else host
         return name.lower() in ALLOWED_HOSTS
+
+    def _token_cookie(self):
+        """The token cookie for this page load, or None.
+
+        The page hands the API token to whoever loads it, so it is withheld from
+        a local peer owned by another account (see web/token.py may_receive).
+        """
+        try:
+            uid = api_token.peer_uid(self.client_address, self.server.server_address)
+        except (AttributeError, TypeError, ValueError, IndexError):
+            uid = None
+        return api_token.cookie_header() if api_token.may_receive(uid) else None
 
     def _runner(self):
         """Queue one audit for the assistant, or None when no scheduler is attached."""
@@ -504,7 +523,7 @@ class Handler(BaseHTTPRequestHandler):
     # it may frame its own GeoSecurity page.
     CSP_STRICT = ("default-src 'none'; style-src 'unsafe-inline'; "
                   "script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; "
-                  "font-src 'self'; img-src data:")
+                  "font-src 'self'; img-src data:; frame-ancestors 'self'")
     # The GeoSecurity globe is inherently external: the Cesium engine and the
     # satellite tiles come from named third parties, place-name lookup from
     # OpenStreetMap, and the 2D street map from OSM and Esri tiles. This
@@ -521,11 +540,12 @@ class Handler(BaseHTTPRequestHandler):
         "https://cdn.jsdelivr.net https://nominatim.openstreetmap.org "
         "https://server.arcgisonline.com https://tiles.maps.eox.at "
         "https://tile.openstreetmap.org; "
-        "worker-src blob: https://cdn.jsdelivr.net; child-src blob:; font-src data:")
+        "worker-src blob: https://cdn.jsdelivr.net; child-src blob:; font-src data:; "
+        "frame-ancestors 'self'")
 
     # /coverage runs no inline script and loads nothing from another origin.
     CSP_COVERAGE = ("default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; "
-                    "connect-src 'self'; img-src data:")
+                    "connect-src 'self'; img-src data:; frame-ancestors 'self'")
 
     def _coverage_asset(self, path):
         name, ctype, digest = COVERAGE_ASSETS[path]
@@ -548,6 +568,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Security-Policy", csp or self.CSP_STRICT)
+        self._hardening_headers()
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -555,6 +576,12 @@ class Handler(BaseHTTPRequestHandler):
             # The client closed the connection (a dashboard poll replaced by
             # the next one). Nothing to deliver, and nothing to log.
             self.close_connection = True
+
+    def _hardening_headers(self):
+        """Headers every response carries: no MIME sniffing of JSON into script,
+        no framing by another origin (also for browsers without CSP level 2)."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
 
     def _hub(self):
         if Handler.hub is None:
@@ -588,6 +615,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Security-Policy", self.CSP_STRICT)
             self.send_header("X-Accel-Buffering", "no")
+            self._hardening_headers()
             self.end_headers()
 
             def write(chunk):
@@ -617,6 +645,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Security-Policy", self.CSP_STRICT)
             self.send_header("X-Accel-Buffering", "no")
+            self._hardening_headers()
             self.end_headers()
 
             def write(chunk):
@@ -650,7 +679,8 @@ class Handler(BaseHTTPRequestHandler):
             store = Store(self.db_path)
             try:
                 expected = store.get_meta(TOKEN_KEY) or ""
-                if not expected or not secrets.compare_digest(token, expected):
+                if not expected or not secrets.compare_digest(
+                        token.encode("utf-8", "replace"), expected.encode("utf-8", "replace")):
                     return self._send(403, json.dumps({"error": "not paired"}))
                 report = validate_report(payload)
                 if report is None:
@@ -878,7 +908,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with open(PAGE, "r", encoding="utf-8", errors="replace") as fh:
                     return self._send(200, fh.read(), "text/html; charset=utf-8",
-                                      cookie=api_token.cookie_header())
+                                      cookie=self._token_cookie())
             except OSError:
                 return self._send(500, "dashboard.html missing", "text/plain")
 

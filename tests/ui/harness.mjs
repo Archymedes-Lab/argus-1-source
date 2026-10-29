@@ -26,9 +26,12 @@ export function loadPage(relPath, exportNames) {
   const html = readFileSync(join(ROOT, relPath), "utf8");
   const scripts = [...html.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1]).filter((s) => s.trim());
+  const listeners = [];
+  globalThis.__documentListeners = listeners;
   globalThis.document = {
     getElementById: () => makeEl(),
-    addEventListener: () => {},
+    // Recorded so tests can drive the page's delegated handlers.
+    addEventListener: (type, fn) => listeners.push([type, fn]),
     createElement: () => makeEl(),
     querySelector: () => makeEl(),
     querySelectorAll: () => [],

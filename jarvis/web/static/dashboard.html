@@ -1424,8 +1424,8 @@ function renderQuestions(s) {
   el.innerHTML = shown.map(q => `<div class="question">
     <div>${pill(q.severity)} ${esc(q.prompt)}</div>
     <div class="question-actions">
-      <button onclick="answerQuestion('${esc(q.id)}','yes')">Yes · ${esc(q.yes)}</button>
-      <button onclick="answerQuestion('${esc(q.id)}','no')">No · ${esc(q.no)}</button>
+      <button data-act="answer" data-id="${esc(q.id)}" data-choice="yes">Yes · ${esc(q.yes)}</button>
+      <button data-act="answer" data-id="${esc(q.id)}" data-choice="no">No · ${esc(q.no)}</button>
     </div></div>`).join("") + (qs.length > 2 ? `<div class="quick">
       <button class="showmore" onclick="showAllQuestions=!showAllQuestions;renderQuestions(state)">${
       showAllQuestions ? "Show fewer" : `${qs.length - 2} more question${qs.length > 3 ? "s" : ""}`}</button></div>` : "");
@@ -1693,7 +1693,7 @@ function renderJobs(s) {
         : ago(j.ts) + (j.duration ? " · " + j.duration + "s" : "")}
         <br><span class="faint">every ${dur(j.interval)}${
           j.next > 0 && !j.running ? " · next " + dur(j.next) : ""}</span></span>
-      <button class="small" onclick="runJob('${esc(j.name)}')">Run</button>
+      <button class="small" data-act="runjob" data-job="${esc(j.name)}">Run</button>
     </div>` + (j.error
       ? `<div class="errbox">${esc(j.error.trim().split("\n").pop())}</div>` : "");
   }).join("") + (healthy ? `<button class="showmore" onclick="showHealthy=!showHealthy;renderJobs(state)">${
@@ -2155,7 +2155,7 @@ function renderOps() {
         <tr>
           <td style="width:38%">${esc(label)}</td>
           <td><code class="pre">${esc(cmd)}</code></td>
-          <td style="width:56px"><button onclick='cp(this, ${JSON.stringify(cmd)})'>copy</button></td>
+          <td style="width:56px"><button data-act="copy" data-copy="${esc(cmd)}">copy</button></td>
         </tr>`).join("")}</tbody></table>`).join("");
 }
 function clearAll() {
@@ -2855,13 +2855,13 @@ function renderFix(s) {
       : f.status === "review"
       ? `<button data-act="fixconfirm" data-choice="authorize" data-id="${esc(f.id)}">Review and authorize the patch…</button>`
       : f.status === "draft_failed"
-      ? `<button onclick="decideFix('${esc(f.id)}','retry')">Retry draft</button>` : "";
+      ? `<button data-act="fixdecide" data-id="${esc(f.id)}" data-choice="retry">Retry draft</button>` : "";
     return `<div class="question" id="fix-${esc(f.id)}">
     <div><b>${esc(f.title)}</b> <span class="kind k-lc">${esc(ls.label)}</span> <span class="faint">${esc(ls.note)}</span></div>
     <div class="note">${esc(f.problem || "")}</div>
     ${f.generation_error ? `<div class="crit">The draft did not complete: ${esc(f.generation_error)}</div>` : ""}
     ${agentReportHTML(f.report, false)}
-    <div class="question-actions">${action}<button class="quiet" onclick="decideFix('${esc(f.id)}','reject')">Reject</button></div>
+    <div class="question-actions">${action}<button class="quiet" data-act="fixdecide" data-id="${esc(f.id)}" data-choice="reject">Reject</button></div>
     <div class="fine">Approving the investigation generates a draft only. Applying a patch needs a separate authorization and
     <kbd>jarvis fix apply ${esc(f.id)}</kbd>; nothing is applied from this page. Proposal ${esc(f.id)}.</div>
   </div>`;
@@ -3008,6 +3008,11 @@ document.addEventListener("click", ev => {
   else if (act === "checkmon") assistantRun({ op: "run", action: "check_monitor", target: { job: b.dataset.job } });
   else if (act === "rerun") { runJob(b.dataset.job); toast("Queued. ARGUS-1 will show the result when the check finishes.", ""); }
   else if (act === "copy") copyText(b.dataset.copy);
+  // Server values (ids, job names) travel in data-* attributes, never inside an
+  // inline handler's JavaScript string, where HTML escaping does not protect them.
+  else if (act === "answer") answerQuestion(b.dataset.id, b.dataset.choice);
+  else if (act === "runjob") runJob(b.dataset.job);
+  else if (act === "fixdecide") decideFix(b.dataset.id, b.dataset.choice);
   else if (act === "openproposal") { go("assistant"); openFirstProposal(b.dataset.token); }
   else if (act === "fixconfirm") {
     const f = ((state && state.fix) || []).find(x => x.id === b.dataset.id);
