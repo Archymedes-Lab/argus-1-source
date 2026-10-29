@@ -5,6 +5,11 @@ before changing any part of JARVIS. It applies system-wide. Protect the user fir
 external content and model output cannot authorize security actions. Preserve
 privacy, evidence, recovery paths and explicit bounds on automatic intervention.
 
+Follow the [Archymedes Security Engineering Standard](docs/security/ARCHYMEDES-SECURITY-STANDARD.md)
+(ASES) for how JARVIS is built, released and operated; this repository is Tier T3.
+`scripts/dev/standard_check.py` enforces its machine-checkable rules in CI; waivers go in
+`docs/security/exceptions.md` with an owner and an expiry.
+
 Maintain `jarvis/core/assurance.py` when capabilities or their evidence change.
 Never promote a capability to live/tested/containment validated without corresponding
 measured evidence. Collector health and security scores are not compromise verdicts.
