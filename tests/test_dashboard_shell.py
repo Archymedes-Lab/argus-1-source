@@ -256,9 +256,10 @@ class OverviewStatusTests(unittest.TestCase):
     def test_a_low_score_with_failing_checks_is_explained_not_called_protected(self):
         out = self.m(model(detectors=[det("failing", "Posture"), det("never_ran", "Memory")], healthy=3, score=12))
         self.assertEqual(out["level"], "incomplete")
-        self.assertNotIn("No current issues", out["headline"])
+        self.assertEqual(out["headline"], "Monitoring issue")
+        self.assertNotIn("No issues found", out["headline"])
         self.assertIn("3 of 5 checks are reporting", out["detail"])
-        self.assertIn("does not mean those areas are safe", out["detail"])
+        self.assertIn("does not mean those areas are fine", out["detail"])
         self.assertIn("12%", out["scoreLine"])
         self.assertIn("not reporting", out["scoreLine"])
 
@@ -271,7 +272,7 @@ class OverviewStatusTests(unittest.TestCase):
     def test_the_reassuring_headline_requires_every_check_to_be_reporting(self):
         ok = self.m(model(healthy=4, score=96, grade="secure"))
         self.assertEqual(ok["level"], "ok")
-        self.assertIn("No current issues detected in the areas checked", ok["headline"])
+        self.assertIn("No issues found in the checks performed", ok["headline"])
         self.assertIn("only what ARGUS-1 can check", ok["detail"])
         for bad in ("never_ran", "stale", "failing", "malformed", "permission_restricted", "missing_dependency", "unsupported"):
             self.assertNotEqual(self.m(model(detectors=[det(bad)], healthy=9, score=99))["level"], "ok", bad)
@@ -369,6 +370,33 @@ class StateWiringTests(unittest.TestCase):
         self.assertEqual(found[0]["id"], acknowledge.finding_id(finding, "control"))
         self.assertRegex(found[0]["id"], r"^[0-9a-f]{8}$")
         self.assertIn("detector_health", state)
+
+    def test_state_carries_open_proposals_recent_activity_and_the_changes_summary(self):
+        from jarvis.response import advisor
+        from jarvis.service.schedule import JOBS
+        job = next(iter(JOBS))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "s.db")
+            store = Store(path)
+            store.save_snapshot(job, [], 0.1, "")
+            advisor.handle_action(store, JOBS, "propose", "rerun_monitor", {"job": job}, runner=lambda j: True)
+            store.close()
+            state = build_state(path, Scheduler(path, ("wsl",)))
+        a = state["assistant"]
+        self.assertEqual(len(a["pending"]), 1)
+        self.assertEqual(a["pending"][0]["target"]["id"], job)
+        self.assertTrue(a["pending"][0]["token"])
+        self.assertEqual([e["outcome"] for e in a["audit"]], ["proposed"])
+        self.assertEqual(a["changes"]["assistant_executed"], 0)        # a proposal is not a change
+
+    def test_state_without_any_assistant_activity_is_still_well_formed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "s.db")
+            Store(path).close()
+            state = build_state(path, Scheduler(path, ("wsl",)))
+        self.assertEqual(state["assistant"]["pending"], [])
+        self.assertEqual(state["assistant"]["audit"], [])
+        self.assertIn("text", state["assistant"]["changes"] or {"text": ""})
 
 
 if __name__ == "__main__":

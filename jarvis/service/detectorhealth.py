@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import time
 
+from jarvis.core import mechanisms
 from jarvis.service import reliability
 
 HEALTHY, LATE, STALE = "healthy", "late", "stale"
@@ -36,6 +37,14 @@ NOT_APPLICABLE = "not_applicable"
 VERIFIED, PARTIAL, BLIND, NA = "verified", "partial", "blind", "not_applicable"
 
 REPEATED_FAILURES = 3
+
+# How much the overall status leans on a check, from the reliability plane's own criticality rating.
+_AFFECTS = {
+    "critical": "Yes. The overall status is not reliable while this check is down.",
+    "high": "Yes. The overall status is not reliable while this check is down.",
+    "medium": "Partly. The overall status is less complete without it.",
+    "low": "Slightly. The overall status is mostly unaffected.",
+}
 HISTORY_KEY, HISTORY_MAX = "detector_health_history", 200
 
 _EXPLAIN = {
@@ -144,11 +153,18 @@ def report(jobs: dict, snapshots: dict, statuses: dict | None = None,
     now = time.time() if now is None else now
     statuses = statuses or {}
     detectors = []
+    specs = reliability.build_specs(jobs)
+    declared = {c.name: c for c in mechanisms.COLLECTORS}
     for name, entry in jobs.items():
         if name in reliability.NON_EVIDENCE_JOBS:
             continue
         item = assess(name, (snapshots or {}).get(name), int(entry[0]), statuses.get(name), now)
         item["label"] = entry[1] if len(entry) > 1 else name
+        spec, decl = specs.get(name), declared.get(name)
+        item["what"] = item["label"]
+        item["criticality"] = spec.criticality if spec else "medium"
+        item["affects_status"] = _AFFECTS.get(item["criticality"], _AFFECTS["medium"])
+        item["command"] = (decl.command if decl and decl.command else "")
         detectors.append(item)
     for name, why in (not_applicable or {}).items():
         label = name
@@ -156,7 +172,8 @@ def report(jobs: dict, snapshots: dict, statuses: dict | None = None,
                           "reason": why, "impact": _EXPLAIN[NOT_APPLICABLE][1], "next_action": "",
                           "last_success": None, "last_result": None, "age_s": None,
                           "expected_interval": None, "error": "", "failure_count": 0,
-                          "recovery_state": "idle", "recovery_confirmed": False, "findings": None})
+                          "recovery_state": "idle", "recovery_confirmed": False, "findings": None,
+                          "what": label, "criticality": "low", "affects_status": "", "command": ""})
     scored = [d for d in detectors if d["coverage"] != NA]
     counts = {c: sum(1 for d in scored if d["coverage"] == c) for c in (VERIFIED, PARTIAL, BLIND)}
     problems = sorted((d for d in scored if d["state"] != HEALTHY),

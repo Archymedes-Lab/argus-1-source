@@ -182,6 +182,47 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn(token, src)
 
 
+class ExplanationFieldTests(unittest.TestCase):
+    """Each detector says what it checks, how much the overall status leans on it, and how to audit it by hand."""
+
+    def setUp(self):
+        self.rep = dh.report(applicable(True, True, ALL_JOBS)[0], {}, now=NOW)
+
+    def test_every_scheduled_detector_carries_the_explanation_fields(self):
+        for d in self.rep["detectors"]:
+            self.assertTrue(d["what"], d["id"])
+            self.assertIn(d["criticality"], ("critical", "high", "medium", "low"), d["id"])
+            self.assertTrue(d["affects_status"], d["id"])
+            self.assertIn("command", d)
+
+    def test_a_high_criticality_check_says_the_overall_status_depends_on_it(self):
+        scan = next(d for d in self.rep["detectors"] if d["id"] == "scan")
+        self.assertEqual(scan["criticality"], "high")
+        self.assertTrue(scan["affects_status"].startswith("Yes."))
+        self.assertEqual(scan["command"], "scan")                 # the hand-run command comes from the declaration
+
+    def test_low_importance_checks_do_not_claim_the_status_depends_on_them(self):
+        low = [d for d in self.rep["detectors"] if d["criticality"] == "low"]
+        for d in low:
+            self.assertNotIn("not reliable", d["affects_status"])
+
+    def test_inapplicable_detectors_keep_the_same_keys_with_no_dependency_claim(self):
+        jobs, absent = applicable(False, True, ALL_JOBS)
+        rep = dh.report(jobs, {}, not_applicable=absent, now=NOW)
+        na = [d for d in rep["detectors"] if d["state"] == dh.NOT_APPLICABLE]
+        self.assertTrue(na)
+        for d in na:
+            self.assertEqual(d["affects_status"], "")
+            self.assertEqual(d["command"], "")
+            self.assertIn("what", d)
+
+    def test_the_explanation_fields_never_change_the_state_or_coverage(self):
+        # Adding explanation must not alter how health is derived.
+        for d in self.rep["detectors"]:
+            self.assertEqual(d["state"], dh.NEVER_RAN)
+            self.assertEqual(d["coverage"], dh.BLIND)
+
+
 class HistoryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

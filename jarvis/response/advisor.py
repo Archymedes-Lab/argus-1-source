@@ -22,13 +22,17 @@ import time
 from dataclasses import dataclass
 
 from jarvis.response import acknowledge, alert, llm
+from jarvis.response import report as agent_report
 from jarvis.response.privacy import redact
 from jarvis.response.reporting import score, triage
 
 CHECK, PREPARE, GUIDE, UNAVAILABLE = "check_now", "prepare", "guide", "unavailable"
 PROPOSAL_TTL_S = 600
-_PENDING_KEY, _AUDIT_KEY = "assistant_pending", "assistant_audit"
-_AUDIT_MAX, _PENDING_MAX = 200, 20
+_PENDING_KEY, _AUDIT_KEY, _USED_KEY = "assistant_pending", "assistant_audit", "assistant_used"
+_AUDIT_MAX, _PENDING_MAX, _USED_MAX = 200, 20, 50
+# What a proposal can be, in order. "Execution started" is not a separate state here: the scheduler
+# does not tell the assistant when a queued audit begins, so the next observable fact is a newer result.
+LIFECYCLE = ("awaiting_approval", "approved_queued", "completed", "failed", "cancelled", "expired")
 _FID = re.compile(r"^[0-9a-f]{8}$")
 
 
@@ -207,6 +211,23 @@ def classify_intent(q):
            "got a virus", "have a virus", "being attacked", "is my computer ok", "is my computer okay",
            "is my system ok", "is my system okay", "is my pc ok", "is everything ok"):
         return "safe"
+    if has("what has argus not", "not checked", "hasn't checked", "what didn't you check",
+           "what isn't covered", "what is not covered", "what was not checked"):
+        return "not_checked"
+    if has("what did argus find", "what has argus found", "what did you find", "what did it find",
+           "what have you found"):
+        return "found"
+    if has("should i be worried", "should i worry", "should i be concerned", "is this bad", "am i in danger"):
+        return "worry"
+    if has("why is this item marked", "marked serious", "why is this serious", "why is it serious",
+           "why serious", "why is this item serious"):
+        return "why_serious"
+    if has("what happens if i approve", "if i approve", "what will approve", "what does approve"):
+        return "approve_effect"
+    if has("can this damage", "damage my computer", "harm my computer", "break my computer", "will this break"):
+        return "damage"
+    if has("investigate this safely", "investigate safely", "how do i investigate", "safely investigate"):
+        return "investigate_safely"
     if has("explain this finding", "explain this warning", "explain this alert",
            "why is argus", "why am i seeing", "showing this warning", "showing me this"):
         return "warning"
@@ -220,9 +241,9 @@ def classify_intent(q):
         return "capabilities"
     if has("can you fix", "fix it", "fix this", "fix that", "repair it", "can you repair", "fix my"):
         return "fix"
-    if re.search(r"(monitor|collector|detector|sensor|watcher|check)s?\b.*(not working|stopped|broken|"
+    if re.search(r"(monitor(?:ing)?|collector|detector|sensor|watcher|check)s?\b.*(not working|stopped|broken|"
                  r"down|offline|fail|blind|why|not reporting)|(not working|stopped|broken|why|which).*"
-                 r"(monitor|collector|detector|sensor|check)s?\b", q):
+                 r"(monitor(?:ing)?|collector|detector|sensor|check)s?\b", q):
         return "monitor"
     if has("what does this warning", "what does this alert", "what does that warning",
            "what does this mean", "what does it mean", "what is this warning", "this warning",
@@ -455,6 +476,194 @@ def score_meaning(store, jobs, now=None):
     return reply(secs, [_act("score_plan", label="How do I raise my score?")], offer)
 
 
+def _tally(store, now=None):
+    """(all distinct items, serious ones, ones worth reviewing, count of informational ones)."""
+    items = _findings(store, ("critical", "high", "medium", "low"), now)
+    serious = [x for x in items if x[0].get("severity") in ("critical", "high")]
+    review = [x for x in items if x[0].get("severity") in ("critical", "high", "medium")]
+    return items, serious, review, len(items) - len(review)
+
+
+def changes_summary(store):
+    """What ARGUS-1 has changed on this computer, from the audit trail and the response ledger."""
+    executed = sum(1 for e in audit_log(store) if e.get("op") == "approve" and e.get("outcome") == "queued")
+    try:
+        from jarvis.response import defense
+        automatic = len(defense.applied(store))
+    except Exception:
+        automatic = None
+    if executed == 0 and automatic == 0:
+        text = "No changes have been made to your computer by ARGUS-1."
+    elif automatic == 0:
+        text = (f"The only thing ARGUS-1 has done on your approval is {executed} read-only re-run"
+                f"{'s' if executed != 1 else ''} of its own checks. It has not changed any setting or file.")
+    elif automatic is None:
+        text = (f"ARGUS-1 has queued {executed} approved read-only check{'s' if executed != 1 else ''}. "
+                "Whether any automatic response ran could not be read.")
+    else:
+        text = (f"ARGUS-1 has applied {automatic} automatic response action{'s' if automatic != 1 else ''}. "
+                "They are listed in its response ledger, with undo information.")
+    return {"assistant_executed": executed, "automatic_applied": automatic, "text": text}
+
+
+def _list(items, limit=3):
+    return "\n".join(f"- {x[0].get('severity', '?').upper()}: {_clean(x[0].get('title'), 100)}"
+                     for x in items[:limit])
+
+
+def found(store, jobs, now=None):
+    items, serious, review, info = _tally(store, now)
+    result = score.compute(store.get_snapshots(), jobs, now, acknowledge.load(store))
+    blind = _blind(result)
+    if review:
+        simple = (f"ARGUS-1 found {len(review)} item{'s' if len(review) != 1 else ''} to review, including "
+                  f"{len(serious)} marked as serious. Some items may have legitimate explanations.")
+    else:
+        simple = "ARGUS-1 found no items to review in the checks that are reporting."
+    if info:
+        simple += f" It also recorded {info} informational observation{'s' if info != 1 else ''}."
+    secs = [_section("simple", simple + " " + changes_summary(store)["text"])]
+    if review:
+        secs.append(_section("observed", "The most important:\n" + _list(serious or review)))
+    secs.append(_section("why", "Serious means ARGUS-1 rates the possible impact as high if the item is real. "
+                                "It does not mean harm has been confirmed."))
+    if blind:
+        secs.append(_section("why", f"{len(blind)} check{'s are' if len(blind) != 1 else ' is'} not reporting, "
+                                    "so this list only covers what the other checks could see."))
+    secs.append(_section("next", "Open the first item to see what was observed and why it was flagged."))
+    secs.append(_section("technical", f"{len(items)} distinct items in all; {len(serious)} critical or high; "
+                                      f"coverage {result['coverage']}%; score {result['score']}%."))
+    offer = {"action": "next_priority", "target": {}} if review else None
+    return reply(secs, _offer_buttons(offer), offer)
+
+
+def worry(store, jobs, now=None):
+    items, serious, review, info = _tally(store, now)
+    blind = _blind(score.compute(store.get_snapshots(), jobs, now, acknowledge.load(store)))
+    if serious:
+        simple = (f"Take it seriously but calmly. ARGUS-1 marked {len(serious)} item"
+                  f"{'s' if len(serious) != 1 else ''} as serious. That means they deserve a look, not that "
+                  "your computer is compromised.")
+    elif review:
+        simple = "Not urgently. ARGUS-1 found some items worth reviewing, none marked serious."
+    elif blind:
+        simple = (f"ARGUS-1 found nothing to review, but {len(blind)} of its checks are not reporting, so it "
+                  "cannot promise everything is fine.")
+    else:
+        simple = "ARGUS-1 found nothing serious in the checks it ran. No tool can promise a computer is clean."
+    secs = [_section("simple", simple),
+            _section("observed", (_list(serious or review) if review else "No items to review right now.")),
+            _section("why", "Many flagged items are normal software doing things attackers also do, such as "
+                            "starting automatically. ARGUS-1 does not know your intent, so it reports and explains."),
+            _section("next", "Open the first item, read what was observed, and decide whether you expect it. "
+                             "You do not need to change anything yet."),
+            _section("technical", changes_summary(store)["text"])]
+    return reply(secs, _offer_buttons({"action": "next_priority", "target": {}}) if review else [])
+
+
+def why_serious(store, jobs, now=None):
+    items, serious, review, info = _tally(store, now)
+    top = (serious or review or [None])[0]
+    if top is None:
+        return reply([_section("simple", "Nothing is marked serious right now.")])
+    f, job = top
+    secs = [_section("simple", f"“{_clean(f.get('title'), 100)}” is marked {f.get('severity')} because of what it "
+                               "could do if it is real, not because ARGUS-1 has proof that it is."),
+            _section("observed", f"{_clean(f.get('detail') or 'No detail was recorded.', 200)} "
+                                 f"(reported by the {_clean(job, 40)} collector)"),
+            _section("why", _sev_why(f.get("severity")) + " Severity is about potential impact. ARGUS-1 does not "
+                            "score how likely an item is to be malicious, so a serious item may still be harmless."),
+            _section("next", "Compare it with software you know you installed, then ask me to explain it."),
+            _section("technical", f"severity={f.get('severity')} category={f.get('category')} job={job}")]
+    c = triage.classify(f, job)
+    return reply(secs, [_act("explain_finding", {"id": c["id"]})],
+                 {"action": "explain_finding", "target": {"id": c["id"]}})
+
+
+def approve_effect(store, jobs, now=None):
+    now = int(now or time.time())
+    pend = {t: p for t, p in _load(store, _PENDING_KEY, {}).items() if p.get("expires", 0) > now}
+    extra = {}
+    if pend:
+        token = max(pend, key=lambda t: pend[t]["expires"])
+        p = pend[token]
+        d = proposal_details(store, jobs, CAPABILITIES[p["action"]], p["target"], now, token)
+        d["expires_at"] = p["expires"]
+        secs = [_section("simple", f"One proposal is waiting for you: {d['proposes']} Nothing has happened yet."),
+                _section("observed", d["why"]),
+                _section("why", f"If you approve: {d['expected']} Risk: {d['risks']}. {d['reversible']}"),
+                _section("next", d["if_nothing"]),
+                _section("technical", d["exact"])]
+        extra["details"] = d
+    else:
+        secs = [_section("simple", "Nothing is waiting for your approval right now.")]
+        try:
+            from jarvis.response import selffix
+            open_fixes = len(selffix.list_open(store))
+        except Exception:
+            open_fixes = 0
+        if open_fixes:
+            secs.append(_section("observed", f"{open_fixes} fix proposal{'s are' if open_fixes != 1 else ' is'} in "
+                                             "the review queue. Approving one only drafts a patch to ARGUS-1's own "
+                                             "code. Nothing is applied from this page."))
+        secs.append(_section("why", "Before you approve anything, ARGUS-1 shows what it would do, why, the exact "
+                                    "target, the risk, whether it can be undone and what happens if you do nothing."))
+        secs.append(_section("next", "You can always decline. Declining, closing the box or letting a proposal "
+                                     "expire changes nothing."))
+    return reply(secs, extra=extra)
+
+
+def damage(store, now=None):
+    secs = [_section("simple", "Looking at findings cannot damage your computer. Nothing ARGUS-1 shows here "
+                               "changes it."),
+            _section("observed", "From this page the assistant can only queue a read-only re-run of one of "
+                                 "ARGUS-1's own checks, and only after you approve. " + changes_summary(store)["text"]),
+            _section("why", "Deleting files, stopping programs and changing settings are not available from "
+                            "this page. Any proposal that could change something shows its risk and whether "
+                            "it can be undone before you decide."),
+            _section("next", "If you are unsure about a finding, leave it alone and ask me to explain it. "
+                             "Doing nothing is safe."),
+            _section("technical", "Re-runs use the scheduler's normal read-only audit path; the action is "
+                                  "recorded in the audit trail.")]
+    return reply(secs)
+
+
+def investigate_safely(store, jobs, now=None):
+    secs = [_section("simple", "Look first, change nothing. Everything below is read-only."),
+            _section("next", "1. Open the finding and read what ARGUS-1 observed and where.\n"
+                             "2. Ask whether you recognise the program, folder or account, for example because "
+                             "you installed or built something recently.\n"
+                             "3. Compare the name and location with the software you know.\n"
+                             "4. Ask me to explain it, or open Technical details for the raw evidence."),
+            _section("why", "Deleting, disabling or stopping something before you understand it can break "
+                            "legitimate software and can destroy evidence."),
+            _section("next", "If you still cannot explain it, keep a note of the title, location and time, "
+                             "and ask someone you trust. Do not run unknown files to see what they do.")]
+    return reply(secs, _offer_buttons({"action": "next_priority", "target": {}}),
+                 {"action": "next_priority", "target": {}})
+
+
+def not_checked(store, jobs, now=None):
+    result = score.compute(store.get_snapshots(), jobs, now, acknowledge.load(store))
+    blind = _blind(result)
+    if blind:
+        lines = "\n".join(f"- {_jobs_label(jobs, b['job'])}: {_STATE_WORDS.get(b['state'], 'not reporting')}"
+                          for b in blind[:12])
+        secs = [_section("simple", f"{len(blind)} of ARGUS-1's checks are not reporting, so those areas are "
+                                   "unchecked right now."),
+                _section("observed", lines + (f"\n…and {len(blind) - 12} more." if len(blind) > 12 else ""))]
+    else:
+        secs = [_section("simple", "Every check ARGUS-1 counts has reported recently."),
+                _section("observed", "That only covers what each check looks at. It is not a promise that "
+                                     "nothing else exists.")]
+    secs += [_section("why", "A check that is not reporting is not counted as safe, and having no alerts from "
+                             "an area that was not checked says nothing about it."),
+             _section("next", "Open Monitoring to see why each check is not reporting and what you can do."),
+             _section("technical", f"Monitoring coverage {result['coverage']}%. Checks that do not apply to this "
+                                   "computer are not counted.")]
+    return reply(secs)
+
+
 def clarify(store, jobs, model_note=True, now=None):
     secs = [_section("say", "I'm not sure I understood that, and I don't want to guess about your "
                             "security. Are you asking about your overall status, a specific warning, "
@@ -503,7 +712,24 @@ def _check_monitor(store, jobs, target, runner_available, now):
         secs.append(_section("say", "The ARGUS service isn't running, so I can't re-run it from here. "
                                     "Start the service or press the monitor's run button."))
         offer = None
-    return reply(secs, actions, offer)
+    when = _fmt(snap["ts"]) if snap and snap.get("ts") else "never"
+    found = (["The check has never stored a result on this computer."] if not snap or not snap.get("ts") else
+             [f"Its last stored result is from {when}."]
+             + ([f"That run recorded an error: {_clean(snap['error'], 160)}"] if snap.get("error") else []))
+    rep = agent_report.build(
+        title=f"Check of the “{name}” monitor", read_only=True,
+        checked=[f"The stored result of the “{name}” check and the error it recorded, if any"],
+        found=found,
+        meaning=[(_cause(snap.get("error"))[0] if snap and snap.get("error") and _cause(snap.get("error"))[0]
+                  else "A stored result tells you what the check saw last time, not what it would see now.")],
+        certainty="Based only on the stored result. The check was not run again.",
+        recommendation=["Re-run the check (it needs your approval) to get a fresh result."
+                        if actions else "Start the ARGUS-1 service, then re-run the check."],
+        unchecked=["The check itself was not re-run, so its behaviour right now is unknown"],
+        technical=json.dumps({"job": job, "last_result": snap.get("ts") if snap else None,
+                              "error": (snap or {}).get("error", "")}, default=str),
+        source="assistant")
+    return reply(secs, actions, offer, extra={"report": rep})
 
 
 def _explain_finding(store, target):
@@ -520,8 +746,20 @@ def _explain_finding(store, target):
             _section("assumption", "This is evidence to review. It is not proof that your computer is "
                                    "compromised.")]
     acts = [_act("show_fix_steps", {"id": c["id"], "job": job})] if c.get("command") else []
+    rep = agent_report.build(
+        title=f"Explanation of “{_clean(finding.get('title'), 100)}”", read_only=True,
+        checked=["The stored finding and the result of the collector that reported it"],
+        found=[_clean(finding.get("detail") or "No detail was recorded.", 200),
+               f"Reported by the {_clean(job, 40)} collector at {_clean(finding.get('where') or 'an unspecified place', 120)}."],
+        meaning=[_sev_why(finding.get("severity")),
+                 "It may have a legitimate explanation. ARGUS-1 has not confirmed that it is harmful."],
+        certainty="Not scored. One collector reported this; ARGUS-1 does not rate how likely it is to be real.",
+        recommendation=["Review the details and decide whether you expect this on your computer."],
+        unchecked=["Whether you installed or expect this item", "The item itself was not opened or run"],
+        technical=json.dumps({k: finding.get(k) for k in ("category", "severity", "host", "where")}, default=str),
+        source="assistant")
     return reply(secs, acts, {"action": "show_fix_steps", "target": {"id": c["id"], "job": job}}
-                 if acts else None)
+                 if acts else None, extra={"report": rep})
 
 
 def _show_fix_steps(store, target, now):
@@ -549,14 +787,16 @@ def _verify_finding(store, jobs, target, now):
                "has no valid result")
         return reply([_section("verified", f"I can't confirm it yet: the “{_jobs_label(jobs, job)}” monitor "
                                            f"{why}. A fix only counts once a fresh check confirms it.")],
-                     [_act("rerun_monitor", {"job": job})] if job in jobs else [])
+                     [_act("rerun_monitor", {"job": job})] if job in jobs else [],
+                     extra={"lifecycle": "approved_queued"})
     still = any(isinstance(f, dict) and acknowledge.finding_id(f, job) == fid
                 for f in snap.get("findings") or [])
     if still:
         return reply([_section("verified", f"Checked at {_fmt(snap['ts'])}: the finding is still present, "
-                                           "so it is not fixed yet.")])
+                                           "so it is not fixed yet.")], extra={"lifecycle": "failed"})
     return reply([_section("verified", f"Verified: a result from {_fmt(snap['ts'])} (after your "
-                                       "request) no longer contains this finding.")])
+                                       "request) no longer contains this finding.")],
+                 extra={"lifecycle": "completed"})
 
 
 def _verify_monitor(store, jobs, target):
@@ -567,16 +807,17 @@ def _verify_monitor(store, jobs, target):
         return reply([_section("verified", f"Not confirmed: the “{name}” monitor has not stored a new "
                                            "result since you approved the re-run. It may still be queued. "
                                            "Ask me to verify again shortly.")],
-                     [_act("verify_monitor", {"job": job, "since": since})])
+                     [_act("verify_monitor", {"job": job, "since": since})],
+                     extra={"lifecycle": "approved_queued"})
     if snap.get("error"):
         cause, _ = _cause(snap["error"])
         secs = [_section("verified", f"The monitor ran at {_fmt(snap['ts'])} but failed: "
                                      f"{_clean(snap['error'], 200)}")]
         if cause:
             secs.append(_section("assumption", cause))
-        return reply(secs)
+        return reply(secs, extra={"lifecycle": "failed"})
     return reply([_section("verified", f"Recovered: the “{name}” monitor stored a fresh, error-free result "
-                                       f"at {_fmt(snap['ts'])}.")])
+                                       f"at {_fmt(snap['ts'])}.")], extra={"lifecycle": "completed"})
 
 
 def _check_model(conf):
@@ -642,9 +883,9 @@ def _valid_target(cap, target, jobs):
     return out
 
 
-def _refuse(store, op, action, target, why, now):
-    _audit(store, op, action, target if isinstance(target, dict) else {}, "denied", why, now)
-    return reply([_section("verified", why)], extra={"ok": False, "state": "denied"})
+def _refuse(store, op, action, target, why, now, outcome="denied", lifecycle="denied"):
+    _audit(store, op, action, target if isinstance(target, dict) else {}, outcome, why, now)
+    return reply([_section("verified", why)], extra={"ok": False, "state": "denied", "lifecycle": lifecycle})
 
 
 def handle_action(store, jobs, op, action=None, target=None, token=None, runner=None, conf=None,
@@ -693,6 +934,36 @@ def handle_action(store, jobs, op, action=None, target=None, token=None, runner=
     return result
 
 
+def proposal_details(store, jobs, cap, target, now, token=""):
+    """Everything a person needs before approving, from the capability and the real stored state."""
+    job = target["job"]
+    label = _jobs_label(jobs, job)
+    snap = _snapshot(store, job)
+    if not snap or not snap.get("ts"):
+        basis = "has never stored a result on this computer"
+    else:
+        basis = f"last stored a result at {_fmt(snap['ts'])}"
+        if snap.get("error"):
+            basis += f", and that run recorded an error: {_clean(snap['error'], 120)}"
+    return {
+        "title": f"Re-run the “{label}” check once",
+        "proposes": f"Queue one extra run of the “{label}” audit so its stored result is refreshed.",
+        "why": f"The stored result is the evidence ARGUS-1 has for this area, and the check {basis}.",
+        "target": {"kind": "collector", "id": job, "label": label},
+        "expected": "A newer stored result for this check. ARGUS-1 will call it recovered only when that "
+                    "result is newer than your approval and has no error.",
+        "risks": cap.risks,
+        "reversible": "Nothing to undo: the audit only reads state and changes no setting or file.",
+        "if_nothing": f"Nothing runs. The proposal expires in {PROPOSAL_TTL_S // 60} minutes and the check "
+                      "stays on its normal schedule.",
+        "elevated": "No elevated permissions are needed. The ARGUS-1 service must be running.",
+        "exact": f"The scheduler queues one read-only run of the “{job}” audit. Nothing else.",
+        "evidence": [f"The “{label}” check {basis}."],
+        "confirm_label": f"Approve: run “{label}” once",
+        "lifecycle": "awaiting_approval", "expires_at": now + PROPOSAL_TTL_S, "token": token,
+    }
+
+
 def _propose(store, jobs, cap, target, now):
     pending = {t: p for t, p in _load(store, _PENDING_KEY, {}).items() if p.get("expires", 0) > now}
     token = secrets.token_urlsafe(9)
@@ -701,28 +972,66 @@ def _propose(store, jobs, cap, target, now):
         del pending[old]
     store.set_meta(_PENDING_KEY, json.dumps(pending))
     _audit(store, "propose", cap.id, target, "proposed", "", now)
-    name = _jobs_label(jobs, target["job"])
-    secs = [_section("recommend", f"Proposed: {cap.purpose} Monitor: “{name}”."),
+    d = proposal_details(store, jobs, cap, target, now, token)
+    secs = [_section("recommend", f"Proposed: {cap.purpose} Monitor: “{_jobs_label(jobs, target['job'])}”."),
             _section("verified", f"Needs: {cap.permissions}. Risk: {cap.risks}. Rollback: {cap.rollback}. "
                                  f"I will verify by: {cap.verify}"),
             _section("say", "Nothing has happened yet. Do you approve?")]
     return reply(secs, [{"action": "approve", "label": "Approve", "target": {}, "token": token},
                         {"action": "cancel", "label": "Cancel", "target": {}, "token": token}],
-                 extra={"ok": True, "state": "proposed", "token": token})
+                 extra={"ok": True, "state": "proposed", "lifecycle": "awaiting_approval", "token": token,
+                        "details": d})
+
+
+def pending_proposals(store, jobs, now=None):
+    """Unexpired proposals with their full confirmation details, newest expiry first."""
+    now = int(now or time.time())
+    out = []
+    for token, p in _load(store, _PENDING_KEY, {}).items():
+        cap = CAPABILITIES.get(p.get("action"))
+        if cap is None or p.get("expires", 0) <= now or p.get("target", {}).get("job") not in jobs:
+            continue
+        d = proposal_details(store, jobs, cap, p["target"], now, token)
+        d["expires_at"] = p["expires"]
+        out.append(d)
+    return sorted(out, key=lambda d: -d["expires_at"])
+
+
+def _record_used(store, token, state, now):
+    used = _load(store, _USED_KEY, {})
+    used[str(token)] = {"state": state, "ts": now}
+    for old in sorted(used, key=lambda t: used[t]["ts"])[:-_USED_MAX]:
+        del used[old]
+    store.set_meta(_USED_KEY, json.dumps(used))
 
 
 def _resolve_proposal(store, jobs, op, token, runner, now):
+    token = str(token or "")
     pending = _load(store, _PENDING_KEY, {})
-    prop = pending.pop(str(token), None)
+    prop = pending.pop(token, None)
     store.set_meta(_PENDING_KEY, json.dumps(pending))
-    if not prop or prop.get("expires", 0) <= now:
-        return _refuse(store, op, "", {}, "That proposal has expired or was already used. Nothing was "
-                                          "changed.", now)
+    if prop is None:
+        used = _load(store, _USED_KEY, {}).get(token)
+        if used and used.get("state") == "expired":
+            return _refuse(store, op, "", {}, "That proposal expired, so nothing was changed. Ask for it again "
+                                              "if you still want it.", now, "expired", "expired")
+        if used:
+            word = {"approved": "approved", "cancelled": "cancelled"}.get(used.get("state"), "used")
+            return _refuse(store, op, "", {}, f"That proposal was already {word}. Each proposal works once, "
+                                              "so nothing was changed.", now, "already_used", used.get("state", "denied"))
+        return _refuse(store, op, "", {}, "ARGUS-1 has no proposal with that code, so nothing was changed.",
+                       now, "unknown_token", "denied")
+    if prop.get("expires", 0) <= now:
+        _record_used(store, token, "expired", now)
+        return _refuse(store, op, prop.get("action", ""), prop.get("target", {}),
+                       "That proposal expired, so nothing was changed. Ask for it again if you still want it.",
+                       now, "expired", "expired")
     cap, target = CAPABILITIES.get(prop["action"]), prop["target"]
     if op == "cancel":
+        _record_used(store, token, "cancelled", now)
         _audit(store, "cancel", prop["action"], target, "cancelled", "", now)
         return reply([_section("verified", "Cancelled. Nothing was changed.")],
-                     extra={"ok": True, "state": "cancelled"})
+                     extra={"ok": True, "state": "cancelled", "lifecycle": "cancelled"})
     ok, why = availability(cap, runner is not None)
     if not ok:
         return _refuse(store, op, cap.id, target, why + " Nothing was changed.", now)
@@ -730,10 +1039,11 @@ def _resolve_proposal(store, jobs, op, token, runner, now):
         queued = bool(runner(target["job"]))
     except Exception:
         queued = False
+    _record_used(store, token, "approved" if queued else "failed", now)
     if not queued:
         _audit(store, "approve", cap.id, target, "failed", "runner refused", now)
         return reply([_section("verified", "I could not queue the re-run, so nothing happened.")],
-                     extra={"ok": False, "state": "failed"})
+                     extra={"ok": False, "state": "failed", "lifecycle": "failed"})
     _audit(store, "approve", cap.id, target, "queued", "", now)
     return reply([_section("verified", "Approved and queued. It has not finished yet, so I can't tell you "
                                        "whether it worked."),
@@ -741,7 +1051,7 @@ def _resolve_proposal(store, jobs, op, token, runner, now):
                                   "sometimes several minutes. Ask me to verify later and I'll check "
                                   "for a fresh result.")],
                  [_act("verify_monitor", {"job": target["job"], "since": now})],
-                 extra={"ok": True, "state": "queued"})
+                 extra={"ok": True, "state": "queued", "lifecycle": "approved_queued"})
 
 
 # ------------------------------------------------------------------ routing
@@ -768,7 +1078,11 @@ def route(store, jobs, q, offer=None, runner_available=False, now=None, conf=Non
         # own proposal and approval.
         return {"_run": True, "op": "propose" if cap.mode == PREPARE else "run",
                 "action": action, "target": target}
-    return {"score_meaning": lambda: score_meaning(store, jobs, now),
+    return {"not_checked": lambda: not_checked(store, jobs, now), "found": lambda: found(store, jobs, now),
+            "worry": lambda: worry(store, jobs, now), "why_serious": lambda: why_serious(store, jobs, now),
+            "approve_effect": lambda: approve_effect(store, jobs, now), "damage": lambda: damage(store, now),
+            "investigate_safely": lambda: investigate_safely(store, jobs, now),
+            "score_meaning": lambda: score_meaning(store, jobs, now),
             "safe": lambda: safe(store, jobs, now), "plain": lambda: plain(store, jobs, now),
             "capabilities": lambda: capabilities(runner_available), "monitor": lambda: monitor(store, jobs, now),
             "fix": lambda: fix(store, jobs, runner_available, now), "first": lambda: first(store, jobs, now),

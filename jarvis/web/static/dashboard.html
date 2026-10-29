@@ -187,6 +187,82 @@ main:focus { outline: none; }
 
 /* the page heading replaces the old collapsible section title inside views */
 details.section[data-views] > summary { display: none; }
+
+/* ---------- simple and advanced detail ---------- */
+body[data-detail="simple"] .adv { display: none; }
+
+/* ---------- findings as readable sections ---------- */
+.fxs { margin: 12px 0 0; }
+.fxs h4 { margin: 0 0 4px; font: 600 12px/1.3 var(--font-sans, system-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.fxs h5 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.fxs p, .fxs ul, .fxs ol { margin: 0; font-size: 14px; }
+.fxs ul, .fxs ol { padding-left: 20px; }
+.fxs li { margin: 2px 0; }
+.fxs ul.where { list-style: none; padding: 0; display: grid; gap: 4px; }
+.fxs ul.where code { word-break: break-all; font-size: 12.5px; }
+.fxcols { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.copy { min-height: 28px; padding: 2px 10px; font-size: 12px; }
+.lastline { color: var(--fg); }
+.ovpend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 18px; border-radius: 18px; background: var(--panel); }
+.kind.k-lc { background: var(--fill); color: var(--fg); }
+.lc { margin: 10px 0 0; font-size: 13.5px; }
+
+/* a definition is one hover or one keyboard focus away */
+.gl { border-bottom: 1px dotted var(--dim); cursor: help; position: relative; }
+.gl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gl::after { content: attr(data-def); position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30; width: max-content; max-width: 280px;
+  padding: 8px 10px; border-radius: 10px; background: var(--fg); color: var(--bg); font-size: 12.5px; font-weight: 400;
+  line-height: 1.4; text-transform: none; letter-spacing: 0; opacity: 0; visibility: hidden; pointer-events: none; }
+.gl:hover::after, .gl:focus::after { opacity: 1; visibility: visible; }
+
+/* ---------- investigation reports ---------- */
+.rep { margin: 12px 0 0; padding: 10px 14px; border-radius: 14px; background: var(--panel2); }
+.rep > summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.rep .tech { margin-top: 8px; }
+
+/* ---------- notification centre ---------- */
+.bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 36px; padding: 0; }
+.bell .n { position: absolute; top: -4px; right: -4px; min-width: 18px; padding: 1px 5px; border-radius: 999px; background: var(--crit);
+  color: #fff; font-size: 11px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.bell .n:empty { display: none; }
+.notifs { position: fixed; z-index: 45; top: 64px; right: 24px; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 96px);
+  overflow-y: auto; padding: 16px; border-radius: 18px; background: var(--panel); box-shadow: 0 20px 60px rgba(0, 0, 0, .35), inset 0 0 0 1px var(--line); }
+.notifs[hidden] { display: none; }
+.nhead { display: flex; align-items: center; gap: 8px; }
+.nhead h2 { margin: 0 auto 0 0; font-size: 18px; }
+.nhead h2:focus { outline: none; }
+.notifs ul { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 10px; }
+.nt { padding: 12px 14px; border-radius: 14px; background: var(--panel2); }
+.nt.unread { box-shadow: inset 3px 0 0 var(--accent); }
+.nt p { margin: 4px 0; font-size: 13.5px; }
+.nth { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.nfoot { margin: 0; font-size: 12px; }
+
+/* ---------- approval confirmation ---------- */
+.approval { margin: auto; width: min(680px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 22px 24px; border: 0; border-radius: 22px;
+  background: var(--panel); color: var(--fg); box-shadow: 0 30px 90px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--line); overflow-y: auto; }
+.approval::backdrop { background: rgba(0, 0, 0, .55); }
+.approval h2 { margin: 0 0 8px; font-size: 21px; line-height: 1.25; }
+.apl { margin: 12px 0; display: grid; gap: 10px; }
+.aprow { display: grid; gap: 2px; }
+.aprow dt { font: 600 12px/1.3 var(--font-sans, system-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.aprow dd { margin: 0; font-size: 14.5px; }
+.apev { margin: 8px 0; font-size: 14px; }
+.apev summary { cursor: pointer; font-weight: 600; }
+.apresult { min-height: 1.4em; margin: 8px 0 0; font-size: 14px; }
+.apactions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+/* declining is the easy, first choice and the prominent one; approving is a plain button that names exactly what it does */
+.apactions button { min-height: 44px; }
+.apactions #ap-return { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.apactions .apapprove { margin-left: auto; background: var(--fill); color: var(--fg); font-weight: 500; }
+.apactions .apapprove:hover { background: var(--line); }
+.moreq { margin: 4px 28px 8px; font-size: 13px; }
+.moreq > summary { cursor: pointer; color: var(--dim); }
+
+@media (max-width: 640px) {
+  .notifs { top: 56px; right: 8px; }
+  .apactions .apapprove { margin-left: 0; }
+}
 </style>
 </head>
 <body data-view="overview">
@@ -205,6 +281,7 @@ details.section[data-views] > summary { display: none; }
   <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.9v.2"/></symbol>
   <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.6M12 16.8v.2"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7.5 2 7.5H4S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
 </svg>
 <a class="skip" href="#main">Skip to main content</a>
@@ -243,9 +320,21 @@ details.section[data-views] > summary { display: none; }
     <button data-t="light" onclick="setTheme('light')">Light</button>
     <button data-t="dark" onclick="setTheme('dark')">Dark</button>
   </span>
+  <span class="segmented" id="detaillevel" role="group" aria-label="Level of detail">
+    <button data-d="simple" aria-pressed="true" onclick="setDetail('simple')" title="Plain language first">Simple</button>
+    <button data-d="advanced" aria-pressed="false" onclick="setDetail('advanced')" title="Open technical details and show identifiers">Advanced</button>
+  </span>
+  <button id="bell" class="bell" aria-haspopup="dialog" aria-expanded="false" aria-controls="notifs" aria-label="Notifications"><svg class="ico" aria-hidden="true"><use href="#i-bell"/></svg><span id="bellcount" class="n"></span></button>
   <button id="pause" onclick="togglePause()" title="Pause live updates (space)">Pause</button>
   <span class="meta" id="meta">connecting…</span>
 </header>
+
+<section id="notifs" class="notifs" role="dialog" aria-modal="false" aria-labelledby="notif-title" hidden>
+  <div class="nhead"><h2 id="notif-title" tabindex="-1">Notifications</h2>
+    <button data-act="notiall">Mark all read</button><button onclick="closeNotifs()">Close</button></div>
+  <ul id="notif-list"></ul>
+  <p class="faint nfoot">These appear here only. Pop-ups on this computer use the Notify me button and work only while this page is open. Dismissing a notification never changes a finding.</p>
+</section>
 
 <div id="alertbar" class="alertbar" role="alert" hidden>
   <b id="alertcount">0</b>
@@ -269,6 +358,7 @@ details.section[data-views] > summary { display: none; }
   <div class="pagehead" data-views="overview"><h1 id="h-overview" tabindex="-1">Overview</h1>
     <p>Is my computer okay, what needs my attention, what has ARGUS-1 checked, and what should I do next.</p></div>
   <section class="ovstatus" id="ov-status" data-views="overview" role="status" aria-live="polite" aria-label="Overall status"><p>Reading the current state…</p></section>
+  <div id="ov-pending" data-views="overview"></div>
   <div class="ovgrid" data-views="overview">
     <section class="card" aria-labelledby="ov-attn-h"><h2 id="ov-attn-h">What needs your attention <span class="cnt" id="ov-attn-cnt"></span></h2>
       <div class="body" id="ov-attn"></div></section>
@@ -437,6 +527,16 @@ details.section[data-views] > summary { display: none; }
         <button data-ask="What can I safely do next?">What can I safely do next?</button>
         <button data-ask="What does my security score mean?">What does my security score mean?</button>
       </div>
+      <details class="moreq"><summary>More questions</summary><div class="suggest">
+        <button data-ask="What did ARGUS find?">What did ARGUS find?</button>
+        <button data-ask="Should I be worried about this?">Should I be worried about this?</button>
+        <button data-ask="Why is this item marked serious?">Why is this item marked serious?</button>
+        <button data-ask="What happens if I approve this?">What happens if I approve this?</button>
+        <button data-ask="Can this damage my computer?">Can this damage my computer?</button>
+        <button data-ask="How do I investigate this safely?">How do I investigate this safely?</button>
+        <button data-ask="What has ARGUS not checked?">What has ARGUS not checked?</button>
+        <button data-ask="Why is my computer showing a monitoring warning?">Why is my computer showing a monitoring warning?</button>
+      </div></details>
       <div class="chat-answer" id="askanswer" aria-live="polite">ARGUS-1 is reading the current state…</div>
       <form class="chat" onsubmit="askJarvis(event)">
         <input id="askq" autocomplete="off" maxlength="4000" aria-label="Ask ARGUS-1"
@@ -459,6 +559,12 @@ details.section[data-views] > summary { display: none; }
       <p>The dashboard is served only on this computer's own address (127.0.0.1). It loads nothing from other websites.</p>
       <p>The assistant's local model is only contacted on this computer; other addresses are refused. If it is not running, the assistant still answers from ARGUS-1's own data.</p>
       <p>Secret-looking values such as keys, tokens and passwords are masked wherever findings are shown here.</p>
+    </div></section>
+  <section class="card" data-views="settings" aria-labelledby="det-h"><h2 id="det-h">Detail level and notifications</h2>
+    <div class="body prose">
+      <p><b>Simple</b> shows plain language first and keeps technical evidence one click away. <b>Advanced</b> opens the technical sections and shows identifiers. It is one interface with two depths, and the choice is remembered in this browser only.</p>
+      <p>Notifications are listed in the bell in the top bar: new serious findings, monitoring problems, proposals that need your approval, investigation updates and action results. An unchanged finding is announced once. They are in-app only. The Notify me button adds pop-ups for new critical findings, and those work only while this page is open: ARGUS-1 has no background notifier.</p>
+      <p>Anything that could change something is shown in a confirmation first, with the risk, whether it can be undone and what happens if you do nothing. Closing it, pressing Escape, or letting it expire changes nothing.</p>
     </div></section>
   <div class="grid" id="more" data-views="network security settings">
   <div class="card" id="geocard" data-views="network">
@@ -507,6 +613,7 @@ details.section[data-views] > summary { display: none; }
 </main>
 </div>
 </div>
+<dialog id="approval" class="approval" aria-labelledby="ap-title"><div id="ap-body"></div><div class="apactions" id="ap-actions"></div></dialog>
 <div id="tip" role="tooltip"></div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
@@ -617,6 +724,7 @@ function redact(text) {
   return t.replace(SECRET_ASSIGN, (m, key, sep) => key + sep + "[hidden]");
 }
 function clip(text, n) { const t = redact(text).replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; }
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + "s"}`;
 
 // Monitoring problems are about ARGUS-1's own checks, not about the computer.
 const MON_CATEGORIES = new Set(["daemon", "collectors", "visibility", "coverage", "model"]);
@@ -640,7 +748,11 @@ function stateOf(f) {
   return { key: "suspicious", label: "Suspicious - needs review",
            note: "ARGUS-1 observed this behaviour. It has not been confirmed as malicious, and it may be expected." };
 }
+// How a person should read each severity. Severity is potential impact, never a verdict or a likelihood.
+const SEVERITY_WORDS = { critical: "Serious", high: "Serious", medium: "Worth reviewing", low: "For information" };
+const severityWord = sev => SEVERITY_WORDS[sev] || "Not rated";
 
+// GUIDE[category] = [what it usually means, why it may matter, a safe next step]. General background only.
 const GUIDE = {
   "data at rest": ["A file appears to contain a credential, such as an API key or password.",
     "If it is a real, active credential and the file can be read by others, it could be misused.",
@@ -709,11 +821,43 @@ const GUIDE = {
     "It cannot report on what it cannot see.",
     "Open Monitoring to see what is limited and why."],
 };
+// Ordinary reasons the same observation can appear on a healthy computer. Offered as possibilities, never as a finding.
+const BENIGN = {
+  "data at rest": ["The text is an example, a placeholder or an expired key", "You stored it on purpose in a private project"],
+  persistence: ["A program you installed (an updater, a driver tool) set it up", "Windows or a device maker created it for maintenance"],
+  staging: ["An installer or developer tool just wrote it", "You built or downloaded something recently"],
+  rules: ["Software you installed asked for network access", "A game, server or remote tool you use needs it"],
+  remote: ["You turned on remote desktop, file sharing or a similar feature"],
+  access: ["You are in a call, recording or using an app that needs the camera or microphone"],
+  internet: ["A local server or development tool you run is listening"],
+  impersonation: ["You saved sign-ins in Windows or a browser"],
+  accounts: ["A service or sandbox tool created the account"],
+  interception: ["Security, company or developer software installed the certificate"],
+  "injected code": ["Browsers, game tools and developer tools legitimately create such memory"],
+  clickfix: ["You ran those commands yourself"],
+  av: ["It could be a false positive for a program you trust"],
+  posture: ["The setting may be off by choice, or not supported on this computer"],
+  extension: ["You installed it yourself"],
+};
+const DEFAULT_BENIGN = ["It may be software you installed, or a change you made yourself"];
 const SEVERITY_WHY = {
   critical: "ARGUS-1 rates this critical: if it is real it can seriously harm the computer or your data.",
   high: "ARGUS-1 rates this high: it deserves attention soon.",
   medium: "ARGUS-1 rates this medium: worth a look, rarely urgent.",
   low: "ARGUS-1 rates this low: informational.",
+};
+// Short definitions shown on hover or keyboard focus. Terms are matched in static guidance text only.
+const GLOSSARY = {
+  WMI: "Windows Management Instrumentation: a built-in way for Windows and programs to run things when events happen.",
+  persistence: "A way for a program to start again after a restart. Normal software uses it, and so does malware.",
+  "scheduled task": "A job Windows runs automatically at set times or events.",
+  "firewall rule": "A setting that allows or blocks network connections for a program or port.",
+  unsigned: "Without a publisher's digital signature. Many developer tools are unsigned, so it is a reason to look, not proof of harm.",
+  collector: "One of ARGUS-1's checks. Each looks at one area and reports what it found.",
+  credential: "A password, key or token that proves who you are to a service.",
+  certificate: "A digital ID a computer uses to prove who it is, or that it is trusted.",
+  "process injection": "Running code inside another program's memory. Some software does this legitimately; malware uses it to hide.",
+  "privilege escalation": "Gaining more access than a program was given.",
 };
 // -> {means, why, next, general}. `general` is true when the wording is category background, not the finding itself.
 function guideFor(f) {
@@ -722,6 +866,53 @@ function guideFor(f) {
   if (kindOf(f) === "monitoring") return { means: GUIDE.collectors[0], why: GUIDE.collectors[1], next: GUIDE.collectors[2], general: true };
   return { means: "ARGUS-1 reported this observation.", why: SEVERITY_WHY[f.severity] || "ARGUS-1 has not rated this observation.",
            next: "View the details and decide whether you expect this on your computer.", general: true };
+}
+
+// One sentence saying what ARGUS-1 found, in plain words, from the real title and category.
+function whatWasFound(f) {
+  const t = String(f.title || "").trim();
+  if (/scheduled task/i.test(t)) return "ARGUS-1 found a scheduled task that runs a program automatically.";
+  if (/WMI event subscription/i.test(t)) return "ARGUS-1 found a Windows (WMI) rule that runs something when an event happens.";
+  if (/unsigned executable/i.test(t)) return "ARGUS-1 found a recently written program that is not digitally signed.";
+  if (/api key|credential|password|secret|token/i.test(t) && f.category === "data at rest")
+    return "ARGUS-1 found a file that appears to contain a credential.";
+  const by = { persistence: "an item that starts or runs automatically", rules: "a firewall rule that allows connections",
+    remote: "a setting that allows connections into this computer", access: "an app using a sensitive device",
+    internet: "a program reachable from the network", accounts: "an unusual account", interception: "a trusted certificate that is not a standard one",
+    "injected code": "a program with code that is not backed by a file", posture: "a protection setting that is off or unreadable" };
+  return by[f.category] ? `ARGUS-1 found ${by[f.category]}.` : `ARGUS-1 reported “${clip(t, 90)}”.`;
+}
+
+// Qualitative evidence basis. ARGUS-1 has no per-finding confidence score, so none is invented: this lists what
+// supports the finding on hand. `others` is the full findings list, used to count independent reporters.
+function evidenceBasis(f, others) {
+  const same = (others || []).filter(o => o.title === f.title && o.where === f.where && o.job !== f.job);
+  const collectors = 1 + new Set(same.map(o => o.job)).size;
+  const forensics = (f.forensics || []).length;
+  const points = [`reported by ${plural(collectors, "collector")}`,
+    forensics ? `${plural(forensics, "supporting forensic record")} attached` : "no supporting forensic records attached",
+    f.where ? "a location was recorded" : "no location was recorded"];
+  const strength = collectors > 1 || forensics ? "Some supporting evidence" : "A single observation";
+  return { level: "unscored", strength, points, collectors, forensics,
+    text: `ARGUS-1 does not score confidence for this kind of finding. Evidence on hand: ${points.join("; ")}. ` +
+      "Severity shows potential impact, not how likely it is to be real." };
+}
+
+// The seven-part explanation, from real fields only. Unknowns are listed, not filled in.
+function explainFinding(f, others) {
+  const gd = guideFor(f), st = stateOf(f), basis = evidenceBasis(f, others);
+  const facts = [`Collector: ${f.job}`, f.host ? `Host: ${f.host}` : null, f.where ? `Location: ${clip(f.where, 140)}` : null,
+                 f.detail ? `Detail: ${clip(f.detail, 200)}` : null].filter(Boolean);
+  const unknown = ["Whether you installed it or expect it", "Whether it is doing anything harmful right now"];
+  if (!f.where) unknown.push("Where exactly it is (no location was recorded)");
+  return {
+    what: whatWasFound(f), where: f.where ? clip(f.where, 300) : "", whereRaw: f.where ? redact(f.where) : "",
+    why: gd.why, whyFlagged: `${gd.means} ARGUS-1 flags this kind of item because ${gd.why.charAt(0).toLowerCase() + gd.why.slice(1)}`,
+    facts, risks: [gd.why], benign: BENIGN[f.category] || DEFAULT_BENIGN, unknown,
+    confidence: basis, severity: severityWord(f.severity), state: st, next: gd.next,
+    steps: ["Read what was observed and where.", "Ask the assistant to explain it, or compare it with software you know.",
+            gd.next, "Do not delete, disable or stop anything until you understand it."],
+  };
 }
 
 // One entry per distinct (collector, title); sorted most severe first, then most frequent.
@@ -749,12 +940,14 @@ function monitoringProblems(s) {
   if (dh && Array.isArray(dh.detectors)) {
     return dh.detectors.filter(d => d.state !== "healthy" && d.state !== "not_applicable").map(d => ({
       id: d.id, label: d.label || d.id, state: d.state, coverage: d.coverage, reason: d.reason, impact: d.impact,
-      next: d.next_action, error: d.error || "", last: d.last_success }));
+      next: d.next_action, error: d.error || "", last: d.last_success, criticality: d.criticality || "medium",
+      what: d.what || d.label || d.id, affects: d.affects_status || "", command: d.command || "" }));
   }
   return (s.jobs || []).filter(j => j.stale || j.error).map(j => ({
     id: j.name, label: j.label || j.name, state: j.error ? "failing" : "stale", coverage: "blind",
     reason: j.error ? "Its last run failed." : "It has not reported recently.",
-    impact: "ARGUS-1 may be missing activity in this area.", next: "Open Monitoring for the reason.", error: j.error || "", last: j.ts }));
+    impact: "ARGUS-1 may be missing activity in this area.", next: "Open Monitoring for the reason.", error: j.error || "", last: j.ts,
+    criticality: "medium", what: j.label || j.name, affects: "", command: "" }));
 }
 function monitoringTotals(s) {
   const dh = s.detector_health;
@@ -766,11 +959,45 @@ function monitoringTotals(s) {
   const jobs = s.jobs || [], bad = jobs.filter(j => j.stale || j.error).length;
   return { total: jobs.length, verified: jobs.length - bad, partial: 0, blind: bad, notApplicable: 0 };
 }
+// Plain explanation of one monitoring problem, from the detector report. Nothing is claimed beyond its fields.
+function explainMonitor(p) {
+  const said = `${p.what} ${DETECTOR_WORDS[p.state] || "is not reporting"}.`;
+  return {
+    headline: `${p.label} ${DETECTOR_WORDS[p.state] || "is not reporting"}`,
+    checks: `${p.what}`, working: p.state === "healthy" ? "Yes" : "No",
+    lastGood: p.last ? new Date(p.last * 1000).toLocaleString() : "never",
+    unavailable: `${said} ARGUS-1 cannot confirm this area right now.`,
+    caution: "The absence of alerts from this check does not mean that nothing suspicious is happening.",
+    affects: p.affects || "Unknown: this server did not report how much the overall status depends on it.",
+    next: [p.next, p.command ? `To audit the same area by hand, run: jarvis ${p.command}` : null].filter(Boolean),
+  };
+}
+
+// Newest successful result across the detectors (or the collector list), and whether it is too old to trust.
+const STALE_AFTER_S = 300;
+function lastCheck(s, now) {
+  now = now ?? Date.now() / 1000;
+  const times = [];
+  const dh = s.detector_health;
+  if (dh && Array.isArray(dh.detectors)) for (const d of dh.detectors) if (d.last_success) times.push(d.last_success);
+  if (!times.length) for (const j of s.jobs || []) if (j.ts && !j.error) times.push(j.ts);
+  if (!times.length) return { ts: null, ageS: null, stale: true };
+  const ts = Math.max(...times), ageS = Math.max(0, Math.round(now - ts));
+  return { ts, ageS, stale: ageS > STALE_AFTER_S };
+}
+function ageWords(sec) {
+  if (sec == null) return "never";
+  if (sec < 60) return `${sec} seconds ago`;
+  if (sec < 3600) return plural(Math.floor(sec / 60), "minute") + " ago";
+  if (sec < 86400) return plural(Math.floor(sec / 3600), "hour") + " ago";
+  return plural(Math.floor(sec / 86400), "day") + " ago";
+}
 
 // The Overview's headline. Every sentence is supported by the counts it carries; with no data it says so.
-function overviewModel(s) {
+function overviewModel(s, now) {
   const sec = s.security || null, all = s.findings || [];
   const secGroups = groupFindings(all.filter(f => kindOf(f) === "security" && stateOf(f).key !== "info"));
+  const infoGroups = groupFindings(all.filter(f => kindOf(f) === "security" && stateOf(f).key === "info"));
   const review = secGroups.filter(g => g.sample.severity === "critical" || g.sample.severity === "high");
   const problems = monitoringProblems(s), tot = monitoringTotals(s);
   const monFindings = groupFindings(all.filter(f => kindOf(f) === "monitoring" && f.severity !== "ok"));
@@ -780,45 +1007,57 @@ function overviewModel(s) {
     suspicious: secGroups.filter(g => stateOf(g.sample).key === "suspicious").length,
     monitoring: problems.length + monFindings.length,
     unverified, expected: (sec && sec.acknowledged) || 0,
+    toReview: secGroups.length, serious: review.length, info: infoGroups.length,
+    notReporting: problems.length, monitoringFindings: monFindings.length,
+    total: secGroups.length + infoGroups.length,
   };
-  const notReporting = problems.length;
-  let level, headline, detail;
+  const notReporting = problems.length, last = lastCheck(s, now);
+  const changes = s.assistant && s.assistant.changes && s.assistant.changes.text ? s.assistant.changes.text : "";
+  const monitoring = !tot.total ? "unknown" : tot.verified === 0 ? "down" : notReporting ? "partial" : "working";
+  let level, headline, parts = [];
   if (!sec && !all.length && !tot.total) {
     level = "unknown"; headline = "Status not available yet";
-    detail = "ARGUS-1 has not received enough results to describe this computer. Wait a moment, or open Monitoring.";
+    parts = ["ARGUS-1 has not received enough results to describe this computer. Wait a moment, or open Monitoring."];
   } else if (sec && sec.state === "verifying") {
     const pg = sec.progress || {};
     level = "info"; headline = "ARGUS-1 is re-checking its monitors";
-    detail = `It is re-checking after a gap (${pg.checked ?? "?"} of ${pg.total ?? "?"} reporting). The last fully verified score was ${sec.score}%.`;
-  } else if (review.length) {
-    level = "attention"; headline = "Needs attention";
-    const raw = review.reduce((n, g) => n + g.count, 0);
-    detail = `ARGUS-1 observed ${review.length} serious item${review.length === 1 ? "" : "s"}${raw !== review.length ? ` (${raw} findings in total)` : ""} that deserve your review. These are observations, not confirmed attacks.` +
-      (notReporting ? ` ${notReporting} check${notReporting === 1 ? " is" : "s are"} also not reporting, so this picture may be incomplete.` : "");
+    parts = [`It is re-checking after a gap (${pg.checked ?? "?"} of ${pg.total ?? "?"} reporting). The last fully verified score was ${sec.score}%.`];
+  } else if (secGroups.length) {
+    level = review.length ? "attention" : "review";
+    headline = review.length ? "Needs attention" : "Review recommended";
+    parts = [`ARGUS-1 found ${plural(secGroups.length, "item")} to review, including ${review.length} marked as serious. ` +
+      "Some items may have legitimate explanations. These are observations, not confirmed attacks." +
+      (infoGroups.length ? ` It also recorded ${plural(infoGroups.length, "informational observation")}.` : "")];
+    if (notReporting) parts.push(`${plural(notReporting, "check")} ${notReporting === 1 ? "is" : "are"} also not reporting, so this picture may be incomplete.`);
   } else if (notReporting) {
-    level = "incomplete"; headline = "Some protection checks are incomplete";
-    detail = `${tot.verified} of ${tot.total} checks are reporting. ARGUS-1 cannot confirm the other ${notReporting}, so having no serious findings does not mean those areas are safe.`;
+    level = "incomplete"; headline = "Monitoring issue";
+    parts = [`${tot.verified} of ${tot.total} checks are reporting. ARGUS-1 cannot confirm the other ${notReporting}, so having nothing to review does not mean those areas are fine.`];
   } else {
-    level = "ok"; headline = "No current issues detected in the areas checked";
-    detail = `All ${tot.total} checks are reporting and none produced a critical or high observation. This reflects only what ARGUS-1 can check.`;
+    level = "ok"; headline = "No issues found in the checks performed";
+    parts = [`All ${tot.total} checks are reporting and none produced an item to review. This reflects only what ARGUS-1 can check.` +
+      (infoGroups.length ? ` It recorded ${plural(infoGroups.length, "informational observation")}.` : "")];
   }
+  if (changes && level !== "unknown" && level !== "info") parts.push(changes);
+  const detail = parts.join(" ");
   let scoreLine = "";
   if (sec && sec.score != null) {
     scoreLine = `Security score ${sec.score}% (${sec.grade}).`;
-    if (notReporting && !review.length)
-      scoreLine += " Part of this reflects checks that are not reporting, not known problems.";
+    if (notReporting && !review.length) scoreLine += " Part of this reflects checks that are not reporting, not known problems.";
     else scoreLine += " Findings lower it; checks that are not reporting are never counted as safe.";
   }
-  return { level, headline, detail, scoreLine, counts, review, secGroups, problems, monFindings, totals: tot };
+  const lastLine = last.ts ? `Last successful check: ${ageWords(last.ageS)}.` + (last.stale ? " That is older than expected, so these results may be out of date." : "")
+                           : "No check has completed yet.";
+  const monLine = { working: "Monitoring is working: every check is reporting.",
+    partial: `Monitoring is partly working: ${tot.verified} of ${tot.total} checks are reporting.`,
+    down: "Monitoring is not working: no check is reporting a fresh result.", unknown: "Monitoring status is not available yet." }[monitoring];
+  return { level, headline, detail, parts, scoreLine, counts, review, secGroups, infoGroups, problems, monFindings, totals: tot,
+           last, lastLine, monitoring, monLine, changes };
 }
 
 // What to put under "What needs your attention": serious security items first, then monitoring problems.
 function attentionItems(s, limit = 5) {
   const m = overviewModel(s), out = [];
-  for (const g of m.secGroups) {
-    if (stateOf(g.sample).key === "info") continue;
-    out.push({ kind: "finding", group: g, state: stateOf(g.sample) });
-  }
+  for (const g of m.secGroups) out.push({ kind: "finding", group: g, state: stateOf(g.sample) });
   const sev = out.filter(i => i.group.sample.severity === "critical" || i.group.sample.severity === "high");
   const rest = out.filter(i => !sev.includes(i));
   const mon = m.problems.slice().sort((a, b) => (a.coverage === "blind" ? 0 : 1) - (b.coverage === "blind" ? 0 : 1))
@@ -832,6 +1071,9 @@ function attentionItems(s, limit = 5) {
 // The single next step, always pointing at a destination that exists.
 function nextStep(s) {
   const m = overviewModel(s), q = (s.questions || []).length;
+  const pend = (s.assistant && s.assistant.pending) || [];
+  if (pend.length) return { text: "ARGUS-1 is waiting for your decision on a proposal. Nothing has happened yet, and you can decline.",
+                            label: "Review the proposal", go: "assistant", act: "openproposal" };
   if (m.review.length) {
     const t = clip(m.review[0].sample.title, 80);
     return { text: `Start with "${t}". Open the details to see what ARGUS-1 observed, then decide whether you expect it.`,
@@ -840,10 +1082,179 @@ function nextStep(s) {
   if (m.problems.length)
     return { text: "Some checks are not reporting correctly. Open Monitoring to see which checks need attention and why.",
              label: "View monitoring status", go: "monitoring" };
-  if (q) return { text: `ARGUS-1 has ${q} question${q === 1 ? "" : "s"} waiting for you. Your answers help it judge what is normal here.`,
+  if (q) return { text: `ARGUS-1 has ${plural(q, "question")} waiting for you. Your answers help it judge what is normal here.`,
                   label: "Open review queue", go: "reviewqueue" };
   return { text: "Nothing needs you right now. ARGUS-1 keeps watching. You can ask the assistant anything.",
            label: "Ask the assistant", go: "assistant" };
+}
+
+// ---- approvals ------------------------------------------------------------
+// The states a proposal can be in, in the words shown to people. "Completed" is only ever claimed from a result.
+const LIFECYCLE = {
+  awaiting_approval: ["Awaiting your approval", "Nothing has happened yet."],
+  approved_queued: ["Approved and queued", "It has not run yet, so nothing is confirmed."],
+  completed: ["Completed", "Confirmed by a fresh, valid result."],
+  failed: ["Failed", "It did not produce a valid result. See the reason."],
+  cancelled: ["Cancelled", "Nothing was changed."],
+  expired: ["Expired", "Nothing was changed."],
+  denied: ["Not accepted", "Nothing was changed."],
+  already_used: ["Already used", "Each proposal works once. Nothing was changed."],
+};
+function lifecycleInfo(key) { const v = LIFECYCLE[key]; return v ? { key, label: v[0], note: v[1] } : null; }
+// Fix-proposal statuses (response/selffix.py) in plain words. Applying a patch is never done from the page.
+function fixStateOf(status) {
+  const m = { proposed: ["awaiting_approval", "Awaiting your approval", "Nothing has happened yet."],
+    approved: ["approved_queued", "Approved: draft being generated", "A draft is written; nothing is applied."],
+    drafting: ["approved_queued", "Approved: draft being generated", "A draft is written; nothing is applied."],
+    review: ["awaiting_approval", "Draft ready: awaiting your authorization", "Authorizing records intent only."],
+    draft_failed: ["failed", "Draft failed", "No draft was produced. Nothing was changed."],
+    apply_approved: ["approved_queued", "Authorized: not yet applied", "Applying needs the terminal command."],
+    applied: ["completed", "Applied from the terminal", "Check the result before relying on it."],
+    rejected: ["cancelled", "Rejected", "Nothing was applied."], expired: ["expired", "Expired", "Nothing was applied."],
+    failed: ["failed", "Failed", "See the reason."], rolled_back: ["cancelled", "Rolled back", "The patch was reversed."] }[status];
+  return m ? { key: m[0], label: m[1], note: m[2] } : { key: "denied", label: String(status || "unknown"), note: "State not recognised." };
+}
+const FIX_EXPIRY_DAYS = 14;
+// -> the ten things a person needs before deciding. Built from the real proposal, never from defaults that could mislead.
+function approvalSpecFromDetails(d) {
+  return { id: d.token, kind: "assistant", title: d.title, proposes: d.proposes, why: d.why,
+    target: d.target && d.target.label ? `${d.target.label} (${d.target.kind}: ${d.target.id})` : "",
+    expected: d.expected, risks: d.risks, reversible: d.reversible, ifNothing: d.if_nothing, elevated: d.elevated,
+    exact: d.exact, evidence: d.evidence || [], confirmLabel: d.confirm_label, token: d.token, expiresAt: d.expires_at || null,
+    destructive: false };
+}
+function approvalSpecForFix(f, choice) {
+  const base = { id: f.id, kind: "fix", target: "ARGUS-1's own source code in this checkout (a draft only)",
+    evidence: [f.problem ? `Problem: ${clip(f.problem, 200)}` : "No problem text was recorded.",
+               f.directive_objective ? `Model directive: ${clip(f.directive_objective, 200)}` : null].filter(Boolean),
+    elevated: "No elevated permissions. It does not touch the system.", destructive: false,
+    ifNothing: `The proposal stays open and expires after ${FIX_EXPIRY_DAYS} days. Nothing is applied.` };
+  if (choice === "approve") return { ...base, title: `Approve the investigation for ${f.title}`,
+    proposes: "Start generating a draft patch with the local model. It is text only.",
+    why: f.problem || "ARGUS-1 raised this proposal from its own findings.",
+    expected: "A drafted patch you can read. Nothing is applied.",
+    risks: "Uses local model time. The draft may be wrong, and the model is advisory only.",
+    reversible: "Yes. This step changes nothing, so there is nothing to undo.",
+    exact: "Records your approval and starts draft generation. It applies no patch.",
+    confirmLabel: `Approve the investigation: ${f.id}` };
+  return { ...base, title: `Authorize the patch for ${f.title}`,
+    proposes: "Record that you authorize applying the reviewed patch. The page does not apply it.",
+    why: f.problem || "ARGUS-1 raised this proposal from its own findings.",
+    expected: "A recorded authorization. Applying still needs `jarvis fix apply " + f.id + "` in a terminal, where its tests run first.",
+    risks: "The patch changes ARGUS-1's source when you later apply it. A wrong patch could break a check.",
+    reversible: `Yes. \`jarvis fix rollback ${f.id}\` reverse-applies the stored patch.`,
+    exact: "Records your authorization only. No file is changed by this click.",
+    confirmLabel: `Authorize the patch: ${f.id}` };
+}
+
+// ---- notifications --------------------------------------------------------
+// Derived from the same state the page already polls; nothing here talks to the server. A key is notified once:
+// an unchanged finding or monitoring problem never produces a second notification. The first time the page is
+// opened, what is already there is recorded as known, not announced.
+const NOTIF_TYPES = { finding: "Security finding", monitoring: "Monitoring problem", approval: "Needs your approval",
+                      investigation: "Investigation update", result: "Action result", info: "Information" };
+const NOTIF_MAX = 100;
+function emptyNotifStore() { return { seen: {}, items: [], baseline: false }; }
+function candidateNotifications(s) {
+  const out = [];
+  const m = overviewModel(s);
+  for (const g of m.secGroups) {
+    const f = g.sample;
+    if (f.severity !== "critical" && f.severity !== "high") continue;
+    out.push({ key: `f:${f.job}|${clip(f.title, 160)}`, type: "finding", sev: f.severity, title: clip(f.title, 120),
+      text: `${severityWord(f.severity)}: ${whatWasFound(f)}${g.count > 1 ? ` (${g.count} found)` : ""} It has not been confirmed as harmful.`,
+      link: { go: "security", q: clip(f.title, 120) } });
+  }
+  const crit = new Set(["critical", "high"]);
+  let other = 0;
+  for (const p of m.problems) {
+    if (crit.has(p.criticality)) {
+      out.push({ key: `m:${p.id}:${p.state}`, type: "monitoring", sev: "warning", title: `${p.label} ${DETECTOR_WORDS[p.state] || "is not reporting"}`,
+        text: "ARGUS-1 cannot confirm this area right now. This does not mean your computer has been attacked.", link: { go: "monitoring" }, important: true });
+    } else other += 1;
+  }
+  if (other) out.push({ key: `m:other:${other}`, type: "monitoring", sev: "info", title: `${plural(other, "other check")} not reporting`,
+    text: "These checks matter less to the overall status. Open Monitoring for the reasons.", link: { go: "monitoring" } });
+  const a = s.assistant || {};
+  for (const d of a.pending || [])
+    out.push({ key: `a:${d.token}`, type: "approval", sev: "action", title: clip(d.title, 120),
+      text: "ARGUS-1 proposes this. No change has been made, and you can decline.", link: { go: "assistant", act: "openproposal", token: d.token }, important: true });
+  for (const f of s.fix || []) {
+    if (f.status === "proposed" || f.status === "review")
+      out.push({ key: `a:${f.id}:${f.status}`, type: "approval", sev: "action", title: clip(f.title || f.id, 120),
+        text: (f.status === "review" ? "A draft patch is ready. " : "A fix proposal is waiting. ") + "No change has been made.",
+        link: { go: "reviewqueue" }, important: true });
+    if (f.generation_state === "done" || f.status === "draft_failed" || f.generation_error)
+      out.push({ key: `i:${f.id}:${f.status}:${f.generation_state || ""}`, type: "investigation", sev: f.status === "draft_failed" ? "warning" : "info",
+        title: clip(f.title || f.id, 120), text: f.status === "draft_failed" ? "The draft did not complete, so this investigation is incomplete." : "The draft is ready for you to read. Nothing was applied.",
+        link: { go: "reviewqueue" } });
+  }
+  for (const e of a.audit || []) {
+    let text = null, sev = "info";
+    if (e.op === "approve" && e.outcome === "queued") text = "You approved it and it was queued. It is not confirmed until a fresh result arrives.";
+    else if (e.outcome === "verified") text = "Confirmed by a fresh, valid result.";
+    else if (e.op === "approve" && e.outcome === "failed") { text = "It could not be queued, so nothing happened."; sev = "warning"; }
+    if (text) {
+      const job = (s.jobs || []).find(j => j.name === (e.target || {}).job), what = job ? `“${job.label || job.name}”` : "a check";
+      const title = e.action === "rerun_monitor" ? `Re-run of ${what}` : e.action === "verify_monitor" ? `Verification of ${what}`
+        : e.action === "verify_finding" ? "Verification of a finding" : (e.action || "Action").replace(/_/g, " ");
+      out.push({ key: `r:${e.ts}:${e.action}:${e.outcome}`, type: "result", sev, title: clip(title, 120), text, link: { go: "assistant" } });
+    }
+  }
+  return out;
+}
+// -> {store, fresh}. `store` is the new persisted state; `fresh` are items to announce now.
+function deriveNotifications(s, store, now) {
+  now = now ?? Math.floor(Date.now() / 1000);
+  const st = store && store.items ? { seen: { ...store.seen }, items: store.items.map(i => ({ ...i })), baseline: store.baseline } : emptyNotifStore();
+  const cands = candidateNotifications(s), live = new Set(cands.map(c => c.key)), fresh = [];
+  for (const c of cands) {
+    if (st.seen[c.key]) continue;
+    st.seen[c.key] = now;
+    // First visit: what is already present is known, not news. Anything needing a decision still counts as unread.
+    const seeded = !st.baseline && c.type !== "approval";
+    const item = { ...c, ts: now, read: seeded, known: seeded, dismissed: false, active: true };
+    st.items.unshift(item);
+    if (!seeded) fresh.push(item);
+  }
+  for (const i of st.items) i.active = live.has(i.key);
+  st.baseline = true;
+  st.items = st.items.slice(0, NOTIF_MAX);
+  const keep = new Set(st.items.map(i => i.key));
+  for (const k of Object.keys(st.seen)) if (!keep.has(k) && !live.has(k)) delete st.seen[k];
+  return { store: st, fresh };
+}
+// Critical findings and important monitoring failures stay put while the condition is true; the rest can be dismissed.
+function canDismiss(item) {
+  if (item.type === "finding" && item.sev === "critical") return !item.active;
+  if (item.important) return !item.active;
+  return true;
+}
+function dismissNotification(store, key) {
+  const st = { ...store, items: store.items.map(i => ({ ...i })) };
+  const it = st.items.find(i => i.key === key);
+  if (it && canDismiss(it)) { it.dismissed = true; it.read = true; }
+  return st;
+}
+function markRead(store, key) {
+  const st = { ...store, items: store.items.map(i => ({ ...i })) };
+  for (const i of st.items) if (key == null || i.key === key) i.read = true;
+  return st;
+}
+const visibleNotifications = store => (store.items || []).filter(i => !i.dismissed);
+const unreadCount = store => visibleNotifications(store).filter(i => !i.read).length;
+
+// ---- investigation reports (assistant checks, JARVIS and coding-agent output) --------------------
+// Fixed order and wording; "what I have not done" is always present, so a report never hides or implies an action.
+const REPORT_SECTIONS = [["checked", "What I checked"], ["found", "What I found"], ["meaning", "What this might mean"],
+  ["certainty", "How certain I am"], ["recommendation", "What I recommend"], ["not_done", "What I have not done"]];
+function reportSections(r) {
+  const out = [];
+  for (const [k, label] of REPORT_SECTIONS) {
+    const v = r[k]; const lines = Array.isArray(v) ? v : (v ? [v] : []);
+    if (lines.length) out.push({ key: k, label, lines: lines.map(l => redact(l)) });
+  }
+  return out;
 }
 // plain:end
 const esc = s => redact(brand(s)).replace(/[&<>"']/g,
@@ -952,6 +1363,7 @@ function render(s) {
   renderOverview(s);
   renderViewLists(s);
   renderDetectors(s);
+  updateNotifications(s);
   renderAlertBar(s);
   notifyCriticals(s);
 
@@ -1034,37 +1446,6 @@ function renderReviewQueue(s) {
 document.getElementById("reviewqueue").addEventListener("toggle", () => {
   if (state) renderReviewQueue(state);
 });
-
-function renderFix(s) {
-  const el = document.getElementById("fix");
-  const items = s.fix || [];
-  if (!items.length) { el.innerHTML = ""; return; }
-  el.innerHTML = items.map(f => {
-    const action = f.status === "proposed"
-      ? `<button onclick="decideFix('${esc(f.id)}','approve')">Approve investigation</button>`
-      : f.status === "review"
-      ? `<button onclick="decideFix('${esc(f.id)}','authorize')">Authorize patch</button>`
-      : f.status === "draft_failed"
-      ? `<button onclick="decideFix('${esc(f.id)}','retry')">Retry draft</button>` : "";
-    const progress = f.generation_error
-      ? `<div class="crit">draft failed: ${esc(f.generation_error)}</div>`
-      : `<div class="note">generation: ${esc(f.generation_state || "awaiting decision")}${
-          f.patch_chars ? ` · ${esc(f.patch_chars)} patch characters` : ""}</div>`;
-    const directive = f.directive_objective
-      ? `<div class="note">Ollama directive: ${esc(f.directive_objective)}</div>` : "";
-    return `<div class="question" id="fix-${esc(f.id)}">
-    <div><b>${esc(f.title)}</b> <span class="faint">· fix proposal ${esc(f.id)} · ${esc(f.status)}</span></div>
-    <div class="note">${esc(f.problem || "")}</div>
-    ${progress}${directive}
-    <div class="question-actions">
-      ${action}
-      <button class="quiet" onclick="decideFix('${esc(f.id)}','reject')">Reject</button>
-    </div>
-    <div class="fine">investigation approval generates a draft only.
-    Patch application requires a separate authorization and
-    <kbd>jarvis fix apply ${esc(f.id)}</kbd>; nothing is applied from this page.</div>
-  </div>`}).join("");
-}
 
 async function decideFix(id, choice) {
   try {
@@ -2257,73 +2638,134 @@ $("scrim").addEventListener("click", () => closeDrawer());
 document.addEventListener("keydown", e => { if (e.key === "Escape" && drawerOpen()) { e.preventDefault(); closeDrawer(); } });
 window.matchMedia("(min-width: 1101px)").addEventListener("change", e => { if (e.matches) closeDrawer(false); });
 
-/* ---------- findings and monitoring problems in plain language ---------- */
+/* ---------- level of detail: Simple (default) or Advanced ----------
+   One set of components with two depths, not two interfaces. Advanced opens the technical sections and shows
+   identifiers; Simple keeps plain language first. The choice is remembered in this browser only. */
+const DETAIL_KEY = "jarvis.detail";
+let detailLevel = "simple";
+function applyDetail(d) {
+  detailLevel = d === "advanced" ? "advanced" : "simple";
+  document.body.dataset.detail = detailLevel;
+  for (const b of document.querySelectorAll("#detaillevel button")) {
+    b.setAttribute("aria-pressed", String(b.dataset.d === detailLevel));
+    b.className = b.dataset.d === detailLevel ? "on" : "";
+  }
+}
+function setDetail(d) {
+  try { localStorage.setItem(DETAIL_KEY, d); } catch (_) {}
+  applyDetail(d);
+  if (state) render(state);
+}
+applyDetail((() => { try { return localStorage.getItem(DETAIL_KEY); } catch (_) { return "simple"; } })());
+
+/* ---------- plain-language pieces ---------- */
 const KIND_ICON = { suspicious: "alert", confirmed: "sliders", monitoring: "monitoring", info: "info", unverified: "help" };
 const ico = name => `<svg class="ico" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 function jobLabel(job) { const j = (state && state.jobs || []).find(x => x.name === job); return j ? (j.label || j.name) : job; }
+const GLOSS_KEYS = Object.keys(GLOSSARY);
+const GLOSS_RE = new RegExp("\\b(" + GLOSS_KEYS.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")\\b", "gi");
+/* Wrap known terms in already-escaped static text so a definition is one hover or keyboard focus away. */
+function gloss(escaped) {
+  return escaped.replace(GLOSS_RE, m => {
+    const key = GLOSS_KEYS.find(k => k.toLowerCase() === m.toLowerCase());
+    return `<span class="gl" tabindex="0" role="note" data-def="${esc(GLOSSARY[key])}">${m}</span>`;
+  });
+}
+const liHTML = items => `<ul>${items.map(i => `<li>${gloss(esc(i))}</li>`).join("")}</ul>`;
+const copyBtn = (text, label) => text ? `<button class="quiet copy" data-act="copy" data-copy="${esc(text)}" aria-label="Copy ${esc(label)}">Copy</button>` : "";
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast("Copied to the clipboard.", "good"); }
+  catch (_) { toast("Could not copy automatically. Select the text and copy it yourself.", "warn"); }
+}
 
+/* One finding, one explanation: what, where, why flagged, what it could mean, how sure, what to do, the evidence. */
 function findingCardHTML(g, compact) {
-  const f = g.sample, st = stateOf(f), gd = guideFor(f);
+  const f = g.sample, ex = explainFinding(f, state && state.findings), st = ex.state, adv = detailLevel === "advanced";
   const j = (state && state.jobs || []).find(x => x.name === f.job) || {};
   const where = [...new Set(g.items.map(x => x.where).filter(Boolean))].slice(0, 5);
   const row = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  const sec = (title, body) => `<section class="fxs"><h4>${esc(title)}</h4>${body}</section>`;
+  const meaning = compact ? "" : sec("What it could mean", `
+      <div class="fxcols"><div><h5>What ARGUS-1 observed</h5>${liHTML(ex.facts)}</div>
+      <div><h5>Possible risk</h5>${liHTML(ex.risks)}</div>
+      <div><h5>Ordinary explanations</h5>${liHTML(ex.benign)}</div>
+      <div><h5>Not known</h5>${liHTML(ex.unknown)}</div></div>`);
+  const confidence = compact ? "" : sec("How confident is ARGUS-1?", `<p><b>${esc(ex.confidence.strength)}.</b> ${esc(ex.confidence.text)}</p>`);
+  const actions = compact ? sec("What you can do first", `<p>${gloss(esc(ex.next))}</p>`)
+    : sec("What you can do", `<ol>${ex.steps.map(x => `<li>${gloss(esc(x))}</li>`).join("")}${f.id
+        ? `<li>To mark it as expected, run <code>jarvis ack ${esc(f.id)} --reason "..."</code> in a terminal. That is not available from this page.</li>` : ""}</ol>`);
   return `<article class="fx k-${st.key}">
     <div class="fxh"><span class="kind k-${st.key}">${ico(KIND_ICON[st.key])}${esc(st.label)}</span>
-      <span class="sev">${esc(f.severity)} severity</span>${g.count > 1 ? `<span class="sev">· ${g.count} found</span>` : ""}</div>
+      <span class="sev">${esc(ex.severity)}${adv ? ` (${esc(f.severity)})` : ""}</span>${g.count > 1 ? `<span class="sev">· ${g.count} found</span>` : ""}</div>
     <h3>${esc(f.title)}</h3>
-    <p><b>What ARGUS-1 observed:</b> ${esc(clip(f.detail || "No detail was recorded.", 200))}</p>
-    ${compact ? "" : `<p><b>What this usually means:</b> ${esc(gd.means)} <small class="faint">(general background)</small></p>`}
-    <p><b>Why it may matter:</b> ${esc(gd.why)}</p>
+    ${sec("What was found", `<p>${gloss(esc(ex.what))} ${esc(clip(f.detail || "", 160))}</p>`)}
+    ${sec("Where", where.length ? `<ul class="where">${where.map(w => `<li><code>${esc(clip(w, 300))}</code> ${copyBtn(redact(w), "location")}</li>`).join("")}</ul>`
+        : `<p>ARGUS-1 did not record a location for this finding.</p>`)}
+    ${sec("Why ARGUS-1 flagged it", `<p>${gloss(esc(ex.whyFlagged))}</p>`)}
+    ${meaning}${confidence}
     <p class="unc"><b>Still uncertain:</b> ${esc(st.note)}</p>
-    <p><b>Suggested next step:</b> ${esc(gd.next)}</p>
+    ${actions}
     <div class="fxa">
       <button data-act="tech">View evidence and details</button>
-      ${f.id ? `<button data-act="explain" data-id="${esc(f.id)}">Explain simply</button>` : ""}
+      ${f.id ? `<button data-act="explain" data-id="${esc(f.id)}">Ask the assistant to explain</button>` : ""}
       <button data-act="investigate" data-q="${esc(f.title)}">Investigate</button>
     </div>
-    <details class="tech"><summary>Technical details</summary><dl class="kv">
+    <details class="tech" ${adv ? "open" : ""}><summary>Technical details</summary><dl class="kv">
       ${row("severity", esc(f.severity))}${row("category", esc(f.category || "-"))}
       ${row("collector", `${esc(jobLabel(f.job))} <span class="faint">(${esc(f.job)})</span>`)}
       ${row("host", esc(f.host || "-"))}${row("last checked", esc(ago(j.ts)))}
       ${row("location", where.length ? where.map(esc).join("<br>") : "-")}
       ${row("detail", esc(clip(f.detail || "-", 600)))}
+      ${row("evidence basis", esc(ex.confidence.points.join("; ")))}
       ${row("verification", "Observed by the collector. Not independently verified.")}
-      ${f.id ? row("finding id", `<code>${esc(f.id)}</code>`) : ""}
+      ${f.id ? row("finding id", `<code>${esc(f.id)}</code> ${copyBtn(f.id, "finding id")}`) : ""}
       ${(f.forensics || []).length ? row("forensics", `<pre class="pre">${esc(f.forensics.join("\n"))}</pre>`) : ""}
     </dl></details>
   </article>`;
 }
-function monitorCardHTML(p, compact) {
+function monitorCardHTML(p) {
   const st = (p.state === "never_ran" || p.state === "stale") ? { key: "unverified", label: "Not verified" } : { key: "monitoring", label: "Monitoring problem" };
+  const ex = explainMonitor(p), sec = (t, b) => `<section class="fxs"><h4>${esc(t)}</h4>${b}</section>`;
   return `<article class="fx k-${st.key}">
     <div class="fxh"><span class="kind k-${st.key}">${ico(KIND_ICON[st.key])}${esc(st.label)}</span>
       <span class="sev">coverage: ${esc(p.coverage || "blind")}</span></div>
-    <h3>${esc(p.label)} ${esc(DETECTOR_WORDS[p.state] || "is not reporting")}</h3>
-    <p><b>What ARGUS-1 observed:</b> ${esc(p.reason || "No reason was recorded.")}${p.error ? ` Recorded error: ${esc(clip(p.error, 160))}` : ""}</p>
-    <p><b>Why it may matter:</b> ${esc(p.impact || GUIDE.collectors[1])}</p>
-    <p class="unc"><b>Still uncertain:</b> This does not mean your computer has been attacked. It means this area is not currently confirmed.</p>
-    ${p.next ? `<p><b>Suggested next step:</b> ${esc(p.next)}</p>` : ""}
+    <h3>${esc(ex.headline)}</h3>
+    ${sec("What this check looks at", `<p>${esc(ex.checks)}</p>`)}
+    ${sec("Is it working?", `<p><b>${ex.working}.</b> Last successful result: ${esc(ex.lastGood)}.${p.error ? ` Recorded error: ${esc(clip(p.error, 160))}.` : ""}</p>`)}
+    ${sec("What is unavailable", `<p>${esc(ex.unavailable)}</p><p>${esc(ex.caution)}</p>`)}
+    ${sec("Does it affect the overall status?", `<p>${esc(ex.affects)}</p>`)}
+    ${sec("What you can do", liHTML(ex.next.length ? ex.next : ["Open Monitoring for the reason."]))}
     <div class="fxa">
       <button data-act="go" data-go="monitoring">View monitoring status</button>
       <button data-act="checkmon" data-job="${esc(p.id)}">Ask the assistant to check</button>
       <button data-act="rerun" data-job="${esc(p.id)}">Re-run this check</button>
     </div></article>`;
 }
+
+/* ---------- the Overview ---------- */
 function renderOverview(s) {
   const m = overviewModel(s), tot = m.totals, att = attentionItems(s, 5), nx = nextStep(s), c = m.counts;
-  const icon = { attention: "alert", incomplete: "help", ok: "check", info: "monitoring", unknown: "help" }[m.level];
+  const pend = (s.assistant && s.assistant.pending) || [];
+  const icon = { attention: "alert", review: "info", incomplete: "help", ok: "check", info: "monitoring", unknown: "help" }[m.level];
   const st = $("ov-status");
   st.dataset.level = m.level;
-  st.innerHTML = `<h2>${ico(icon)}${esc(m.headline)}</h2><p>${esc(m.detail)}</p>
+  st.innerHTML = `<h2>${ico(icon)}${esc(m.headline)}</h2>${m.parts.map(t => `<p>${esc(t)}</p>`).join("")}
+    <p class="lastline"><b>${esc(m.lastLine)}</b> ${esc(m.monLine)}</p>
     ${m.scoreLine ? `<p class="score">${esc(m.scoreLine)} <button data-act="go" data-go="how-score">How is this calculated?</button></p>` : ""}
-    <ul class="ovcounts" aria-label="What ARGUS-1 found, by kind">
-      <li><b>${c.suspicious}</b> suspicious activity to review</li><li><b>${c.confirmed}</b> confirmed settings to review</li>
-      <li><b>${c.monitoring}</b> monitoring problems</li><li><b>${c.unverified}</b> not yet verified</li>
-      <li><b>${c.expected}</b> marked as expected</li></ul>
+    <ul class="ovcounts" aria-label="Counts">
+      <li><b>${c.total}</b> findings in total</li><li><b>${c.serious}</b> marked serious</li>
+      <li><b>${c.notReporting}</b> checks not reporting</li><li><b>${c.unverified}</b> not yet verified</li>
+      <li class="adv"><b>${c.monitoringFindings}</b> monitoring findings</li>
+      <li class="adv"><b>${c.suspicious}</b> suspicious activity</li><li class="adv"><b>${c.confirmed}</b> confirmed settings</li>
+      <li class="adv"><b>${c.expected}</b> marked as expected</li></ul>
     <p class="ovfoot">ARGUS-1 reports what it observed. It never declares an attack confirmed on its own.</p>`;
+  $("ov-pending").innerHTML = pend.length ? `<div class="ovpend" role="group" aria-label="Waiting for your decision">
+      <span class="kind k-confirmed">${ico("help")}${esc(LIFECYCLE.awaiting_approval[0])}</span>
+      <span>${esc(pend[0].title)}. ${esc(LIFECYCLE.awaiting_approval[1])} You can decline.</span>
+      <button data-act="openproposal">Review and decide</button></div>` : "";
   $("ov-attn-cnt").textContent = att.total ? `showing ${att.items.length} of ${att.total}` : "";
   $("ov-attn").innerHTML = att.items.length
-    ? att.items.map(i => i.kind === "finding" ? findingCardHTML(i.group, true) : monitorCardHTML(i.problem, true)).join("") +
+    ? att.items.map(i => i.kind === "finding" ? findingCardHTML(i.group, true) : monitorCardHTML(i.problem)).join("") +
       (att.total > att.items.length ? `<div class="ovactions"><button data-act="go" data-go="security">See all ${att.total} in Security</button></div>` : "")
     : `<p class="empty-good">Nothing in the current results needs your attention.</p>`;
   const pct = tot.total ? Math.round(100 * tot.verified / tot.total) : 0;
@@ -2339,7 +2781,7 @@ function renderOverview(s) {
        <div class="ovactions"><button data-act="go" data-go="monitoring">View monitoring status</button>
          <a class="linkbtn" href="/coverage">Coverage map</a></div>`
     : `<p class="empty-good">No check results have arrived yet.</p>`;
-  $("ov-next").innerHTML = `<p>${esc(nx.text)}</p><button data-act="go" data-go="${esc(nx.go)}" ${nx.query ? `data-q="${esc(nx.query)}"` : ""}>${esc(nx.label)}</button>`;
+  $("ov-next").innerHTML = `<p>${esc(nx.text)}</p><button data-act="${nx.act || "go"}" data-go="${esc(nx.go)}" ${nx.query ? `data-q="${esc(nx.query)}"` : ""}>${esc(nx.label)}</button>`;
   const mon = $("nav-mon");
   if (mon) { mon.textContent = m.problems.length || ""; mon.className = "n " + (m.problems.some(p => p.coverage === "blind") ? "bad" : "warn"); }
   $("side-foot").innerHTML = tot.total ? `<strong>${tot.verified} of ${tot.total} checks reporting</strong>${esc(m.headline)}` : "Waiting for results…";
@@ -2365,18 +2807,193 @@ function renderDetectors(s) {
   if (!el) return;
   if (!d || !Array.isArray(d.detectors)) { el.innerHTML = `<p class="empty-good">Detector health is not available from this server.</p>`; return; }
   $("detectorsub").textContent = d.total ? `${(d.counts || {}).verified || 0} of ${d.total} verified` : "";
-  const bad = d.detectors.filter(x => x.state !== "healthy" && x.state !== "not_applicable");
+  const probs = new Map(monitoringProblems(s).map(p => [p.id, p]));
   const na = d.detectors.filter(x => x.state === "not_applicable");
-  const when = t => (t ? new Date(t * 1000).toLocaleString() : "never");
-  const row = x => `<details class="dhrow"><summary><span class="kind k-${x.coverage === "blind" ? "monitoring" : "unverified"}">${esc((x.state || "").replace(/_/g, " "))}</span>
+  const row = x => {
+    const ex = explainMonitor(probs.get(x.id) || { id: x.id, label: x.label, what: x.what || x.label, state: x.state, reason: x.reason, next: x.next_action, last: x.last_success, affects: x.affects_status, command: x.command });
+    return `<details class="dhrow" ${detailLevel === "advanced" ? "open" : ""}><summary><span class="kind k-${x.coverage === "blind" ? "monitoring" : "unverified"}">${esc((x.state || "").replace(/_/g, " "))}</span>
       <b>${esc(x.label || x.id)}</b> <small>coverage: ${esc(x.coverage)}</small></summary>
-      <div class="more"><div>${esc(x.reason)}</div><div>${esc(x.impact)}</div>
-      ${x.next_action ? `<div><b>Next:</b> ${esc(x.next_action)}</div>` : ""}
-      <small>Last good result: ${esc(when(x.last_success))}${x.error ? " · recorded error: " + esc(x.error) : ""}${x.failure_count ? " · failures in a row: " + x.failure_count : ""} · recovery: ${esc(x.recovery_state)}${x.recovery_confirmed ? " (confirmed by a fresh result)" : ""}</small>
+      <dl class="kv more">
+        <dt>What it checks</dt><dd>${esc(ex.checks)}</dd>
+        <dt>Is it working?</dt><dd>${ex.working}. Last good result: ${esc(ex.lastGood)}</dd>
+        <dt>What is unavailable</dt><dd>${esc(ex.unavailable)} ${esc(ex.caution)}</dd>
+        <dt>Affects the overall status?</dt><dd>${esc(ex.affects)}</dd>
+        <dt>What you can do</dt><dd>${esc(ex.next.join(" ")) || "Nothing further."}</dd>
+        <dt class="adv">Diagnostics</dt><dd class="adv">${x.error ? "recorded error: " + esc(x.error) + " · " : ""}failures in a row: ${x.failure_count || 0} · recovery: ${esc(x.recovery_state)}${x.recovery_confirmed ? " (confirmed by a fresh result)" : ""}</dd>
+      </dl>
       <div class="fxa"><button data-act="checkmon" data-job="${esc(x.id)}">Ask the assistant to check</button>
-        <button data-act="rerun" data-job="${esc(x.id)}">Re-run this check</button></div></div></details>`;
+        <button data-act="rerun" data-job="${esc(x.id)}">Re-run this check</button></div></details>`;
+  };
+  const bad = d.detectors.filter(x => x.state !== "healthy" && x.state !== "not_applicable");
   el.innerHTML = `<p>${esc(d.summary)}</p>` + bad.map(row).join("") +
     (na.length ? `<details class="dhrow"><summary><small>${na.length} not applicable on this computer</small></summary><div class="more">${na.map(x => `<small>${esc(x.id)}: ${esc(x.reason)}</small>`).join("")}</div></details>` : "");
+}
+
+/* ---------- investigation reports (assistant checks, fix proposals) ---------- */
+function agentReportHTML(r, open) {
+  if (!r) return "";
+  const secs = reportSections(r);
+  return `<details class="rep" ${open ? "open" : ""}><summary><b>${esc(r.title)}</b>
+      <span class="kind">${esc(r.mode_label)}</span><span class="kind">${esc(r.status)}</span></summary>
+    ${secs.map(x => `<section class="fxs"><h4>${esc(x.label)}</h4><ul>${x.lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul></section>`).join("")}
+    <details class="tech" ${detailLevel === "advanced" ? "open" : ""}><summary>Technical evidence</summary><pre class="pre">${esc(r.technical || "(none recorded)")}</pre></details></details>`;
+}
+function lifecycleHTML(key) {
+  const l = lifecycleInfo(key);
+  return l ? `<p class="lc" role="status"><span class="kind k-lc">${esc(l.label)}</span> ${esc(l.note)}</p>` : "";
+}
+
+/* ---------- fix proposals (the coding agent's drafts) ---------- */
+function renderFix(s) {
+  const el = document.getElementById("fix");
+  const items = s.fix || [];
+  if (!items.length) { el.innerHTML = ""; return; }
+  el.innerHTML = items.map(f => {
+    const ls = fixStateOf(f.status);
+    const action = f.status === "proposed"
+      ? `<button data-act="fixconfirm" data-choice="approve" data-id="${esc(f.id)}">Review and approve the investigation…</button>`
+      : f.status === "review"
+      ? `<button data-act="fixconfirm" data-choice="authorize" data-id="${esc(f.id)}">Review and authorize the patch…</button>`
+      : f.status === "draft_failed"
+      ? `<button onclick="decideFix('${esc(f.id)}','retry')">Retry draft</button>` : "";
+    return `<div class="question" id="fix-${esc(f.id)}">
+    <div><b>${esc(f.title)}</b> <span class="kind k-lc">${esc(ls.label)}</span> <span class="faint">${esc(ls.note)}</span></div>
+    <div class="note">${esc(f.problem || "")}</div>
+    ${f.generation_error ? `<div class="crit">The draft did not complete: ${esc(f.generation_error)}</div>` : ""}
+    ${agentReportHTML(f.report, false)}
+    <div class="question-actions">${action}<button class="quiet" onclick="decideFix('${esc(f.id)}','reject')">Reject</button></div>
+    <div class="fine">Approving the investigation generates a draft only. Applying a patch needs a separate authorization and
+    <kbd>jarvis fix apply ${esc(f.id)}</kbd>; nothing is applied from this page. Proposal ${esc(f.id)}.</div>
+  </div>`;
+  }).join("");
+}
+
+/* ---------- the approval confirmation ----------
+   One component for every action that could change something. It states the ten things a person needs, defaults
+   focus to the safe choice, and never calls the backend on dismissal. Closing it, pressing Escape, or letting the
+   proposal expire changes nothing. The backend still enforces the token, the 10-minute expiry and single use. */
+let approvalSpec = null, approvalOpener = null, lastProposal = null;
+function openApproval(spec) {
+  if (!spec) return;
+  approvalSpec = spec; approvalOpener = document.activeElement;
+  const row = (k, v) => v ? `<div class="aprow"><dt>${esc(k)}</dt><dd>${gloss(esc(v))}</dd></div>` : "";
+  const first = LIFECYCLE.awaiting_approval;
+  $("ap-body").innerHTML = `<h2 id="ap-title">${esc(spec.title)}</h2>
+    <p class="apstate"><span class="kind k-lc">${esc(first[0])}</span> ${esc(first[1])} Closing this box or letting it expire changes nothing.</p>
+    <dl class="apl">${row("What ARGUS-1 proposes", spec.proposes)}${row("Why", spec.why)}${row("Exactly what it affects", spec.target)}
+      ${row("Expected result", spec.expected)}${row("Possible side effects and risks", spec.risks)}${row("Can it be undone?", spec.reversible)}
+      ${row("If you do nothing", spec.ifNothing)}${row("Permissions needed", spec.elevated)}${row("The exact action after you approve", spec.exact)}</dl>
+    <details class="apev" id="ap-evidence"><summary>Evidence supporting this proposal</summary>${liHTML(spec.evidence && spec.evidence.length ? spec.evidence : ["No further evidence was recorded."])}</details>
+    ${spec.expiresAt ? `<p class="faint">This proposal expires at ${esc(new Date(spec.expiresAt * 1000).toLocaleTimeString())}. Each proposal works once.</p>` : ""}
+    <p class="apresult" id="ap-result" role="status" aria-live="polite"></p>`;
+  $("ap-actions").innerHTML = `<button id="ap-return" data-ap="return">Return without making changes</button>
+    <button data-ap="review">Review details</button>
+    ${spec.kind === "assistant" ? `<button data-ap="cancel">Cancel this proposal</button>` : ""}
+    <button class="apapprove" data-ap="approve">${esc(spec.confirmLabel || "Approve this action")}</button>`;
+  const dlg = $("approval");
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  $("ap-return").focus();
+}
+function closeApproval() {
+  const dlg = $("approval");
+  if (dlg.open) { if (typeof dlg.close === "function") dlg.close(); else dlg.removeAttribute("open"); }
+  if (approvalOpener && approvalOpener.focus && document.contains(approvalOpener)) approvalOpener.focus();
+  approvalSpec = null;
+}
+async function approvalResult(promise, spec, verb) {
+  const out = $("ap-result");
+  for (const b of $("ap-actions").querySelectorAll("button")) b.disabled = true;
+  out.textContent = "Working…";
+  try {
+    const r = await promise;
+    const d = r.data;
+    if (spec.kind === "assistant") {
+      const l = lifecycleInfo(d.lifecycle || (d.ok ? "approved_queued" : "failed"));
+      out.innerHTML = `<span class="kind k-lc">${esc(l ? l.label : "Done")}</span> ${esc((d.sections || []).map(x => x.text).join(" ") || d.answer || "")}`;
+      renderAssistant(d);
+    } else {
+      out.innerHTML = r.ok ? `<span class="kind k-lc">${esc(verb === "approve" ? "Approved: draft being generated" : "Authorized: not yet applied")}</span> ${esc(d.message || "")} Nothing was applied from this page.`
+                           : `<span class="kind k-lc">Failed</span> ${esc(d.message || d.error || "The decision could not be recorded.")} Nothing was changed.`;
+    }
+    tick();
+  } catch (e) { out.innerHTML = `<span class="kind k-lc">Failed</span> The request did not complete, so nothing was changed.`; }
+  $("ap-actions").innerHTML = `<button id="ap-return" data-ap="return">Close</button>`;
+  $("ap-return").focus();
+}
+async function postJSON(url, body) {
+  const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return { ok: resp.ok, data: await resp.json() };
+}
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("[data-ap]");
+  if (!b || !approvalSpec) return;
+  const spec = approvalSpec, a = b.dataset.ap;
+  if (a === "return") closeApproval();
+  else if (a === "review") { const d = $("ap-evidence"); d.open = true; d.querySelector("summary").focus(); }
+  else if (a === "cancel") approvalResult(postJSON("/api/assistant/action", { op: "cancel", token: spec.token }), spec, "cancel");
+  else if (a === "approve") {
+    if (spec.kind === "assistant") approvalResult(postJSON("/api/assistant/action", { op: "approve", token: spec.token }), spec, "approve");
+    else approvalResult(postJSON("/api/fix/" + spec.choice, { id: spec.id }), spec, spec.choice);
+  }
+});
+$("approval").addEventListener("cancel", () => { approvalSpec = null; });   // Escape: no request is made
+$("approval").addEventListener("close", () => { if (approvalOpener && approvalOpener.focus && document.contains(approvalOpener)) approvalOpener.focus(); });
+
+/* ---------- notification center ----------
+   Built on the state the page already polls. In-app only: OS pop-ups remain the existing "Notify me" button, which
+   works only while this page is open. Dismissing a notification never changes a finding. */
+const NOTIF_KEY = "jarvis.notifications";
+let notifStore = (() => { try { const v = JSON.parse(localStorage.getItem(NOTIF_KEY) || "null"); return v && Array.isArray(v.items) ? v : emptyNotifStore(); } catch (_) { return emptyNotifStore(); } })();
+function saveNotifs() { try { localStorage.setItem(NOTIF_KEY, JSON.stringify(notifStore)); } catch (_) {} }
+function updateNotifications(s) {
+  const r = deriveNotifications(s, notifStore);
+  notifStore = r.store; saveNotifs();
+  // Critical findings already get a toast and an optional OS pop-up from notifyCriticals; do not announce them twice.
+  for (const f of r.fresh.filter(x => !(x.type === "finding" && x.sev === "critical")).slice(0, 2))
+    toast(`${NOTIF_TYPES[f.type]}: ${f.title}`, f.type === "monitoring" || f.sev === "warning" ? "warn" : "", f.text);
+  renderBell();
+  if (!$("notifs").hidden) renderNotifPanel();
+}
+function renderBell() {
+  const n = unreadCount(notifStore);
+  $("bellcount").textContent = n || "";
+  $("bell").setAttribute("aria-label", n ? `Notifications, ${n} unread` : "Notifications");
+}
+function renderNotifPanel() {
+  const items = visibleNotifications(notifStore);
+  $("notif-list").innerHTML = items.length ? items.map(i => `<li class="nt ${i.read ? "" : "unread"}" data-key="${esc(i.key)}">
+      <div class="nth"><span class="kind k-${i.type === "monitoring" ? "monitoring" : i.type === "finding" ? "suspicious" : "lc"}">${esc(NOTIF_TYPES[i.type] || "Notice")}</span>
+        ${i.sev && i.sev !== "info" && i.sev !== "action" ? `<span class="sev">${esc(i.sev === "warning" ? "warning" : severityWord(i.sev))}</span>` : ""}
+        ${i.known ? `<span class="sev">already present when you first opened ARGUS-1</span>` : ""}
+        ${i.active ? "" : `<span class="sev">no longer reported</span>`}${i.read ? "" : `<span class="sev">new</span>`}</div>
+      <p class="ntt"><b>${esc(i.title)}</b></p><p>${esc(i.text)}</p>
+      <div class="fxa"><button data-act="notiview" data-key="${esc(i.key)}">View</button>
+        ${canDismiss(i) ? `<button class="quiet" data-act="notidismiss" data-key="${esc(i.key)}">Dismiss</button>` : `<span class="faint">Stays until resolved</span>`}</div></li>`).join("")
+    : `<li class="empty-good">No notifications yet. ARGUS-1 will list new serious findings, monitoring problems, proposals and results here.</li>`;
+}
+function openNotifs() {
+  $("notifs").hidden = false; $("bell").setAttribute("aria-expanded", "true"); renderNotifPanel();
+  $("notif-title").focus();
+}
+function closeNotifs(restore = true) {
+  if ($("notifs").hidden) return;
+  $("notifs").hidden = true; $("bell").setAttribute("aria-expanded", "false");
+  if (restore) $("bell").focus();
+}
+$("bell").addEventListener("click", () => ($("notifs").hidden ? openNotifs() : closeNotifs()));
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("notifs").hidden) { e.preventDefault(); closeNotifs(); } });
+document.addEventListener("click", e => { if (!$("notifs").hidden && !e.target.closest("#notifs") && !e.target.closest("#bell")) closeNotifs(false); });
+function openLink(link) {
+  if (!link) return;
+  if (link.act === "openproposal") return openFirstProposal(link.token);
+  go(viewOf(link.go) || link.go);
+  if (!VIEWS[link.go]) jump(link.go);
+  if (link.q) setSearch(link.q);
+}
+function openFirstProposal(token) {
+  const list = (state && state.assistant && state.assistant.pending) || [];
+  const d = list.find(x => x.token === token) || (lastProposal && lastProposal.token === token ? lastProposal : null) || list[0];
+  if (d) openApproval(approvalSpecFromDetails(d)); else toast("That proposal is no longer open.", "warn");
 }
 
 /* one place for every button the new views add; each maps to an existing page function or endpoint */
@@ -2390,16 +3007,25 @@ document.addEventListener("click", ev => {
   else if (act === "explain") assistantRun({ op: "run", action: "explain_finding", target: { id: b.dataset.id } });
   else if (act === "checkmon") assistantRun({ op: "run", action: "check_monitor", target: { job: b.dataset.job } });
   else if (act === "rerun") { runJob(b.dataset.job); toast("Queued. ARGUS-1 will show the result when the check finishes.", ""); }
+  else if (act === "copy") copyText(b.dataset.copy);
+  else if (act === "openproposal") { go("assistant"); openFirstProposal(b.dataset.token); }
+  else if (act === "fixconfirm") {
+    const f = ((state && state.fix) || []).find(x => x.id === b.dataset.id);
+    if (f) openApproval({ ...approvalSpecForFix(f, b.dataset.choice), choice: b.dataset.choice });
+  }
+  else if (act === "notiview") { const k = b.dataset.key, it = notifStore.items.find(i => i.key === k); notifStore = markRead(notifStore, k); saveNotifs(); renderBell(); closeNotifs(false); if (it) openLink(it.link); }
+  else if (act === "notidismiss") { notifStore = dismissNotification(notifStore, b.dataset.key); saveNotifs(); renderBell(); renderNotifPanel(); }
+  else if (act === "notiall") { notifStore = markRead(notifStore, null); saveNotifs(); renderBell(); renderNotifPanel(); }
 });
 function setSearch(text) {
   query = String(text || ""); $("q").value = query; findingLimit = FINDING_BATCH; open.clear();
   if (state) renderFindings();
 }
-/* On the Findings card, filters are page state; "Investigate" fills the search box, and Esc clears it. */
 
 /* ---------- assistant: suggested questions, honest model status, guided actions ---------- */
 let chatOffer = null, chatActions = [];
-const SECTION_TAG = { verified: "verified", recommend: "recommended", assumption: "assumption" };
+const SECTION_TAG = { verified: "verified", recommend: "recommended", assumption: "assumption", simple: "In short",
+                      observed: "What we observed", why: "Why it matters", next: "What to do next" };
 function renderModelStatus(model) {
   const el = $("modelstatus");
   if (!el) return;
@@ -2407,37 +3033,43 @@ function renderModelStatus(model) {
 }
 async function refreshModelStatus() {
   try {
-    const r = await fetch("/api/assistant/action", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "run", action: "check_model" }) });
-    const d = await r.json(); if (r.ok && d.model) renderModelStatus(d.model);
+    const r = await postJSON("/api/assistant/action", { op: "run", action: "check_model" });
+    if (r.ok && r.data.model) renderModelStatus(r.data.model);
   } catch (_) { renderModelStatus(null); }
 }
 function renderAssistant(data) {
   const out = $("askanswer");
   out.dataset.kind = "answer";
-  chatOffer = data.offer || null; chatActions = data.actions || [];
-  const body = (data.sections && data.sections.length)
-    ? data.sections.map(sec => `<div class="sec">${SECTION_TAG[sec.kind] ? `<b class="tag">${SECTION_TAG[sec.kind]}:</b> ` : ""}${esc(sec.text)}</div>`).join("")
+  chatOffer = data.offer || null;
+  const proposal = data.details && data.lifecycle === "awaiting_approval" ? data.details : null;
+  // A proposal is decided in the confirmation box, never by a bare Approve button in the chat.
+  chatActions = (data.actions || []).filter(a => !(proposal && (a.action === "approve" || a.action === "cancel")));
+  const secs = data.sections || [];
+  const body = secs.length
+    ? secs.filter(x => x.kind !== "technical").map(sec => `<div class="sec">${SECTION_TAG[sec.kind] ? `<b class="tag">${SECTION_TAG[sec.kind]}:</b> ` : ""}${esc(sec.text).replace(/\n/g, "<br>")}</div>`).join("")
     : esc(data.answer);
+  const tech = secs.filter(x => x.kind === "technical");
+  const techHTML = tech.length ? `<details class="tech" ${detailLevel === "advanced" ? "open" : ""}><summary>Technical details</summary>${tech.map(x => `<div class="sec">${esc(x.text)}</div>`).join("")}</details>` : "";
   const buttons = chatActions.length ? `<div class="chat-actions">${chatActions.map((a, i) =>
     `<button data-chat-action="${i}">${esc(a.label)}</button>`).join("")}</div>` : "";
+  const propBtn = proposal ? `<div class="chat-actions"><button data-act="openproposal" data-token="${esc(proposal.token)}">Review and decide…</button></div>` : "";
   const chips = (data.suggestions || []).length ? `<div class="chat-chips">${data.suggestions.map(q =>
     `<button class="showmore" data-ask="${esc(q)}">${esc(q)}</button>`).join("")}</div>` : "";
   if (data.model) renderModelStatus(data.model);
-  out.innerHTML = body + buttons + chips + `<div class="chat-source">${
+  out.innerHTML = body + techHTML + lifecycleHTML(data.lifecycle) + propBtn + buttons + agentReportHTML(data.report, true) + chips + `<div class="chat-source">${
     data.source === "ollama" ? "local AI explanation · no action taken" :
     data.source === "builtin" ? "answered from ARGUS-1 data · basic assistance" :
     data.source === "busy" ? "local model busy" : "local model unavailable"}</div>`;
+  if (proposal) lastProposal = proposal;
 }
 async function assistantRun(body) {
   go("assistant");
   const out = $("askanswer");
   out.textContent = "Working…";
   try {
-    const r = await fetch("/api/assistant/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || r.status);
-    renderAssistant(d); tick();
+    const r = await postJSON("/api/assistant/action", body);
+    if (!r.ok) throw new Error(r.data.error || "request failed");
+    renderAssistant(r.data); tick();
   } catch (e) { out.textContent = "That didn't work. Please try again in a moment."; }
 }
 function assistantAction(i) {
@@ -2460,11 +3092,9 @@ async function askJarvis(event) {
   button.disabled = true; button.textContent = "Thinking…";
   output.textContent = "Reading current ARGUS-1 state…";
   try {
-    const r = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, offer: chatOffer }) });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || r.status);
-    input.value = ""; renderAssistant(d);
+    const r = await postJSON("/api/ask", { question, offer: chatOffer });
+    if (!r.ok) throw new Error(r.data.error || "request failed");
+    input.value = ""; renderAssistant(r.data);
   } catch (e) { output.textContent = "I couldn't get an answer just now. Please try again in a moment."; }
   finally { button.disabled = false; button.textContent = "Ask"; }
 }
