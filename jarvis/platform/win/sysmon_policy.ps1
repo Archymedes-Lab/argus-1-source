@@ -2,6 +2,8 @@
 # The broker stages this script in its administrator-only directory before use.
 # Nothing here installs, updates, or reconfigures Sysmon.
 
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'Stop'
 $result = [ordered]@{
   installed = $false

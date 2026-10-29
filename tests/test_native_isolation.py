@@ -111,8 +111,8 @@ class InstallerHandoffTests(unittest.TestCase):
         # Windows PowerShell 5.1 drops an empty native argument, so sc.exe
         # rejected `password= ""` and the first cutover rolled back.
         commands = [line.strip() for line in self.INSTALLER.read_text().splitlines()
-                    if line.strip().startswith("& sc.exe config")]
-        self.assertIn("& sc.exe config $name obj= $account | Out-Null", commands)
+                    if line.strip().startswith("& (Join-Path $Sys32 'sc.exe') config")]
+        self.assertIn("& (Join-Path $Sys32 'sc.exe') config $name obj= $account | Out-Null", commands)
         self.assertEqual([line for line in commands if "password=" in line], [])
 
     def test_monitor_task_is_not_registered_through_native_quoting(self):

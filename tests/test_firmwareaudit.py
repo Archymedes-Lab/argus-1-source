@@ -46,12 +46,15 @@ class ReaderScriptRules(unittest.TestCase):
             self.assertIn("fwaudit  = @{ script = 'hp_firmware_audit.ps1'", fh.read())
 
     def test_modules_come_from_program_files_by_full_path_only(self):
-        self.assertIn("Join-Path $env:ProgramFiles 'WindowsPowerShell\\Modules'", self.code)
+        # From the OS, not %ProgramFiles%: the user's environment can redefine it.
+        self.assertIn("Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'WindowsPowerShell\\Modules'",
+                      self.code)
+        self.assertNotIn("$env:ProgramFiles", self.code)
         imports = re.findall(r"Import-Module[^\n]*", self.code)
         self.assertEqual(len(imports), 1)
         self.assertIn("-Name (Join-Path $roots[$i]", imports[0])
         # The #requires by-name lookups must resolve to system folders only.
-        pin = self.code.index("$env:PSModulePath = \"$base;$env:SystemRoot")
+        pin = self.code.index("$env:PSModulePath = \"$base;$([Environment]::SystemDirectory)")
         self.assertLess(pin, self.code.index("Import-Module"))
         for user_path in ("Documents", "$env:USERPROFILE", "LOCALAPPDATA", "CurrentUser"):
             self.assertNotIn(user_path, self.code)

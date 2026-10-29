@@ -168,10 +168,18 @@ class WindowsSysmonPolicyTests(unittest.TestCase):
     def test_installer_refuses_unexpected_policy_and_backs_up_first(self):
         installer = INSTALLER.read_text(encoding="utf-8")
         refuse = installer.index("does not match the expected")
-        backup = installer.index("reg.exe export")
-        apply = installer.index("& $svc.Exe -c $PolicyPath")
+        backup = installer.index("'reg.exe') export")
+        apply = installer.index("& $svc.Exe -c $applied")
         self.assertLess(refuse, backup)
         self.assertLess(backup, apply)
+        # Verify, then apply the same copy: the hashed file is the protected
+        # copy in the vault backup, never the caller's path.
+        copy = installer.index("Copy-Item -LiteralPath $PolicyPath -Destination $applied")
+        hashed = installer.index("Get-FileHash -Algorithm SHA256 -LiteralPath $applied")
+        self.assertLess(copy, hashed)
+        self.assertLess(hashed, refuse)
+        self.assertNotIn("-c $PolicyPath", installer)
+        self.assertNotIn("-LiteralPath $PolicyPath).Hash", installer)
         self.assertIn("Jarvis\\Vault", installer)
         self.assertIn("-Pattern 'Rules'", installer)
 

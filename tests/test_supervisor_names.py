@@ -39,7 +39,8 @@ OLD_NAMES = ("deadman-jarvis.ps1", "wake-jarvis.ps1", "revive-jarvis.ps1",
 
 
 def _live(task, arguments, target_hash):
-    return {"name": task.name, "user": "DESKTOP\\chris",
+    user = "SYSTEM" if task.principal == "system" else "DESKTOP\\chris"
+    return {"name": task.name, "user": user,
             "runLevel": task.run_level.title(), "logonType": task.logon.upper(),
             "actions": [{"execute": r"C:\WINDOWS\System32\conhost.exe",
                          "arguments": (r'--headless "C:\WINDOWS\System32\WindowsPowerShell'

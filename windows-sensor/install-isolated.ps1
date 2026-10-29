@@ -7,12 +7,19 @@ param(
     [string]$User = "$env:USERDOMAIN\$env:USERNAME"
 )
 $ErrorActionPreference = 'Stop'
+# Locations from the operating system, not environment variables, which an
+# elevated shell inherits from the (unelevated) user's own environment.
+$Sys32 = [Environment]::SystemDirectory
+$WinDir = Split-Path -Parent $Sys32
+$ProgramFilesDir = [Environment]::GetFolderPath('ProgramFiles')
+$ProgramDataDir = Join-Path ([IO.Path]::GetPathRoot($Sys32)) 'ProgramData'
+$PowerShellExe = Join-Path $Sys32 'WindowsPowerShell\v1.0\powershell.exe'
 if (-not $SelfTest -and $Install -eq $Rollback) { throw 'Choose exactly one of -Install or -Rollback.' }
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $SelfTest -and -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Run from an elevated PowerShell.'
 }
-$trustedStage = Join-Path $env:ProgramFiles 'Jarvis\SensorStage'
+$trustedStage = Join-Path $ProgramFilesDir 'Jarvis\SensorStage'
 if (-not $SelfTest -and [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\') -ne $trustedStage.TrimEnd('\')) {
     throw "Run only the reviewed copy from the protected stage: $trustedStage"
 }
@@ -26,8 +33,8 @@ if (-not $SelfTest) {
         if (-not $expected -or $actual -ne $expected) { throw "Reviewed source hash mismatch: $name" }
     }
 }
-$root = Join-Path $env:ProgramData 'Jarvis\Sensor'
-$bin = Join-Path $env:ProgramFiles 'Jarvis\Sensor'
+$root = Join-Path $ProgramDataDir 'Jarvis\Sensor'
+$bin = Join-Path $ProgramFilesDir 'Jarvis\Sensor'
 $exe = Join-Path $bin 'JarvisSensorIsolated.exe'
 $monitor = Join-Path $bin 'monitor-isolated.ps1'
 $monitorTask = 'JARVIS Native Sensor Monitor'
@@ -39,13 +46,33 @@ $channels = @(
     @{ Name='JarvisSensorDefender'; Channel='Microsoft-Windows-Windows Defender/Operational' },
     @{ Name='JarvisSensorTasks'; Channel='Microsoft-Windows-TaskScheduler/Operational' }
 )
+function New-AdminOnlyDirectory([string]$prefix) {
+    # A fresh folder under %SystemRoot%\Temp, created with its ACL in one call
+    # (SYSTEM and Administrators only, nothing inherited). The user's %TEMP%
+    # is writable by the unelevated user, who could edit a policy file there
+    # between its writing and secedit applying it.
+    $sid = { param($v) New-Object Security.Principal.SecurityIdentifier($v) }
+    $sec = New-Object Security.AccessControl.DirectorySecurity
+    $sec.SetOwner((& $sid 'S-1-5-32-544'))
+    $sec.SetAccessRuleProtection($true, $false)
+    foreach ($s in @('S-1-5-18', 'S-1-5-32-544')) {
+        $sec.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((& $sid $s),
+            [Security.AccessControl.FileSystemRights]::FullControl,
+            [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+            [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)))
+    }
+    $path = Join-Path (Join-Path $WinDir 'Temp') ($prefix + [guid]::NewGuid().ToString('N'))
+    if (Test-Path -LiteralPath $path) { throw "refusing: $path already exists" }
+    [void][IO.Directory]::CreateDirectory($path, $sec)
+    return $path
+}
+
 function Grant-LogonAsService([string]$sid) {
-    $temp = Join-Path $env:TEMP ('jarvis-isolated-right-' + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $temp | Out-Null
+    $temp = New-AdminOnlyDirectory 'jarvis-isolated-right-'
     try {
         $inf = Join-Path $temp 'rights.inf'
         $db = Join-Path $temp 'rights.sdb'
-        & secedit.exe /export /cfg $inf /areas USER_RIGHTS | Out-Null
+        & (Join-Path $Sys32 'secedit.exe') /export /cfg $inf /areas USER_RIGHTS | Out-Null
         Assert-Exit 'export service logon policy'
         $content = Get-Content -LiteralPath $inf
         $line = $content | Where-Object { $_ -match '^SeServiceLogonRight' }
@@ -56,7 +83,7 @@ function Grant-LogonAsService([string]$sid) {
             $content = $content -replace '(\[Privilege Rights\])', "`$1`r`nSeServiceLogonRight = *$sid"
         }
         Set-Content -LiteralPath $inf -Value $content -Encoding Unicode
-        & secedit.exe /configure /db $db /cfg $inf /areas USER_RIGHTS | Out-Null
+        & (Join-Path $Sys32 'secedit.exe') /configure /db $db /cfg $inf /areas USER_RIGHTS | Out-Null
         Assert-Exit 'grant service logon right'
     } finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
 }
@@ -154,7 +181,9 @@ function New-MonitorAction([string]$script) {
     # schtasks /tr is passed through Windows PowerShell 5.1 native argument
     # quoting, which splits a quoted "Program Files" path (E_FAIL). A task
     # action object carries the arguments without a native command line.
-    New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
+    # Absolute: the task runs as SYSTEM, and a bare name is resolved through
+    # PATH, where any earlier writable folder would win.
+    New-ScheduledTaskAction -Execute $PowerShellExe -Argument (
         '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script + '"')
 }
 if ($SelfTest) {
@@ -223,7 +252,7 @@ if ($SelfTest) {
             throw 'Monitor confirmation self-test failed.'
         }
         $action = New-MonitorAction 'C:\Program Files\Jarvis\Sensor\monitor-isolated.ps1'
-        if ($action.Execute -ne 'powershell.exe' -or
+        if ($action.Execute -ne $PowerShellExe -or
             $action.Arguments -notlike '*-File "C:\Program Files\Jarvis\Sensor\monitor-isolated.ps1"') {
             throw 'Monitor task action self-test failed.'
         }
@@ -246,7 +275,7 @@ function Restore-Legacy {
         # Demote before the legacy readback so a failed rollback cannot leave
         # paused isolated services set to start automatically.
         if (Get-Service -Name $entry.Name -ErrorAction SilentlyContinue) {
-            & sc.exe config $entry.Name start= demand | Out-Null
+            & (Join-Path $Sys32 'sc.exe') config $entry.Name start= demand | Out-Null
             Assert-Exit 'disable isolated service'
         }
     }
@@ -278,12 +307,12 @@ function Restore-Legacy {
         }
     }
     Copy-Item -LiteralPath $oldExe -Destination (Join-Path $bin 'JarvisSensor.exe') -Force
-    & icacls.exe (Split-Path $root -Parent) /restore $savedAcl /c | Out-Null
+    & (Join-Path $Sys32 'icacls.exe') (Split-Path $root -Parent) /restore $savedAcl /c | Out-Null
     Assert-Exit 'restore spool ACL'
     foreach ($entry in $channels) {
         $directory = Channel-Dir $entry.Channel
         if (Test-Path -LiteralPath $directory) {
-            & icacls.exe $directory /grant "NT SERVICE\${oldName}:(OI)(CI)M" | Out-Null
+            & (Join-Path $Sys32 'icacls.exe') $directory /grant "NT SERVICE\${oldName}:(OI)(CI)M" | Out-Null
             Assert-Exit 'legacy channel spool access'
         }
     }
@@ -295,7 +324,7 @@ function Restore-Legacy {
     }
     $legacy = Get-Service -Name $oldName -ErrorAction SilentlyContinue
     if (-not $legacy) { throw 'Legacy service missing; leave isolated services stopped for inspection.' }
-    & sc.exe config $oldName start= auto | Out-Null
+    & (Join-Path $Sys32 'sc.exe') config $oldName start= auto | Out-Null
     Assert-Exit 'restore legacy startup'
     Start-Service -Name $oldName
     $deadline = (Get-Date).AddSeconds(90)
@@ -361,7 +390,7 @@ if (-not $coverage -or $coverage.error -or $coverage.freshness -ne 'FRESH' -or
     $collectorFailures.Count -gt 0) {
     throw 'Collector coverage baseline is incomplete; no cutover attempted.'
 }
-$compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+$compiler = Join-Path $WinDir 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) { throw '64-bit .NET Framework compiler unavailable.' }
 # Existing deployment needed an ASR-only exclusion for its unsigned, protected
 # service binary. Record whether this cutover added the new exact path.
@@ -390,8 +419,8 @@ try {
        bridge=$jarvisHealth.sources.bridge.status; coverage_ts=$coverage.ts;
        coverage_freshness=$coverage.freshness } |
         ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $baseline 'jarvis-baseline.json')
-    & sc.exe qc $oldName | Set-Content -LiteralPath (Join-Path $baseline 'legacy-service.txt')
-    & icacls.exe $root /save (Join-Path $baseline 'spool-acl.txt') /t /c | Out-Null
+    & (Join-Path $Sys32 'sc.exe') qc $oldName | Set-Content -LiteralPath (Join-Path $baseline 'legacy-service.txt')
+    & (Join-Path $Sys32 'icacls.exe') $root /save (Join-Path $baseline 'spool-acl.txt') /t /c | Out-Null
     Assert-Exit 'spool ACL backup'
     Get-FileHash -LiteralPath $exe -Algorithm SHA256 | Format-Table -AutoSize
     Write-Host "Rollback baseline: $baseline"
@@ -428,7 +457,7 @@ foreach ($entry in $channels) {
         throw "Preserved spool for $($entry.Channel) exceeds its isolated budget; no evidence was removed."
     }
 }
-& sc.exe config $oldName start= demand | Out-Null
+& (Join-Path $Sys32 'sc.exe') config $oldName start= demand | Out-Null
 Assert-Exit 'disable legacy automatic startup'
     # A manual start of the old service must obey the same mode marker. The
     # saved binary is restored before rollback starts the old publisher.
@@ -443,17 +472,17 @@ Assert-Exit 'disable legacy automatic startup'
             New-Service -Name $name -BinaryPathName "`"$exe`" --service $name" `
                 -DisplayName "JARVIS $name collector" -StartupType Automatic | Out-Null
         }
-        & sc.exe sidtype $name unrestricted | Out-Null
+        & (Join-Path $Sys32 'sc.exe') sidtype $name unrestricted | Out-Null
         Assert-Exit "SID type $name"
         # In Windows PowerShell 5.1 an empty native argument is dropped, so
         # `password= ""` makes sc.exe reject the command (1639). SCM accepts
         # a virtual service account with the password option omitted; this
         # was read back on the stopped service before cutover.
-        & sc.exe config $name obj= $account | Out-Null
+        & (Join-Path $Sys32 'sc.exe') config $name obj= $account | Out-Null
         Assert-Exit "configure account $name"
-        & sc.exe config $name start= auto | Out-Null
+        & (Join-Path $Sys32 'sc.exe') config $name start= auto | Out-Null
         Assert-Exit "configure startup $name"
-        & sc.exe failure $name reset= 86400 actions= restart/5000/restart/30000/none/0 | Out-Null
+        & (Join-Path $Sys32 'sc.exe') failure $name reset= 86400 actions= restart/5000/restart/30000/none/0 | Out-Null
         Assert-Exit "recovery $name"
         $sid = (New-Object Security.Principal.NTAccount($account)).Translate(
             [Security.Principal.SecurityIdentifier]).Value
@@ -461,17 +490,17 @@ Assert-Exit 'disable legacy automatic startup'
         $member = Get-LocalGroupMember -SID 'S-1-5-32-573' -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -eq $account }
         if (-not $member) { Add-LocalGroupMember -SID 'S-1-5-32-573' -Member $account }
-        & icacls.exe $dir /inheritance:r /grant:r "${account}:(OI)(CI)M" `
+        & (Join-Path $Sys32 'icacls.exe') $dir /inheritance:r /grant:r "${account}:(OI)(CI)M" `
             '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' "${User}:(OI)(CI)RX" | Out-Null
         Assert-Exit "spool ACL $name"
-        & icacls.exe (Join-Path $root 'acks') /grant "${account}:(OI)(CI)RX" | Out-Null
+        & (Join-Path $Sys32 'icacls.exe') (Join-Path $root 'acks') /grant "${account}:(OI)(CI)RX" | Out-Null
         Assert-Exit "ack ACL $name"
-        & icacls.exe $root /grant "${account}:(OI)(CI)RX" | Out-Null
+        & (Join-Path $Sys32 'icacls.exe') $root /grant "${account}:(OI)(CI)RX" | Out-Null
         Assert-Exit "root read ACL $name"
-        & icacls.exe $bin /grant "${account}:(OI)(CI)RX" | Out-Null
+        & (Join-Path $Sys32 'icacls.exe') $bin /grant "${account}:(OI)(CI)RX" | Out-Null
         Assert-Exit "binary read ACL $name"
     }
-    & icacls.exe $root /remove:g "NT SERVICE\$oldName" | Out-Null
+    & (Join-Path $Sys32 'icacls.exe') $root /remove:g "NT SERVICE\$oldName" | Out-Null
     Assert-Exit 'remove legacy spool write access'
     Write-Mode
     foreach ($entry in $channels) { Start-Service -Name $entry.Name }

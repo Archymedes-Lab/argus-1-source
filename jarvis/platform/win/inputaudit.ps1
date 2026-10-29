@@ -26,9 +26,14 @@
 # paths, signer status, hook types and counts. Never key codes, window titles
 # or command lines.
 
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'Stop'
 $Name = 'JarvisInputAudit'
-$Dir = Join-Path $env:ProgramData 'Jarvis\Broker\inputaudit'
+$Sys32 = [Environment]::SystemDirectory
+$Logman = Join-Path $Sys32 'logman.exe'
+# From the system drive, not %ProgramData% (the user's environment can set it).
+$Dir = Join-Path ([IO.Path]::GetPathRoot($Sys32)) 'ProgramData\Jarvis\Broker\inputaudit'
 $Etl = Join-Path $Dir 'session.etl'
 $Old = Join-Path $Dir 'session.prev.etl'
 $Inv = Join-Path $Dir 'inventory.json'
@@ -39,7 +44,7 @@ $WantIds = "*[System[(EventID=1000 or EventID=1001 or EventID=1002 or EventID=10
 New-Item -ItemType Directory -Force $Dir | Out-Null
 
 function Unix([datetime]$t) { [DateTimeOffset]::new($t.ToUniversalTime()).ToUnixTimeSeconds() }
-function Running { & logman.exe query $Name -ets *> $null; return $LASTEXITCODE -eq 0 }
+function Running { & $Logman query $Name -ets *> $null; return $LASTEXITCODE -eq 0 }
 function Start-Session {
     # 0x1400: AuditApiCalls (0x400) plus the 0x1000 bit that 1003 (key-state
     # polling) is gated on. Measured 2026-10-21: 0x400 alone and 0x1000 alone
@@ -47,7 +52,7 @@ function Start-Session {
     # attributed. 0x1000 adds about 450 other Win32k events a second, so the
     # file is capped and parsed with an event-id filter (0.8 s for 20k events
     # against 23 s unfiltered).
-    & logman.exe start $Name -p Microsoft-Windows-Win32k $Keyword 0x5 -o $Etl -bs 64 -nb 4 16 -max $CapMB -ets | Out-Null
+    & $Logman start $Name -p Microsoft-Windows-Win32k $Keyword 0x5 -o $Etl -bs 64 -nb 4 16 -max $CapMB -ets | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "logman start failed ($LASTEXITCODE)" }
 }
 
@@ -63,7 +68,7 @@ $gapMs = $null
 $fresh = $false
 if (Running) {
     $t0 = Get-Date
-    & logman.exe stop $Name -ets | Out-Null
+    & $Logman stop $Name -ets | Out-Null
     Remove-Item $Old -ErrorAction SilentlyContinue
     if (Test-Path $Etl) { Move-Item $Etl $Old }
     Start-Session

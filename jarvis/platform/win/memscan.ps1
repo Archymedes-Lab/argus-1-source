@@ -30,7 +30,23 @@
 #
 # Without elevation only processes owned by this user can be opened. That is
 # reported rather than silently reducing the sample.
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'SilentlyContinue'
+# The user the broker was installed for, recorded by SID at install in this
+# administrator-only folder. The broker runs as SYSTEM, so per-user state is
+# read from HKEY_USERS\<SID>, read-only, never from this process's environment.
+$UserSid = ''
+try { $UserSid = [string](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'user.json') -Raw | ConvertFrom-Json).sid } catch { }
+if ($UserSid -notmatch '^S-1-(5-21|12-1)(-\d+)+$') { $UserSid = '' }
+function Get-UserLocalAppData([string]$sid) {
+    # From the administrator-owned profile list, not an environment variable.
+    if (-not $sid) { return '' }
+    $key = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid"
+    $profile = (Get-ItemProperty -LiteralPath $key -Name ProfileImagePath -ErrorAction SilentlyContinue).ProfileImagePath
+    if (-not $profile) { return '' }
+    return (Join-Path $profile 'AppData\Local')
+}
 
 $src = @'
 using System;
@@ -423,7 +439,7 @@ $o = [ordered]@{}
 $scanWatch = [Diagnostics.Stopwatch]::StartNew()
 $o.memory = [JarvisMem]::Scan(400, 4000) | ConvertFrom-Json
 $o.scan_ms = $scanWatch.ElapsedMilliseconds
-$o.local_app_data = $env:LOCALAPPDATA
+$o.local_app_data = Get-UserLocalAppData $UserSid
 
 # Who hosts each copied-in image: executable, how it was launched, and its
 # parent. Only for the few processes that have one; never the full command

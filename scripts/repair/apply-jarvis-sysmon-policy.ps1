@@ -25,14 +25,19 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$VaultRoot = Join-Path $env:ProgramData 'Jarvis\Vault'
+$Sys32 = [Environment]::SystemDirectory
+# From the system drive, not %ProgramData%: an elevated shell of the same user
+# inherits that user's own environment variables.
+$VaultRoot = Join-Path ([IO.Path]::GetPathRoot($Sys32)) 'ProgramData\Jarvis\Vault'
 $SysmonVault = Join-Path $VaultRoot 'sysmon'
 
 function Lock-Folder([string]$path) {
     # SYSTEM and Administrators: full. The installing user: read. No other
     # account, and no inherited ProgramData ACEs (which let Users create files).
     $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    & icacls.exe $path /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' `
+    & (Join-Path $Sys32 'icacls.exe') $path /setowner '*S-1-5-32-544' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls /setowner failed on $path ($LASTEXITCODE)" }
+    & (Join-Path $Sys32 'icacls.exe') $path /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' `
         "*${owner}:(OI)(CI)RX" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "icacls failed on $path ($LASTEXITCODE)" }
 }
@@ -96,7 +101,7 @@ function Restore-Backup([string]$dir) {
     $regs = @(Get-ChildItem -LiteralPath $dir -Filter '*.reg' -File)
     if ($regs.Count -eq 0) { throw "no registry backup in $dir" }
     foreach ($reg in $regs) {
-        & reg.exe import $reg.FullName 2>&1 | Out-Null
+        & (Join-Path $Sys32 'reg.exe') import $reg.FullName 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "reg import failed for $($reg.Name) ($LASTEXITCODE)" }
     }
     Restart-Service -Name $svc.Name -Force
@@ -119,13 +124,7 @@ if ($Rollback) {
 if (-not $PolicyPath -or -not $ExpectedSha256) { throw 'Use -PolicyPath with -ExpectedSha256, or -Rollback <backup folder>.' }
 if (-not (Test-Path -LiteralPath $PolicyPath -PathType Leaf)) { throw "Policy not found: $PolicyPath" }
 $ExpectedSha256 = $ExpectedSha256.ToLowerInvariant()
-$actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $PolicyPath).Hash.ToLowerInvariant()
-if ($actual -ne $ExpectedSha256) { throw "Refusing: policy hash $actual does not match the expected $ExpectedSha256." }
-$xml = New-Object System.Xml.XmlDocument
-$xml.Load((Resolve-Path -LiteralPath $PolicyPath).ProviderPath)
-$create = $xml.SelectSingleNode('/Sysmon/EventFiltering/ProcessCreate[@onmatch="exclude"]')
-if ($null -eq $create -or $create.HasChildNodes) { throw 'Policy must keep an empty ProcessCreate exclude rule.' }
-
+if ($ExpectedSha256 -notmatch '^[0-9a-f]{64}$') { throw 'Refusing: -ExpectedSha256 is not a SHA-256 hex digest.' }
 $svc = Get-SysmonService
 foreach ($dir in @($VaultRoot, $SysmonVault)) {
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
@@ -134,12 +133,26 @@ Lock-Folder $VaultRoot
 $backup = Join-Path $SysmonVault ('backup-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))
 New-Item -ItemType Directory -Path $backup | Out-Null
 
+# Verify, then apply the same copy: the policy is copied into the
+# administrator-only backup first, and that copy is hashed, parsed and given
+# to Sysmon. The file at -PolicyPath can live in a folder the user can write,
+# and a swap between the check and `sysmon -c` would install other rules.
+$applied = Join-Path $backup 'applied-policy.xml'
+Copy-Item -LiteralPath $PolicyPath -Destination $applied
+(Get-Item -LiteralPath $applied).IsReadOnly = $true
+$actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $applied).Hash.ToLowerInvariant()
+if ($actual -ne $ExpectedSha256) { throw "Refusing: policy hash $actual does not match the expected $ExpectedSha256." }
+$xml = New-Object System.Xml.XmlDocument
+$xml.Load($applied)
+$create = $xml.SelectSingleNode('/Sysmon/EventFiltering/ProcessCreate[@onmatch="exclude"]')
+if ($null -eq $create -or $create.HasChildNodes) { throw 'Policy must keep an empty ProcessCreate exclude rule.' }
+
 $before = Get-SysmonDump $svc.Exe
 $driver = Get-DriverName $before
 Set-Content -LiteralPath (Join-Path $backup 'before-export.txt') -Value $before -Encoding UTF8
 foreach ($key in @("HKLM\SYSTEM\CurrentControlSet\Services\$driver", "HKLM\SYSTEM\CurrentControlSet\Services\$($svc.Name)")) {
     $file = Join-Path $backup (($key -split '\\')[-1] + '.reg')
-    & reg.exe export $key $file /y 2>&1 | Out-Null
+    & (Join-Path $Sys32 'reg.exe') export $key $file /y 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $file) -or (Get-Item -LiteralPath $file).Length -eq 0) {
         throw "Refusing: could not back up $key ($LASTEXITCODE); nothing was changed."
     }
@@ -147,7 +160,6 @@ foreach ($key in @("HKLM\SYSTEM\CurrentControlSet\Services\$driver", "HKLM\SYSTE
 if (-not (Select-String -LiteralPath (Join-Path $backup "$driver.reg") -Pattern 'Rules' -Quiet)) {
     throw "Refusing: the $driver backup does not contain the Rules value; nothing was changed."
 }
-Copy-Item -LiteralPath $PolicyPath -Destination (Join-Path $backup 'applied-policy.xml')
 $receipt = [ordered]@{
     at = (Get-Date).ToUniversalTime().ToString('o')
     service = $svc.Name; driver = $driver
@@ -158,7 +170,7 @@ $receipt = [ordered]@{
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $backup 'receipt.json') -Encoding UTF8
 
 if (-not $PSCmdlet.ShouldProcess($svc.Exe, 'replace Sysmon configuration')) { return }
-& $svc.Exe -c $PolicyPath | Out-Null
+& $svc.Exe -c $applied | Out-Null
 $receipt.applied = ($LASTEXITCODE -eq 0)
 $after = if ($receipt.applied) { Get-SysmonDump $svc.Exe } else { '' }
 Set-Content -LiteralPath (Join-Path $backup 'after-export.txt') -Value $after -Encoding UTF8

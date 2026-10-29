@@ -45,7 +45,8 @@ class ManagedPersistenceTests(unittest.TestCase):
             action["execute"] = r"C:\WINDOWS\System32\conhost.exe"
             action["arguments"] = (r'--headless "C:\WINDOWS\System32\WindowsPowerShell\v1.0'
                                    r'\powershell.exe" ' + args)
-        return {"name": task.name.title(), "user": "DESKTOP\\chris",
+        user = "SYSTEM" if task.principal == "system" else "DESKTOP\\chris"
+        return {"name": task.name.title(), "user": user,
                 "runLevel": task.run_level.title(), "logonType": task.logon.upper(),
                 "actions": [action]}
 

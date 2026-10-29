@@ -13,8 +13,10 @@
 
 import base64
 import hashlib
+import re
 import subprocess
 import time
+from pathlib import Path
 
 from jarvis.core.paths import REPO_ROOT, WIN_SCRIPTS_DIR
 from jarvis.platform import broker, host
@@ -70,31 +72,130 @@ def _make_stage(prefix):
     return "", f"could not create a staging folder on Windows after {STAGE_TRIES} tries: {why}"
 
 
-def _elevated_files(files, entry, args, timeout=240):
-    """Copy `files` ({name: path}) to a fresh local folder and run `entry`
-    elevated through one UAC prompt. Returns (exit code, output).
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+# PowerShell closes a single-quoted string at any of these characters.
+_PS_QUOTES = ("'", "\u2018", "\u2019", "\u201a", "\u201b")
+_POWERSHELL = "(Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\\v1.0\\powershell.exe')"
 
-    Never run from the \\\\wsl share: an elevated shell executing a file the
-    user can edit is the hole the broker is built to avoid.
+# Runs elevated. It never executes anything from the user's TEMP stage: it
+# creates a fresh folder under %SystemRoot%\Temp whose ACL (SYSTEM and
+# Administrators only, nothing inherited) is set in the same call that creates
+# it, copies the staged files there, checks each copy against the SHA-256 JARVIS
+# computed from its checkout, and runs only those copies. Data reaches it as
+# quoted literals built by _ps_literal, never as code.
+_BOOTSTRAP = r"""$ErrorActionPreference = 'Stop'
+$sys = [Environment]::SystemDirectory
+$env:PSModulePath = Join-Path $sys 'WindowsPowerShell\v1.0\Modules'
+$src = __SRC__
+$want = [ordered]@{ __WANT__ }
+$entry = __ENTRY__
+$argv = @(__ARGS__)
+$id = { param($v) New-Object Security.Principal.SecurityIdentifier($v) }
+$sec = New-Object Security.AccessControl.DirectorySecurity
+$sec.SetOwner((& $id 'S-1-5-32-544'))
+$sec.SetAccessRuleProtection($true, $false)
+foreach ($s in 'S-1-5-18', 'S-1-5-32-544') {
+    $sec.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((& $id $s), 'FullControl',
+        'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+}
+$dst = Join-Path (Join-Path (Split-Path -Parent $sys) 'Temp') ('jarvis-elevated-' + [guid]::NewGuid().ToString('N'))
+$code = 1
+try {
+    if (Test-Path -LiteralPath $dst) { throw "refusing: $dst already exists" }
+    [void][IO.Directory]::CreateDirectory($dst, $sec)
+    foreach ($name in $want.Keys) {
+        $to = Join-Path $dst $name
+        Copy-Item -LiteralPath (Join-Path $src $name) -Destination $to
+        $got = (Get-FileHash -Algorithm SHA256 -LiteralPath $to).Hash.ToLowerInvariant()
+        if ($got -ne $want[$name]) { throw "refusing: $name changed after JARVIS checked it" }
+    }
+    $argv = @($argv | ForEach-Object { $_.Replace('{stage}', $dst) })
+    & (Join-Path $sys 'WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive `
+        -ExecutionPolicy Bypass -File (Join-Path $dst $entry) @argv
+    $code = $LASTEXITCODE
+} catch {
+    Write-Output $_.Exception.Message
+    $code = 1
+} finally {
+    Remove-Item -LiteralPath $dst -Recurse -Force -ErrorAction SilentlyContinue
+}
+exit $code
+"""
+
+
+def _ps_literal(text):
+    """`text` as a PowerShell single-quoted literal (data, never code)."""
+    text = str(text)
+    if any(ch in text for ch in "\r\n\0"):
+        raise ValueError("control character in a PowerShell literal")
+    for quote in _PS_QUOTES:
+        text = text.replace(quote, quote + quote)
+    return "'" + text + "'"
+
+
+def _bootstrap(stage, digests, entry, args):
+    """The elevated bootstrap for `digests` ({name: sha256}) staged in `stage`."""
+    for name in list(digests) + [entry]:
+        if not _SAFE_NAME.match(name):
+            raise ValueError(f"unsafe staged file name: {name!r}")
+    if entry not in digests:
+        raise ValueError("the entry script must be one of the verified files")
+    for digest in digests.values():
+        if not _HEX64.match(digest):
+            raise ValueError("not a SHA-256 hex digest")
+    want = "; ".join(f"{_ps_literal(n)} = {_ps_literal(d)}" for n, d in digests.items())
+    return (_BOOTSTRAP.replace("__SRC__", _ps_literal(stage))
+            .replace("__WANT__", want)
+            .replace("__ENTRY__", _ps_literal(entry))
+            .replace("__ARGS__", ", ".join(_ps_literal(a) for a in args)))
+
+
+def _elevated_verified(files, entry, args, prefix, timeout=240):
+    """Run `entry` elevated, through one UAC prompt, from verified copies.
+
+    `files` maps a staged name to its checkout path. The files are staged in
+    the user's TEMP (writable by anything running as the user), so the
+    elevated side copies them into an administrator-only folder, refuses any
+    copy whose SHA-256 differs from what was read here, and runs only those
+    copies. The \\\\wsl share and the TEMP stage are never executed elevated.
+    `{stage}` in `args` becomes that protected folder. Returns (exit code, output).
     """
     if not win.available():
         return 1, "the Windows interop bridge is not available"
-    stage, why = _make_stage("jarvis-elevated")
+    digests = {name: hashlib.sha256(Path(path).read_bytes()).hexdigest()
+               for name, path in files.items()}
+    stage, why = _make_stage(prefix)
     if not stage:
         return 1, why
-    copy = ";".join(f"Copy-Item -LiteralPath '{_winpath(path)}' -Destination '{stage}\\{name}'"
-                    for name, path in files.items())
-    argline = ",".join(f"'{a}'" for a in (["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                                          f"{stage}\\{entry}"] + [
-                                              a.replace("{stage}", stage) for a in args]))
-    script = (f"{copy}; $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
-              f"-ArgumentList {argline}; Remove-Item -LiteralPath '{stage}' -Recurse -Force; exit $p.ExitCode")
+    try:
+        inner = _bootstrap(stage, digests, entry, args)
+        copy = ";".join(
+            f"Copy-Item -LiteralPath {_ps_literal(_winpath(path))} "
+            f"-Destination (Join-Path {_ps_literal(stage)} {_ps_literal(name)})"
+            for name, path in files.items())
+    except ValueError as exc:
+        return 1, f"refused: {exc}"
+    # The bootstrap travels as a here-string and is encoded on the Windows
+    # side: encoding it twice here nearly filled the 32767-character limit.
+    # Its data literals cannot contain a newline, so no line can end it early.
+    script = (f"{copy}; $b = @'\n{inner}\n'@\n"
+              "$e = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($b)); "
+              f"$p = Start-Process -FilePath {_POWERSHELL} -Verb RunAs -Wait -PassThru "
+              "-ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',"
+              "'-EncodedCommand',$e; "
+              f"Remove-Item -LiteralPath {_ps_literal(stage)} -Recurse -Force; exit $p.ExitCode")
     try:
         r = subprocess.run(_ps_args(script),
                            capture_output=True, text=True, errors="replace", timeout=timeout, cwd="/")
     except subprocess.TimeoutExpired:
         return 1, "timed out waiting for the UAC prompt"
     return r.returncode, _clean(r.stdout + "\n" + r.stderr)
+
+
+def _elevated_files(files, entry, args, timeout=240):
+    """Copy `files` ({name: path}) and run `entry` elevated through one UAC prompt."""
+    return _elevated_verified(files, entry, args, "jarvis-elevated", timeout)
 
 
 def _sysmon_baseline():
@@ -116,31 +217,12 @@ def _sysmon_baseline():
 
 
 def _elevated(args, timeout=240):
-    """Run jarvis-elevated-broker.ps1 with `args` through a UAC prompt, from a local copy.
-
-    The script must not be launched from the \\\\wsl share: an elevated shell
-    executing a file the user can edit is the hole the broker is built to
-    avoid, even for the instant of installation.
-    """
-    if not win.available():
-        return 1, "the Windows interop bridge is not available"
-    stage, why = _make_stage("jarvis-broker")
-    if not stage:
-        return 1, why
-    names = [broker.BROKER_SCRIPT] + list(broker.SCRIPTS.values())
-    copy = ";".join(
-        f"Copy-Item -LiteralPath '{_winpath((REPO_ROOT if n == broker.BROKER_SCRIPT else WIN_SCRIPTS_DIR) / n)}' "
-        f"-Destination '{stage}\\{n}'" for n in names)
-    argline = ",".join(f"'{a}'" for a in (["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                                          f"{stage}\\{broker.BROKER_SCRIPT}"] + args + ["-Source", stage]))
-    script = (f"{copy}; $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
-              f"-ArgumentList {argline}; Remove-Item -LiteralPath '{stage}' -Recurse -Force; exit $p.ExitCode")
-    try:
-        r = subprocess.run(_ps_args(script),
-                           capture_output=True, text=True, errors="replace", timeout=timeout, cwd="/")
-    except subprocess.TimeoutExpired:
-        return 1, "timed out waiting for the UAC prompt"
-    return r.returncode, _clean(r.stdout + "\n" + r.stderr)
+    """Run jarvis-elevated-broker.ps1 with `args` through a UAC prompt, from a
+    verified administrator-only copy (see _elevated_verified)."""
+    files = {n: (REPO_ROOT if n == broker.BROKER_SCRIPT else WIN_SCRIPTS_DIR) / n
+             for n in [broker.BROKER_SCRIPT] + list(broker.SCRIPTS.values())}
+    return _elevated_verified(files, broker.BROKER_SCRIPT, list(args) + ["-Source", "{stage}"],
+                              "jarvis-broker", timeout)
 
 
 def cmd_broker(args, store=None):

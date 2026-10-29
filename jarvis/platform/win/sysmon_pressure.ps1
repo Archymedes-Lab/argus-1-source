@@ -7,6 +7,8 @@
 # path measured 2.3s for the same query. Sysmon 12/13/14 share the layout
 # RuleName(0), EventType, UtcTime, ProcessGuid, ProcessId, Image(5), ...
 
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'Stop'
 $MaxEvents = 200000
 $BudgetSeconds = 90

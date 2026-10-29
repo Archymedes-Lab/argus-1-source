@@ -253,9 +253,12 @@ class VaultScriptTests(unittest.TestCase):
 
     def test_prefix_rule_and_owner_only_read(self):
         self.assertIn("staged chain does not extend the vaulted chain", self.SCRIPT)
-        self.assertIn("WindowsIdentity]::GetCurrent().User.Value", self.SCRIPT)
+        # Readable only by the user recorded at install (the job runs as
+        # SYSTEM), whose inbox is found through the profile list, not %LOCALAPPDATA%.
+        self.assertIn("@($UserSid, 'ReadAndExecute')", self.SCRIPT)
         self.assertNotIn("S-1-5-32-545", self.SCRIPT)       # BUILTIN\\Users
-        self.assertIn("$env:LOCALAPPDATA 'Jarvis\\VaultInbox'", self.SCRIPT)
+        self.assertIn("Join-Path $UserLocal 'Jarvis\\VaultInbox'", self.SCRIPT)
+        self.assertNotIn("$env:LOCALAPPDATA", self.SCRIPT)
 
 
 if __name__ == "__main__":
