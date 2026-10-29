@@ -14,7 +14,8 @@ import unittest
 from unittest import mock
 
 from jarvis.collectors.process import assemblies, memscan
-from jarvis.core.paths import REPO_ROOT as ROOT, load_win_script
+from jarvis.core.paths import REPO_ROOT as ROOT
+from jarvis.core.paths import load_win_script
 from jarvis.response import jev, memory_advice
 
 PS = r"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe"

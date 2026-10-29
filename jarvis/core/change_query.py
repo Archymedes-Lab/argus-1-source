@@ -8,7 +8,6 @@ clock shifts, stale cursors and bounded replay all limit its meaning.
 from collections import Counter
 from datetime import datetime, timezone
 
-
 MAX_SCAN_EVENTS = 20_000
 MAX_WINDOW_SECONDS = 3600
 CURSOR_FRESH_SECONDS = 180

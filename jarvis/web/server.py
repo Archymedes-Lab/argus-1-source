@@ -22,19 +22,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from jarvis.collectors.network import internetwatch
-from jarvis.core import incidents
+from jarvis.core import incidents, mechanisms
 from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
-from jarvis.response import acknowledge, alert, assistant, protocols, questions, remediation
+from jarvis.platform import procfeed
+from jarvis.response import acknowledge, advisor, alert, assistant, protocols, questions, remediation
 from jarvis.response.reporting import score, voice
-from jarvis.service import attackmap, sdnotify
+from jarvis.service import attackmap, detectorhealth, sdnotify
 from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
-from jarvis.service.schedule import JOBS
+from jarvis.service.schedule import JOBS, NOT_APPLICABLE
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
-from jarvis.web import stream
+from jarvis.web import procview, stream
+from jarvis.web import token as api_token
 
 PAGE = str(STATIC_DIR / "dashboard.html")
 GEO_PAGE = str(STATIC_DIR / "geo.html")
@@ -51,9 +53,21 @@ COVERAGE_ASSETS = {
     # pinned Natural Earth files (scripts/tools/build_world_assets.py).
     "/world": ("world.html", "text/html; charset=utf-8", None),
     "/static/world.js": ("world.js", "text/javascript; charset=utf-8", None),
+    # The /procs view: every process on both domains, live, read-only.
+    "/procs": ("procs.html", "text/html; charset=utf-8", None),
+    "/static/procs.js": ("procs.js", "text/javascript; charset=utf-8", None),
+    "/static/procs-model.js": ("procs-model.js", "text/javascript; charset=utf-8", None),
+    "/static/procs-state.js": ("procs-state.js", "text/javascript; charset=utf-8", None),
+    "/static/procs-scene.js": ("procs-scene.js", "text/javascript; charset=utf-8", None),
+    "/static/procs-layout.js": ("procs-layout.js", "text/javascript; charset=utf-8", None),
     "/static/vendor/world-50m.json": (
         "vendor/world-50m.json", "application/json",
         "bd89e13c5073e3fba5dbe16ca9231a1d7d7de5844961f426e9d35d95b4ec4a28"),
+    # The dashboard's typeface: Inter 4.1 variable (SIL Open Font License 1.1,
+    # vendor/InterVariable-LICENSE.txt), from the rsms/inter v4.1 release.
+    "/static/vendor/InterVariable.woff2": (
+        "vendor/InterVariable.woff2", "font/woff2",
+        "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3"),
 }
 
 
@@ -119,7 +133,8 @@ def _performance_state(jobs, scheduler):
             "scheduled_duty_pct": round(sum(x["duty_pct"] for x in contributors), 1),
             "top": contributors[:6],
             "running": [n for n in (getattr(scheduler, "current", None),
-                                      getattr(scheduler, "fast_current", None)) if n]}
+                                      getattr(scheduler, "fast_current", None),
+                                      getattr(scheduler, "bulk_current", None)) if n]}
 
 
 def _intel_state(store):
@@ -180,11 +195,7 @@ def _continuity_state(store, snaps, scheduler, findings):
         from jarvis.core import governor as governor_mod
         from jarvis.service import protection as protection_mod
         stamp = time.time()
-        required = {"scan": 180}
-        if "win" in scheduler.hosts:
-            required.update(bridge=135, sysmon=1500, native=180)
-        optional = {"internet": 300, "veil": 90, "secrets": 90000,
-                    "resources": 900}
+        required, optional = mechanisms.health_sources(windows="win" in scheduler.hosts)
         sources = {}
         for name, limit in {**required, **optional}.items():
             snap = snaps.get(name)
@@ -225,7 +236,7 @@ def build_state(db_path, scheduler):
                         all_checks.append({**f, "job": name})
                     elif sev:
                         counts[sev] = counts.get(sev, 0) + 1
-                        all_findings.append({**f, "job": name})
+                        all_findings.append({**f, "job": name, "id": acknowledge.finding_id(f, name)})
             jobs.append({
                 "name": name, "label": label, "interval": interval,
                 "ts": s["ts"] if s else 0,
@@ -240,7 +251,8 @@ def build_state(db_path, scheduler):
                 # is STALE: no result is no result, never clean.
                 "freshness": reliability_mod.classify(
                     (time.time() - s["ts"]) if s and s["ts"] else -1, interval),
-                "running": name in (scheduler.current, getattr(scheduler, "fast_current", None)),
+                "running": name in (scheduler.current, getattr(scheduler, "fast_current", None),
+                                    getattr(scheduler, "bulk_current", None)),
                 "next": int(scheduler.next_run.get(name, 0) - time.time()),
             })
 
@@ -309,6 +321,7 @@ def build_state(db_path, scheduler):
             "baseline_at": store.get_meta("baseline_at"),
             "db": db_path,
             "reliability": _reliability_state(scheduler, snaps),
+            "detector_health": _detector_health(store, scheduler, snaps),
             "performance": {**_performance_state(jobs, scheduler),
                             "subsystems": _meta_object(store, "resource_profile_v1"),
                             "accelerator": _meta_object(store, "accelerator_probe_v2")
@@ -329,13 +342,27 @@ def _wake_phase(scheduler):
         return {}
 
 
+def _detector_health(store, scheduler, snaps):
+    """Per-detector health for the dashboard panel. Never raises."""
+    try:
+        status_fn = getattr(scheduler, "reliability_status", None)
+        statuses = status_fn(snapshots=snaps).get("statuses", {}) if callable(status_fn) else {}
+        rep = detectorhealth.report(JOBS, snaps, statuses, NOT_APPLICABLE)
+        detectorhealth.record_transitions(store, rep)
+        return rep
+    except Exception:
+        return {"detectors": [], "counts": {}, "total": 0, "attention": [],
+                "summary": "Detector health is unavailable right now."}
+
+
 def _reliability_state(scheduler, snaps):
     """Collector reliability plane for the dashboard. Never raises."""
     try:
         status_fn = getattr(scheduler, "reliability_status", None)
         if callable(status_fn):
             status = status_fn(snapshots=snaps)
-            return {**status["summary"], "resume": status.get("resume") or {}}
+            return {**status["summary"], "resume": status.get("resume") or {},
+                    "outages": status.get("outages") or {}}
     except Exception:
         pass
     return {"levels": {}, "stale_collectors": [], "recovering": [],
@@ -422,6 +449,11 @@ class Handler(BaseHTTPRequestHandler):
             name = host.rsplit(":", 1)[0] if ":" in host else host
         return name.lower() in ALLOWED_HOSTS
 
+    def _runner(self):
+        """Queue one audit for the assistant, or None when no scheduler is attached."""
+        scheduler = getattr(self, "scheduler", None)
+        return scheduler.force if scheduler is not None else None
+
     def _same_origin(self):
         """Reject cross-site calls. Browsers that send Sec-Fetch-Site make this
         exact; for anything older we fall back to checking Origin."""
@@ -451,7 +483,8 @@ class Handler(BaseHTTPRequestHandler):
     # The dashboard is self-contained and forbids anything external, except that
     # it may frame its own GeoSecurity page.
     CSP_STRICT = ("default-src 'none'; style-src 'unsafe-inline'; "
-                  "script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'")
+                  "script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; "
+                  "font-src 'self'; img-src data:")
     # The GeoSecurity globe is inherently external: the Cesium engine and the
     # satellite tiles come from named third parties, place-name lookup from
     # OpenStreetMap, and the 2D street map from OSM and Esri tiles. This
@@ -485,10 +518,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(500, f"{name} does not match its pinned hash", "text/plain")
         return self._send(200, body, ctype, csp=self.CSP_COVERAGE)
 
-    def _send(self, code, body, ctype="application/json", csp=None):
+    def _send(self, code, body, ctype="application/json", csp=None, cookie=None):
         if isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -549,6 +584,36 @@ class Handler(BaseHTTPRequestHandler):
             hub.release()
             self.close_connection = True
 
+    def _procs_stream(self):
+        """Server-Sent Events of the live process table (web/procview.py). The
+        feed behind it runs only while at least one of these is open."""
+        if not self._same_origin():
+            return self._send(403, json.dumps({"error": "cross-site"}))
+        if not procview.acquire_slot():
+            return self._send(503, json.dumps({"error": "too many process views open"}))
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Security-Policy", self.CSP_STRICT)
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            def write(chunk):
+                self.wfile.write(chunk)
+                self.wfile.flush()
+
+            try:
+                from jarvis.web import procidentity
+                feed = procfeed.shared(identity=procidentity.shared(self.db_path))
+                procview.run(feed, write,
+                             gone=lambda: stream.peer_closed(self.connection))
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass  # the viewer left
+        finally:
+            procview.release_slot()
+            self.close_connection = True
+
     def do_POST(self):
         if not self._host_ok():
             return self._send(403, json.dumps({"error": "bad host"}))
@@ -582,6 +647,11 @@ class Handler(BaseHTTPRequestHandler):
                 store.close()
         if not self._same_origin():
             return self._send(403, json.dumps({"error": "cross-site request"}))
+        # Every state-changing route needs the per-start token (header or the
+        # dashboard's cookie). See jarvis/web/token.py for what this does and
+        # does not close.
+        if not api_token.accepts(self.headers):
+            return self._send(403, json.dumps({"error": "missing or wrong API token"}))
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]
             ok = self.scheduler.force(job)
@@ -591,9 +661,26 @@ class Handler(BaseHTTPRequestHandler):
             if payload is None:
                 return self._send(400, json.dumps({"error": "invalid request"}))
             question = str(payload.get("question") or "")[:4000]
+            offer = payload.get("offer") if isinstance(payload.get("offer"), dict) else None
             store = Store(self.db_path)
             try:
-                result = assistant.answer(store, question, jobs=JOBS)
+                result = assistant.answer(store, question, jobs=JOBS, offer=offer,
+                                          runner=self._runner())
+            finally:
+                store.close()
+            return self._send(200, json.dumps(result))
+        if url.path == "/api/assistant/action":
+            # The assistant's only door to doing anything. advisor validates the
+            # action against its capability table; changes need propose+approve.
+            payload = self._json_body(4096)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                result = advisor.handle_action(
+                    store, JOBS, str(payload.get("op") or "")[:12], payload.get("action"),
+                    payload.get("target"), str(payload.get("token") or "")[:64],
+                    runner=self._runner(), conf=alert.load_conf())
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
@@ -770,7 +857,8 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in ("/", "/index.html"):
             try:
                 with open(PAGE, "r", encoding="utf-8", errors="replace") as fh:
-                    return self._send(200, fh.read(), "text/html; charset=utf-8")
+                    return self._send(200, fh.read(), "text/html; charset=utf-8",
+                                      cookie=api_token.cookie_header())
             except OSError:
                 return self._send(500, "dashboard.html missing", "text/plain")
 
@@ -830,6 +918,17 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/coverage/stream":
             from jarvis.service import coveragemap
             return self._stream(self._cover_hub(), beat=coveragemap.LIVE_BEAT_S)
+
+        if url.path == "/api/procs/stream":
+            return self._procs_stream()
+
+        if url.path == "/api/procs/baseline":
+            # Names this machine has seen before, for the /procs change lens.
+            # Metadata only and cached (web/procbaseline.py).
+            if not self._same_origin():
+                return self._send(403, json.dumps({"error": "cross-site"}))
+            from jarvis.web import procbaseline
+            return self._send(200, json.dumps(procbaseline.shared.get(self.db_path)))
 
         if url.path == "/api/coverage":
             from jarvis.service import coveragemap
@@ -895,6 +994,14 @@ class Handler(BaseHTTPRequestHandler):
                 reg.close()
             return self._send(200, json.dumps(summary, default=str))
 
+        if url.path == "/metrics":
+            from jarvis.web import metrics
+            try:
+                return self._send(200, metrics.cached(self.db_path, self.scheduler),
+                                  metrics.CONTENT_TYPE)
+            except metrics.Unavailable as exc:
+                return self._send(503, f"store unavailable: {exc}\n", "text/plain")
+
         if url.path in ("/api/health", "/api/live"):
             state = health(self.db_path, self.scheduler)
             ok = state['live'] if url.path == '/api/live' else state['healthy']
@@ -937,6 +1044,7 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
 
     Handler.db_path = db_path
     Handler.scheduler = scheduler
+    api_token.issue()               # fresh per start; 0600 beside the store
     Handler.hub = stream.Hub(db_path, scheduler)
     Handler.cover_hub = None        # built on first use, for this database and scheduler
     # Localhost only, deliberately and without an override.

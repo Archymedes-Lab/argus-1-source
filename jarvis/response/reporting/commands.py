@@ -10,62 +10,11 @@ that gains a command, or a command that gets renamed, cannot silently leave a
 report pointing at something that does not run.
 """
 
-# job name -> the CLI command that audits the same ground
-JOB_COMMANDS = {
-    "scan": "scan",
-    "containers": "containers",
-    "hidden": "hidden",
-    "deep_hidden": "hidden --deep",
-    "firewall": "firewall",
-    "control": "control",
-    "controls": "control",
-    "audio": "audio",
-    "preos": "preos",
-    "asep": "asep",
-    "spy": "spy",
-    "pixel": "pixel",
-    "identity": "impersonation",
-    "intrusion": "intrusion",
-    "evasion": "evasion",
-    "coverage": "coverage",
-    "bridge": "coverage",
-    "boot": "boot",
-    "hunt": "hunt",
-    "gaps": "gaps",
-    "attackmap": "attack",
-    "intel": "intel",
-    "feeds": "feeds",
-    "implant": "implant",
-    "netwatch": "netwatch",
-    "internet": "netwatch",
-    "posture": "posture",
-    "backdoor": "backdoor",
-    "toolchain": "toolchain",
-    "ledger": "outstanding",
-    "input": "inputwatch",
-    "input_hook": "inputwatch",
-    "memscan": "memscan",
-    "dotnet": "dotnet",
-    "secrets": "secrets",
-    "bruteforce": "bruteforce",
-    "sniffing": "sniffing",
-    "webshell": "webshell",
-    "auditd": "auditd",
-    "sysmon_linux": "sysmon-linux",
-    "sysmon": "sysmon",
-    "native": "timeline status",
-    "rust_mirror": "status",
-    "evidence": "broker status",
-    "arena": "arena suite",
-    "geo": "geo status",
-    "world": "geo world",
-    "watchdogs": "selfcheck",
-    "resources": "status",
-    "report": "alert",
-    # The model job answers "is Ollama there?"; `ask model status` runs the
-    # same ping on demand through the assistant's deterministic intent.
-    "model": "ask model status",
-}
+from jarvis.core import mechanisms
+
+# job name -> the CLI command that audits the same ground, declared on each
+# collector in core/mechanisms.py.
+JOB_COMMANDS = mechanisms.commands()
 
 # Commands worth running whatever the findings say, in the order a person
 # would actually work through them.

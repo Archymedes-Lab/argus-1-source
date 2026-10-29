@@ -302,8 +302,9 @@ class CapsuleTests(Base):
         seen = {}
 
         def observe():
-            deadline = time.time() + 10
-            while time.time() < deadline and "prov" not in seen:
+            # Monotonic: the wall clock here steps by ~9 s (WSL clock fight).
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and "prov" not in seen:
                 try:
                     child = json.loads(report.read_text())
                 except (OSError, ValueError):

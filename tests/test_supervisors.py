@@ -9,6 +9,7 @@ minutes while every outward sign said it was installed and fine.
 import json
 import os
 import tempfile
+import time
 import unittest
 
 from jarvis.service import supervisors
@@ -83,6 +84,27 @@ class HealthMonitorAuditTests(unittest.TestCase):
 
         self.assertEqual(out["the Windows monitor's email path is failing"],
                          "medium")
+
+    def test_a_deliberate_mail_pause_is_low_not_a_failing_path(self):
+        self._write(checkedAt=self.now - 10, healthy=True,
+                    mailError="Outage email failed (ItemNotFoundException); queued for retry")
+        folder = os.path.dirname(self.path)
+        open(os.path.join(folder, "mail.json.paused-20260929T131238Z.bak"), "w").close()
+
+        out = self._titles(supervisors.audit_health_monitor(self.path, self.now))
+
+        self.assertNotIn("the Windows monitor's email path is failing", out)
+        self.assertEqual(out["outage email has been paused for %d days"
+                             % supervisors.pause_age_days("20260929T131238Z", self.now)],
+                         "medium")
+        self.assertEqual(supervisors.mail_paused_since(folder), "20260929T131238Z")
+        fresh = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(self.now - 2 * 86400))
+        os.remove(os.path.join(folder, "mail.json.paused-20260929T131238Z.bak"))
+        open(os.path.join(folder, "mail.json.paused-%s.bak" % fresh), "w").close()
+        out = self._titles(supervisors.audit_health_monitor(self.path, self.now))
+        self.assertEqual(out["outage email is paused"], "low")
+        open(os.path.join(folder, "mail.json"), "w").close()
+        self.assertEqual(supervisors.mail_paused_since(folder), "")
 
     def test_a_monitor_reporting_us_unhealthy_is_relayed(self):
         self._write(checkedAt=self.now - 10, healthy=False,

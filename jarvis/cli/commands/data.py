@@ -32,6 +32,7 @@ def cmd_baseline(args, store):
 def cmd_procs(args, store):
     if args.live:
         from jarvis.platform import linux, windows
+
         from ..output import selected_hosts
 
         hosts = selected_hosts(args)

@@ -31,7 +31,16 @@ import time
 from pathlib import Path
 
 from jarvis.collectors.telemetry import sysmon_policy
-from jarvis.core.eventlog import DEFAULT_ROOT, GENESIS, EventLog, LogError, header_hash
+from jarvis.core import inflate, pagecache
+from jarvis.core.eventlog import (
+    DEFAULT_ROOT,
+    GENESIS,
+    MAX_HEADER_LINE,
+    MAX_SEGMENT_PLAIN,
+    EventLog,
+    LogError,
+    header_hash,
+)
 from jarvis.core.finding import finding
 from jarvis.platform import broker, timestamps
 from jarvis.platform.mounts import WINDOWS_DRIVE
@@ -172,9 +181,15 @@ def verify_vault(live_chain, vault, verified_through=0, full=False, pruned=()):
         if n <= through:
             continue
         try:
-            with gzip.open(path, "rb") as fh:
-                stored = json.loads(fh.readline())
-                digest = hashlib.sha256(fh.read()).hexdigest()
+            with open(path, "rb") as raw, gzip.open(raw, "rb") as fh:
+                try:
+                    stored = json.loads(inflate.readline(fh, MAX_HEADER_LINE))
+                    hasher = hashlib.sha256()
+                    for block in inflate.chunks(fh, MAX_SEGMENT_PLAIN):
+                        hasher.update(block)
+                    digest = hasher.hexdigest()
+                finally:
+                    pagecache.drop(raw)
         except (OSError, ValueError, EOFError) as exc:
             problems.append(f"vaulted segment {n}: unreadable ({type(exc).__name__})")
             continue

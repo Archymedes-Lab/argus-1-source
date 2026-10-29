@@ -46,7 +46,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from jarvis.core import mechanisms
 
 # Freshness budget boundaries, as multiples of the expected interval.
 LATE_AFTER = 1.0
@@ -70,17 +72,11 @@ CRITICALITY_WEIGHT = {"critical": 4.0, "high": 3.0, "medium": 2.0, "low": 1.0}
 
 # Jobs that never describe evidence freshness. They are excluded from the
 # mandatory set and from the invariant.
-NON_EVIDENCE_JOBS = frozenset({"coverage", "report"})
+NON_EVIDENCE_JOBS = frozenset(mechanisms.names(evidence=False))
 
 # Dependency roots: when one of these dies, every dependent collector fails
 # for the same reason. Reporting the root once beats paging five times.
-DEPENDENCIES: dict[str, tuple[str, ...]] = {
-    "windows-bridge": ("firewall", "control", "asep", "spy", "intrusion",
-                       "evasion", "posture", "backdoor", "implant",
-                       "bruteforce", "input", "input_hook", "sysmon"),
-    "native-sensor": ("native", "sysmon"),
-    "scheduler": ("scan", "bridge", "netwatch"),
-}
+DEPENDENCIES: dict[str, tuple[str, ...]] = mechanisms.dependencies()
 
 
 @dataclass(frozen=True)
@@ -187,31 +183,26 @@ def _tier_and_criticality(name: str, interval: int) -> tuple[int, str]:
     Tier 0 continuous: native event streams. Tier 1 (1-2 min): liveness
     reconciliation. Tier 2 (~5 min): persistence/firewall/hidden. Tier 3
     (15+ min): secrets/posture/toolchain/deep checks. Tier 4 (daily/event):
-    expensive hunts.
+    expensive hunts. Declared collectors carry theirs in core/mechanisms.py;
+    a name outside the registry (synthetic tables in tests) is placed by
+    interval alone.
     """
-    fast_liveness = {"bridge", "input_hook", "scan", "native", "sysmon",
-                     "sysmon_linux", "netwatch"}
-    high_value = {"asep", "boot", "control", "backdoor", "implant", "firewall",
-                  "hidden", "intrusion", "evasion", "posture", "input",
-                  "watchdogs", "coverage"}
-    if name in ("native", "sysmon", "sysmon_linux"):
-        return 0, "critical"
-    if name in fast_liveness:
-        return 1, "high"
+    declared = mechanisms.BY_NAME.get(name)
+    if declared is not None:
+        return declared.tier, declared.criticality
     if interval <= 300:
-        return 2, "high" if name in high_value else "medium"
+        return 2, "medium"
     if interval <= 7200:
-        return 3, "high" if name in high_value else "medium"
-    return 4, "medium" if name in high_value else "low"
+        return 3, "medium"
+    return 4, "low"
 
 
 def _execution_timeout(name: str, interval: int) -> float:
     """Bounded run budget per collector. Fast-lane watchdogs must stay under
     a few seconds; slow audits get room without holding the plane hostage."""
-    if name in ("bridge", "input_hook", "scan"):
-        return 30.0
-    if name in ("native", "sysmon", "sysmon_linux", "netwatch"):
-        return 45.0
+    declared = mechanisms.BY_NAME.get(name)
+    if declared is not None:
+        return declared.timeout
     # A PowerShell audit costs 15-90s; cap well below the shortest hard
     # deadline so a hang is detected before dependents go stale.
     return min(300.0, max(60.0, interval / 10.0))

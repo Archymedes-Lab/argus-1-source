@@ -5,7 +5,7 @@ import os
 
 from jarvis.core.util import now
 
-from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, READ_CAP
+from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, READ_CAP, SOUND_META
 from .helper import _paths
 
 _BEAT_COLS = ("real_keys", "injected_keys", "real_clicks", "injected_clicks",
@@ -24,6 +24,85 @@ _WINDOW_COLS = ("real_keys", "injected_keys", "real_key_gaps",
 _WINDOW_SQL = ("INSERT OR REPLACE INTO input_typing_windows (ts,"
                + ",".join(_WINDOW_COLS) + ") VALUES ("
                + ",".join("?" * (len(_WINDOW_COLS) + 1)) + ")")
+
+
+_SOUND_SQL = ("INSERT INTO sound_events(ts,ms,sound,source,dur_ms,pulses,peak,"
+              "endpoint,pid,app,proc_start,known,sys,quiet_ms,idle_s,open,fg,"
+              "caller,caller_pid,caller_app,caller_start,caller_blocked_new,"
+              "console_pid,console_app,console_start) "
+              "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+_SOUND_COUNTERS = ("samples", "endpoints", "sessions", "episodes", "beeps",
+                   "dropped", "errors", "enumerations", "last_sample",
+                   "beep_lookups", "beep_callers", "beep_uninspectable",
+                   "beep_skipped", "beep_lookup_ms")
+_SOUND_TEXT = (("state", 80), ("beep_state", 80), ("beep_holders", 200))
+# What the Beep() caller lookup concluded for a system-sounds episode.
+_CALLER_STATES = ("", "found", "none", "none visible", "pending", "skipped",
+                  "lookup failed")
+
+
+def _int(value, low, high):
+    """An integer inside [low, high], or None. Booleans are not numbers here."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = int(value)
+    return value if low <= value <= high else None
+
+
+def _sound_row(rec):
+    """A sound_events row from one listener line, or None when malformed.
+
+    The helper is ours but its output file is user-writable, so every field is
+    type- and range-checked; a line that fails is dropped, never half-stored.
+    """
+    ts = _int(rec.get("ts"), 1, 2**33)
+    ms = _int(rec.get("ms"), 1, 2**43)
+    dur = _int(rec.get("dur_ms"), 1, 3_600_000)
+    pulses = _int(rec.get("pulses"), 1, 1_000_000)
+    pid = _int(rec.get("pid"), 0, 0xFFFFFFFF)
+    quiet = _int(rec.get("quiet_ms"), -1, 2**43)
+    idle = _int(rec.get("idle_s"), -1, 2**33)
+    peak = rec.get("peak")
+    flags = [_int(rec.get(k), 0, 1) for k in ("known", "sys", "open")]
+    if (None in (ts, ms, dur, pulses, pid, quiet, idle) or None in flags
+            or rec.get("sound") not in ("beep", "sound")
+            or rec.get("source") not in ("session", "device")
+            or isinstance(peak, bool) or not isinstance(peak, (int, float))
+            or not 0.0 <= peak <= 1.0):
+        return None
+    if rec["sound"] == "beep" and (dur > 1500 + 25 or flags[2]):
+        return None
+    caller = rec.get("caller", "")
+    caller_pid = _int(rec.get("caller_pid", 0), 0, 0xFFFFFFFF)
+    blocked_new = _int(rec.get("caller_blocked_new", -1), -1, 10_000_000)
+    console_pid = _int(rec.get("console_pid", 0), 0, 0xFFFFFFFF)
+    if (caller not in _CALLER_STATES or None in (caller_pid, blocked_new, console_pid)
+            or (caller == "found") != (caller_pid > 0)):
+        return None
+    text = {k: _clean(str(rec.get(k) or ""))[:n] for k, n in
+            (("endpoint", 160), ("app", 64), ("proc_start", 40), ("fg", 64),
+             ("caller_app", 64), ("caller_start", 40), ("console_app", 64),
+             ("console_start", 40))}
+    return (ts, ms, rec["sound"], rec["source"], dur, pulses, float(peak),
+            text["endpoint"], pid, text["app"], text["proc_start"],
+            flags[0], flags[1], quiet, idle, flags[2], text["fg"],
+            caller, caller_pid, text["caller_app"], text["caller_start"],
+            blocked_new, console_pid, text["console_app"], text["console_start"])
+
+
+def _sound_beat(rec, ts):
+    """The heartbeat's sound-listener counters as stored JSON, or None."""
+    sound = rec.get("sound")
+    if not isinstance(sound, dict):
+        return None
+    out = {"ts": ts}
+    for key, limit in _SOUND_TEXT:
+        out[key] = _clean(str(sound.get(key) or ""))[:limit]
+    for key in _SOUND_COUNTERS:
+        value = _int(sound.get(key), 0, 2**53)
+        if value is not None:
+            out[key] = value
+    return json.dumps(out, sort_keys=True)
 
 
 def _clean(value):
@@ -66,6 +145,8 @@ def ingest(store):
 
     beats, windows, events, beat_pids = [], [], [], set()
     bursts = []
+    sounds = []
+    sound_beat = None
     session = None
     controls = []
     for line in body.splitlines():
@@ -89,17 +170,30 @@ def ingest(store):
                 beat_pids.add(int(rec["pid"]))
             if "session" in rec:
                 session = f"{int(rec['session'])}:{int(rec.get('desktop', -1))}"
+            sound_beat = _sound_beat(rec, ts) or sound_beat
+        elif rec.get("kind") == "sound":
+            row = _sound_row(rec)
+            if row:
+                sounds.append(row)
         elif rec.get("kind") in ("control-key", "control-state"):
             # Control activations are kept in full, with their own timestamp:
             # they carry no text, and the whole point is being able to say
             # which control moved, when, and whether a key explains it.
             kind = str(rec.get("kind"))
             if kind == "control-state":
-                detail = "%s%s -> %s%s" % (
+                # Brightness lines carry the panel id and how long the whole
+                # machine had been idle; volume lines carry mute state.
+                idle = rec.get("idle_s")
+                detail = "%s%s -> %s%s%s" % (
                     ("%s:%s " % (str(rec.get("app") or "?")[:40], rec.get("pid"))
-                     if rec.get("control") == "app-volume" else ""),
+                     if rec.get("control") == "app-volume" else
+                     ("%s " % str(rec.get("display") or "")[:24]
+                      if rec.get("control") == "brightness" and rec.get("display")
+                      else "")),
                     rec.get("from"), rec.get("to"),
-                    "  muted" if rec.get("muted") else "")
+                    "  muted" if rec.get("muted") else "",
+                    ("  idle %ds" % int(idle)
+                     if isinstance(idle, (int, float)) and idle >= 0 else ""))
                 keyed = int(rec.get("keyed", -1))
                 gap = int(rec.get("key_gap_ms", -1))
             else:
@@ -144,6 +238,10 @@ def ingest(store):
         store.db.executemany(
             "INSERT OR REPLACE INTO input_bursts(burst,ts,record) VALUES(?,?,?)",
             bursts)
+    if sounds:
+        store.db.executemany(_SOUND_SQL, sounds)
+    if sound_beat is not None:
+        store.set_meta(SOUND_META, sound_beat)
     if session is not None:
         store.set_meta(_M_SESSION, session)
     # Heartbeats from more than one PID in a single drain means two helpers are
@@ -152,7 +250,7 @@ def ingest(store):
     if len(beat_pids) > 1:
         store.set_meta(_M_DUPES,
                        f"{now()}:{','.join(str(p) for p in sorted(beat_pids))}")
-    if beats or windows or events or bursts:
+    if beats or windows or events or bursts or sounds:
         # Minute windows give a useful 90-day baseline at only ~130k rows.
         # Raw cumulative beats and injected-event detail need much less history;
         # bounding all three keeps the SQLite file small indefinitely.
@@ -164,6 +262,8 @@ def ingest(store):
         store.db.execute("DELETE FROM input_events WHERE ts < ?",
                          (stamp - 30 * 86400,))
         store.db.execute("DELETE FROM input_bursts WHERE ts < ?",
+                         (stamp - 30 * 86400,))
+        store.db.execute("DELETE FROM sound_events WHERE ts < ?",
                          (stamp - 30 * 86400,))
         store.commit()
     return len(events)

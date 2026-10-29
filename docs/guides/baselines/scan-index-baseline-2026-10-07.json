@@ -1,0 +1,423 @@
+{
+ "expect": "scan duration falls well below 34.8s (index processes_host_pid); late collectors recover; scheduled_duty_pct < 100; no finding changes from this release; selfcheck no longer logs NOTIFY_SOCKET 'reception only permitted for main PID'",
+ "jobs": {
+  "arena": {
+   "counts": {},
+   "duration": 4.1,
+   "freshness": "FRESH",
+   "ts": 1791394262
+  },
+  "asep": {
+   "counts": {},
+   "duration": 4.7,
+   "freshness": "FRESH",
+   "ts": 1791396643
+  },
+  "attackmap": {
+   "counts": {},
+   "duration": 1.8,
+   "freshness": "FRESH",
+   "ts": 1791383366
+  },
+  "audio": {
+   "counts": {
+    "low": 2
+   },
+   "duration": 9.5,
+   "freshness": "LATE",
+   "ts": 1791396923
+  },
+  "auditd": {
+   "counts": {
+    "medium": 1
+   },
+   "duration": 0.1,
+   "freshness": "LATE",
+   "ts": 1791390015
+  },
+  "backdoor": {
+   "counts": {
+    "low": 4
+   },
+   "duration": 4.5,
+   "freshness": "LATE",
+   "ts": 1791393418
+  },
+  "boot": {
+   "counts": {
+    "high": 1,
+    "low": 29,
+    "medium": 1
+   },
+   "duration": 36.0,
+   "freshness": "FRESH",
+   "ts": 1791383347
+  },
+  "bridge": {
+   "counts": {},
+   "duration": 0.0,
+   "freshness": "DEGRADED",
+   "ts": 1791397213
+  },
+  "bruteforce": {
+   "counts": {
+    "low": 1
+   },
+   "duration": 1.7,
+   "freshness": "FRESH",
+   "ts": 1791394257
+  },
+  "containers": {
+   "counts": {},
+   "duration": 2.0,
+   "freshness": "LATE",
+   "ts": 1791396333
+  },
+  "control": {
+   "counts": {
+    "critical": 1,
+    "low": 128
+   },
+   "duration": 14.0,
+   "freshness": "FRESH",
+   "ts": 1791396958
+  },
+  "controls": {
+   "counts": {
+    "low": 2
+   },
+   "duration": 2.4,
+   "freshness": "LATE",
+   "ts": 1791396913
+  },
+  "coverage": {
+   "counts": {
+    "low": 5
+   },
+   "duration": 0.1,
+   "freshness": "FRESH",
+   "ts": 1791396958
+  },
+  "deep_hidden": {
+   "counts": {
+    "low": 7,
+    "medium": 2
+   },
+   "duration": 26.4,
+   "freshness": "FRESH",
+   "ts": 1791383484
+  },
+  "dotnet": {
+   "counts": {},
+   "duration": 1.6,
+   "freshness": "FRESH",
+   "ts": 1791396623
+  },
+  "evasion": {
+   "counts": {
+    "low": 1
+   },
+   "duration": 15.2,
+   "freshness": "FRESH",
+   "ts": 1791396531
+  },
+  "evidence": {
+   "counts": {},
+   "duration": 102.8,
+   "freshness": "FRESH",
+   "ts": 1791397198
+  },
+  "feeds": {
+   "counts": {
+    "low": 1
+   },
+   "duration": 13.0,
+   "freshness": "FRESH",
+   "ts": 1791394182
+  },
+  "firewall": {
+   "counts": {
+    "low": 17,
+    "medium": 4
+   },
+   "duration": 31.3,
+   "freshness": "FRESH",
+   "ts": 1791397255
+  },
+  "gaps": {
+   "counts": {
+    "high": 19,
+    "low": 168,
+    "medium": 12
+   },
+   "duration": 0.0,
+   "freshness": "FRESH",
+   "ts": 1791383363
+  },
+  "geo": {
+   "counts": {
+    "low": 1
+   },
+   "duration": 8.3,
+   "freshness": "LATE",
+   "ts": 1791396194
+  },
+  "hidden": {
+   "counts": {
+    "low": 7,
+    "medium": 2
+   },
+   "duration": 10.4,
+   "freshness": "FRESH",
+   "ts": 1791397224
+  },
+  "hunt": {
+   "counts": {
+    "low": 12
+   },
+   "duration": 3.5,
+   "freshness": "FRESH",
+   "ts": 1791396859
+  },
+  "identity": {
+   "counts": {
+    "low": 7,
+    "medium": 1
+   },
+   "duration": 4.3,
+   "freshness": "LATE",
+   "ts": 1791396186
+  },
+  "implant": {
+   "counts": {
+    "low": 2
+   },
+   "duration": 20.4,
+   "freshness": "LATE",
+   "ts": 1791393397
+  },
+  "input": {
+   "counts": {
+    "low": 1,
+    "medium": 1
+   },
+   "duration": 0.6,
+   "freshness": "LATE",
+   "ts": 1791396902
+  },
+  "input_hook": {
+   "counts": {
+    "low": 1
+   },
+   "duration": 0.1,
+   "freshness": "DEGRADED",
+   "ts": 1791397213
+  },
+  "intel": {
+   "counts": {
+    "low": 1,
+    "medium": 1
+   },
+   "duration": 15.9,
+   "freshness": "FRESH",
+   "ts": 1791383363
+  },
+  "internet": {
+   "counts": {
+    "low": 21
+   },
+   "duration": 2.9,
+   "freshness": "FRESH",
+   "ts": 1791397201
+  },
+  "intrusion": {
+   "counts": {
+    "low": 22
+   },
+   "duration": 70.8,
+   "freshness": "FRESH",
+   "ts": 1791393994
+  },
+  "ledger": {
+   "counts": {
+    "critical": 4,
+    "high": 32,
+    "medium": 1
+   },
+   "duration": 0.2,
+   "freshness": "FRESH",
+   "ts": 1791396859
+  },
+  "memscan": {
+   "counts": {
+    "low": 13,
+    "medium": 2
+   },
+   "duration": 0.3,
+   "freshness": "LATE",
+   "ts": 1791390015
+  },
+  "model": {
+   "counts": {},
+   "duration": 0.7,
+   "freshness": "FRESH",
+   "ts": 1791396861
+  },
+  "native": {
+   "counts": {},
+   "duration": 1.6,
+   "freshness": "DEGRADED",
+   "ts": 1791397167
+  },
+  "netwatch": {
+   "counts": {
+    "low": 10,
+    "medium": 1
+   },
+   "duration": 9.7,
+   "freshness": "LATE",
+   "ts": 1791396901
+  },
+  "pixel": {
+   "counts": {
+    "low": 7,
+    "medium": 1
+   },
+   "duration": 0.3,
+   "freshness": "FRESH",
+   "ts": 1791394093
+  },
+  "posture": {
+   "counts": {
+    "low": 4
+   },
+   "duration": 0.1,
+   "freshness": "FRESH",
+   "ts": 1791396911
+  },
+  "preos": {
+   "counts": {
+    "low": 1,
+    "medium": 1
+   },
+   "duration": 6.4,
+   "freshness": "FRESH",
+   "ts": 1791396621
+  },
+  "report": {
+   "counts": {
+    "medium": 1
+   },
+   "duration": 0.0,
+   "freshness": "LATE",
+   "ts": 1791396931
+  },
+  "resources": {
+   "counts": {
+    "high": 2
+   },
+   "duration": 2.7,
+   "freshness": "LATE",
+   "ts": 1791396905
+  },
+  "rust_mirror": {
+   "counts": {},
+   "duration": 22.4,
+   "freshness": "FRESH",
+   "ts": 1791396883
+  },
+  "scan": {
+   "counts": {
+    "critical": 1,
+    "low": 9,
+    "medium": 1
+   },
+   "duration": 34.8,
+   "freshness": "FRESH",
+   "ts": 1791397261
+  },
+  "secrets": {
+   "counts": {
+    "critical": 3,
+    "high": 3,
+    "low": 27,
+    "medium": 5
+   },
+   "duration": 79.5,
+   "freshness": "FRESH",
+   "ts": 1791383446
+  },
+  "sniffing": {
+   "counts": {},
+   "duration": 0.9,
+   "freshness": "FRESH",
+   "ts": 1791396860
+  },
+  "spy": {
+   "counts": {
+    "low": 40,
+    "medium": 1
+   },
+   "duration": 23.9,
+   "freshness": "FRESH",
+   "ts": 1791394089
+  },
+  "sysmon": {
+   "counts": {
+    "low": 7,
+    "medium": 2
+   },
+   "duration": 0.8,
+   "freshness": "FRESH",
+   "ts": 1791396911
+  },
+  "sysmon_linux": {
+   "counts": {
+    "high": 1,
+    "low": 1,
+    "medium": 16
+   },
+   "duration": 0.6,
+   "freshness": "FRESH",
+   "ts": 1791396910
+  },
+  "toolchain": {
+   "counts": {
+    "low": 5,
+    "medium": 1
+   },
+   "duration": 33.2,
+   "freshness": "FRESH",
+   "ts": 1791394256
+  },
+  "watchdogs": {
+   "counts": {
+    "medium": 1
+   },
+   "duration": 0.1,
+   "freshness": "FRESH",
+   "ts": 1791397167
+  },
+  "webshell": {
+   "counts": {},
+   "duration": 1.4,
+   "freshness": "FRESH",
+   "ts": 1791383364
+  },
+  "world": {
+   "counts": {},
+   "duration": 30.7,
+   "freshness": "LATE",
+   "ts": 1791396265
+  }
+ },
+ "not_expected": "JarvisCursorSpeed critical persistence stays (needs the supervisor-rename release); secrets findings stay",
+ "performance": {
+  "cpu_pct": 12.9,
+  "rss_mib": 881.4,
+  "scheduled_duty_pct": 102.3
+ },
+ "release": "20261004T200640Z-677b2a83b901",
+ "stage": "20261007T183813Z-on-677b2a83b901",
+ "taken_at": 1791397274
+}

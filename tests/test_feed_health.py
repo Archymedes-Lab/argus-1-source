@@ -1,0 +1,142 @@
+"""A failing threat feed is a coverage failure every run until it recovers.
+
+Measured 2026-10-27: URLhaus, ThreatFox and MalwareBazaar answered "HTTP 410
+Gone" from 2026-10-21 (abuse.ch has required an Auth-Key since 2025-06-30).
+Each feed retries once a day, so only that one run mentioned it; the hourly
+runs between recorded the feeds job as complete over six-day-old indicators.
+"""
+import os
+import tempfile
+import unittest
+from unittest import mock
+
+from jarvis.core import collection
+from jarvis.core.store import Store
+from jarvis.intel import feeds
+from jarvis.service import jobs
+
+
+class AuthKeyTests(unittest.TestCase):
+    def test_key_is_sent_only_to_abuse_ch(self):
+        with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: "k-123"}):
+            self.assertEqual(feeds._auth_headers("https://urlhaus.abuse.ch/downloads/csv/"),
+                             {"Auth-Key": "k-123"})
+            self.assertEqual(feeds._auth_headers("https://abuse.ch/x"), {"Auth-Key": "k-123"})
+            for url in ("https://lists.blocklist.de/lists/all.txt",
+                        "https://abuse.ch.evil.example/x", "https://notabuse.ch/x"):
+                self.assertEqual(feeds._auth_headers(url), {}, url)
+
+    def config(self, doc):
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, True))
+        path = os.path.join(d, "config.json")
+        with open(path, "w") as fh:
+            fh.write(doc)
+        return mock.patch("jarvis.core.paths.CONFIG_PATH", path)
+
+    def test_no_key_no_header(self):
+        with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: ""}), self.config("{}"):
+            self.assertEqual(feeds._auth_headers("https://threatfox.abuse.ch/export/csv/full/"), {})
+
+    def test_key_from_config(self):
+        with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: ""}), \
+                self.config('{"abuse_ch_auth_key": " conf-key "}'):
+            self.assertEqual(feeds.abusech_key(), "conf-key")
+
+    def test_unreadable_or_odd_config_means_no_key(self):
+        for doc in ("not json", "[]", "null"):
+            with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: ""}), self.config(doc):
+                self.assertEqual(feeds.abusech_key(), "", doc)
+
+    def test_abuse_ch_feeds_are_identified_by_host(self):
+        self.assertTrue(feeds.is_abusech("urlhaus-full"))
+        self.assertTrue(feeds.is_abusech("malwarebazaar"))
+        self.assertTrue(feeds.is_abusech("feodo"))
+        self.assertFalse(feeds.is_abusech("blocklist-de"))
+        self.assertFalse(feeds.is_abusech("no-such-feed"))
+
+
+class FeedsJobTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.db = os.path.join(self.dir.name, "j.db")
+        store = Store(self.db)
+        store.db.execute(
+            "INSERT INTO feed_runs(name,last_run,rows,kept,bytes,error) "
+            "VALUES('urlhaus-full', 1, 0, 0, 0, 'HTTP Error 410: Gone')")
+        store.db.execute(
+            "INSERT INTO feed_runs(name,last_run,rows,kept,bytes,error) "
+            "VALUES('blocklist-de', 1, 10, 10, 10, '')")
+        store.db.commit()
+        store.close()
+
+    def run_job(self, results, key=""):
+        patches = [
+            mock.patch.object(feeds, "refresh", return_value=list(results)),
+            mock.patch.object(feeds, "refresh_attack", return_value={"name": "attack", "kept": 1}),
+            mock.patch.object(feeds, "refresh_tranco", return_value={"name": "tranco", "kept": 1}),
+            mock.patch.object(feeds, "prune"),
+            mock.patch.object(feeds, "abusech_key", return_value=key),
+            mock.patch("jarvis.core.retention.apply", return_value=[]),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        with collection.observe() as obs:
+            findings = jobs._feeds(("wsl",), self.db)
+        if isinstance(findings, tuple):
+            findings = findings[0]
+        return findings, obs
+
+    def test_a_failure_from_an_earlier_run_still_makes_this_run_partial(self):
+        # This run fetched nothing from abuse.ch (not due); the stored error stands.
+        findings, obs = self.run_job([])
+        self.assertEqual(obs.status, "partial")
+        self.assertIn("feed:urlhaus-full", obs.error)
+        titles = [f["title"] for f in findings]
+        self.assertTrue(any("urlhaus-full" in t or "feed failed" in t for t in titles), titles)
+        text = " ".join(f["detail"] for f in findings)
+        self.assertIn("Auth-Key", text)
+
+    def test_with_a_key_configured_the_advice_is_not_given(self):
+        findings, _obs = self.run_job([], key="k")
+        text = " ".join(f["detail"] for f in findings)
+        self.assertNotIn("auth.abuse.ch", text)
+        self.assertIn("410", text)
+
+    def test_recovery_clears_it(self):
+        store = Store(self.db)
+        store.db.execute("UPDATE feed_runs SET error='' WHERE name='urlhaus-full'")
+        store.db.commit()
+        store.close()
+        findings, obs = self.run_job([{"name": "urlhaus-full", "kept": 5}])
+        self.assertEqual(obs.status, "complete")
+        self.assertFalse(any("failed" in f["title"] for f in findings))
+
+    def test_the_key_never_appears_in_findings(self):
+        with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: "SECRET-KEY-VALUE"}):
+            findings, obs = self.run_job([{"name": "urlhaus-full",
+                                           "error": "HTTP Error 403: Forbidden"}],
+                                         key="SECRET-KEY-VALUE")
+        blob = repr(findings) + obs.error
+        self.assertNotIn("SECRET-KEY-VALUE", blob)
+
+
+class ParseFailurePersistsTests(unittest.TestCase):
+    def test_parse_failure_is_recorded_for_later_runs(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(os.path.join(d, "j.db"))
+            try:
+                spec = {"url": "https://example.invalid/x", "max_bytes": 10,
+                        "parse": mock.Mock(side_effect=ValueError("bad shape"))}
+                with mock.patch.object(feeds, "fetch", return_value=b"x"):
+                    r = feeds.ingest(store, "cins", spec)
+                self.assertIn("parse failed", r["error"])
+                self.assertIn("cins", feeds.failing(store))
+            finally:
+                store.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

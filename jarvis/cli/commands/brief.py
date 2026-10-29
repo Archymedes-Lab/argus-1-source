@@ -39,9 +39,12 @@ def _find(store, protocol_id):
 def _check(store, item, port):
     """Ask the running daemon to re-observe, then wait for fresh snapshots."""
     jobs = item["protocol"].jobs
-    started = time.time()
+    started = time.time()          # compared with snapshot timestamps (wall clock)
+    waited_from = time.monotonic()  # bounds the wait; the wall clock can step here
     for job in jobs:
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/run?job={job}", method="POST")
+        from jarvis.web import token
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/run?job={job}", method="POST",
+                                     headers={token.HEADER: token.read()})
         try:
             with urllib.request.urlopen(req, timeout=10) as response:
                 if not json.loads(response.read()).get("queued"):
@@ -51,7 +54,7 @@ def _check(store, item, port):
             print(f"could not reach jarvis serve on port {port} ({exc}); is the daemon running?")
             return 1
     print(f"re-running {', '.join(jobs)} — this takes a minute or two", flush=True)
-    while time.time() - started < CHECK_TIMEOUT:
+    while time.monotonic() - waited_from < CHECK_TIMEOUT:
         snapshots = store.get_snapshots()
         if all(int((snapshots.get(job) or {}).get("ts") or 0) >= started for job in jobs):
             refreshed, _ = _find(store, item["protocol"].id)
@@ -75,7 +78,7 @@ def cmd_brief(args, store):
 
     if action == "email":
         conf = alert.load_conf()
-        if not alert.enabled(conf):
+        if not alert.email_enabled(conf):
             print("email is not configured (see alert settings in ~/.jarvis/config.json)")
             return 1
         print("composing the action plan — the local model writes the notes, "

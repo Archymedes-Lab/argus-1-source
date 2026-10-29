@@ -332,11 +332,12 @@ class SchedulerLaneTests(unittest.TestCase):
              patch.object(self.mod, "Store"), \
              patch.object(self.mod.notifications, "deliver"):
             self.scheduler.start()
-            deadline = time.time() + 3
-            while self.scheduler.current != "secrets" and time.time() < deadline:
+            # Monotonic: the wall clock here steps by ~9 s (WSL clock fight).
+            deadline = time.monotonic() + 3
+            while self.scheduler.current != "secrets" and time.monotonic() < deadline:
                 time.sleep(0.01)
             self.scheduler.force("bridge")
-            while "bridge" not in ran and time.time() < deadline:
+            while "bridge" not in ran and time.monotonic() < deadline:
                 time.sleep(0.01)
             busy = self.scheduler.current
             release.set()
@@ -365,6 +366,10 @@ class ForcedPriorityTests(unittest.TestCase):
         # near the end, went stale behind two full sweeps.
         self.scheduler.next_run = {name: self.now + 60 for name in JOBS}
         self.scheduler.next_run["sysmon"] = self.now - 2 * JOBS["sysmon"][0]
+        # Lateness is measured from evidence (LANE-FAIRNESS-AND-OUTAGE-RECORD.md):
+        # everything else verified moments ago, sysmon's evidence is 3x old.
+        self.scheduler.evidence_ts = {name: self.now - 10 for name in JOBS}
+        self.scheduler.evidence_ts["sysmon"] = self.now - 3 * JOBS["sysmon"][0]
         for name in JOBS:
             self.scheduler.force(name)
         with patch("jarvis.service.scheduler.time.time", return_value=self.now), \
@@ -386,6 +391,11 @@ class ForcedPriorityTests(unittest.TestCase):
         self.scheduler.next_run = {name: self.now + 3600 for name in JOBS}
         self.scheduler.next_run["evasion"] = self.now - 10
         self.scheduler.next_run["secrets"] = self.now - JOBS["secrets"][0]
+        # The same lateness, stated as evidence age: evasion just due,
+        # secrets a full cadence overdue.
+        self.scheduler.evidence_ts = {name: self.now - 10 for name in JOBS}
+        self.scheduler.evidence_ts["evasion"] = self.now - JOBS["evasion"][0] - 10
+        self.scheduler.evidence_ts["secrets"] = self.now - 2 * JOBS["secrets"][0]
         with patch("jarvis.service.scheduler.time.time", return_value=self.now), \
              patch("jarvis.core.governor.live_pressure", return_value=(False, "")):
             self.assertEqual(self.scheduler._due("main"), "secrets")

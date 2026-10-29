@@ -23,8 +23,11 @@
 # write, owner read) and never overwrites or deletes. The one stateful job is
 # inputaudit.ps1: it keeps JARVIS's own Win32k audit trace session running
 # (observation only; it changes no system setting and ends at reboot) and an
-# inventory under this folder. The broker adds no remediation and runs
-# nothing else.
+# inventory under this folder. hp_firmware_audit.ps1 loads HP's signed CMSL
+# module from Program Files only after checking every file's signer and that
+# only SYSTEM, Administrators or TrustedInstaller can change it; it reads the
+# HP Sure Start audit log and changes nothing. The broker adds no remediation
+# and runs nothing else.
 #
 #   .\jarvis-elevated-broker.ps1 -Install -Source <folder with the .ps1 collectors>
 #       (from an elevated shell, or via Start-Process -Verb RunAs)
@@ -52,7 +55,12 @@ $Jobs = [ordered]@{
     sysmon_policy = @{ script = 'sysmon_policy.ps1'; timeout = 30 }
     sysmon_pressure = @{ script = 'sysmon_pressure.ps1'; timeout = 120 }
     vault    = @{ script = 'vault.ps1';          timeout = 120 }
-    inputaudit = @{ script = 'inputaudit.ps1';   timeout = 120 }
+    # Scanning the trace costs 0.7-1.7 s per MB whatever the reader (measured
+    # 2026-10-27: Get-WinEvent and EventLogReader both 24 s on 34 MB; 70 MB
+    # under load passed 120 s and every run failed). The trace is capped at
+    # 128 MB, so 400 s covers the worst case measured.
+    inputaudit = @{ script = 'inputaudit.ps1';   timeout = 400 }
+    fwaudit  = @{ script = 'hp_firmware_audit.ps1'; timeout = 120 }
 }
 
 function Test-Admin {

@@ -42,6 +42,13 @@ def deliver(store, job, findings, error=""):
     that occasionally misses. The caller still wraps this in its own guard.
     """
     try:
+        # The desktop toast runs whether or not mail is configured: it is the
+        # channel that needs no key, and criticals must interrupt someone.
+        from jarvis.response import toast
+        toast.deliver(store, job, list(findings or []))
+    except Exception:
+        pass
+    try:
         conf = alert.load_conf()
         if not alert.enabled(conf):
             return
@@ -167,7 +174,7 @@ def flush(store, conf):
     subject, text, html = emails.digest(
         ordered, urgent, health, score.change_since(store, 86400, now) if health else None, now,
         conf, store=store)
-    err = alert.send_email(conf, subject, text, html=html)
+    err = alert.deliver(conf, subject, text, html=html)
     if err:
         store.set_meta('alert_last_error',f'{now}: {err}'[:300])
         store.set_meta(RETRY_AT,now + 300)

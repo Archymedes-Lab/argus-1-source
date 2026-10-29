@@ -20,10 +20,13 @@ COVERAGE = {
     "T1053":     "control — scheduled tasks and cron",
     "T1543":     "control — service and systemd unit creation",
     "T1547":     "control / startup — boot and logon autostart",
-    "T1546":     "asep — event-triggered execution",
+    "T1546":     "asep — event-triggered execution; sysmon — WMI event filters, consumers and bindings",
+    "T1559":     "sysmon — named pipes of known remote-execution and credential-dump tools",
     "T1574":     "asep — hijacked execution flow",
     "T1564":     "evasion — hidden files, streams and artefacts",
     "T1070":     "evasion — indicator removal and log tampering",
+    "T1679":     "evasion / tamper — Defender exclusions added, with the writing process",
+    "T1687":     "evasion / tamper — security product crashes and dying security services",
     "T1056":     "spy — input capture",
     "T1113":     "spy — screen capture",
     "T1123":     "spy — audio capture",
@@ -117,6 +120,27 @@ COVERAGE.update({
 # years; it is covered when a successor is, and is never mapped by itself.
 SUPERSEDED = {"T1562": ("T1685", "T1686", "T1688", "T1689", "T1690")}
 
+# Ids MITRE revoked and folded into one successor (the v7 restructuring and
+# later). The catalogue feed drops revoked objects, but a catalogue loaded
+# before that filter existed, and writeups citing the old id for years, both
+# keep them alive; a gap is judged under the successor, never the dead id.
+REVOKED = {
+    "T1043": "T1571", "T1064": "T1059", "T1086": "T1059.001", "T1085": "T1218.011",
+    "T1060": "T1547.001", "T1023": "T1547.009", "T1050": "T1543.003",
+    "T1031": "T1543.003", "T1035": "T1569.002", "T1077": "T1021.002",
+    "T1076": "T1021.001", "T1193": "T1566.001", "T1192": "T1566.002",
+    "T1173": "T1559.002", "T1175": "T1021.003", "T1038": "T1574.001",
+    "T1138": "T1546.009", "T1063": "T1518.001", "T1158": "T1564.001",
+    "T1093": "T1055.011", "T1116": "T1553.002", "T1067": "T1542.001",
+    "T1088": "T1548.002", "T1045": "T1027.002", "T1073": "T1574.001",
+    "T1081": "T1552.001", "T1214": "T1552.002", "T1004": "T1547.004",
+    "T1015": "T1546.008", "T1084": "T1546.003",
+}
+
+# Platforms this host has (Docker runs inside WSL). A technique MITRE scopes only to cloud, SaaS,
+# network devices, ESXi or mobile cannot be a gap in a laptop's monitoring.
+HOST_PLATFORMS = {"Windows", "Linux", "Containers"}
+
 
 def _successors(parent):
     mapped = [t for t in SUPERSEDED.get(parent, ()) if t in COVERAGE]
@@ -136,8 +160,9 @@ KNOWN_BLIND = {
     "T1554": "compromised host binary — no integrity baseline for system files",
     "T1505": "server software component — no web/server module auditing",
     "T1567": "exfiltration to web service — egress is seen but not classified",
-    "T1611": "container escape — no container runtime auditing",
-    "T1610": "malicious container deployment — no container runtime auditing",
+    "T1611": "containers / sysmon_linux — privileged, host-namespace, host-mount and Docker-socket containers; nsenter and privileged `docker run` command lines",
+    "T1610": "containers / sysmon_linux — container creation events and privileged or unconfined `docker run` command lines",
+    "T1609": "containers / sysmon_linux — `docker exec` activity from daemon events and command lines, escape-shaped commands reported high",
     "T1003": "credential dumping beyond LSASS memory (SAM, LSA secrets, NTDS, "
              "DCSync) — sysmon covers LSASS access; the rest needs "
              "registry/file/replication auditing",
@@ -193,23 +218,32 @@ def gaps(store, min_docs=1):
         "WHERE kind='attack' AND status='active' AND doc_count>=? "
         "ORDER BY doc_count DESC", (min_docs,)).fetchall()
 
-    cat = {r["tid"]: (r["name"], r["tactics"]) for r in
-           store.db.execute("SELECT tid,name,tactics FROM attack_techniques")}
+    cat, platforms = {}, {}
+    for r in store.db.execute("SELECT tid,name,tactics,platforms FROM attack_techniques"):
+        cat[r["tid"]] = (r["name"], r["tactics"])
+        platforms[r["tid"]] = {p.strip() for p in (r["platforms"] or "").split(",") if p.strip()}
 
-    covered, closeable, behavioural = [], [], []
+    covered, closeable, behavioural, inapplicable = [], [], [], []
     for r in rows:
-        tid, n = r["norm"], r["doc_count"]
+        cited, n = r["norm"], r["doc_count"]
+        successor = REVOKED.get(cited) or REVOKED.get(cited.split(".")[0])
+        tid = successor or cited
+        retired = f"retired id {cited}, now {tid}: " if successor else ""
         parent = tid.split(".")[0]
         where = COVERAGE.get(tid) or COVERAGE.get(parent) or _successors(parent)
         if where:
-            covered.append((tid, n, where))
+            covered.append((cited, n, retired + where))
             continue
         name, tactics = cat.get(tid) or cat.get(parent) or ("", "")
-        why = (KNOWN_BLIND.get(tid) or KNOWN_BLIND.get(parent)
-               or "no collector checks this")
+        why = retired + (KNOWN_BLIND.get(tid) or KNOWN_BLIND.get(parent)
+                         or "no collector checks this")
         if not name:
-            behavioural.append((tid, n, "deprecated or unrecognised "
-                                        "technique id", ""))
+            behavioural.append((cited, n, "deprecated or unrecognised "
+                                          "technique id", ""))
+            continue
+        scoped = platforms.get(tid) or platforms.get(parent) or set()
+        if scoped and not scoped & HOST_PLATFORMS:
+            inapplicable.append((cited, n, ", ".join(sorted(scoped)), name))
             continue
         tset = {t for t in (tactics or "").split(",") if t}
         if tset and tset <= BEHAVIOURAL_TACTICS:
@@ -238,4 +272,10 @@ def gaps(store, min_docs=1):
             "not observable", "low", f"{tid} {name}".strip(),
             f"{why} — mentioned in {n} intelligence document{'s' if n > 1 else ''}; "
             "this is a visibility limitation, not observed activity on this host"))
+    for tid, n, scoped, name in inapplicable:
+        out.append(_finding(
+            "not applicable", "low", f"{tid} {name}".strip(),
+            f"MITRE scopes this technique to {scoped}, which this host does not "
+            f"run — mentioned in {n} intelligence document{'s' if n > 1 else ''}; "
+            "not a gap in this machine's monitoring"))
     return out, covered, closeable

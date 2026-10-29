@@ -13,20 +13,21 @@ from .commands import ask as ask_cli
 from .commands import attack as attack_cli
 from .commands import brief as brief_cli
 from .commands import broker as broker_cli
+from .commands import canary as canary_cli
 from .commands import (
-    cmd_audio,
-    cmd_preos,
-    cmd_containers,
     cmd_alert,
     cmd_approve,
     cmd_asep,
+    cmd_audio,
     cmd_auditd,
     cmd_backdoor,
     cmd_baseline,
     cmd_boot,
     cmd_bruteforce,
+    cmd_containers,
     cmd_control,
     cmd_coverage,
+    cmd_dotnet,
     cmd_evasion,
     cmd_events,
     cmd_feeds,
@@ -40,11 +41,11 @@ from .commands import (
     cmd_intrusion,
     cmd_investigate,
     cmd_memscan,
-    cmd_dotnet,
     cmd_netwatch,
     cmd_outstanding,
     cmd_peers,
     cmd_posture,
+    cmd_preos,
     cmd_procs,
     cmd_scan,
     cmd_secrets,
@@ -64,16 +65,19 @@ from .commands import evidence as evidence_cli
 from .commands import fix as fix_cli
 from .commands import geo as geo_cli
 from .commands import history as history_cli
-from .commands import mesh as mesh_cli
 from .commands import impersonation as impersonation_cli
 from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
+from .commands import mesh as mesh_cli
+from .commands import notify as notify_cli
 from .commands import pixel as pixel_cli
+from .commands import privacy as privacy_cli
 from .commands import provenance as provenance_cli
+from .commands import reason as reason_cli
 from .commands import repair as repair_cli
 from .commands import retention as retention_cli
 from .commands import sensor as sensor_cli
-from .commands import reason as reason_cli
+from .commands import server as server_cli
 from .commands import timeline as timeline_cli
 from .commands import veil as veil_cli
 
@@ -100,6 +104,10 @@ def build_parser():
     inspect_cli.add_parser(sub)
     sensor_cli.add_parser(sub)
     geo_cli.add_parser(sub)
+    canary_cli.add_parser(sub)
+    server_cli.add_parser(sub)
+    notify_cli.add_parser(sub)
+    privacy_cli.add_parser(sub)
     timeline_cli.add_parser(sub)
     history_cli.add_parser(sub)
     mesh_cli.add_parser(sub)
@@ -471,8 +479,10 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    if args.cmd == 'mesh':
-        # Mesh owns its isolated store; never open the protected collector DB.
+    if args.cmd == 'mesh' or getattr(args, 'no_store', False):
+        # Mesh owns its isolated store, and the server network sensors run as
+        # their own account without access to it: never open the protected
+        # collector DB for them.
         return args.fn(args, None)
     store = Store(args.db)
     try:

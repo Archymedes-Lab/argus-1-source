@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 
+from jarvis.collectors import webroots
 from jarvis.core.finding import finding as _finding
 from jarvis.core.paths import load_win_script
 from jarvis.platform import windows as collect_windows
@@ -38,9 +39,7 @@ SCRIPT_EXT = (".php", ".phtml", ".php3", ".php4", ".php5", ".php7", ".pht",
               ".asp", ".aspx", ".ashx", ".asmx", ".jsp", ".jspx", ".jspa",
               ".cfm", ".pl", ".cgi", ".py")
 
-COMMON_ROOTS = ("/var/www", "/var/www/html", "/usr/share/nginx/html",
-                "/srv/www", "/srv/http", "/var/lib/tomcat/webapps",
-                "/opt/lampp/htdocs", "/home/*/public_html")
+COMMON_ROOTS = webroots.COMMON_ROOTS
 
 SKIP_DIRS = {"node_modules", "vendor", ".git", ".svn", "cache", "tests",
              "test", "__pycache__", "site-packages"}
@@ -92,26 +91,8 @@ def _linux_servers():
     return found
 
 
-def _roots_from_config():
-    roots = set()
-    for cfg_cmd in (["nginx", "-T"], ["apache2ctl", "-S"], ["httpd", "-S"]):
-        try:
-            r = subprocess.run(cfg_cmd, capture_output=True, text=True, errors="replace",
-                               timeout=15)
-            for m in re.finditer(r"(?:^\s*root|DocumentRoot)\s+\"?([^\";\s]+)",
-                                 r.stdout + r.stderr, re.M):
-                roots.add(m.group(1))
-        except (OSError, subprocess.SubprocessError):
-            continue
-    return roots
-
-
-def _expand(paths):
-    import glob
-    out = []
-    for p in paths:
-        out += glob.glob(p) if "*" in p else ([p] if os.path.isdir(p) else [])
-    return out
+_roots_from_config = webroots.roots_from_config
+_expand = webroots.expand
 
 
 # ── scanning a document root ──────────────────────────────────────────────

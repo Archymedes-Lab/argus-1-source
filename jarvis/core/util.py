@@ -117,19 +117,35 @@ def dpkg_candidates(path: str) -> list:
     return list(dict.fromkeys(out))
 
 
-def dpkg_owns(path: str) -> bool:
+def package_manager(exists=os.path.exists) -> str:
+    """"dpkg", "rpm" or "" for the package database this system keeps."""
+    if exists("/var/lib/dpkg/status"):
+        return "dpkg"
+    if exists("/var/lib/rpm") or exists("/usr/lib/sysimage/rpm"):
+        return "rpm"
+    return ""
+
+
+def dpkg_owns(path: str, manager=None) -> bool:
     """True when a package owns this file, under any of its path spellings.
 
-    A False here is used to escalate findings, so a wrong False is expensive:
-    it turns stock system files into critical alerts. When dpkg is missing or
-    errors, this returns False and callers should treat that as "unknown",
-    not as proof the file is unmanaged.
+    Asks dpkg on Debian-family systems and rpm on Red Hat/SUSE-family ones
+    (before 2026-10-24 only dpkg, so on RPM systems every file read as
+    unowned). A False here is used to escalate findings, so a wrong False is
+    expensive: it turns stock system files into critical alerts. When no
+    package manager answers, this returns False and callers should treat that
+    as "unknown", not as proof the file is unmanaged.
     """
+    manager = package_manager() if manager is None else manager
+    if manager == "rpm":
+        argv, owned = ["rpm", "-qf"], lambda r: r.returncode == 0 and r.stdout.strip()
+    else:
+        argv, owned = ["dpkg", "-S"], lambda r: r.returncode == 0 and ":" in r.stdout
     for cand in dpkg_candidates(path):
         try:
-            r = subprocess.run(["dpkg", "-S", cand], capture_output=True,
+            r = subprocess.run(argv + [cand], capture_output=True,
                                text=True, errors="replace", timeout=8)
-            if r.returncode == 0 and ":" in r.stdout:
+            if owned(r):
                 return True
         except (OSError, subprocess.SubprocessError):
             return False

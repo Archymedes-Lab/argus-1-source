@@ -48,7 +48,7 @@ import time
 from pathlib import Path
 
 from jarvis.core import event as event_mod
-from jarvis.core import filelock
+from jarvis.core import filelock, inflate, pagecache
 
 DEFAULT_ROOT = Path(os.path.expanduser("~/.jarvis/eventlog"))
 GENESIS = "0" * 64
@@ -57,6 +57,13 @@ GENESIS = "0" * 64
 # sits in the unsealed, unchained file; the sizes bound one segment's rewrite.
 SEAL_EVENTS = 20_000
 SEAL_BYTES = 32 * 1024 * 1024
+# Read-side bounds for sealed (gzip) segments, so a planted decompression bomb
+# is reported as an unreadable segment instead of exhausting the reader
+# (core/inflate.py). Measured 2026-10-25: headers ~3 KB, longest line 78 KB,
+# largest segment 324 MB plain.
+MAX_HEADER_LINE = 256 * 1024
+MAX_EVENT_LINE = 1024 * 1024
+MAX_SEGMENT_PLAIN = 1024 * 1024 * 1024
 SEAL_AGE = 300
 
 DEFAULT_BUDGET = 2 * 1024 ** 3
@@ -191,7 +198,7 @@ class EventLog:
                 filelock.acquire(self._lock)
             except OSError:
                 self._lock.close()
-                raise LogError("another process is writing the event log")
+                raise LogError("another process is writing the event log") from None
         self.db = None
         if writer or (self.root / "index.db").exists():
             self.db = (sqlite3.connect(self.root / "index.db", timeout=10) if writer else
@@ -299,7 +306,7 @@ class EventLog:
     @staticmethod
     def _read_header(path):
         with gzip.open(path, "rb") as fh:
-            return json.loads(fh.readline())
+            return json.loads(inflate.readline(fh, MAX_HEADER_LINE))
 
     def cursor(self, sensor, channel):
         return self.cursors.get(_cursor_key(sensor, channel))
@@ -450,8 +457,8 @@ class EventLog:
             if until is not None and header["first_seq"] > until:
                 return
             with gzip.open(self._segment_path(header["segment"]), "rb") as fh:
-                fh.readline()
-                for line in fh:
+                inflate.readline(fh, MAX_HEADER_LINE)
+                for line in inflate.lines(fh, MAX_EVENT_LINE):
                     obj = json.loads(line)
                     if "cursor" in obj:
                         continue
@@ -522,12 +529,15 @@ class EventLog:
                 problems.append(f"segment {n}: missing (not removed by retention)")
             else:
                 try:
-                    with gzip.open(path, "rb") as fh:
-                        stored = json.loads(fh.readline())
-                        hasher = hashlib.sha256()
-                        for block in iter(lambda: fh.read(1024 * 1024), b""):
-                            hasher.update(block)
-                        digest = hasher.hexdigest()
+                    with open(path, "rb") as raw, gzip.open(raw, "rb") as fh:
+                        try:
+                            stored = json.loads(inflate.readline(fh, MAX_HEADER_LINE))
+                            hasher = hashlib.sha256()
+                            for block in inflate.chunks(fh, MAX_SEGMENT_PLAIN):
+                                hasher.update(block)
+                            digest = hasher.hexdigest()
+                        finally:
+                            pagecache.drop(raw)   # read once per verify; not worth keeping
                 except (OSError, ValueError, EOFError) as exc:
                     problems.append(f"segment {n}: unreadable ({exc})")
                 else:

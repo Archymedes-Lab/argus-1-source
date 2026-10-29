@@ -73,7 +73,26 @@ class ClassifyTests(unittest.TestCase):
     def test_hooks_that_do_not_see_input_or_failed_are_ignored(self):
         self.assertIsNone(watchers.classify(row(type="-1")))    # WH_MSGFILTER
         self.assertIsNone(watchers.classify(row(failed=True)))
-        self.assertIsNone(watchers.classify(row(kind="winevent", type="any")))
+
+    def test_winevent_hooks_are_listed_without_keylogger_weight(self):
+        # SetWinEventHook sees focus and window changes, never keystrokes.
+        f = watchers.classify(row(kind="winevent", type="any"))
+        self.assertEqual(f["severity"], "low")
+        self.assertIn("not keystrokes", f["detail"])
+        self.assertEqual(sev(row(kind="winevent", type="any", sig="Valid",
+                                 path=r"C:\Windows\explorer.exe")), "ok")
+        self.assertIsNone(watchers.classify(row(kind="winevent", type="any", path="", start=0)))
+
+    def test_fast_key_state_polling_has_the_keylogger_shape(self):
+        # The kernel writes 1003 only for >= 1 call/ms between key events, so a
+        # row is already a fast poller; unsigned means the keylogger shape.
+        f = watchers.classify(row(kind="poll", type="getasynckeystate", calls=6021, ms=94))
+        self.assertEqual(f["severity"], "high")
+        self.assertIn("6021 key-state calls in 94 ms", f["detail"])
+        self.assertIn("agent.exe is watching every keyboard event", f["title"])
+        # Signed OS components poll too (Explorer, input method editors): named, no weight.
+        self.assertEqual(sev(row(kind="poll", type="getasynckeystate", sig="Valid",
+                                 path=r"C:\Windows\explorer.exe")), "ok")
 
     def test_only_background_raw_input_sinks_count(self):
         sink = row(kind="rawinput", type="1/6/256", visible_windows=0)
@@ -88,10 +107,15 @@ class ClassifyTests(unittest.TestCase):
 
 class AuditTests(unittest.TestCase):
     def test_unavailable_broker_is_stated_not_clean(self):
-        out = watchers.audit(result=(None, "the elevated broker is not installed"))
+        # Blind to keyboard hooks is medium and a coverage failure (2026-10-27:
+        # a broker timeout read as a complete run with a low note for hours).
+        from jarvis.core import collection
+        with collection.observe() as obs:
+            out = watchers.audit(result=(None, "the elevated broker is not installed"))
         self.assertEqual(len(out), 1)
-        self.assertEqual(out[0]["severity"], "low")
-        self.assertIn("unknown", out[0]["detail"])
+        self.assertEqual(out[0]["severity"], "medium")
+        self.assertIn("not seen", out[0]["detail"])
+        self.assertIn("inputaudit", obs.error)
 
     def test_summary_always_carries_the_polling_blind_spot(self):
         data = {"boot": 1000, "session_started": 1100, "watchers": [], "parse_failures": 0}
@@ -99,6 +123,19 @@ class AuditTests(unittest.TestCase):
         self.assertEqual([f["severity"] for f in out], ["ok"])
         self.assertIn("GetAsyncKeyState", out[0]["detail"])
         self.assertIn("0 process", out[0]["title"])
+        # An older broker script (keyword 0x400) never sees 1003: say so, do not
+        # describe the kernel gate as if polling were covered.
+        self.assertIn("invisible until the broker is reinstalled", out[0]["detail"])
+        data["polling_logged"] = True
+        out = watchers.audit(result=(data, ""), clock=2000)
+        self.assertIn("one call per millisecond", out[0]["detail"])
+        self.assertNotIn("invisible", out[0]["detail"])
+
+    def test_capped_trace_is_reported_as_lost_coverage(self):
+        data = {"boot": 1, "session_started": 2, "watchers": [], "polling_logged": True,
+                "etl_bytes": 128 << 20, "etl_capped": True}
+        out = watchers.audit(result=(data, ""), clock=10)
+        self.assertTrue(any("size cap" in f["title"] and f["severity"] == "medium" for f in out))
 
     def test_late_trace_start_and_parse_failures_are_reported(self):
         data = {"boot": 1000, "session_started": 1000 + 3600, "watchers": [],
@@ -122,6 +159,36 @@ class AuditTests(unittest.TestCase):
         out = watchers.audit(result=(data, ""), clock=10)
         self.assertIn("1 process", out[-1]["title"])
 
+    def test_polling_events_without_a_row_are_not_lost(self):
+        data = {"boot": 1, "session_started": 2, "watchers": [], "polling_events": 3}
+        out = watchers.audit(result=(data, ""), clock=10)
+        self.assertTrue(any("not attributed" in f["title"] and f["severity"] == "medium"
+                            for f in out))
+        # Attributed polling rows carry the finding; no second unattributed one.
+        data["watchers"] = [row(kind="poll", type="getasynckeystate", calls=900, ms=120)]
+        out = watchers.audit(result=(data, ""), clock=10)
+        self.assertFalse(any("not attributed" in f["title"] for f in out))
+        self.assertIn("1 process", out[-1]["title"])
+
+    def test_winevent_hook_holders_are_reported_low_with_their_trust(self):
+        rows = [row(kind="winevent", type="any", pid=10, path=r"C:\Program Files\NVDA\nvda.exe",
+                    sig="Valid", signer="NV Access"),
+                row(kind="winevent", type="any", pid=11, path=r"C:\Users\u\AppData\Local\Temp\s.exe",
+                    sig="NotSigned")]
+        out = watchers.audit(result=({"watchers": rows}, ""), clock=1767225700)
+        hit = [f for f in out if "window-event hooks" in f["title"]]
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0]["severity"], "low")
+        self.assertIn("nvda.exe", hit[0]["detail"])
+        self.assertIn("Unsigned or unidentified: s.exe", hit[0]["detail"])
+        self.assertNotIn("keystroke", hit[0]["title"])
+
+    def test_winevent_watchers_do_not_count_as_input_watchers(self):
+        data = {"boot": 1, "session_started": 2,
+                "watchers": [row(kind="winevent", type="any", pid=8, sig="Valid")]}
+        out = watchers.audit(result=(data, ""), clock=10)
+        self.assertIn("0 process", out[-1]["title"])
+
     def test_malformed_rows_are_skipped(self):
         data = {"boot": 1, "session_started": 2, "watchers": [None, "x", {"kind": "hook", "type": "z"}]}
         self.assertEqual(len(watchers.audit(result=(data, ""), clock=10)), 1)
@@ -137,6 +204,13 @@ class BrokerWiringTests(unittest.TestCase):
         text = (ROOT / "jarvis/platform/win/inputaudit.ps1").read_text(encoding="utf-8")
         self.assertIn("@($gone)", text)
         self.assertIn("$touched.ContainsKey($row.key)", text)
+
+    def test_script_traces_the_keyword_that_carries_polling_and_filters_by_id(self):
+        text = (ROOT / "jarvis/platform/win/inputaudit.ps1").read_text(encoding="utf-8")
+        self.assertIn("$Keyword = '0x1400'", text)
+        self.assertIn("EventID=1003", text)
+        self.assertIn("-FilterXPath $WantIds", text)
+        self.assertIn("-max $CapMB", text)
 
     def test_script_keeps_no_input_content(self):
         text = (ROOT / "jarvis/platform/win/inputaudit.ps1").read_text(encoding="utf-8")

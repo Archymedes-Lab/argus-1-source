@@ -47,6 +47,9 @@ SOURCE_ROOT = _source_root()
 WIN_SCRIPTS_DIR = PACKAGE_DIR / "platform" / "win"
 # The dashboard page and its assets.
 STATIC_DIR = PACKAGE_DIR / "web" / "static"
+# The owner's settings file. response/alert.py reads it for delivery; lower
+# layers that need one setting read it here instead of importing upward.
+CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
 
 
 def win_script(name):
@@ -63,8 +66,14 @@ def load_win_script(name):
     script then shows up as that collector's "unavailable" finding instead of
     stopping the daemon and every other collector with it.
     """
-    with open(win_script(name), encoding="utf-8", errors="replace", newline="") as fh:
-        return fh.read()
+    try:
+        with open(win_script(name), encoding="utf-8", errors="replace", newline="") as fh:
+            return fh.read()
+    except FileNotFoundError:
+        # The Linux server edition ships no Windows payloads. A payload that
+        # throws keeps the absence explicit: a collector that ever ran it would
+        # report itself unavailable, never an empty clean result.
+        return f'throw "{name} is not part of this edition"\n'
 
 
 def repo_file(name):

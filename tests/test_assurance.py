@@ -47,11 +47,25 @@ class AssuranceTests(unittest.TestCase):
                         assurance.OBSERVATION_REQUIREMENTS.values() for source in required}
         result = assurance.report(observations)
         gaps = result['evidence_gaps']
-        self.assertEqual(gaps['implementation_unverified'], 5)
+        # 2026-10-23: +3 unverified entries (firmware_audit_log,
+        # live_process_view, agent_reference_monitor); none is validated.
+        # 2026-10-24: +5 unverified Linux server entries (server_exposure_audit,
+        # server_packet_sensor, server_login_audit, package_integrity,
+        # alert_channels; the last is delivery, so it has no observing job).
+        # 2026-10-25: +1 unverified metrics_export (a read-out, no observing job),
+        # +1 unverified interop_backpressure (self-protection, no observing job).
+        # +2 unverified off_box_heartbeat and patch_cve_awareness (W10, W11).
+        # 2026-10-28: +1 unverified server_ssh_watch (sshwatch job).
+        # 2026-10-28: +1 unverified app_code_vulnerabilities (appcode, osv; W12).
+        # 2026-10-29: +1 unverified server_ops_health (opshealth job).
+        # 2026-10-29: +1 unverified linux_boot_chain (bootchain job).
+        # 2026-10-29: +1 unverified linux_keyboard_readers (keyreaders job).
+        # 2026-10-29: +1 unverified friday_defender_reviews (friday_defender job).
+        self.assertEqual(gaps['implementation_unverified'], 26)
         self.assertEqual(gaps['implementation_partial'], 20)
-        self.assertEqual(gaps['observation_mapping_missing'], 12)
-        self.assertEqual(gaps['containment_not_validated'], 25)
-        self.assertEqual(gaps['validation_date_missing'], 25)
+        self.assertEqual(gaps['observation_mapping_missing'], 17)
+        self.assertEqual(gaps['containment_not_validated'], 46)  # +1 friday_defender_reviews 2026-10-29
+        self.assertEqual(gaps['validation_date_missing'], 46)  # +1 friday_defender_reviews 2026-10-29
         self.assertFalse(result['complete'])
 
     def test_missing_or_stale_optional_sensor_is_explicit(self):

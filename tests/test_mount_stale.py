@@ -142,7 +142,10 @@ class NativeCollectorTests(unittest.TestCase):
     def test_report_level_stale_mount_maps_to_the_same_finding(self):
         from jarvis.collectors.telemetry import native
         from jarvis.platform.native import ingest
+        # Hermetic: the preflight would read this machine's real spool (absent
+        # on any machine without the sensor, and in the renamed Argus tree).
         with mock.patch.object(mounts, "under_windows_drive", return_value=False), \
+             mock.patch.object(ingest, "preflight", return_value={"installed": True}), \
              mock.patch.object(ingest, "run", return_value={
                  "installed": False, "mount_stale": True,
                  "access_error": mounts.stale_detail(), "channels": [],

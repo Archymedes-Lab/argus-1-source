@@ -18,19 +18,41 @@ Config, all under ~/.jarvis/config.json (kept 0600), or the noted env var:
     report_hour         9                   daily advisory, host local time
     alert_send_attempts 5                   transport retries per email
 
+Other channels (ARGUS-SERVER.md W4), each optional and independent:
+
+    webhook_url         "https://..."        JSON POST; Slack/Discord-compatible text
+    webhook_secret      "..."                HMAC-SHA256 signature in X-Argus-Signature
+    ntfy_url            "https://ntfy.sh/your-topic"   push to a phone
+    ntfy_token          "tk_..."             for a protected topic
+    syslog              true                 one line per alert to /dev/log; counts as
+                                             a channel only while a log forwarder runs
+    notify_url          "https://argus.archymedes.xyz"  sealed phone notifications
+                                             (ARGUS-NOTIFY.md); a channel once a phone is
+                                             paired with `notify pair`
+    notify_label        "web-1"              the name phones show for this server
+
+Off-box liveness (ARGUS-SERVER.md W10, service/heartbeat.py), not an alert channel:
+
+    heartbeat_url       "https://hc-ping.com/<uuid>"   one GET a minute to a dead-man
+                                             service; it alerts when the pings stop
+
 Critical findings and monitoring outages send immediately. Other findings
 must survive a second observation and are grouped into an hourly change digest.
 Unchanged findings escalate once per age threshold, never via periodic STILL
 mail. Notification state and pending delivery survive process restarts.
 """
 
+import hashlib
+import hmac
 import json
 import os
 import random
 import re
+import socket
 import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
@@ -107,10 +129,91 @@ def recipients(conf):
     return [x for x in to if x]
 
 
-def enabled(conf):
+def email_enabled(conf):
     return bool((conf.get("resend_api_key") or "").strip()
                 and (conf.get("alert_from") or "").strip()
                 and recipients(conf))
+
+
+# Programs that ship the local log somewhere a person reads it. A syslog line
+# with none of them running reaches no one, so it is not a channel.
+LOG_FORWARDERS = ("rsyslogd", "syslog-ng", "vector", "fluent-bit", "td-agent-bit", "fluentd",
+                  "promtail", "alloy", "filebeat", "elastic-agent", "otelcol", "otelcol-contrib",
+                  "nxlog", "splunkd", "wazuh-agentd", "datadog-agent", "journal-upload",
+                  "systemd-journal-upload", "systemd-journal-remote")
+
+
+def log_forwarder(proc="/proc"):
+    """The name of a running log forwarder, or ""."""
+    try:
+        pids = [d for d in os.listdir(proc) if d.isdigit()]
+    except OSError:
+        return ""
+    for pid in pids:
+        try:
+            with open(f"{proc}/{pid}/comm", errors="replace") as fh:
+                comm = fh.read().strip()
+        except OSError:
+            continue
+        if comm in LOG_FORWARDERS or comm.startswith("otelcol"):
+            return comm
+    return ""
+
+
+def _https(url):
+    try:
+        u = urllib.parse.urlsplit((url or "").strip())
+    except ValueError:
+        return False
+    return u.scheme == "https" and bool(u.hostname)
+
+
+def channels(conf, forwarder=None):
+    """Names of the channels that can reach the owner, in delivery order."""
+    out = []
+    if email_enabled(conf):
+        out.append("email")
+    if _https(conf.get("webhook_url")):
+        out.append("webhook")
+    if _https(conf.get("ntfy_url")):
+        out.append("ntfy")
+    if conf.get("syslog") is True:
+        if (log_forwarder() if forwarder is None else forwarder):
+            out.append("syslog")
+    from jarvis.response.notify import channel as notify_channel
+    if notify_channel.ready(conf):
+        out.append("notify")
+    return out
+
+
+def enabled(conf):
+    """True when at least one channel can reach the owner."""
+    return bool(channels(conf))
+
+
+def channel_findings(conf=None):
+    """A finding that stays critical while no outbound channel can page you.
+
+    Detection without delivery is a log. The desktop toast still fires for
+    criticals, but it lives in the user's own session and can be muted there,
+    so an unconfigured or paused mail path is reported at critical and is not
+    acknowledgeable (category `daemon`)."""
+    conf = load_conf() if conf is None else conf
+    if enabled(conf):
+        return []
+    missing = [name for name, ok in (("key", bool((conf.get("resend_api_key") or "").strip())),
+                                     ("sender", bool((conf.get("alert_from") or "").strip())),
+                                     ("recipient", bool(recipients(conf)))) if not ok]
+    syslog_note = (" syslog is on, but no log forwarder is running, so a log line would "
+                   "reach no one." if conf.get("syslog") is True else "")
+    return [{"category": "daemon", "severity": "critical", "host": "wsl",
+             "title": "no alert channel can reach you",
+             "detail": "email alerting is not configured (missing: " + ", ".join(missing)
+                       + "), and no webhook_url or ntfy_url (https) is set." + syslog_note
+                       + " Critical findings reach only the dashboard and a desktop toast "
+                         "that your own session can mute. Configure a channel in "
+                         "~/.jarvis/config.json (`jarvis alert --help`).",
+             "where": "~/.jarvis/config.json"}]
 
 
 def branded_sender(conf):
@@ -130,6 +233,7 @@ def status(store):
         state = {}
     return {
         "enabled": enabled(conf),
+        "channels": channels(conf),
         "have_key": bool((conf.get("resend_api_key") or "").strip()),
         "from": conf.get("alert_from", ""),
         "to": recipients(conf),
@@ -219,12 +323,129 @@ def send_email(conf, subject, text, html=None):
     return f"{last} (after {attempts} attempts)"
 
 
+def _post(url, body, headers, attempts=3, timeout=15, label="channel"):
+    """POST with retries; "" on 2xx, else an error that never contains the URL
+    (webhook URLs often embed their secret)."""
+    ctx = ssl.create_default_context()
+    last = "no attempt was made"
+    for i in range(attempts):
+        if i:
+            time.sleep(min(SEND_BACKOFF_CAP, SEND_BACKOFF_BASE * (2 ** (i - 1))) * (0.5 + random.random() / 2))
+        req = urllib.request.Request(url, data=body, method="POST")
+        for k, v in headers.items():
+            req.add_header(k, v)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+                if 200 <= resp.status < 300:
+                    return ""
+                last = f"{label} returned HTTP {resp.status}"
+        except urllib.error.HTTPError as exc:
+            last = f"{label} HTTP {exc.code}"
+            if 400 <= exc.code < 500 and exc.code not in (408, 429):
+                return last
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            last = f"could not reach the {label}: {type(exc).__name__}"
+    return f"{last} (after {attempts} attempts)"
+
+
+def _priority(subject):
+    low = (subject or "").lower()
+    return "critical" if "critical" in low or "down" in low or "not watching" in low else "high"
+
+
+def send_webhook(conf, subject, text, now=None):
+    ts = int(time.time() if now is None else now)
+    payload = {"source": "argus", "host": socket.gethostname(), "ts": ts, "subject": subject[:200],
+               "priority": _priority(subject), "text": f"*{subject[:200]}*\n{text[:3500]}",
+               "content": f"**{subject[:200]}**\n{text[:1800]}", "body": text[:60000]}
+    body = json.dumps(payload).encode()
+    headers = {"Content-Type": "application/json", "User-Agent": "argus-monitor/1.0",
+               "X-Argus-Timestamp": str(ts)}
+    secret = (conf.get("webhook_secret") or "").strip()
+    if secret:
+        sig = hmac.new(secret.encode(), str(ts).encode() + b"." + body, hashlib.sha256).hexdigest()
+        headers["X-Argus-Signature"] = "sha256=" + sig
+    return _post(conf["webhook_url"].strip(), body, headers, label="webhook")
+
+
+def _ascii(text, limit):
+    return (text or "").encode("ascii", "replace").decode()[:limit]
+
+
+def send_ntfy(conf, subject, text):
+    prio = _priority(subject)
+    headers = {"Title": _ascii(subject, 200), "Priority": "5" if prio == "critical" else "4",
+               "Tags": "rotating_light" if prio == "critical" else "warning",
+               "User-Agent": "argus-monitor/1.0", "Content-Type": "text/plain; charset=utf-8"}
+    token = (conf.get("ntfy_token") or "").strip()
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    # ntfy caps a message at 4 KiB; longer bodies become attachments it may refuse.
+    return _post(conf["ntfy_url"].strip(), text.encode()[:3900], headers, label="ntfy server")
+
+
+SYSLOG_SOCKET = "/dev/log"
+
+
+def send_syslog(subject, text, path=SYSLOG_SOCKET):
+    """One RFC 3164-style line to the local syslog socket (journald reads it)."""
+    prio = _priority(subject)
+    pri = 3 * 8 + (2 if prio == "critical" else 3)          # daemon.crit / daemon.err
+    line = " ".join((subject + " | " + text).split())[:1800]
+    msg = f"<{pri}>argus[{os.getpid()}]: {line}".encode("utf-8", "replace")
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.connect(path)
+            s.send(msg)
+        return ""
+    except OSError as exc:
+        return f"syslog socket: {exc.strerror or type(exc).__name__}"
+
+
+def deliver(conf, subject, text, html=None, only=None, senders=None):
+    """Send one alert on every configured channel, each independently (I8).
+
+    Returns "" when at least one channel delivered, else every channel's error.
+    A failing channel never stops another. `senders` exists for tests."""
+    names = [c for c in channels(conf) if only is None or c in only]
+    if not names:
+        return "no alert channel is configured"
+    senders = senders or {
+        "email": lambda: send_email(conf, subject, text, html=html),
+        "webhook": lambda: send_webhook(conf, subject, text),
+        "ntfy": lambda: send_ntfy(conf, subject, text),
+        "syslog": lambda: send_syslog(subject, text),
+        "notify": lambda: _send_notify(conf, subject, text),
+    }
+    errors, delivered = [], 0
+    for name in names:
+        try:
+            err = senders[name]()
+        except Exception as exc:  # noqa: BLE001 - one channel's bug must not silence the others
+            err = f"{type(exc).__name__}"
+        if err:
+            errors.append(f"{name}: {err}")
+        else:
+            delivered += 1
+    LAST_DELIVERY.clear()
+    LAST_DELIVERY.update({"channels": names, "delivered": delivered, "errors": errors})
+    return "" if delivered else "; ".join(errors)
+
+
+LAST_DELIVERY: dict = {}
+
+
+def _send_notify(conf, subject, text):
+    from jarvis.response.notify import channel as notify_channel
+    return notify_channel.send(conf, subject, text, severity=_priority(subject))
+
+
 def test(store):
     conf = load_conf()
     if not enabled(conf):
-        return "alerts are not configured — set resend_api_key, alert_from and " \
-               "alert_to in " + CONFIG_PATH
-    err = send_email(conf, "[JARVIS] test alert",
+        return "alerts are not configured — set an email (resend_api_key, alert_from, " \
+               "alert_to), webhook_url or ntfy_url in " + CONFIG_PATH
+    err = deliver(conf, "[JARVIS] test alert",
                      "This is a test from JARVIS (`jarvis alert --test`).\n"
                      "If you got this, outage alerts will reach you too.\n")
     if not err:

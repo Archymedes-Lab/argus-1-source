@@ -346,7 +346,7 @@ def _apply(args, store, test_cmd=None):
     print(f"applied {pid} at {base_commit or '?'} — tests passed.")
     print(f"touched: {', '.join(touched) or 'none tracked'}")
     print("verify fresh evidence next:")
-    print(f"  jarvis coverage -v            # collectors whose errors this was meant to fix")
+    print("  jarvis coverage -v            # collectors whose errors this was meant to fix")
     print("  curl -s http://127.0.0.1:8787/api/health | head -c 600")
     print(f"  rollback retained: jarvis fix rollback {pid}  (reverse-applies the stored patch)")
     return 0

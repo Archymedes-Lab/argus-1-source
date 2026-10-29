@@ -76,10 +76,14 @@ KNOWN_ABUSED_DRIVERS = re.compile(
 
 # Dead-drop and tunnel infrastructure. The point of each is that the traffic is
 # ordinary HTTPS to a host with a good reputation, so the destination name is
-# the only thing that gives it away.
+# the only thing that gives it away. This is matched against DNS cache names,
+# which carry no path: the old `discord(app).com/api/webhooks` and
+# `pastebin.com/raw` alternatives could never match (2026-10-27 audit). Discord
+# itself is everyday traffic by name, so webhooks are caught where the URL is
+# visible, by the command-line rules (techniques.py, "chat webhook service").
 DEAD_DROP = re.compile(
-    r"(api\.telegram\.org|discord(app)?\.com/api/webhooks|"
-    r"pastebin\.com/raw|paste\.ee|hastebin|ghostbin|rentry\.co|"
+    r"(api\.telegram\.org|"
+    r"pastebin\.com|paste\.ee|hastebin|ghostbin|rentry\.co|"
     r"transfer\.sh|file\.io|anonfiles|gofile\.io|temp\.sh|"
     r"\.ngrok(-free)?\.(io|app|dev)|trycloudflare\.com|"
     r"localtonet\.com|playit\.gg|loclx\.io|serveo\.net|pinggy\.io)",
@@ -126,6 +130,7 @@ PS_EVASION = load_win_script("evasion.ps1")
 
 def audit(data=None):
     """`data` is a payload already collected (the coverage map's probes)."""
+    live = data is None
     if data is None:
         data = ps_json(PS_EVASION, timeout=300)
     if data is None:
@@ -162,6 +167,44 @@ def audit(data=None):
     else:
         out.append(_finding("byovd", "ok", "vulnerable driver blocklist enabled",
                             "VulnerableDriverBlocklistEnable = 1", "CI\\Config"))
+
+    asr = data.get("asrByovd", -2)
+    asr_where = "Defender ASR rule 56a863a9-875e-4185-98a7-b882c64b5ce5"
+    if asr == 1:
+        out.append(_finding("byovd", "ok", "ASR rule against exploited signed drivers blocks",
+                            "Block abuse of exploited vulnerable signed drivers is in block mode", asr_where))
+    elif asr in (2, 6):
+        out.append(_finding("byovd", "low", "ASR rule against exploited signed drivers only "
+                            + ("audits" if asr == 2 else "warns"),
+                            "Block abuse of exploited vulnerable signed drivers is not in block mode; the driver "
+                            "blocklist and Memory Integrity still apply", asr_where))
+    elif asr == 0:
+        out.append(_finding("byovd", "medium", "ASR rule against exploited signed drivers is switched off",
+                            "Block abuse of exploited vulnerable signed drivers is explicitly disabled; BYOVD EDR "
+                            "killers rely on such drivers (Exa threat research 2026-10-29)", asr_where))
+    elif asr == -1:
+        out.append(_finding("byovd", "low", "ASR rule against exploited signed drivers is not enabled",
+                            "Block abuse of exploited vulnerable signed drivers is not configured. Turning it on "
+                            "(Set-MpPreference -AttackSurfaceReductionRules_Ids 56a863a9-875e-4185-98a7-b882c64b5ce5 "
+                            "-AttackSurfaceReductionRules_Actions Enabled) adds a block on top of the blocklist",
+                            asr_where))
+    else:
+        out.append(_finding("visibility", "low", "ASR rule state not observed",
+                            "Defender preferences could not be read, so the vulnerable-driver ASR rule is unknown",
+                            asr_where))
+
+    # Mandatory-profile hive persistence (NTUSER.MAN): loaded instead of
+    # NTUSER.DAT at logon, planted without administrator rights.
+    for h in aslist(data.get("manHives")):
+        out.append(_finding("persistence", "high", "mandatory profile hive in a user profile",
+                            f"{h.get('path')} ({h.get('size')} bytes, written {h.get('written')}) is loaded at "
+                            "logon instead of NTUSER.DAT: registry persistence planted in it is invisible to "
+                            "registry monitoring until then. Expected only where an administrator configured "
+                            "mandatory profiles.", str(h.get("path") or "")))
+    if int(data.get("manUnreadable") or 0):
+        out.append(_finding("visibility", "low", "some user profiles not checked for NTUSER.MAN",
+                            f"{data.get('manUnreadable')} profile folder(s) could not be read without "
+                            "administrator rights", "C:\\Users"))
 
     # -- 2. drivers in the wrong place ------------------------------------
     odd = 0
@@ -282,10 +325,19 @@ def audit(data=None):
         out.append(_finding("unicode", "ok", "no invisible characters in command lines",
                             "Run keys, RunMRU and shortcuts are all plain text", ""))
 
+    if live:
+        # Attempts to blind the defenses (collectors/process/tamper.py): read
+        # from Windows' own logs on every live run, never in a probe replay.
+        try:
+            from jarvis.collectors.process import tamper
+            out.extend(tamper.audit())
+        except Exception as exc:     # a broken tamper read must not cost the evasion audit
+            out.append(_finding("visibility", "medium", "Tamper audit failed",
+                                f"{type(exc).__name__}: tampering is unknown, not absent", "tamper"))
     return out
 
 
-CAT_ORDER = {"byovd": 0, "unicode": 1, "ads": 2, "lnk": 3, "c2": 4}
+CAT_ORDER = {"byovd": 0, "tamper": 1, "unicode": 2, "ads": 3, "lnk": 4, "c2": 5}
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "ok": 4}
 
 

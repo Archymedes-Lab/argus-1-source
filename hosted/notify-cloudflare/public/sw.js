@@ -1,0 +1,68 @@
+// Service worker: the shell offline, and on an (empty) push: fetch, verify, decrypt,
+// notify. What a lock screen shows is the owner's choice (Settings); by default only
+// the severity and the server, never the alert's text.
+import { syncAll } from "./lib/sync.js";
+import { settings } from "./lib/store.js";
+
+const SHELL = "argus-shell-v1";
+const FILES = ["/", "/index.html", "/app.js", "/style.css", "/lib/protocol.js", "/lib/store.js", "/lib/sync.js",
+  "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/badge-72.png"];
+
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener("activate", (e) => {
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k))))
+    .then(() => self.clients.claim()));
+});
+
+self.addEventListener("fetch", (e) => {
+  const url = new URL(e.request.url);
+  if (url.origin !== location.origin || url.pathname.startsWith("/v1/") || e.request.method !== "GET") return;
+  e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).catch(() => caches.match("/index.html"))));
+});
+
+const RANK = { critical: 0, high: 1, medium: 2, low: 3, ok: 4, info: 5 };
+
+self.addEventListener("push", (e) => {
+  e.waitUntil((async () => {
+    const { fresh } = await syncAll();
+    const detail = await settings.get("lockscreenDetail", false);
+    const alerts = [...fresh].sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
+    if (!alerts.length) {
+      // Browsers require a visible notification for every push.
+      return self.registration.showNotification("Argus", { body: "Checked in: nothing new.", tag: "argus-sync",
+        icon: "/icons/icon-192.png", badge: "/icons/badge-72.png", silent: true });
+    }
+    const shown = alerts.length > 3 ? [summary(alerts)] : alerts.map((m) => single(m, detail));
+    for (const n of shown) await self.registration.showNotification(n.title, n.options);
+  })());
+});
+
+function single(m, detail) {
+  const where = m.label || m.host || "your server";
+  return {
+    title: detail ? `${m.severity.toUpperCase()} · ${where}` : `Argus · ${where}`,
+    options: { body: detail ? m.title : `${article(m.severity)} ${m.severity} alert. Open to read it.`,
+      tag: m.id, icon: "/icons/icon-192.png", badge: "/icons/badge-72.png",
+      data: { url: `/#/m/${m.id}` }, requireInteraction: m.severity === "critical" },
+  };
+}
+
+function summary(alerts) {
+  const servers = new Set(alerts.map((m) => m.label || m.host));
+  return { title: "Argus", options: { body: `${alerts.length} new alerts from ${servers.size} server${servers.size > 1 ? "s" : ""}.`,
+    tag: "argus-summary", icon: "/icons/icon-192.png", badge: "/icons/badge-72.png", data: { url: "/#/" } } };
+}
+
+const article = (s) => (/^[aeiou]/.test(s) ? "An" : "A");
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || "/#/";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+    for (const w of wins) if ("focus" in w) { w.navigate(target); return w.focus(); }
+    return self.clients.openWindow(target);
+  }));
+});

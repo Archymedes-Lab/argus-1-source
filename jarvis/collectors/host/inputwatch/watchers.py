@@ -7,10 +7,15 @@ This module turns that inventory into findings.
 
 What it can and cannot see was measured on this machine on 2026-09-23 with a
 positive control: hook (1002) and raw-input (1001) registrations are logged
-and attributed; GetAsyncKeyState polling (1003) is not logged at all, so a
-polling keylogger stays invisible. A registration is logged only once, when
-it happens, so anything that registered before the trace started this boot
-is missing too. Both gaps are stated in every summary.
+and attributed. Key-state polling (1003) is written by the kernel only at a
+key event, and only for a process that called GetAsyncKeyState at one call
+per millisecond or more since the previous key event; slower polling is never
+logged, and the 2026-09-23 control polled too slowly to show whether faster
+polling is (re-measured by scripts/tools/probe-win32k-polling.ps1). A
+registration is logged only once, when it happens, so anything that
+registered before the trace started this boot is missing too. Both gaps are
+stated in every summary. WinEvent hooks (1000: focus and window events, the
+accessibility API) are listed too; they see windows, not keystrokes.
 
 Severity follows what the evidence can carry. A keyboard watcher that runs
 unsigned code, or runs inside a script host, has the shape of a keylogger and
@@ -23,6 +28,7 @@ never by name or command line, which anyone can imitate.
 
 import ntpath
 
+from jarvis.core import collection
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
 from jarvis.platform import broker
@@ -53,10 +59,23 @@ SYSTEM_DIRS = ("c:\\windows\\", "c:\\program files\\", "c:\\program files (x86)\
 BOOT_GAP_S = 300        # trace started this long after boot: early watchers unseen
 
 POLLING_BLIND_SPOT = (
-    "Key-state polling (GetAsyncKeyState) is not logged by Windows on this "
-    "build (measured with a positive control), and anything that registered "
+    "Key-state polling (GetAsyncKeyState) is logged by Windows only at one call "
+    "per millisecond or more between key events, and anything that registered "
     "before the trace started is missing, so this list is not everything that "
     "can read input.")
+# The trace must carry keyword 0x1400 for 1003 to exist at all (measured
+# 2026-10-21); an older broker script traces 0x400 and sees no polling.
+POLLING_UNTRACED = (
+    "This broker's trace does not carry the keyword that logs key-state polling "
+    "(GetAsyncKeyState), so polling keyloggers are invisible until the broker is "
+    "reinstalled; anything that registered before the trace started is missing too.")
+
+# Kernel gate for 1003: calls since the previous key event / ms elapsed >= 1.
+# A row below the Velociraptor community thresholds is still reported: the
+# kernel already applied its own gate, and the thresholds only bound what one
+# burst looks like.
+POLL_LABEL = "key-state polling (GetAsyncKeyState at one call/ms or more)"
+WINEVENT_LABEL = "WinEvent hook (window and focus events)"
 
 
 def _watch(row):
@@ -80,6 +99,12 @@ def _watch(row):
         if not device or flags & RIDEV_REMOVE or not flags & (RIDEV_INPUTSINK | RIDEV_EXINPUTSINK):
             return None
         return device, "background raw-input sink", True
+    if kind == "poll":
+        return "keyboard", POLL_LABEL, True
+    if kind == "winevent":
+        # Sees window and focus changes (which app is active, titles via
+        # follow-up calls), never key codes; always low or ok.
+        return "window", WINEVENT_LABEL, False
     return None
 
 
@@ -115,6 +140,18 @@ def classify(row, own_pids=()):
         hidden += " It has since exited, so it ran only briefly."
     lib = (f" Hook library: {row['lib']}."
            if row.get("lib") and row["lib"] != "NULL" else "")
+    if row.get("kind") == "poll" and row.get("calls") is not None:
+        lib += (f" Windows measured {row.get('calls')} key-state calls in "
+                f"{row.get('ms')} ms between two key events.")
+    if device == "window":
+        if trust == "unidentified":
+            return None
+        return _finding(
+            "input", "low" if trust in ("unsigned", "script-host") else "ok",
+            f"{name} watches window and focus events",
+            f"a {label} registered at {since} (pid {row.get('pid')}); it sees which "
+            f"window is active, not keystrokes. Screen readers, window managers and "
+            f"automation tools do this.{hidden}", path)
     if trust in ("unsigned", "script-host") and is_global:
         sev = "high" if device == "keyboard" else "medium"
         why = ("it runs inside a script host, so its signature says nothing "
@@ -151,11 +188,17 @@ def audit(own_pids=(), result=None, clock=None):
     """Findings from the broker's watcher inventory. `result` is injectable."""
     data, why = result if result is not None else broker.result("inputaudit")
     if data is None:
+        # Blind to keyboard hooks is a coverage failure, not a footnote: the
+        # run must not read "complete" (2026-10-27: the broker timed out on a
+        # 70 MB trace for hours while every input run was recorded complete).
+        collection.failed("inputaudit", why)
         return [_finding(
-            "input", "low", "input watcher audit unavailable",
-            f"{why}. Without it, which processes hook the keyboard and mouse is "
-            f"unknown. Install or refresh the broker with `jarvis broker install`.",
+            "input", "medium", "input watcher audit unavailable",
+            f"{why}. Until it runs again, a program that starts watching the "
+            f"keyboard or mouse is not seen. Install or refresh the broker with "
+            f"`jarvis broker install`.",
             "broker")]
+    collection.succeeded("inputaudit")
     t = clock if clock is not None else now()
     out = []
     watchers = [r for r in (data.get("watchers") or []) if isinstance(r, dict)]
@@ -174,22 +217,51 @@ def audit(own_pids=(), result=None, clock=None):
             "input", "low", "some input-audit events could not be read",
             f"{data['parse_failures']} event(s) failed to parse this run; the "
             f"watchers they described are missing from the inventory.", "inputaudit"))
-    if int(data.get("polling_events") or 0):
-        # Not expected on this build; if Windows starts logging it, say so.
+    polled = int(data.get("polling_events") or 0)
+    if polled and not any(r.get("kind") == "poll" for r in watchers):
+        # Events were counted but no row survived (parse failure or row cap):
+        # say so rather than lose them.
         out.append(_finding(
-            "input", "low", "Windows logged key-state polling",
-            f"{data['polling_events']} GetAsyncKeyState audit event(s) appeared; "
-            f"this was not logged when measured, so review what changed.",
+            "input", "medium", "key-state polling was logged but not attributed",
+            f"Windows wrote {polled} GetAsyncKeyState audit event(s) this run and "
+            f"none could be tied to a process; a fast poller may be present.",
             "inputaudit"))
 
     # Distinct processes, not watchers: one program often holds both a
     # keyboard and a mouse watcher. JARVIS's own hook is not counted.
     mine = {int(p) for p in own_pids}
     watching = {(r.get("pid"), r.get("start")) for r in watchers
-                if _watch(r) and int(r.get("pid") or -1) not in mine}
+                if _watch(r) and r.get("kind") != "winevent"
+                and int(r.get("pid") or -1) not in mine}
+    # WinEvent hooks see which window has focus and its title, never keys.
+    # Screen readers, window managers and UI-automation scrapers all use
+    # them; counted but never reported until 2026-10-23, so a scraper that
+    # Windows logged was invisible.
+    winevent = {}
+    for r in watchers:
+        if r.get("kind") == "winevent" and int(r.get("pid") or -1) not in mine:
+            name = ntpath.basename(r.get("path") or "") or f"pid {r.get('pid')}"
+            winevent.setdefault(name, _trust(r))
+    if winevent:
+        untrusted = sorted(n for n, t in winevent.items() if t in ("unsigned", "unidentified", "script-host"))
+        out.append(_finding(
+            "input", "low",
+            f"{len(winevent)} process(es) hold window-event hooks",
+            "these see focus changes and window titles (which app you are in), "
+            "not keystrokes: " + ", ".join(sorted(winevent))
+            + (f". Unsigned or unidentified: {', '.join(untrusted)}" if untrusted else "")
+            + ". Screen readers and window tools do this; a scraper logging which "
+              "sites you visit looks the same here.", "inputaudit"))
+    traced = bool(data.get("polling_logged"))
+    if data.get("etl_capped"):
+        out.append(_finding(
+            "input", "medium", "input audit trace hit its size cap",
+            f"the trace file reached {int(data.get('etl_bytes') or 0) // (1 << 20)} MB "
+            f"before this run, so registrations after that point are lost; the "
+            f"next rotation starts clean.", "inputaudit"))
     out.append(_finding(
         "input", "ok",
         f"{len(watching)} process(es) watching keyboard or mouse input",
         (f"inventory since {iso(started)}, refreshed {iso(t)}. " if started else "")
-        + POLLING_BLIND_SPOT, "inputaudit"))
+        + (POLLING_BLIND_SPOT if traced else POLLING_UNTRACED), "inputaudit"))
     return out

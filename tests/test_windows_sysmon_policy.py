@@ -40,6 +40,18 @@ class WindowsSysmonPolicyTests(unittest.TestCase):
         self.assertIn("\\CurrentControlSet\\Services\\", targets)
         self.assertIn("\\Image File Execution Options\\", targets)
 
+    def test_wsl_boundary_keys_and_files_are_recorded(self):
+        # The registration keys any user process can write (DefaultUid, BasePath,
+        # Flags), the service plugins, the policy key, the VM config file and
+        # Windows-side writes into the distro over the wsl.localhost share.
+        targets = [node.text for node in self.registry("include").findall("TargetObject")]
+        self.assertIn("\\CurrentVersion\\Lxss\\", targets)
+        self.assertIn("\\Policies\\Microsoft\\Windows\\WSL", targets)
+        files = [node.text for node in self.event("FileCreate").findall("TargetFilename")]
+        self.assertIn("\\.wslconfig", files)
+        self.assertIn("\\wsl.localhost\\", files)
+        self.assertIn("\\wsl$\\", files)
+
     def test_registry_include_and_exclude_live_in_separate_rule_groups(self):
         groups = self.events.findall("RuleGroup")
         kinds = sorted(group.find("RegistryEvent").attrib["onmatch"] for group in groups
@@ -50,16 +62,21 @@ class WindowsSysmonPolicyTests(unittest.TestCase):
         # Every exclusion is an AND of one noise operation and one key, so
         # deletions, renames and security value changes are never excluded.
         rules = self.registry("exclude").findall("Rule")
-        self.assertEqual(len(rules), 5)
+        self.assertEqual(len(rules), 6)
         for rule in rules:
             self.assertEqual(rule.attrib["groupRelation"], "and")
             (kind,) = [n.text for n in rule.findall("EventType")]
             (target,) = [n.text for n in rule.findall("TargetObject")]
             self.assertIn(kind, ("CreateKey", "SetValue"))
-            self.assertIn("\\Services\\", target)
+            # The consent-store exclusion drops only the per-use time stamps;
+            # the Allow/Deny switch (\Value) stays recorded and attributed.
+            self.assertTrue("\\Services\\" in target
+                            or ("\\ConsentStore\\" in target and "LastUsedTime" in target),
+                            target)
         excluded = [n.text for n in self.registry("exclude").iter("TargetObject")]
         for signal in ("NameServer", "\\Parameters\\ServiceDll", "ImagePath",
-                       "\\CurrentVersion\\Run", "Winlogon", "NtpServer"):
+                       "\\CurrentVersion\\Run", "Winlogon", "NtpServer",
+                       "ConsentStore\\microphone\\Value", "\\Value"):
             self.assertFalse(any(signal in value for value in excluded), signal)
         self.assertEqual(sum(1 for event in self.events.iter("RegistryEvent")
                              for _ in event.iter("EventType")
@@ -70,6 +87,31 @@ class WindowsSysmonPolicyTests(unittest.TestCase):
         self.assertEqual(access.attrib["onmatch"], "include")
         self.assertIn("\\lsass.exe", [node.text for node in access])
         self.assertEqual(self.event("CreateRemoteThread").attrib["onmatch"], "exclude")
+
+    def test_browser_memory_opens_are_recorded_except_by_the_browser_itself(self):
+        access = self.event("ProcessAccess")
+        rules = access.findall("Rule")
+        targets = sorted(rule.find("TargetImage").text for rule in rules)
+        self.assertEqual(targets, ["\\brave.exe", "\\chrome.exe", "\\firefox.exe", "\\msedge.exe"])
+        for rule in rules:
+            self.assertEqual(rule.attrib["groupRelation"], "and")
+            source = rule.find("SourceImage")
+            self.assertEqual(source.attrib["condition"], "excludes")
+            self.assertEqual(source.text, rule.find("TargetImage").text)
+
+    def test_only_unsigned_image_loads_are_recorded(self):
+        loads = self.event("ImageLoad")
+        self.assertEqual(loads.attrib["onmatch"], "include")
+        self.assertEqual([(n.tag, n.attrib["condition"], n.text) for n in loads],
+                         [("Signed", "is", "false")])
+
+    def test_defence_tampering_registry_families_are_recorded(self):
+        targets = [n.text for n in self.registry("include").iter("TargetObject")]
+        for family in ("\\Windows Defender\\Exclusions\\", "\\Windows Defender\\Real-Time Protection\\",
+                       "\\Policies\\Microsoft\\Windows Defender\\", "\\CLSID\\;\\InprocServer32",
+                       "\\Control\\Lsa\\;Packages", "\\Microsoft\\AMSI\\Providers\\",
+                       "\\WMI\\Autologger\\;\\Start"):
+            self.assertIn(family, targets)
 
     def test_installer_verifies_process_starts_are_not_filtered_after_apply(self):
         installer = INSTALLER.read_text(encoding="utf-8")

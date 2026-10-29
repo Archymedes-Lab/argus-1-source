@@ -21,7 +21,7 @@ voice with:
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 from jarvis.response import acknowledge
 from jarvis.response.reporting import score
@@ -434,7 +434,7 @@ class RemediationGraph:
     that must complete before this step can begin.
     """
 
-    def __init__(self, edges: Dict[str, List[str]] = None):
+    def __init__(self, edges: Optional[Dict[str, List[str]]] = None):
         self.edges = edges or {}
         # Build reverse adjacency: what depends on this step
         self._dependents: Dict[str, List[str]] = {}

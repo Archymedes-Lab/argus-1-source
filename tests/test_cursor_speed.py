@@ -6,7 +6,6 @@ from pathlib import Path
 
 from jarvis.platform.provenance import persistence
 
-
 ROOT = Path(__file__).resolve().parents[1]
 TASK = persistence.BY_NAME["jarviscursorspeed"]
 LOCAL = r"C:\Users\chris\AppData\Local"

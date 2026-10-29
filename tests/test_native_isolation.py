@@ -10,8 +10,8 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from jarvis.core.eventlog import EventLog
 from jarvis.core import telemetry
+from jarvis.core.eventlog import EventLog
 from jarvis.platform.native import ingest
 
 

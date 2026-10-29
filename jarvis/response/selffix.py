@@ -26,8 +26,8 @@ proposal per problem key, a 6h cooldown after a decision, one email per
 proposal, and at most 3 proposal emails per 24h.
 """
 
-import json
 import hashlib
+import json
 import time
 import uuid
 
@@ -341,7 +341,7 @@ def email_text(proposal):
 def send_email_for(store, conf, pid, now=None):
     """Mail one proposal, rate-limited. Returns '' on success else an error."""
     now = _now(now)
-    if not alert.enabled(conf):
+    if not alert.email_enabled(conf):
         return "alerts are not configured"
     proposals = _load(store)
     entry = proposals.get(pid or "")

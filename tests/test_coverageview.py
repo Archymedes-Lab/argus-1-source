@@ -380,13 +380,14 @@ class RouteTests(unittest.TestCase):
             self.assertEqual(res.status, 200)
             self.assertTrue(res.getheader("Content-Type").startswith("text/event-stream"))
             open_streams.append(res)
-        lines, deadline = [], time.time() + 5
-        while "event: pulse" not in lines and time.time() < deadline:
+        # Monotonic: the wall clock here steps by ~9 s (WSL clock fight).
+        lines, deadline = [], time.monotonic() + 5
+        while "event: pulse" not in lines and time.monotonic() < deadline:
             lines.append(open_streams[0].fp.readline().decode().rstrip("\n"))
         self.assertIn("event: pulse", lines)
         # Nothing changes in this empty database, so the next thing sent is the
         # heartbeat the page uses to tell quiet from dead.
-        while "event: beat" not in lines and time.time() < deadline:
+        while "event: beat" not in lines and time.monotonic() < deadline:
             lines.append(open_streams[0].fp.readline().decode().rstrip("\n"))
         self.assertIn("event: beat", lines)
         self.assertEqual(lines.count("event: pulse"), 1)   # the state itself was not re-sent

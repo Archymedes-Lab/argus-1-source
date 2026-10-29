@@ -1,0 +1,80 @@
+{
+ "captured_local": "2026-10-23 20:38:24 EEST",
+ "release": "sha256:0534b538cd160b49405c6ced57ffa6532c53499e884f300194f9eeaa013faabd",
+ "sysmon": {
+  "ts": 1792776898,
+  "error": "collector coverage incomplete",
+  "findings": [
+   {
+    "severity": "critical",
+    "title": "driver loaded that is unsigned or from a writable path: ksld.sys"
+   },
+   {
+    "severity": "critical",
+    "title": "driver loaded that is unsigned or from a writable path: wdnisdrv.sys"
+   },
+   {
+    "severity": "high",
+    "title": "Sysmon dropped events before logging them"
+   },
+   {
+    "severity": "high",
+    "title": "WSL shut down or a distribution terminated from Windows (stops the JARVIS engine) (T1489)"
+   },
+   {
+    "severity": "high",
+    "title": "WSL shut down or a distribution terminated from Windows (stops the JARVIS engine) (T1489)"
+   },
+   {
+    "severity": "medium",
+    "title": "codex-windows-sandbox-service.exe queried LSASS"
+   },
+   {
+    "severity": "low",
+    "title": "hotkeyserviceuwp.exe queried LSASS"
+   },
+   {
+    "severity": "low",
+    "title": "hpaudioanalytics.exe queried LSASS"
+   },
+   {
+    "severity": "low",
+    "title": "microsoftedgeupdate.exe queried LSASS"
+   },
+   {
+    "severity": "medium",
+    "title": "powershell.exe queried LSASS"
+   },
+   {
+    "severity": "medium",
+    "title": "Sysmon lost events while starting at boot"
+   },
+   {
+    "severity": "medium",
+    "title": "Sysmon is catching up a backlog"
+   },
+   {
+    "severity": "low",
+    "title": "powershell.exe queried LSASS (JARVIS broker)"
+   },
+   {
+    "severity": "low",
+    "title": "clipboard read from PowerShell (T1115)"
+   },
+   {
+    "severity": "low",
+    "title": "query for hardware an emulator lacks (thermal zone or fan) (T1497)"
+   }
+  ]
+ },
+ "fwaudit": {
+  "ts": 1792776900,
+  "error": "fwaudit: the broker's last fwaudit run failed: no run recorded",
+  "findings": [
+   {
+    "severity": "low",
+    "title": "HP firmware audit log is not read"
+   }
+  ]
+ }
+}

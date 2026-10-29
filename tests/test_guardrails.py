@@ -44,6 +44,7 @@ class AssistantWiringTests(unittest.TestCase):
         with mock.patch.object(assistant.llm, "chat",
                                return_value=("You are 100% safe.", "")):
             import tempfile
+
             from jarvis.core.store import Store
             with tempfile.TemporaryDirectory() as tmp:
                 store = Store(f"{tmp}/t.db")
@@ -61,6 +62,7 @@ class AssistantWiringTests(unittest.TestCase):
                 side_effect=lambda c, s, u, **k: (seen.update(system=s),
                                                   ("ok", ""))[1]):
             import tempfile
+
             from jarvis.core.store import Store
             with tempfile.TemporaryDirectory() as tmp:
                 store = Store(f"{tmp}/t.db")

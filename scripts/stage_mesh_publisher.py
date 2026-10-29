@@ -9,7 +9,7 @@ def stage(repo, releases):
     repo, releases = Path(repo), Path(releases)
     names = ['jarvis/__init__.py', 'jarvis/core/__init__.py',
              'jarvis/core/event.py', 'jarvis/core/eventlog.py',
-             'jarvis/core/filelock.py',
+             'jarvis/core/filelock.py', 'jarvis/core/inflate.py', 'jarvis/core/pagecache.py',
              'jarvis/platform/__init__.py']
     names += [str(p.relative_to(repo)) for p in sorted(
         (repo / 'jarvis/platform/peerledger').glob('*.py'))]

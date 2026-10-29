@@ -3,6 +3,7 @@ import json
 import sqlite3
 import time
 
+from jarvis.core import mechanisms
 from jarvis.core.assurance import report as assurance_report
 from jarvis.core.telemetry import META as TELEMETRY_META
 from jarvis.core.telemetry import parse as telemetry_parse
@@ -15,7 +16,7 @@ def _invariants(sources, scheduler, stamp):
         from jarvis.core import invariants as invariants_mod
         stale = any(
             sources.get(name, {}).get("status") in ("stale", "unavailable")
-            for name in ("scan", "bridge", "sysmon", "native"))
+            for name in mechanisms.health_sources()[0])
         recovering = False
         try:
             summary = scheduler.reliability_status()["summary"]
@@ -29,7 +30,8 @@ def _invariants(sources, scheduler, stamp):
         # Noncritical running is approximated by whether a governed job is
         # currently executing; the scheduler defers them under pressure, so
         # this closes the loop without new instrumentation.
-        current = {scheduler.current, getattr(scheduler, "fast_current", None)}
+        current = {scheduler.current, getattr(scheduler, "fast_current", None),
+                   getattr(scheduler, "bulk_current", None)}
         noncritical_running = pressured and any(
             c in governor_mod.GOVERNED_JOBS for c in current if c)
         return invariants_mod.evaluate_all(
@@ -83,14 +85,14 @@ def _state(row, limit, stamp):
 
 def health(db_path, scheduler, stamp=None):
     stamp = time.time() if stamp is None else stamp
-    age = max(0, stamp - scheduler.heartbeat)
-    fast_age = max(0, stamp - getattr(scheduler, 'fast_heartbeat', stamp))
+    # Monotonic ages: a standby does not count as a stall (see Scheduler.lane_age).
+    from jarvis.service.scheduler import lane_age
+    age = lane_age(scheduler, 'main', stamp)
+    fast_age = lane_age(scheduler, 'fast', stamp)
     fast_ok = getattr(scheduler, 'fast_alive', lambda: True)() and fast_age < 300
     alive = scheduler.is_alive() and age < 900 and fast_ok
     sources = {}
-    required = {'scan': 180}
-    if 'win' in scheduler.hosts:
-        required.update(bridge=135, sysmon=1500, native=180)
+    required, optional = mechanisms.health_sources(windows='win' in scheduler.hosts)
     try:
         with sqlite3.connect('file:' + db_path + '?mode=ro', uri=True, timeout=1) as db:
             rows = {r[0]: r for r in db.execute('SELECT kind,ts,error,payload FROM snapshots')}
@@ -99,7 +101,6 @@ def health(db_path, scheduler, stamp=None):
             # Optional sources make their capability telemetry honest without
             # making an opt-in browser extension or an infrequent audit a
             # service-health dependency.
-            optional = {'internet': 300, 'veil': 90, 'secrets': 90000, 'resources': 900}
             for name, limit in optional.items():
                 sources[name] = _state(rows.get(name), limit, stamp)
     except (OSError, sqlite3.Error, ValueError, TypeError) as exc:

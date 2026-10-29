@@ -67,10 +67,28 @@ $o.uac = [pscustomobject]@{
 }
 $o.lsa = [pscustomobject]@{
   runasppl=RVal 'HKLM:\System\CurrentControlSet\Control\Lsa' 'RunAsPPL'
+  runasppl_boot=RVal 'HKLM:\System\CurrentControlSet\Control\Lsa' 'RunAsPPLBoot'
   restrictanon=RVal 'HKLM:\System\CurrentControlSet\Control\Lsa' 'RestrictAnonymous'
 }
+# Memory-corruption and credential-memory mitigations. Get-ProcessMitigation
+# -System answers ON / OFF / NOTSET (NOTSET = the Windows default). Nothing
+# here needs elevation; an unreadable value stays null, never "off".
+$o.mitigations = $null
+try {
+  $m = Get-ProcessMitigation -System -ErrorAction Stop
+  $o.mitigations = [pscustomobject]@{
+    dep=[string]$m.DEP.Enable; sehop=[string]$m.SEHOP.Enable
+    aslr_bottomup=[string]$m.ASLR.BottomUp; aslr_highentropy=[string]$m.ASLR.HighEntropy
+    aslr_forcerelocate=[string]$m.ASLR.ForceRelocateImages; cfg=[string]$m.CFG.Enable
+    user_shadow_stack=[string]$m.UserShadowStack.UserShadowStack
+  }
+} catch {}
+$o.kernelshadow = RVal 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KernelShadowStacks' 'Enabled'
+$o.wdigest = RVal 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest' 'UseLogonCredential'
 $o.smartscreen = [string](RVal 'HKLM:\Software\Policies\Microsoft\Windows\System' 'EnableSmartScreen')
 $o.smartscreen_shell = [string](RVal 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer' 'SmartScreenEnabled')
+# Smart App Control: 0 off, 1 on, 2 evaluation. The value is protected; only the Windows Security app changes it.
+$o.sac = RVal 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' 'VerifiedAndReputablePolicyState'
 
 $o.smb1 = (Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol).State
 $o.smbsign = Get-SmbClientConfiguration | Select-Object RequireSecuritySignature, EnableSecuritySignature

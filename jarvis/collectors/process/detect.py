@@ -138,6 +138,14 @@ def traits(p: dict, topo=None) -> list:
     return found
 
 
+def _kernel_thread(p: dict) -> bool:
+    """A Linux kernel thread: no executable, a [bracketed] command line, and
+    kthreadd (pid 2) as its parent or itself."""
+    return (p.get("host") != "win" and not p.get("exe")
+            and (p.get("pid") == 2 or p.get("ppid") == 2)
+            and (p.get("cmdline") or "").startswith("["))
+
+
 def severity(score: int, unknown: bool) -> str:
     if score >= 60:
         return "critical"
@@ -153,6 +161,13 @@ def assess(p: dict, known: set, approved: set, topo=None) -> dict:
     fp = p["fp"]
     unknown = fp not in known
     reasons = traits(p, topo)
+    if _kernel_thread(p):
+        # Kernel threads have no binary to vet and rename themselves as they
+        # take work (kworker/u2:5-events_...): "new" says nothing about trust.
+        # Traits (a raw socket, a public listener) still score.
+        score = sum(WEIGHT.get(r, 0) for r in reasons)
+        return {"unknown": False, "approved": fp in approved, "reasons": reasons,
+                "score": score, "severity": severity(score, False)}
 
     if unknown and (p.get("user") in ("root", "SYSTEM")):
         reasons.append("root-unknown")

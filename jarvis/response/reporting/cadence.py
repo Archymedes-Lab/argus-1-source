@@ -116,7 +116,10 @@ def run(store, jobs):
     conf = alert.load_conf()
     if not alert.enabled(conf):
         return advisory.advisory_report(store,jobs)
+    # Alerts go out on every configured channel; the reports below are email.
     notifications.flush(store,conf)
+    if not alert.email_enabled(conf):
+        return advisory.advisory_report(store,jobs)
     briefed = notifications.briefings(conf)
     if briefed:
         _briefing(store, conf, jobs, int(time.time()))

@@ -1,0 +1,23 @@
+{
+ "recorded_at": 1791977717.415965,
+ "purpose": "baseline before native-position sensor install",
+ "job": "native",
+ "native_coverage_last_1h": {
+  "complete": 13,
+  "partial": 40
+ },
+ "native_coverage_last_6h": {
+  "complete": 13,
+  "partial": 110
+ },
+ "native_coverage_last_24h": {
+  "complete": 191,
+  "partial": 425,
+  "unavailable": 6
+ },
+ "sensor_files": {
+  "installed_cs_sha256": "5492c69b6d5dca411b2122a7085756b9de6c9a4289f36a5032912a8837341c9a",
+  "stage_cs_sha256": "a27f4141f1051a72bb8d0eee5a7dc66eb525aa0051698eb2d1252bb6208437ed"
+ },
+ "expected_change": "native coverage complete on nearly every pass over >=30 min; 'sensor cannot read Sysmon' incident stops; spool record IDs contiguous; no loss of channels (Sysmon, Defender, TaskScheduler stay complete)"
+}

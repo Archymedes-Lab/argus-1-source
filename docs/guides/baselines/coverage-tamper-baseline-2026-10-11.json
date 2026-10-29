@@ -1,0 +1,46 @@
+{
+ "recorded_at": 1791732365.5941744,
+ "release": "adc49c7a46e3",
+ "health": {
+  "healthy": false,
+  "ready": false,
+  "protection_healthy": false
+ },
+ "score": 40,
+ "stale": [],
+ "attack_totals": {
+  "validated": 58,
+  "claimed": 64,
+  "regressed": 0,
+  "blind": 64,
+  "total": 186
+ },
+ "levels": {
+  "T1070": "validated",
+  "T1679": "blind",
+  "T1685": "validated",
+  "T1687": "blind"
+ },
+ "evasion_job": {
+  "ts": 1791731556,
+  "duration": 4.1,
+  "error": "",
+  "counts": {
+   "low": 1
+  },
+  "freshness": "FRESH"
+ },
+ "evasion_findings": [
+  [
+   "low",
+   "kernel driver outside the standard directories"
+  ]
+ ],
+ "expected_after_deploy": [
+  "map moves toward 69 validated / 76 claimed / 0 regressed / 41 blind (measured on the staged tree); more validated once the sysmon backlog clears",
+  "T1679 blind -> validated (live via evasion); T1687 blind -> claimed (held: crash is a symptom); T1685 stays validated with evasion as a second proof",
+  "evasion job gains tamper findings; first live run expected: one medium 'Security software crashed: NisSrv.exe (T1687)' (real 0xc0000409 crash at 13:00 EEST during memory exhaustion), rolling out of the 24 h window by 13:00 tomorrow",
+  "evasion run time grows by about 11 s",
+  "no existing finding disappears; health/stale no worse than this baseline"
+ ]
+}

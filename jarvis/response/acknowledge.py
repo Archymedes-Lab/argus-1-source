@@ -27,7 +27,9 @@ from jarvis.response import alert
 
 META = "acknowledged_v1"
 DEFAULT_DAYS = 90
-UNACKNOWLEDGEABLE = ("daemon", "collectors")
+# Findings about the guard itself, its evidence, or its own blindness can never
+# be waved away by the account an intruder would hold (PROTECTION-REVIEW C1).
+UNACKNOWLEDGEABLE = ("daemon", "collectors", "tamper", "tampering", "visibility")
 
 
 def finding_id(finding, job):

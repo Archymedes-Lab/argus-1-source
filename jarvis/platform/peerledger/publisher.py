@@ -1,12 +1,12 @@
 """Bounded supervised publication. No collector mutation or response authority."""
 import os
-import sqlite3
 import socket
+import sqlite3
 import time
 from pathlib import Path
 
-from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core import filelock
+from jarvis.core.eventlog import EventLog, LogError
 
 from . import protocol as p
 from . import source, workflow
@@ -168,6 +168,7 @@ def run(root, log_root, configured, send, interval=INTERVAL, budget=DEFAULT_BUDG
 
 def main():
     import argparse
+
     from .transport import exchange
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True)

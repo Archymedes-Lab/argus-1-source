@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JARVIS · GeoSecurity</title>
+<title>ARGUS-1 · GeoSecurity</title>
 <link href="https://cdn.jsdelivr.net/npm/cesium@1.121/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
 <style>
@@ -66,7 +66,7 @@
 <div id="tilewarn"></div>
 <div id="fallback">The globe needs internet for map imagery.<br>The GeoSecurity status is on the right.</div>
 <div id="panel">
-  <h1>JARVIS // GEOSECURITY</h1>
+  <h1>ARGUS-1 // GEOSECURITY</h1>
   <div class="sub"><a class="back" href="/">‹ dashboard</a> · <a class="back" href="/world">world watch ›</a> · <span id="ts">…</span></div>
   <div class="card"><h2>Map</h2>
     <div id="modebar" role="tablist" aria-label="map mode">
@@ -127,7 +127,19 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const $ = s => document.querySelector(s);
-const esc = s => String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+// brand:begin -- identical in every page; tests/test_ui_brand.py keeps the copies equal.
+// The product is ARGUS-1. Server text can still say JARVIS (finding titles keep their
+// identity for acknowledgements and history), so it is re-branded at display time.
+// Real Windows objects keep their spelling so they can be found in Task Scheduler
+// and Services; lowercase commands (jarvis ..., jarvis.service) are never touched.
+// Idempotent: a name already followed by -1 is left alone, so text that went
+// through the rule twice, or a build that renames JARVIS to ARGUS, never reads ARGUS-1-1.
+const BRAND = "ARGUS-1";
+const BRAND_KEEP = /^ (input hook|independent health monitor|connectivity guard|native sensor|Jarvis)/;
+const brand = (s) => String(s ?? "").replace(/\bJARVIS\b(?!-1)/g,
+  (m, i, all) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
+// brand:end
+const esc = s => brand(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const attr = s => esc(s).replace(/"/g,"&quot;");
 const cls = sev => ({ok:"ok",low:"low",medium:"high",high:"high",critical:"crit"}[sev]||"dim");
 
@@ -461,7 +473,7 @@ function render(p){
       `<div class="row"><span class="k">accuracy</span><span class="v">${loc.accuracy_m==null?"n/a — set manually":"~"+Math.round(loc.accuracy_m)+" m"}</span></div>`+
       `<div class="row"><span class="k">source</span><span class="v">${esc(loc.source||"")}</span></div>`;
   else locHtml = `<div class="row"><span class="k">status</span><span class="v ${loc.status==="denied"?"low":"dim"}">${esc(loc.status||"unknown")}</span></div>`+
-      `<div class="sig">${esc(loc.reason||"JARVIS never guesses a position from your IP.")}</div>`;
+      `<div class="sig">${esc(loc.reason||"ARGUS-1 never guesses a position from your IP.")}</div>`;
   $("#loc").innerHTML = locHtml +
     `<div class="row" style="margin-top:6px"><span class="k">confidence</span><span class="v">${Math.round(conf.score*100)}%</span></div>`;
   const v=p.view||{};

@@ -10,7 +10,9 @@ Never promote a capability to live/tested/containment validated without correspo
 measured evidence. Collector health and security scores are not compromise verdicts.
 Add executable regression checks for changed security invariants. Keep existing
 unrelated user work intact. Use `python3 -m unittest discover -s tests` for regression
-validation; isolate any adversarial scenario from the protected user's data.
+validation and `scripts/dev/static_gate.sh` (ruff, mypy on the typed packages, property
+checks and model checking; see docs/architecture/VERIFICATION-LADDER.md) before finalizing;
+isolate any adversarial scenario from the protected user's data.
 
 ## Invariants, efficiency, and architecture
 

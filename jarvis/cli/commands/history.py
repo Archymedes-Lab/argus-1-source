@@ -1,8 +1,8 @@
 """Persistent history review and local forensic case preservation."""
 import json
 
-from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
 from jarvis.core import historybook
+from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
 
 
 def cmd_history(args, store):

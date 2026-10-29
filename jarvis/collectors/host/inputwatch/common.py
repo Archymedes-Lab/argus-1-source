@@ -16,6 +16,8 @@ _M_OVERSIZE = "input_hook_oversized_at"  # local ts the output file blew READ_CA
 
 _M_SESSION = "input_hook_session"   # "<helper session>:<desktop session>" from the newest beat
 
+SOUND_META = "sound_listener_v1"      # JSON: the newest beat's sound-listener counters + its ts
+
 
 def _sha256(path):
     try:

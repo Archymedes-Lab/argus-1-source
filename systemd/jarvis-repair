@@ -2,11 +2,24 @@
 """Root-owned, fixed-operation repair helper. Never imports the user checkout."""
 import json
 import os
-import pwd
 import subprocess
 import sys
 
 ACTIONS = ('status','monitor','telemetry','journal','mount','all')
+
+
+def mount_owner():
+    """(uid, gid) of the account that invoked this helper through sudo, or None.
+
+    sudo sets SUDO_UID/SUDO_GID itself; the caller cannot choose them. The mount
+    is given to that account, the one running JARVIS, never a fixed name."""
+    try:
+        uid, gid = int(os.environ['SUDO_UID']), int(os.environ['SUDO_GID'])
+    except (KeyError, ValueError):
+        return None
+    if uid <= 0 or gid < 0:
+        return None
+    return uid, gid
 
 
 def run(args, timeout=30):
@@ -24,9 +37,13 @@ def repair(action):
         mount=run(['/usr/bin/stat','/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'],8)
         results.append(mount)
         if action != 'status' and mount['code']:
-            user=pwd.getpwnam('chris')
-            results.append(run(['/usr/bin/mount','-t','drvfs','C:','/mnt/c','-o',
-                                f'uid={user.pw_uid},gid={user.pw_gid}'],30))
+            owner=mount_owner()
+            if owner is None:
+                results.append({'command':['mount'],'code':1,'output':
+                                'refusing to mount: not run through sudo, so the owning account is unknown'})
+            else:
+                results.append(run(['/usr/bin/mount','-t','drvfs','C:','/mnt/c','-o',
+                                    f'uid={owner[0]},gid={owner[1]}'],30))
     services={'monitor':'jarvis.service','telemetry':'sysmon.service','journal':'systemd-journald.service'}
     for name,unit in services.items():
         if action not in ('status','all',name):continue

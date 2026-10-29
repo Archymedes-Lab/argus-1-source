@@ -2,28 +2,54 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "JARVIS",
   "mainBinaryName": "jarvis-desktop",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "identifier": "local.jarvis.desktop",
   "build": {
-    "frontendDist": "fallback"
+    "frontendDist": "ui/dist"
   },
   "app": {
     "windows": [],
     "withGlobalTauri": false,
     "security": {
-      "csp": "default-src 'none'; style-src 'unsafe-inline'"
+      "capabilities": [
+        "main"
+      ],
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self'",
+        "img-src": "'self' data:",
+        "font-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'",
+        "frame-ancestors": "'none'"
+      },
+      "freezePrototype": true
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "JARVIS",
     "shortDescription": "JARVIS desktop",
-    "longDescription": "Window, tray and notifications for the local JARVIS daemon. The daemon does the monitoring; this app only shows it.",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "longDescription": "Native window, tray and notifications for the local JARVIS daemon. The daemon does the monitoring; this app only shows it and passes on your explicit decisions.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
     "windows": {
-      "webviewInstallMode": { "type": "skip" },
-      "nsis": { "installMode": "currentUser" }
+      "webviewInstallMode": {
+        "type": "skip"
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   }
 }

@@ -32,7 +32,7 @@ class AssistantTests(unittest.TestCase):
     def test_open_question_uses_read_only_ollama_path(self):
         with mock.patch.object(assistant, "_ollama", return_value=("analysis", "ollama")):
             result = assistant.answer(self.store, "could these two findings be related?")
-        self.assertEqual(result, {"answer": "analysis", "source": "ollama"})
+        self.assertEqual((result["answer"], result["source"]), ("analysis", "ollama"))
 
     def test_open_question_requests_a_fuller_answer_budget(self):
         # 2026-09-24: the ask persona's cap was raised from 70 to 110 words;

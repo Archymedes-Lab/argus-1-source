@@ -9,7 +9,12 @@ that cannot be read stays unknown; it is never treated as clean.
 import ipaddress
 import os
 
-from jarvis.core.reasoning.vocab import LINUX_KERNEL_THREAD_PREFIXES, Observation, Subject, is_masquerade
+from jarvis.core.reasoning.vocab import (
+    LINUX_KERNEL_THREAD_PREFIXES,
+    Observation,
+    Subject,
+    is_masquerade,
+)
 
 MAX_PROCESSES = 4096
 MAX_FDS = 512

@@ -16,6 +16,29 @@ $o.blocklistValue = if ($null -eq $v) { -1 } else { [int]$v }
 $hv = 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity'
 $o.hvciRegEnabled = [int](Get-ItemProperty -Path $hv -Name Enabled).Enabled
 
+# The ASR rule that blocks known-exploited signed drivers (Microsoft: 'Block abuse
+# of exploited vulnerable signed drivers'). -1 not configured, -2 unreadable.
+$asrId = '56a863a9-875e-4185-98a7-b882c64b5ce5'
+$o.asrByovd = -2
+$mp = Get-MpPreference
+if ($mp) {
+  $o.asrByovd = -1
+  $ids = @($mp.AttackSurfaceReductionRules_Ids); $acts = @($mp.AttackSurfaceReductionRules_Actions)
+  for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $asrId -and $i -lt $acts.Count) { $o.asrByovd = [int]$acts[$i] } }
+}
+
+# Mandatory-profile hives: an NTUSER.MAN in a profile folder is loaded at logon
+# instead of NTUSER.DAT, so registry persistence planted offline in it bypasses
+# registry monitoring and needs no administrator rights (2026 research).
+$o.manHives = @(); $o.manUnreadable = 0
+foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $env:SystemDrive 'Users') -Directory -Force)) {
+  try {
+    $f = Get-Item -LiteralPath (Join-Path $d.FullName 'NTUSER.MAN') -Force -ErrorAction Stop
+    $o.manHives += [pscustomobject]@{ path = [string]$f.FullName; size = [int64]$f.Length; written = $f.LastWriteTimeUtc.ToString('o') }
+  } catch [System.Management.Automation.ItemNotFoundException] {
+  } catch { $o.manUnreadable++ }
+}
+
 # --- 2. loaded kernel drivers ---------------------------------------------
 # Only drivers outside the normal directories get an Authenticode check: over
 # 300 drivers are loaded and signature verification is far too slow to run on

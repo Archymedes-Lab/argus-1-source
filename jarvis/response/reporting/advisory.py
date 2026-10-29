@@ -240,7 +240,7 @@ def advisory_report(store, jobs):
     command lines and destinations do not belong in routine outbound mail.
     """
     conf = alert.load_conf()
-    if not alert.enabled(conf):
+    if not alert.email_enabled(conf):
         return [{
             "category": "reporting", "severity": "medium", "host": "wsl",
             "title": "daily security report is not configured",

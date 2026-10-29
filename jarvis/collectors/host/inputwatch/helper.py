@@ -210,8 +210,8 @@ def start():
            "'-ExecutionPolicy','Bypass','-File','"
            + script_win + "','-OutFile','" + win_out + "'")
     try:
-        subprocess.run([collect_windows._PS, "-NoProfile", "-NonInteractive",
-                        "-Command", cmd], capture_output=True, timeout=90,
+        subprocess.run([*collect_windows.interop_launcher(), collect_windows._PS,
+                        "-NoProfile", "-NonInteractive", "-Command", cmd], capture_output=True, timeout=90,
                        cwd=host.subprocess_cwd(), **host.spawn_options(),
                        env={**os.environ, "WSL_INTEROP": desktop} if desktop else None)
     except (OSError, subprocess.SubprocessError) as exc:

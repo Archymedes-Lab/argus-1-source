@@ -322,6 +322,42 @@ CREATE TABLE IF NOT EXISTS control_events (
 
 CREATE INDEX IF NOT EXISTS idx_control_events_ts ON control_events(ts DESC);
 
+-- Sound episodes from the input hook's continuous listener: amplitude only,
+-- never content. One row per episode of one app session (or of a device's
+-- unexplained sound); 'beep' when its sound lasted 1.5 s or less.
+CREATE TABLE IF NOT EXISTS sound_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         INTEGER NOT NULL,
+    ms         INTEGER NOT NULL,
+    sound      TEXT NOT NULL CHECK(sound IN ('beep','sound')),
+    source     TEXT NOT NULL CHECK(source IN ('session','device')),
+    dur_ms     INTEGER NOT NULL,
+    pulses     INTEGER NOT NULL DEFAULT 1,
+    peak       REAL NOT NULL,
+    endpoint   TEXT NOT NULL DEFAULT '',
+    pid        INTEGER NOT NULL DEFAULT 0,
+    app        TEXT NOT NULL DEFAULT '',
+    proc_start TEXT NOT NULL DEFAULT '',
+    known      INTEGER NOT NULL DEFAULT 0,
+    sys        INTEGER NOT NULL DEFAULT 0,
+    quiet_ms   INTEGER NOT NULL DEFAULT -1,
+    idle_s     INTEGER NOT NULL DEFAULT -1,
+    open       INTEGER NOT NULL DEFAULT 0,
+    fg         TEXT NOT NULL DEFAULT '',
+    -- system-sounds episodes: who held the Beep device (Beep()); empty = not looked up
+    caller     TEXT NOT NULL DEFAULT '',
+    caller_pid INTEGER NOT NULL DEFAULT 0,
+    caller_app TEXT NOT NULL DEFAULT '',
+    caller_start TEXT NOT NULL DEFAULT '',
+    caller_blocked_new INTEGER NOT NULL DEFAULT -1,
+    -- console-host episodes: the program whose console rang the bell
+    console_pid INTEGER NOT NULL DEFAULT 0,
+    console_app TEXT NOT NULL DEFAULT '',
+    console_start TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_sound_events_ts ON sound_events(ts DESC);
+
 CREATE TABLE IF NOT EXISTS input_beats (
     ts             INTEGER PRIMARY KEY,
     real_keys      INTEGER NOT NULL DEFAULT 0,

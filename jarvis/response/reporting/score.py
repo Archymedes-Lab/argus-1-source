@@ -28,29 +28,15 @@ returns the moment the finding changes, worsens or the acceptance expires.
 import json
 import time
 
+from jarvis.core import mechanisms
 from jarvis.response import acknowledge, alert
 
 # Protection areas, in display order, and the jobs whose findings describe them.
-# Jobs absent here do not describe the machine's safety and are not scored:
-# gaps (jarvis's own detection coverage), intel/feeds (knowledge-base upkeep),
-# ledger (a record of past alerts, already counted where they came from),
-# report (email cadence), resources and controls (performance and devices),
-# world (news about conflicts elsewhere, which says nothing about this machine).
-AREAS = (
-    ("Active threats", ("hunt", "sysmon", "sysmon_linux", "memscan", "hidden",
-                        "deep_hidden", "evasion", "intrusion", "webshell",
-                        "input", "input_hook", "scan")),
-    ("OS hardening", ("posture", "firewall", "implant", "auditd")),
-    ("Persistence & access", ("control", "asep", "boot", "backdoor",
-                              "identity", "bruteforce", "dotnet")),
-    ("Data & privacy", ("secrets", "spy", "pixel", "sniffing", "geo")),
-    ("Network", ("internet", "netwatch")),
-    ("Developer toolchain", ("toolchain",)),
-    ("Monitoring", ("coverage", "bridge", "watchdogs", "native", "arena",
-                    "rust_mirror", "evidence")),
-)
-UNSCORED = ("gaps", "intel", "feeds", "ledger", "report", "resources", "controls", "audio",
-            "attackmap", "model", "containers", "preos", "world")
+# A job outside every area does not describe the machine's safety and is not
+# scored; its Collector declaration says why. Declared per collector in core/mechanisms.py, with the reason each unscored
+# job is unscored; order inside an area is precedence (see Collector).
+AREAS = mechanisms.score_areas()
+UNSCORED = mechanisms.names(area=None)
 AREA_OF = {job: area for area, jobs in AREAS for job in jobs}
 
 WEIGHT = {"critical": 20, "high": 8, "medium": 2, "low": 0, "ok": 0}

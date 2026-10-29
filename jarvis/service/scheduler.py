@@ -23,7 +23,7 @@ import threading
 import time
 import traceback
 
-from jarvis.core import collection, incidents
+from jarvis.core import collection, incidents, mechanisms
 from jarvis.core.store import Store
 from jarvis.response import alert, defense, remediation
 from jarvis.response.reporting import notifications
@@ -38,8 +38,16 @@ from jarvis.service.schedule import JOBS
 # multi-minute collectors they waited 7+ minutes and went stale, blanking
 # Monitoring while nothing was actually wrong. native is the only event-log
 # writer in the daemon; readers take no lock and see committed batches only.
-FAST = ("bridge", "input_hook", "scan", "native", "watchdogs")
-ISOLATED = {"native"}
+FAST = mechanisms.names(lane="fast")
+# The bulk lane: jobs whose cost is DrvFS hashing and network, not the
+# PowerShell interop pipe. `evidence` took 314 s of every 900 s (35 % of the
+# main lane's duty) on 2026-10-10, pushing that lane past 100 %.
+# 2026-10-11: world, feeds and rust_mirror make no PowerShell calls (network,
+# DrvFS and Linux work only), so they move off the main lane too: its measured
+# steady-state duty was 94% with evidence, leaving 6% to catch up after a
+# restart, a WSL crash or a standby, and 32 of 51 collectors stayed stale.
+BULK = mechanisms.names(lane="bulk")
+ISOLATED = set(mechanisms.names(isolated=True))
 # Longest the cold-start gate may hold coverage and report back. One full
 # sweep takes a few minutes; past this the audits run and report honestly
 # on whatever has still not caught up.
@@ -56,6 +64,22 @@ RETRY_S = 60
 FORCED_FLOOR = 1.0
 HOLD_MAX = 3
 RETRY_META = "collector_retry_"
+# Lateness (as a share of cadence) at which a collector is starving: its
+# evidence has aged past the hard deadline. Starving collectors are served
+# before anything else, ordered by lateness x criticality. Matches
+# reliability.STALE_AFTER.
+STARVING = reliability.STALE_AFTER
+# A repeated force request for a job that attempted within this long (capped
+# at its own cadence) waits. On 2026-10-10 the Windows reviver re-forced a
+# capped sysmon every ~30 s and it ran back to back for 7 hours, starving 36
+# collectors. The request is kept, not dropped.
+FORCE_COOLDOWN_S = 300
+
+
+def reports_backlog(findings):
+    """True when a run read one bounded page of a larger backlog and said so."""
+    return any("catching up a backlog" in (f.get("title") or "")
+               for f in findings or () if isinstance(f, dict))
 
 
 def _isolated_job(name, hosts, db_path, timeout):
@@ -119,6 +143,11 @@ class Scheduler(threading.Thread):
         self.cold_start_pending = self._cold_start_gate()
         self.forced = []
         self.retry_soon = set()
+        # Real lateness: persisted evidence time and this process's last
+        # attempt. next_run restarts at process start, so lateness measured
+        # from it called six hours of staleness "a few minutes" after a restart.
+        self.evidence_ts = self._seed_evidence()
+        self.last_attempt = {}
         self.current = None
         # Bumped at the top of every loop iteration. The systemd watchdog pings
         # only while this keeps advancing, so a wedged scheduler — alive process,
@@ -129,6 +158,19 @@ class Scheduler(threading.Thread):
         self.fast_heartbeat = time.time()
         self.fast_current = None
         self.fast_thread = None
+        self.bulk_heartbeat = time.time()
+        # Monotonic twins of the heartbeats. CLOCK_MONOTONIC stops with the
+        # VM during standby, so an age measured on it counts only time in
+        # which the lane could have run. Wall-clock ages called a daemon
+        # "stalled" right after every resume (the reviver then restarted a
+        # healthy daemon: 2026-10-20 14:48, 2026-10-22 16:19); health and
+        # the systemd watchdog read these instead.
+        self.heartbeat_mono = time.monotonic()
+        self.fast_heartbeat_mono = time.monotonic()
+        self.bulk_heartbeat_mono = time.monotonic()
+        self.bulk_current = None
+        self.bulk_thread = None
+        self.outages = None
         self.started_at = time.time()
         self.lock = threading.Lock()
         self._clock = (time.time(), time.monotonic())
@@ -164,6 +206,34 @@ class Scheduler(threading.Thread):
                  and now - float(snaps[name]["ts"]) <= max(
                      JOBS[name][0] * 2, JOBS[name][0] + 300)}
         return pending - fresh
+
+    def _seed_evidence(self):
+        """{job: persisted evidence time} at start. Never raises."""
+        try:
+            store = Store(self.db_path)
+            try:
+                snaps = store.get_snapshots()
+            finally:
+                store.close()
+        except Exception:
+            return {}
+        return {name: float(s["ts"]) for name, s in snaps.items()
+                if name in JOBS and s.get("ts")}
+
+    def lateness(self, name, now=None):
+        """How far past due this job's evidence is, as a share of its cadence,
+        from the newer of its persisted evidence and its last attempt here. A
+        job with neither counts as long overdue. An attempt resets lateness
+        even when it failed, so a failing job cannot hold the top spot."""
+        now = time.time() if now is None else now
+        interval = max(1, JOBS[name][0])
+        basis = max(self.evidence_ts.get(name, 0.0), self.last_attempt.get(name, 0.0))
+        if basis <= 0:
+            return 99.0
+        return max(0.0, now - basis) / interval
+
+    def _lane_of(self, name):
+        return "fast" if name in FAST else "bulk" if name in BULK else "main"
 
     def _note_resume(self):
         """Re-arm the cold-start hold after the host resumes from suspend.
@@ -210,34 +280,48 @@ class Scheduler(threading.Thread):
             holding = sorted(self.cold_start_pending) if self._cold_start_holding(now) else []
             return {"holding": holding, "resumed_at": self.resumed_at,
                     "started_at": self.started_at,
-                    "current": [n for n in (self.current, self.fast_current) if n]}
+                    "current": [n for n in (self.current, self.fast_current,
+                                                    self.bulk_current) if n]}
 
     def _cold_start_holding(self, now):
         return bool(self.cold_start_pending) and \
             now - self.started_at < COLD_START_HOLD_S
 
     def force(self, name):
+        """Queue a job to run soon. Repeated requests collapse into one."""
         if name in JOBS:
             with self.lock:
-                self.forced.append(name)
+                if name not in self.forced:
+                    self.forced.append(name)
             return True
         return False
 
     def _due(self, lane=None):
-        """The job to run next. `lane` is "fast", "main", or None for either.
+        """The job to run next. `lane` is "fast", "main", "bulk" or None for any.
 
-        Forced jobs (the dashboard's run buttons, recovery, the reviver)
-        compete on the same priority as scheduled ones instead of jumping a
-        FIFO queue: one "run all" queued ~46 jobs ahead of an overdue
-        critical collector on 2026-09-23, and sysmon went stale behind two
-        full sweeps. A forced job counts as at least FORCED_FLOOR of its
-        cadence overdue, so it still runs promptly.
+        Order (docs/architecture/LANE-FAIRNESS-AND-OUTAGE-RECORD.md):
+
+        1. Starving jobs first: evidence older than STARVING x cadence,
+           measured from real evidence and attempts, never from a next_run
+           that a restart reset. No forced repeat of a job that just ran can
+           jump them. On 2026-10-10 a re-forced sysmon held the only main
+           worker for 7 hours while 36 collectors went stale.
+        2. Then every other due or forced job, by relative lateness x
+           criticality x failure pressure. A forced job counts as at least
+           FORCED_FLOOR overdue, but a repeat request for a job that attempted
+           within FORCE_COOLDOWN_S (capped at its cadence) waits.
+
+        Relative lateness keeps every cadence represented. An absolute
+        oldest-deadline policy starves the one-minute watchdogs behind every
+        not-yet-run hourly collector after a restart or a long suspend.
         """
-        member = (lambda n: True) if lane is None else (
-            (lambda n: n in FAST) if lane == "fast" else (lambda n: n not in FAST))
+        if lane is None:
+            member = lambda n: True  # noqa: E731
+        else:
+            member = lambda n: self._lane_of(n) == lane  # noqa: E731
         # Resource governor: under host pressure, deferrable Tier 1/2 jobs
         # yield to Tier 0 protection/ingestion. A governed job still runs
-        # once it is 3x overdue, so deferral is a delay, never a drop, and
+        # once it is 3x late, so deferral is a delay, never a drop, and
         # staleness accounting keeps working. Forced recovery bypasses this.
         with self.lock:
             forced = [n for n in self.forced if member(n)]
@@ -249,29 +333,27 @@ class Scheduler(threading.Thread):
         except Exception:
             host_pressured = False
         now = time.time()
-        best, best_score = None, None
+        best, best_key = None, None
         for name, t in self.next_run.items():
             if not member(name):
                 continue
             is_forced = name in forced
+            if is_forced:
+                cooldown = min(FORCE_COOLDOWN_S, JOBS[name][0])
+                if now - self.last_attempt.get(name, 0.0) < cooldown:
+                    is_forced = False          # kept queued; not yet eligible
             if name in ("coverage", "report") and self._cold_start_holding(now) \
                     and not is_forced:
                 continue
             if t > now and not is_forced:
                 continue
-            # Compare lateness as a fraction of each job's own cadence. An
-            # absolute oldest-deadline policy starves the one-minute watchdogs
-            # behind every not-yet-run hourly collector after a restart or a
-            # long suspend. Relative lateness keeps all cadences represented;
-            # stable dict order remains the tie-breaker on the first pass.
-            # The reliability plane weights that share by collector
-            # criticality and failure pressure, so something approaching stale
-            # naturally rises to the top without starving fast watchdogs.
-            overdue = max(0.0, now - t) / max(1, JOBS[name][0])
+            late = self.lateness(name, now)
+            starving = late >= STARVING
+            overdue = late
             if is_forced:
                 overdue = max(overdue, FORCED_FLOOR)
             elif host_pressured and governor_mod.should_defer(name, True) \
-                    and overdue < 3.0:
+                    and late < 3.0:
                 continue
             spec = self.specs.get(name)
             weight = reliability.CRITICALITY_WEIGHT.get(
@@ -279,8 +361,9 @@ class Scheduler(threading.Thread):
             failures = self.reliability.health[name].consecutive_failures \
                 if name in self.reliability.health else 0
             score = overdue * weight * (1.0 + min(3, max(0, failures)) * 0.25)
-            if best_score is None or score > best_score:
-                best, best_score = name, score
+            key = (starving, score)
+            if best_key is None or key > best_key:
+                best, best_key = name, key
         if best is not None and best in forced:
             with self.lock:
                 if best in self.forced:
@@ -310,10 +393,18 @@ class Scheduler(threading.Thread):
                 resume = {"count": self.resume_count, "last_at": self.resumed_at,
                           "holding": sorted(self.cold_start_pending)
                           if self._cold_start_holding(time.time()) else []}
+            outage = {}
+            if self.outages is not None:
+                outage = {**self.outages.status,
+                          "open": self.outages.open_outages()}
+            lateness = {name: round(self.lateness(name), 2) for name in JOBS}
             return {
                 "statuses": self.reliability.all_statuses(snapshots),
-                "summary": self.reliability.summary(snapshots),
+                "summary": {**self.reliability.summary(snapshots),
+                            "starving": sorted(n for n, v in lateness.items()
+                                               if v >= STARVING)},
                 "resume": resume,
+                "outages": outage,
             }
         except Exception:
             return {"statuses": {}, "summary": {"levels": {}, "stale_collectors": [],
@@ -375,21 +466,56 @@ class Scheduler(threading.Thread):
                     min(health.consecutive_failures - 3,
                         len(reliability.RETRY_DELAYS) - 1))
                 health.next_retry_at = now + (delay or 0.0)
+        if self.outages is not None:
+            # Record up/failing/stale transitions. A recorder fault must not
+            # change what supervision queued.
+            try:
+                self.outages.observe(self.specs, snapshots, now)
+            except Exception:
+                pass
         return queued
 
     def run(self):
         self.fast_thread = threading.Thread(target=self._lane, args=("fast",),
                                             name="jarvis-fast-lane", daemon=True)
         self.fast_thread.start()
+        self.bulk_thread = threading.Thread(target=self._lane, args=("bulk",),
+                                            name="jarvis-bulk-lane", daemon=True)
+        self.bulk_thread.start()
+        self._start_outage_record()
         self._lane("main")
 
+    def _start_outage_record(self):
+        """The outage record runs beside the lanes; failing to start it is
+        visible in its status and never stops collection."""
+        try:
+            from jarvis.service import outages
+            self.outages = outages.OutageRecorder()
+            threading.Thread(target=outages.recorder_loop,
+                             args=(self.outages, self),
+                             name="jarvis-outage-record", daemon=True).start()
+        except Exception:
+            self.outages = None
+
+    def lane_age(self, lane="main"):
+        """Seconds since the lane last looped, on the monotonic clock."""
+        beat = {"main": "heartbeat", "fast": "fast_heartbeat",
+                "bulk": "bulk_heartbeat"}[lane]
+        return max(0.0, time.monotonic() - getattr(self, beat + "_mono"))
+
     def fast_alive(self):
-        return self.fast_thread is None or self.fast_thread.is_alive()
+        """The secondary lanes are alive (fast and bulk). The name predates
+        the bulk lane; watchdogs and protection health read it."""
+        fast = self.fast_thread is None or self.fast_thread.is_alive()
+        bulk = self.bulk_thread is None or self.bulk_thread.is_alive()
+        return fast and bulk
 
     def _lane(self, lane):
         store = Store(self.db_path)
-        beat = "heartbeat" if lane == "main" else "fast_heartbeat"
-        running = "current" if lane == "main" else "fast_current"
+        beat = {"main": "heartbeat", "fast": "fast_heartbeat",
+                "bulk": "bulk_heartbeat"}[lane]
+        running = {"main": "current", "fast": "fast_current",
+                   "bulk": "bulk_current"}[lane]
         try:
             # Reconciliation is read-only at the protected-host boundary.  It
             # happens once per scheduler process, before new collections can
@@ -403,6 +529,7 @@ class Scheduler(threading.Thread):
                     self._open_wake_window(time.time())
             while True:
                 setattr(self, beat, time.time())
+                setattr(self, beat + "_mono", time.monotonic())
                 self._note_resume()
                 name = self._due(lane)
                 if name is None:
@@ -413,6 +540,7 @@ class Scheduler(threading.Thread):
                     findings, err = self.run_once(store, name)
                 finally:
                     setattr(self, running, None)
+                    self.last_attempt[name] = time.time()
                     with self.lock:
                         soon = name in self.retry_soon
                         self.retry_soon.discard(name)
@@ -486,6 +614,13 @@ class Scheduler(threading.Thread):
         held = self._transient_hold(store, name, findings, err, health)
         if held is None:
             store.save_snapshot(name, findings, max(0.0, time.time() - started), err)
+            self.evidence_ts[name] = time.time()
+            # A collector that read one bounded page of a larger backlog says so;
+            # run it again soon. Lateness ordering still serves anything more
+            # overdue first, so the backlog drains in the lane's idle time.
+            if reports_backlog(findings):
+                with self.lock:
+                    self.retry_soon.add(name)
             if not err:
                 store.set_meta(RETRY_META + name, "")
         else:
@@ -571,6 +706,21 @@ class Scheduler(threading.Thread):
         return findings
 
 
+def lane_age(scheduler, lane="main", now=None):
+    """Monotonic age of a lane's heartbeat; wall-clock age for a scheduler
+    that keeps no monotonic twin (tests, older fakes)."""
+    method = getattr(scheduler, "lane_age", None)
+    if callable(method):
+        try:
+            return float(method(lane))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
+    beat = {"main": "heartbeat", "fast": "fast_heartbeat",
+            "bulk": "bulk_heartbeat"}[lane]
+    stamp = time.time() if now is None else now
+    return max(0.0, stamp - getattr(scheduler, beat, stamp))
+
+
 def watchdog_loop(scheduler):
     """Feed the systemd hardware-style watchdog, but only while healthy.
 
@@ -593,8 +743,8 @@ def watchdog_loop(scheduler):
         time.sleep(interval)
         alive = scheduler.is_alive() and scheduler.fast_alive()
         # The fast lane's jobs take seconds, so a minute without a loop is a hang.
-        progressed = ((time.time() - scheduler.heartbeat) < stall_limit and
-                      (time.time() - scheduler.fast_heartbeat) < 300)
+        progressed = (lane_age(scheduler, "main") < stall_limit and
+                      lane_age(scheduler, "fast") < 300)
         if alive and progressed:
             sdnotify.watchdog()
         # else: withhold the ping and let systemd restart us.

@@ -12,13 +12,16 @@ way down the wire:
     looks like after the connection succeeds
 """
 
+import os
 import re
 
+from jarvis.collectors.network import exposure
 from jarvis.collectors.signatures import REMOTE_AGENTS
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import classify_ip
 from jarvis.platform import firewall_state
+from jarvis.platform import host as machine
 from jarvis.platform.linux import read_file, socket_table
 from jarvis.platform.windows import aslist, ps_json
 
@@ -54,7 +57,121 @@ HOST_NETWORKING = re.compile(
 # Linux side: who is listening, and who connected in
 # ---------------------------------------------------------------------------
 
+def _sample(ips, n=3):
+    ips = sorted(ips)
+    return ", ".join(ips[:n]) + (f" and {len(ips) - n} more" if len(ips) > n else "")
+
+
+def audit_server(table=None, declared=None, declared_src="", declared_problems=(),
+                 snapshot=None, snapshot_problem="", load=True):
+    """The Linux firewall audit on a plain server (ARGUS-SERVER.md W2).
+
+    Expected service traffic is not a finding: inbound connections to a
+    declared port from a declared source are the server doing its job.
+    Everything else is aggregated per port, never one finding per connection.
+    """
+    if load:
+        declared, declared_src, declared_problems = exposure.load_declared()
+        snapshot, snapshot_problem = exposure.load_netstate()
+    table = socket_table() if table is None else table
+    out = []
+    listeners = exposure.exposed_listeners(table)
+    # No file, or a file with every line still commented out (as the installer
+    # writes it): the owner has not said what this server serves yet.
+    undeclared_mode = not declared
+
+    # Inbound connections, grouped by local port.
+    peers = {}
+    for conn in table.values():
+        if conn.get("state") != "ESTABLISHED" or (conn.get("local_port"), "tcp") not in listeners:
+            continue
+        scope = classify_ip(conn.get("remote_ip", ""))
+        if scope in ("loopback", "invalid", "unspecified"):
+            continue
+        if exposure.is_declared(declared, conn["local_port"], "tcp", conn.get("remote_ip")):
+            continue
+        bucket = peers.setdefault(conn["local_port"], {"public": set(), "private": set()})
+        bucket["public" if scope == "public" else "private"].add(conn["remote_ip"])
+    for port, b in sorted(peers.items()):
+        if b["public"]:
+            sev = "medium" if undeclared_mode else "high"
+            out.append(_finding("inbound", sev, f"internet clients on undeclared port {port}/tcp",
+                                f"{len(b['public'])} public address(es): {_sample(b['public'])}",
+                                f"port {port}/tcp", host="wsl"))
+        if b["private"]:
+            out.append(_finding("inbound", "medium" if not undeclared_mode else "low",
+                                f"private-network clients on undeclared port {port}/tcp",
+                                f"{len(b['private'])} address(es): {_sample(b['private'])}",
+                                f"port {port}/tcp", host="wsl"))
+
+    # Listeners beyond loopback that nobody declared, weighed by the firewall.
+    fresh = snapshot is not None and not snapshot_problem
+    lo, hi = exposure.ephemeral_range()
+    for (port, proto), addrs in sorted(listeners.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        if exposure.is_declared(declared, port, proto):
+            continue
+        verdict, source = exposure.reachability(snapshot, port, proto) if fresh else (exposure.UNKNOWN, "")
+        sev = {exposure.OPEN: "high", exposure.RESTRICTED: "medium",
+               exposure.UNKNOWN: "medium", exposure.FILTERED: "low"}[verdict]
+        if undeclared_mode and sev == "high":
+            sev = "medium"
+        note = ""
+        if proto == "udp" and lo <= port <= hi and sev != "low":
+            # Usually a client's reply socket, but a backdoor can sit here too:
+            # kept visible, at low.
+            sev, note = "low", "; in the ephemeral port range, likely a client socket"
+        why = {exposure.OPEN: f"the firewall lets it in ({source})",
+               exposure.RESTRICTED: f"the firewall admits some sources ({source})",
+               exposure.FILTERED: f"the firewall blocks new inbound connections ({source})",
+               exposure.UNKNOWN: "whether the firewall lets it in is not known"
+                                 + (f" ({source})" if source else
+                                    f" ({snapshot_problem})" if snapshot_problem else "")}[verdict]
+        out.append(_finding("exposure", sev, f"undeclared service listening on {port}/{proto}",
+                            f"bound to {', '.join(addrs[:4])}; {why}{note}",
+                            f"port {port}/{proto}", host="wsl"))
+
+    # What the owner has (not) said, and whether the firewall was seen at all.
+    if undeclared_mode:
+        listed = ", ".join(f"{p}/{pr}" for p, pr in sorted(listeners)) or "none"
+        out.append(_finding("posture", "medium", "exposed services are not declared",
+                            "Argus cannot tell the server's own traffic from an intrusion until "
+                            f"{exposure.DECLARED_PATHS[0]} lists the ports it serves "
+                            f"(listening beyond loopback now: {listed})",
+                            exposure.DECLARED_PATHS[0], host="wsl"))
+    elif declared_problems:
+        out.append(_finding("posture", "medium", "declared services file has unreadable lines",
+                            "; ".join(list(declared_problems)[:5]), declared_src, host="wsl"))
+    if not fresh and not os.path.isdir(exposure.NET_DIR):
+        # The firewall reader is part of the opt-in network sensor: unknown
+        # posture, stated, but not a collector failure.
+        out.append(_finding("configuration", "medium", "firewall rules are not read",
+                            "the argus-netstate unit is opt-in (install.sh --net-sensor); until it "
+                            "runs, whether the firewall lets these ports in is unknown",
+                            exposure.NET_DIR, host="wsl"))
+    elif not fresh:
+        out.append(_finding("visibility", "medium", "firewall rules not observed",
+                            snapshot_problem or "no firewall snapshot", exposure.NET_DIR, host="wsl"))
+    else:
+        nft = snapshot.get("nft") or {}
+        if nft.get("ok"):
+            policies = exposure.nft_input_policies(nft.get("ruleset"))
+            if not policies:
+                any_open = any(f["severity"] == "high" and f["category"] == "exposure" for f in out)
+                out.append(_finding("posture", "high" if any_open else "medium",
+                                    "no inbound packet filtering",
+                                    "the netfilter ruleset has no input chain: every listening port "
+                                    "is reachable from every network this server is on",
+                                    "nft list ruleset", host="wsl"))
+        elif not any((snapshot.get(k) or {}).get("ok") for k in ("ufw", "firewalld")):
+            out.append(_finding("visibility", "medium", "firewall rules not observed",
+                                "nft: " + str(nft.get("error") or "unreadable")
+                                + "; ufw and firewalld unreadable too", "argus-netstate", host="wsl"))
+    return out
+
+
 def audit_linux():
+    if machine.kind() == "linux":
+        return audit_server()
     out = []
     table = socket_table()
 

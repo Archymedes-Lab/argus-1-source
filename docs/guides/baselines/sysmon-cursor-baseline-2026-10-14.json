@@ -1,0 +1,53 @@
+{
+ "recorded_at": 1791974544.8699048,
+ "purpose": "baseline before sysmon cursor-parse release",
+ "health_http": 503,
+ "healthy": false,
+ "ready": false,
+ "protection_healthy": false,
+ "sources": {
+  "scan": {
+   "status": "complete"
+  },
+  "bridge": {
+   "status": "complete"
+  },
+  "sysmon": {
+   "status": "unavailable"
+  },
+  "native": {
+   "status": "unavailable"
+  },
+  "internet": {
+   "status": "complete"
+  },
+  "veil": {
+   "status": "not_reporting"
+  },
+  "secrets": {
+   "status": "complete"
+  },
+  "resources": {
+   "status": "complete"
+  }
+ },
+ "freshness_invariant": {
+  "ok": false,
+  "reason": "mandatory collector stale with no recovery active; staleness must page, never look current"
+ },
+ "stale_collectors": [],
+ "expected_change": "sysmon + native sources return to complete; no 'ValueError: invalid literal' in sysmon snapshot; sysmon findings unchanged except removal of the unavailable/ValueError error; no coverage loss",
+ "rollback": "sudo python3 -I /opt/jarvis/current/scripts/deploy_root_runtime.py --rollback",
+ "/api/score": {
+  "http": 404,
+  "keys": [
+   "error"
+  ]
+ },
+ "/api/snapshots": {
+  "http": 404,
+  "keys": [
+   "error"
+  ]
+ }
+}

@@ -16,6 +16,7 @@ import json
 import os
 import time
 
+from jarvis.core import mechanisms
 from jarvis.core.paths import win_script
 from jarvis.platform import host
 
@@ -26,10 +27,11 @@ BROKER_SCRIPT = "jarvis-elevated-broker.ps1"
 # until `jarvis broker install` restages the broker under its new name.
 LEGACY_BROKER_SCRIPT = "broker-jarvis.ps1"
 OUT = os.path.join(ROOT, "out")
+# Collectors declare their elevated script in core/mechanisms.py; the rest are
+# broker tasks that serve other jobs (Sysmon policy and pressure probes, the
+# evidence vault, the input audit trace).
 SCRIPTS = {
-    "posture": "posture.ps1",
-    "memscan": "memscan.ps1",
-    "internet": "internetwatch.ps1",
+    **mechanisms.elevated_scripts(),
     "sysmon_policy": "sysmon_policy.ps1",
     "sysmon_pressure": "sysmon_pressure.ps1",
     "vault": "vault.ps1",

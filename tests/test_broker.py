@@ -66,5 +66,6 @@ class BrokerResultTests(unittest.TestCase):
             args = broker_cli._ps_args("$x='quoted value'; $x")
         self.assertEqual(args[:3],
                          ["powershell.exe", "-NoProfile", "-NonInteractive"])
+        # The script arrives intact, after the progress-silencing preamble.
         self.assertEqual(base64.b64decode(args[-1]).decode("utf-16le"),
-                         "$x='quoted value'; $x")
+                         "$ProgressPreference='SilentlyContinue';$x='quoted value'; $x")

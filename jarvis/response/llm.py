@@ -10,6 +10,7 @@ and callers decide what that text is allowed to become.
 """
 
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -80,6 +81,135 @@ def ping(conf, timeout=PING_TIMEOUT):
     if any(name.split(":")[0] == model_name(conf).split(":")[0] for name in loaded):
         return "model_loaded", time.monotonic() - started
     return "model_ready", time.monotonic() - started
+
+
+# Plain-language reading of why the model can't answer. `ok` is the only state
+# in which a generation is worth attempting.
+DIAGNOSES = {
+    "ok": "Local AI is ready.",
+    "stopped": "Local AI is not running. Basic assistance is still working.",
+    "model_missing": "Local AI is running but the {model} model is not installed. "
+                     "Basic assistance is still working.",
+    "misconfigured": "Local AI is pointed at a non-local address, which ARGUS refuses. "
+                     "Basic assistance is still working.",
+    "refused": "Local AI refused the request. Basic assistance is still working.",
+    "inference_failed": "Local AI is running but could not answer just now. "
+                        "Basic assistance is still working.",
+}
+
+
+def _installed(data, wanted):
+    """True when `wanted` (e.g. llama3.2:1b) is in an /api/tags listing.
+
+    A bare name means ":latest", as Ollama resolves it. A different size tag
+    of the same family is a different model and does not count."""
+    def norm(name):
+        name = str(name or "").strip().lower()
+        return name if ":" in name else name + ":latest"
+    names = {norm(m.get("name") or m.get("model")) for m in (data.get("models") or ())
+             if isinstance(m, dict)}
+    return norm(wanted) in names
+
+
+_HTTP_STATUS = re.compile(r"\((\d{3})\)")
+
+
+def classify_failure(error):
+    """Cause of a failed request, from the error text alone (no second request).
+
+    -> stopped | model_missing | refused | inference_failed. A transport error
+    (nothing listening, DNS, timeout) is "stopped"; an HTTP status is read from
+    the server's own answer: 404 or "not found" means the model, 5xx means the
+    service is up but generation failed, other 4xx means it refused us."""
+    text = str(error or "")
+    match = _HTTP_STATUS.search(text)
+    low = text.lower()
+    if match:
+        status = int(match.group(1))
+        if status == 404 or "model" in low and "not found" in low:
+            return "model_missing"
+        return "inference_failed" if status >= 500 else "refused"
+    if "model" in low and "not found" in low:
+        return "model_missing"
+    return "stopped"
+
+
+def diagnose(conf, timeout=PING_TIMEOUT):
+    """-> {state, label, model, seconds}. Read-only: lists models, never generates.
+
+    Separates a stopped service from a missing model and a refused request, so
+    the interface can say which one without showing a connection error."""
+    model = model_name(conf)
+    base, forbidden = _origins(conf)
+    if forbidden:
+        state, seconds = "misconfigured", 0.0
+    else:
+        started = time.monotonic()
+        req = urllib.request.Request(base + "/api/tags", method="GET")
+        data = None
+        try:
+            with _open(req, timeout) as response:
+                data = json.loads(response.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError:
+            data = {"_jarvis_error": "http"}
+        except (urllib.error.URLError, OSError, ValueError):
+            try:
+                data = _bridge_get(timeout)
+            except (urllib.error.URLError, OSError, ValueError):
+                data = None
+        seconds = time.monotonic() - started
+        if not isinstance(data, dict):
+            state = "stopped"
+        elif data.get("_jarvis_error"):
+            state = classify_failure(data["_jarvis_error"])
+            state = "refused" if state in ("model_missing", "inference_failed") else state
+        else:
+            state = "ok" if _installed(data, model) else "model_missing"
+    if state == "ok":
+        note_success()
+    else:
+        note_failure(state)
+    return {"state": state, "label": DIAGNOSES[state].format(model=model),
+            "model": model, "seconds": round(seconds, 2)}
+
+
+# Reconnect backoff for interactive callers. After a failed attempt the next
+# few seconds of questions skip the model instead of each waiting out a
+# connection timeout; the wait doubles per consecutive failure, up to a cap.
+_BACKOFF = {"failures": 0, "until": 0.0, "state": "unknown"}
+_BACKOFF_BASE, _BACKOFF_CAP = 5.0, 120.0
+_BACKOFF_LOCK = threading.Lock()
+
+
+def note_failure(state="stopped", now=None):
+    now = time.monotonic() if now is None else now
+    with _BACKOFF_LOCK:
+        _BACKOFF["failures"] += 1
+        wait = min(_BACKOFF_CAP, _BACKOFF_BASE * 2 ** (_BACKOFF["failures"] - 1))
+        _BACKOFF.update(until=now + wait, state=state)
+
+
+def note_success():
+    with _BACKOFF_LOCK:
+        _BACKOFF.update(failures=0, until=0.0, state="ok")
+
+
+def reset_backoff():
+    """The user asked to retry: forget the cooldown."""
+    with _BACKOFF_LOCK:
+        _BACKOFF.update(failures=0, until=0.0, state="unknown")
+
+
+def cooling_down(now=None):
+    now = time.monotonic() if now is None else now
+    with _BACKOFF_LOCK:
+        return now < _BACKOFF["until"]
+
+
+def last_state():
+    """State from the most recent attempt, with no network call."""
+    with _BACKOFF_LOCK:
+        return _BACKOFF["state"]
 
 
 def _bridge_get(timeout):

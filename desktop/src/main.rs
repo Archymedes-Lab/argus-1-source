@@ -3,18 +3,27 @@
 //!
 //! The app is a client, never the monitor. `jarvis serve` collects, scores
 //! and responds whether or not this is running; nothing here observes the
-//! machine or acts on it. The window shows the daemon's own dashboard, and
-//! the tray reads the daemon's pulse stream.
+//! machine or acts on it.
 //!
-//! Trust boundary:
-//! * The page is the daemon's (http://127.0.0.1:8787). It gets no Tauri IPC:
-//!   there are no capabilities, `withGlobalTauri` is off, and the window may
-//!   only navigate to the daemon or to the bundled fallback page.
-//! * Every action the page offers still goes through the daemon's own local
-//!   API checks (loopback, Host, same-origin). The app adds no new route in.
+//! Trust boundary (v2):
+//! * The window shows the interface bundled into this binary (ui/, Svelte),
+//!   never a page from the network, and may not navigate anywhere else.
+//! * That interface reaches the daemon only through the typed commands in
+//!   api.rs, which build.rs and capabilities/main.json limit to the main
+//!   window. It has no HTTP, file, shell or window permission of its own and
+//!   never sees the API token.
+//! * Every command is one loopback request through the daemon's own checks
+//!   (Host, token). The app adds no route into the daemon.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Without the production asset protocol Tauri compiles in development mode
+// (`cfg(dev)`, set by tauri-build), whatever the optimisation level. A release
+// binary must never be that build: refuse it rather than ship it.
+#[cfg(all(dev, not(debug_assertions)))]
+compile_error!("release builds need `--features custom-protocol` (see docs/architecture/DESKTOP-APP.md)");
+
+mod api;
 mod pulse;
 mod watch;
 
@@ -23,7 +32,7 @@ use std::time::{Duration, Instant};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
+use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 use tauri_plugin_notification::NotificationExt;
 use watch::{Level, View, Watch};
 
@@ -36,23 +45,15 @@ struct Tray {
     status: MenuItem<Wry>,
 }
 
-/// The only pages this window may show: the daemon, and the bundled
-/// fallback (served from tauri://localhost or http(s)://tauri.localhost).
+/// The only page this window may show is the bundled interface (served from
+/// tauri://localhost, or http(s)://tauri.localhost on Windows).
 fn allowed(url: &Url) -> bool {
     let host = url.host_str().unwrap_or("");
     match url.scheme() {
-        "http" if host == "127.0.0.1" || host == "localhost" => {
-            url.port_or_known_default() == Some(pulse::port())
-        }
         "http" | "https" => host == "tauri.localhost",
         "tauri" => host == "localhost",
         _ => false,
     }
-}
-
-fn on_dashboard(url: &Url) -> bool {
-    matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"))
-        && url.port_or_known_default() == Some(pulse::port())
 }
 
 fn show_main(app: &AppHandle) {
@@ -101,17 +102,6 @@ fn apply(app: &AppHandle, view: View, last: &mut Option<Level>) {
     }
 }
 
-/// Leave the fallback page for the dashboard once the daemon answers.
-fn ensure_dashboard(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window(MAIN) {
-        if !w.url().map(|u| on_dashboard(&u)).unwrap_or(false) {
-            if let Ok(u) = pulse::dashboard_url().parse() {
-                let _ = w.navigate(u);
-            }
-        }
-    }
-}
-
 fn pulse_loop(app: AppHandle) {
     let mut watch = Watch::default();
     let mut last = None;
@@ -119,10 +109,9 @@ fn pulse_loop(app: AppHandle) {
     loop {
         let mut got = false;
         let end = pulse::stream(&mut |p| {
-            if !got {
-                got = true;
-                ensure_dashboard(&app);
-            }
+            got = true;
+            // The interface refetches state when the daemon says it changed.
+            let _ = app.emit_to(MAIN, "pulse", &p);
             apply(&app, watch.pulse(&p), &mut last);
         });
         match end {
@@ -130,13 +119,20 @@ fn pulse_loop(app: AppHandle) {
                 // Up, but every stream slot is taken (or we were refused):
                 // poll the same summary instead of going dark.
                 match pulse::poll() {
-                    Ok(p) => apply(&app, watch.pulse(&p), &mut last),
-                    Err(_) => apply(&app, watch.unreachable(Instant::now()), &mut last),
+                    Ok(p) => {
+                        let _ = app.emit_to(MAIN, "pulse", &p);
+                        apply(&app, watch.pulse(&p), &mut last)
+                    }
+                    Err(_) => {
+                        let _ = app.emit_to(MAIN, "daemon-down", ());
+                        apply(&app, watch.unreachable(Instant::now()), &mut last)
+                    }
                 }
                 thread::sleep(POLL_WHEN_REFUSED);
             }
             _ if got => backoff = Duration::from_secs(1), // stream ended normally
             _ => {
+                let _ = app.emit_to(MAIN, "daemon-down", ());
                 apply(&app, watch.unreachable(Instant::now()), &mut last);
                 thread::sleep(backoff);
                 backoff = (backoff * 2).min(MAX_BACKOFF);
@@ -182,14 +178,18 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_notification::init())
+        .invoke_handler(tauri::generate_handler![
+            api::daemon_state,
+            api::daemon_status,
+            api::run_collector,
+            api::answer_question,
+            api::ask_jarvis,
+            api::score_coach,
+            api::decide_fix,
+        ])
         .setup(move |app| {
             build_tray(app)?;
-            let first = if pulse::reachable() {
-                WebviewUrl::External(pulse::dashboard_url().parse().expect("static URL"))
-            } else {
-                WebviewUrl::App("index.html".into())
-            };
-            WebviewWindowBuilder::new(app, MAIN, first)
+            WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
                 .title("JARVIS")
                 .inner_size(1440.0, 920.0)
                 .min_inner_size(720.0, 480.0)
@@ -225,23 +225,17 @@ mod tests {
     }
 
     #[test]
-    fn navigation_is_pinned_to_the_daemon_and_the_fallback() {
-        assert!(allowed(&u("http://127.0.0.1:8787/")));
-        assert!(allowed(&u("http://localhost:8787/geo")));
+    fn navigation_is_pinned_to_the_bundled_interface() {
         assert!(allowed(&u("http://tauri.localhost/index.html")));
+        assert!(allowed(&u("https://tauri.localhost/index.html")));
         assert!(allowed(&u("tauri://localhost/index.html")));
-        assert!(!allowed(&u("http://127.0.0.1:8788/")));
-        assert!(!allowed(&u("http://127.0.0.1/")));
-        assert!(!allowed(&u("https://127.0.0.1:8787/")));
+        // The daemon's own page is no longer shown: its API is reached only
+        // through the commands, never by navigating the window to it.
+        assert!(!allowed(&u("http://127.0.0.1:8787/")));
+        assert!(!allowed(&u("http://localhost:8787/geo")));
         assert!(!allowed(&u("https://example.com/")));
-        assert!(!allowed(&u("http://127.0.0.1.evil.example:8787/")));
+        assert!(!allowed(&u("http://tauri.localhost.evil.example/")));
         assert!(!allowed(&u("file:///C:/Windows/")));
         assert!(!allowed(&u("javascript:alert(1)")));
-    }
-
-    #[test]
-    fn dashboard_detection() {
-        assert!(on_dashboard(&u("http://127.0.0.1:8787/")));
-        assert!(!on_dashboard(&u("http://tauri.localhost/index.html")));
     }
 }

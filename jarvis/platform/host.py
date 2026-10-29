@@ -29,7 +29,25 @@ _DRIVE = re.compile(r"^[A-Za-z]:([\\/]|$)")
 _MOUNT = re.compile(r"^/mnt/([A-Za-z])(/|$)")
 
 
-def _detect(os_name=None, osrelease=None):
+# A server-edition install inside WSL can be told to watch only the Linux guest,
+# like a plain server: no Windows domain, no PowerShell over interop (an
+# independent second monitor beside the workstation one). Root-owned and
+# writable by root alone, and it can only narrow "wsl" to "linux".
+KIND_OVERRIDE = "/etc/jarvis/host-kind"
+
+
+def _override(path=KIND_OVERRIDE):
+    try:
+        st = os.stat(path)
+        if st.st_uid != 0 or st.st_mode & 0o022:
+            return ""
+        with open(path, encoding="ascii", errors="replace") as fh:
+            return fh.read().strip().lower()
+    except OSError:
+        return ""
+
+
+def _detect(os_name=None, osrelease=None, override=None):
     if (os.name if os_name is None else os_name) == "nt":
         return "windows"
     if osrelease is None:
@@ -38,7 +56,10 @@ def _detect(os_name=None, osrelease=None):
                 osrelease = fh.read()
         except OSError:
             osrelease = ""
-    return "wsl" if "microsoft" in osrelease.lower() else "linux"
+    kind = "wsl" if "microsoft" in osrelease.lower() else "linux"
+    if kind == "wsl" and (_override() if override is None else override) == "linux":
+        return "linux"
+    return kind
 
 
 KIND = _detect()
@@ -167,11 +188,40 @@ def program_data(*parts):
     return _join(base, parts)
 
 
+# Profile folders that are never a person's.
+_NOT_PEOPLE = {"all users", "default", "default user", "public", "defaultapppool",
+               "wdagutilityaccount"}
+
+
 def windows_user():
-    """The Windows account whose profile holds JARVIS's per-user state."""
+    """The Windows account whose profile holds JARVIS's per-user state.
+
+    In WSL: an explicit JARVIS_WINDOWS_USER or WSL_USER; else the Linux account
+    name when a Windows profile of that name exists (the usual WSL setup); else
+    the only real profile on the machine. Otherwise "" (unknown): callers then
+    read nothing rather than another person's profile."""
     if KIND == "windows":
         return os.environ.get("USERNAME") or ""
-    return os.environ.get("JARVIS_WINDOWS_USER") or os.environ.get("WSL_USER") or "chris"
+    explicit = os.environ.get("JARVIS_WINDOWS_USER") or os.environ.get("WSL_USER")
+    if explicit:
+        return explicit
+    users = users_dir()
+    if not users or not os.path.isdir(users):
+        return ""
+    try:
+        import pwd
+        login = pwd.getpwuid(os.getuid()).pw_name
+    except (ImportError, KeyError, OSError):
+        login = ""
+    if login and os.path.isdir(os.path.join(users, login, "AppData", "Local")):
+        return login
+    try:
+        people = [n for n in os.listdir(users)
+                  if n.lower() not in _NOT_PEOPLE
+                  and os.path.isdir(os.path.join(users, n, "AppData", "Local"))]
+    except OSError:
+        return ""
+    return people[0] if len(people) == 1 else ""
 
 
 def users_dir():

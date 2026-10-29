@@ -71,7 +71,7 @@ def load_yaml(path):
         import yaml
     except ImportError:
         raise RuntimeError("importing Atomic YAML needs PyYAML (pip install pyyaml); "
-                           "the JARVIS daemon itself needs no such dependency")
+                           "the JARVIS daemon itself needs no such dependency") from None
     import pathlib
     with open(path, encoding="utf-8", errors="replace") as fh:
         return from_tests(yaml.safe_load(fh)) if not pathlib.Path(path).is_dir() else []

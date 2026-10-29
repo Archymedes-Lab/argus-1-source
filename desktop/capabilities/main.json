@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "The bundled interface: read the daemon's state through typed commands, listen for pulses. No file, shell, HTTP or window API.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-daemon-state",
+    "allow-daemon-status",
+    "allow-run-collector",
+    "allow-answer-question",
+    "allow-ask-jarvis",
+    "allow-score-coach",
+    "allow-decide-fix"
+  ]
+}

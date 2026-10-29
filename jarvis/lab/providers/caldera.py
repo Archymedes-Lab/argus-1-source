@@ -76,7 +76,7 @@ def load_yaml(path):
     try:
         import yaml
     except ImportError:
-        raise RuntimeError("importing CALDERA YAML needs PyYAML (pip install pyyaml)")
+        raise RuntimeError("importing CALDERA YAML needs PyYAML (pip install pyyaml)") from None
     with open(path, encoding="utf-8", errors="replace") as fh:
         data = yaml.safe_load(fh)
     items = data if isinstance(data, list) else [data]

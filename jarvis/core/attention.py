@@ -7,7 +7,6 @@ episode. The canonical event log remains authoritative.
 
 from datetime import datetime
 
-
 MAX_INPUT = 5000
 MAX_EPISODES = 500
 MAX_GAP_SECONDS = 600

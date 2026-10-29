@@ -179,8 +179,8 @@ def cmd_timeline(args, store):
                   f"{stats['segments']} sealed segments ({stats['sealed_bytes'] // 1048576} MiB), "
                   f"{stats['unsealed_events']} unsealed, {stats['pruned']} pruned")
             for c in stats["cursors"]:
-                print(f"  {c['channel']}: batch {c['sequence']} ({c['status']}), "
-                      f"through event #{c['through_seq']}" + (f" — gap: {c['gap']}" if c.get("gap") else ""))
+                print(f"  {c.get('channel', '?')}: batch {c.get('sequence', '?')} ({c.get('status', '?')}), "
+                      f"through event #{c.get('through_seq', '?')}" + (f" — gap: {c['gap']}" if c.get("gap") else ""))
             h = stats["health"]
             print("  sensor: " + ("not installed" if h is None else
                                   f"health {int(h['age'] or 0)}s old, boot {h.get('boot_id')}"))

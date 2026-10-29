@@ -3,380 +3,285 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JARVIS</title>
-<style>
-  /* ── JARVIS design system ─────────────────────────────────────────────
-     Swiss: one sans family, a strict grid, flush-left type, big numerals,
-     tracked uppercase micro-labels, hairline rules, numbered sections.
-     Sci-fi: near-black surfaces, one electric signal colour for everything
-     interactive, HUD ring, 45° cut corners on every card and control.
-     Severity colours are reserved for severity and never decorate. */
-  :root {
-    --bg:#07080a; --panel:#0e1013; --panel2:#15181d; --line:#23272e; --line2:#343a43;
-    --fg:#eef1f4; --dim:#9aa3ad; --faint:#626b75;
-    --accent:#3de0ff; --accent-ink:#021014;
-    --accent-soft:rgba(61,224,255,.10); --ok-soft:rgba(58,217,122,.12);
-    --crit-soft:rgba(255,77,77,.12); --high-soft:rgba(255,154,61,.12);
-    --crit:#ff4d4d; --high:#ff9a3d; --med:#e8c547; --low:#7b848e; --ok:#3ad97a;
-    --shadow:0 12px 40px rgba(0,0,0,.45);
-    --sans:"Inter","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
-    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-    --cut:14px; --cut-sm:7px; --gap:16px;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg:#f2f2ef; --panel:#ffffff; --panel2:#f5f5f2; --line:#dcdcd6; --line2:#c4c4bc;
-      --fg:#0b0b0c; --dim:#50555c; --faint:#80858c;
-      --accent:#0070a8; --accent-ink:#ffffff;
-      --accent-soft:rgba(0,112,168,.08); --ok-soft:rgba(22,128,62,.09);
-      --crit-soft:rgba(200,30,30,.08); --high-soft:rgba(186,82,0,.08);
-      --crit:#c81e1e; --high:#ba5200; --med:#8a6a00; --low:#6b7178; --ok:#16803e;
-      --shadow:0 12px 40px rgba(0,0,0,.10);
-    }
-  }
-  * { box-sizing:border-box; }
-  html { -webkit-text-size-adjust:100%; }
-  body { margin:0; background:var(--bg); color:var(--fg); overflow-x:hidden;
-         font:14px/1.5 var(--sans); letter-spacing:-.005em;
-         font-feature-settings:"ss01","cv11"; }
-  code, kbd, .tag, .where, .mono, td.num { font-family:var(--mono); }
-  ::selection { background:var(--accent); color:var(--accent-ink); }
-  :focus-visible { outline:1px solid var(--accent); outline-offset:3px; }
+<title>ARGUS-1</title>
+<style id="ui">
+/* compiled from jarvis/web/styles/dashboard.css by scripts/dev/build_ui.sh; do not edit here */
+/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-leading:initial;--tw-font-weight:initial;--tw-tracking:initial;--tw-duration:initial;--tw-border-style:solid}}}@layer theme{:root,:host{--spacing:.25rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--text-xl:1.25rem;--text-xl--line-height:calc(1.75 / 1.25);--font-weight-normal:400;--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;--tracking-normal:0em;--leading-tight:1.25;--leading-snug:1.375;--leading-normal:1.5;--leading-relaxed:1.625;--radius-sm:.25rem;--radius-md:.375rem;--radius-lg:.5rem;--radius-xl:.75rem;--radius-2xl:1rem;--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", InterVariable, "Inter", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;--default-mono-font-family:ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;--font-display:-apple-system, BlinkMacSystemFont, "SF Pro Display", InterVariable, "Inter", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;--radius-card:22px;--radius-control:12px;--text-largetitle:34px;--text-title:28px}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring:where(:not(iframe)){outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}:root{--bg:#000;--panel:#1c1c1e;--panel2:#2c2c2e;--fill:#7676803d;--line:#54545899;--fg:#f5f5f7;--dim:#ebebf59e;--faint:#ebebf561;--accent:#2997ff;--accent-ink:#fff;--accent-soft:#2997ff29;--crit:#ff453a;--high:#ff9f0a;--med:#ffd60a;--low:#8e8e93;--ok:#30d158;--crit-soft:#ff453a26;--high-soft:#ff9f0a26;--med-soft:#ffd60a21;--ok-soft:#30d15826;--material:#161617b8;--hairline:#ffffff14;--lift:none;color-scheme:dark}@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f5f5f7;--panel:#fff;--panel2:#fbfbfd;--fill:#7676801f;--line:#3c3c431f;--fg:#1d1d1f;--dim:#6e6e73;--faint:#86868b;--accent:#0071e3;--accent-soft:#0071e317;--crit:#e30000;--high:#c93400;--med:#a05a00;--low:#6e6e73;--ok:#1d8139;--crit-soft:#e3000012;--high-soft:#c9340014;--med-soft:#a05a0014;--ok-soft:#1d813917;--material:#fbfbfdcc;--hairline:#0000000f;--lift:0 1px 1px #00000005, 0 2px 12px #0000000a;color-scheme:light}}:root[data-theme=light]{--bg:#f5f5f7;--panel:#fff;--panel2:#fbfbfd;--fill:#7676801f;--line:#3c3c431f;--fg:#1d1d1f;--dim:#6e6e73;--faint:#86868b;--accent:#0071e3;--accent-soft:#0071e317;--crit:#e30000;--high:#c93400;--med:#a05a00;--low:#6e6e73;--ok:#1d8139;--crit-soft:#e3000012;--high-soft:#c9340014;--med-soft:#a05a0014;--ok-soft:#1d813917;--material:#fbfbfdcc;--hairline:#0000000f;--lift:0 1px 1px #00000005, 0 2px 12px #0000000a;color-scheme:light}:root[data-theme=dark]{color-scheme:dark}html{-webkit-text-size-adjust:100%;scroll-padding-top:128px}body{background-color:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;letter-spacing:-.009em;font-optical-sizing:auto;font-feature-settings:"cv11", "ss03";font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.47;overflow-x:hidden}a{color:var(--accent)}code,pre,kbd,.mono,.where,td.num{font-family:ui-monospace,SF Mono,Cascadia Code,Menlo,Consolas,monospace}::selection{background:var(--accent-soft)}:focus-visible{outline:3px solid var(--accent-soft);outline-offset:2px;border-radius:10px}h1,h2,h3{font-family:var(--font-display)}@media (prefers-reduced-motion:reduce){*,:before,:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}}@layer components{.spacer{flex:1}.meta{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint)}.faint{color:var(--faint)}.dim{color:var(--dim)}.note{margin-top:calc(var(--spacing) * .5);color:var(--dim);font-size:13px}.fine{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint)}.empty{padding-inline:calc(var(--spacing) * 6);padding-block:calc(var(--spacing) * 10);text-align:center;font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));color:var(--faint)}.scroll{overflow-x:auto}.vscroll{max-height:560px;overflow-y:auto}.pre{--tw-leading:var(--leading-relaxed);font-family:ui-monospace,SF Mono,Cascadia Code,Menlo,Consolas,monospace;font-size:12.5px;line-height:var(--leading-relaxed);word-break:break-all;white-space:pre-wrap;margin:0}button,select,input{border-radius:var(--radius-control);background-color:var(--fill);padding-inline:calc(var(--spacing) * 3.5);padding-block:calc(var(--spacing) * 2);--tw-font-weight:var(--font-weight-medium);font-size:13px;font-weight:var(--font-weight-medium);--tw-tracking:-.01em;letter-spacing:-.01em;color:var(--fg);transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration));--tw-duration:.15s;transition-duration:.15s}button{cursor:pointer;color:var(--accent)}@media (hover:hover){button:hover{background-color:var(--accent-soft)}}button:active{scale:.98}button.on,button.primary{background:var(--accent);color:var(--accent-ink)}button.small{padding-inline:calc(var(--spacing) * 3);padding-block:calc(var(--spacing) * 1.5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}button.quiet{color:var(--dim);background-color:#0000}@media (hover:hover){button.quiet:hover{background-color:var(--fill);color:var(--fg)}}select{cursor:pointer}input:focus,select:focus{box-shadow:0 0 0 4px var(--accent-soft);outline:none}input[type=search]{width:calc(var(--spacing) * 80);padding-block:calc(var(--spacing) * 2.5);padding-right:calc(var(--spacing) * 4);padding-left:calc(var(--spacing) * 9);background:var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 14px 50%;border-radius:3.40282e38px}kbd{border-radius:var(--radius-md);background-color:var(--fill);padding-inline:calc(var(--spacing) * 1.5);padding-block:calc(var(--spacing) * .5);color:var(--dim);font-size:11px}.segmented,.tabs{gap:calc(var(--spacing) * .5);border-radius:var(--radius-control);background-color:var(--fill);padding:calc(var(--spacing) * .5);flex-wrap:wrap;display:inline-flex}.segmented button,.tabs button{padding-inline:calc(var(--spacing) * 3);padding-block:calc(var(--spacing) * 1.5);color:var(--dim);background-color:#0000;border-radius:10px;font-size:12.5px}@media (hover:hover){:is(.segmented button,.tabs button):hover{color:var(--fg);background-color:#0000}}.segmented button.on,.tabs button.on{background:var(--panel);color:var(--fg);box-shadow:0 1px 2px #0000001f, 0 0 0 .5px var(--hairline)}.filters{align-items:center;gap:calc(var(--spacing) * 2);flex-wrap:wrap;display:flex}#filters:empty{display:none}.showmore{margin-top:calc(var(--spacing) * 3);width:100%}.linkbtn{border-radius:var(--radius-control);background-color:var(--fill);padding-inline:calc(var(--spacing) * 3.5);padding-block:calc(var(--spacing) * 2);--tw-font-weight:var(--font-weight-medium);font-size:13px;font-weight:var(--font-weight-medium)}header{z-index:20;align-items:center;gap:calc(var(--spacing) * 3);padding-inline:calc(var(--spacing) * 8);padding-block:calc(var(--spacing) * 3);background:var(--material);-webkit-backdrop-filter:saturate(180%)blur(20px);backdrop-filter:saturate(180%)blur(20px);box-shadow:inset 0 -1px 0 var(--line);flex-wrap:wrap;display:flex;position:sticky;top:0}.brand{margin-right:var(--spacing);--tw-leading:1;--tw-font-weight:var(--font-weight-semibold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:21px;line-height:1;font-weight:var(--font-weight-semibold);--tw-tracking:-.025em;letter-spacing:-.025em}.status{padding-inline:calc(var(--spacing) * 3);padding-block:calc(var(--spacing) * 1.5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-leading:1;--tw-font-weight:var(--font-weight-semibold);line-height:1;font-weight:var(--font-weight-semibold);white-space:nowrap;border-radius:3.40282e38px}.s-critical{background:var(--crit-soft);color:var(--crit)}.s-high{background:var(--high-soft);color:var(--high)}.s-medium{background:var(--med-soft);color:var(--med)}.s-low{background-color:var(--fill);color:var(--dim)}.s-ok{background:var(--ok-soft);color:var(--ok)}.live{align-items:center;gap:calc(var(--spacing) * 1.5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint);display:flex}.beat{background-color:var(--ok);border-radius:3.40282e38px;width:7px;height:7px}.beat.off{background-color:var(--faint)}.beat.on{animation:2s infinite beat}header .notify.on{background:var(--ok-soft);color:var(--ok)}.nav{z-index:19;gap:var(--spacing);padding-inline:calc(var(--spacing) * 8);padding-block:calc(var(--spacing) * 2);background:var(--material);-webkit-backdrop-filter:saturate(180%)blur(20px);backdrop-filter:saturate(180%)blur(20px);box-shadow:inset 0 -1px 0 var(--line);flex-wrap:wrap;display:flex;position:sticky;top:61px}.nav a{padding-inline:calc(var(--spacing) * 3.5);padding-block:calc(var(--spacing) * 2);--tw-leading:1;--tw-font-weight:var(--font-weight-medium);font-size:13px;line-height:1;font-weight:var(--font-weight-medium);color:var(--dim);border-radius:3.40282e38px}@media (hover:hover){.nav a:hover{background-color:var(--fill);color:var(--fg)}}.nav a .n{margin-left:calc(var(--spacing) * 1.5);--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);font-variant-numeric:tabular-nums}.nav a .n:empty{display:none}.alertbar,.results,.loadnotice{margin-inline:auto;margin-top:calc(var(--spacing) * 6);border-radius:var(--radius-card);width:calc(100% - 64px);max-width:1376px}.alertbar{align-items:center;gap:calc(var(--spacing) * 4);padding-inline:calc(var(--spacing) * 6);padding-block:calc(var(--spacing) * 4);background:var(--crit-soft);flex-wrap:wrap;display:flex}.alertbar b{min-width:calc(var(--spacing) * 8);--tw-leading:1;--tw-font-weight:var(--font-weight-bold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:30px;line-height:1;font-weight:var(--font-weight-bold);--tw-tracking:-.03em;letter-spacing:-.03em;color:var(--crit);font-variant-numeric:tabular-nums}.alertbar .what{--tw-font-weight:var(--font-weight-semibold);min-width:220px;font-size:15px;font-weight:var(--font-weight-semibold);flex:1}.alertbar .what small{margin-top:calc(var(--spacing) * .5);--tw-font-weight:var(--font-weight-normal);font-size:13px;font-weight:var(--font-weight-normal);color:var(--dim);display:block}.loadnotice{padding-inline:calc(var(--spacing) * 6);padding-block:calc(var(--spacing) * 3);font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));background:var(--high-soft)}.loadnotice button{margin-left:calc(var(--spacing) * 3)}.results{background-color:var(--panel);box-shadow:var(--lift)}.results .head{align-items:center;gap:calc(var(--spacing) * 3);padding-inline:calc(var(--spacing) * 6);padding-block:calc(var(--spacing) * 4);--tw-font-weight:var(--font-weight-semibold);font-size:15px;font-weight:var(--font-weight-semibold);box-shadow:inset 0 -1px 0 var(--line);flex-wrap:wrap;display:flex}.results .head .meta{--tw-font-weight:var(--font-weight-normal);font-weight:var(--font-weight-normal)}.results ul{max-height:340px;padding:calc(var(--spacing) * 2);margin:0;list-style-type:none;overflow:auto}.results li{cursor:pointer;align-items:baseline;gap:calc(var(--spacing) * 3);border-radius:var(--radius-xl);padding-inline:calc(var(--spacing) * 4);padding-block:calc(var(--spacing) * 2.5);grid-template-columns:auto auto 1fr;display:grid}@media (hover:hover){.results li:hover{background-color:var(--fill)}}.results li .t{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.results li .d{color:var(--dim);font-size:13px}main{gap:calc(var(--spacing) * 5);max-width:1440px;padding-inline:calc(var(--spacing) * 8);padding-top:calc(var(--spacing) * 10);padding-bottom:calc(var(--spacing) * 24);margin-inline:auto;display:grid}main>h2{margin-top:calc(var(--spacing) * 8);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:var(--text-largetitle);--tw-leading:1.12;--tw-font-weight:var(--font-weight-bold);line-height:1.12;font-weight:var(--font-weight-bold);--tw-tracking:-.03em;letter-spacing:-.03em}main>h2:first-child{margin-top:0}.row,.hero,.prio,.tiles,details.section>.grid{gap:calc(var(--spacing) * 5);display:grid}.row.split{grid-template-columns:repeat(1,minmax(0,1fr))}@media (min-width:64rem){.row.split{grid-template-columns:minmax(320px,1fr) minmax(320px,1.15fr)}}.hero{grid-template-columns:repeat(1,minmax(0,1fr));align-items:flex-start}@media (min-width:64rem){.hero{grid-template-columns:minmax(340px,1.25fr) minmax(300px,1fr)}}details.section>summary{cursor:pointer;align-items:baseline;gap:calc(var(--spacing) * 3);padding-top:calc(var(--spacing) * 8);padding-bottom:calc(var(--spacing) * 2);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:var(--text-largetitle);--tw-leading:1.12;--tw-font-weight:var(--font-weight-bold);line-height:1.12;font-weight:var(--font-weight-bold);--tw-tracking:-.03em;letter-spacing:-.03em;list-style-type:none;display:flex}details.section>summary::-webkit-details-marker{display:none}details.section>summary:after{content:"Show";--tw-font-weight:var(--font-weight-normal);font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:15px;font-weight:var(--font-weight-normal);--tw-tracking:var(--tracking-normal);letter-spacing:var(--tracking-normal);color:var(--accent);margin-left:auto}details.section[open]>summary:after{content:"Hide"}details.section>summary .cnt{--tw-font-weight:var(--font-weight-normal);font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:15px;font-weight:var(--font-weight-normal);--tw-tracking:var(--tracking-normal);letter-spacing:var(--tracking-normal);color:var(--faint)}.card{border-radius:var(--radius-card);background-color:var(--panel);min-width:0;box-shadow:var(--lift);overflow:hidden}.card>h2{align-items:baseline;gap:calc(var(--spacing) * 2.5);padding-inline:calc(var(--spacing) * 7);padding-top:calc(var(--spacing) * 6);padding-bottom:calc(var(--spacing) * 3);--tw-leading:var(--leading-tight);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:19px;line-height:var(--leading-tight);--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);--tw-tracking:-.02em;letter-spacing:-.02em;flex-wrap:wrap;margin:0;display:flex}.card>h2 .cnt{--tw-font-weight:var(--font-weight-normal);font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:13px;font-weight:var(--font-weight-normal);--tw-tracking:var(--tracking-normal);letter-spacing:var(--tracking-normal);color:var(--faint)}.card .body{padding-inline:calc(var(--spacing) * 7);padding-top:var(--spacing);padding-bottom:calc(var(--spacing) * 7)}.card>.scroll,.card>.vscroll{box-shadow:inset 0 1px 0 var(--line)}.prio{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}.prio .card{flex-direction:column;display:flex}.prio .lbl{align-items:center;gap:calc(var(--spacing) * 2);padding-inline:calc(var(--spacing) * 7);padding-top:calc(var(--spacing) * 6);--tw-font-weight:var(--font-weight-semibold);font-size:13px;font-weight:var(--font-weight-semibold);color:var(--dim);order:-9999;display:flex}.prio .lbl:before{content:"";width:calc(var(--spacing) * 2);height:calc(var(--spacing) * 2);background-color:var(--line);border-radius:3.40282e38px}.prio .crit .lbl:before{background-color:var(--crit)}.prio .high .lbl:before{background-color:var(--high)}.prio .you .lbl:before{background-color:var(--accent)}.prio .blind .lbl:before{background-color:var(--med)}.prio .clean .lbl:before{background-color:var(--ok)}.prio .big{padding-inline:calc(var(--spacing) * 7);padding-top:calc(var(--spacing) * 2);padding-bottom:calc(var(--spacing) * 5);--tw-leading:1;--tw-font-weight:var(--font-weight-bold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:56px;line-height:1;font-weight:var(--font-weight-bold);--tw-tracking:-.05em;letter-spacing:-.05em;font-variant-numeric:tabular-nums}.prio ul{flex:1;margin:0;padding:0;list-style-type:none}.prio li{gap:calc(var(--spacing) * .5);padding-inline:calc(var(--spacing) * 7);padding-block:calc(var(--spacing) * 3);font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));box-shadow:inset 0 1px 0 var(--line);display:grid}.prio li .t{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium);overflow-wrap:break-word}.prio li small{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));overflow-wrap:break-word;color:var(--faint)}.prio .act{gap:calc(var(--spacing) * 2);padding-inline:calc(var(--spacing) * 7);padding-top:calc(var(--spacing) * 4);padding-bottom:calc(var(--spacing) * 6);flex-wrap:wrap;display:flex}.prio .act button,.alertbar button{padding-inline:0;padding-block:var(--spacing);--tw-font-weight:var(--font-weight-normal);font-size:14px;font-weight:var(--font-weight-normal);color:var(--accent);background-color:#0000}@media (hover:hover){:is(.prio .act button,.alertbar button):hover{background-color:#0000;text-decoration-line:underline}}.prio .act button:after,.alertbar button:after{content:" ›"}.alertbar button+button{margin-left:calc(var(--spacing) * 4)}.scorebox{align-items:flex-start;gap:calc(var(--spacing) * 6);flex-direction:column;display:flex}@media (min-width:40rem){.scorebox{flex-direction:row;align-items:center}}.ring{flex:none;width:156px;height:156px;position:relative}.ring svg{width:100%;height:100%;rotate:-90deg}.ring circle{stroke-width:12px!important}.ring circle:first-child{display:none}.ring .track{stroke:var(--fill)}.ring .fill{stroke-linecap:round;transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1),stroke .4s}.ring.held .fill{opacity:.5}.ring .num{flex-direction:column;justify-content:center;align-items:center;display:flex;position:absolute;inset:0}.ring .num b{--tw-leading:1;--tw-font-weight:var(--font-weight-semibold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:52px;line-height:1;font-weight:var(--font-weight-semibold);--tw-tracking:-.05em;letter-spacing:-.05em;font-variant-numeric:tabular-nums}.ring .num span{margin-top:var(--spacing);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint)}.scoremeta{gap:calc(var(--spacing) * 2);flex:1;min-width:0;display:grid}.scoremeta .grade{font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:var(--text-title);--tw-leading:1.14;--tw-font-weight:var(--font-weight-bold);line-height:1.14;font-weight:var(--font-weight-bold);--tw-tracking:-.025em;letter-spacing:-.025em}.scoremeta .grade:first-letter{text-transform:uppercase}.scoremeta .cov{color:var(--dim);font-size:13px}.delta{gap:var(--spacing);padding-inline:calc(var(--spacing) * 2.5);padding-block:var(--spacing);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-leading:1;--tw-font-weight:var(--font-weight-semibold);line-height:1;font-weight:var(--font-weight-semibold);border-radius:3.40282e38px;display:inline-flex}.delta.up{background:var(--ok-soft);color:var(--ok)}.delta.down{background:var(--high-soft);color:var(--high)}.delta.flat{background-color:var(--fill);color:var(--dim)}.spark{height:calc(var(--spacing) * 8);width:100%}.meter{margin-top:calc(var(--spacing) * 2);height:calc(var(--spacing) * 1.5);background-color:var(--fill);border-radius:3.40282e38px;overflow:hidden}.meter>i{border-radius:3.40282e38px;height:100%;transition:width .6s cubic-bezier(.2,.8,.2,1);display:block}.meter.sm{margin-top:0}.areas{margin-top:calc(var(--spacing) * 7);align-items:center;column-gap:calc(var(--spacing) * 4);row-gap:calc(var(--spacing) * 3);padding-top:calc(var(--spacing) * 6);box-shadow:inset 0 1px 0 var(--line);grid-template-columns:auto 1fr auto;font-size:13px;display:grid}.areas .nm{white-space:nowrap;color:var(--dim)}.areas .pc{text-align:right;white-space:nowrap;color:var(--faint);font-variant-numeric:tabular-nums}.rechk{margin-left:calc(var(--spacing) * 1.5);color:var(--accent);font-size:11px}.wake{--tw-leading:var(--leading-normal);font-size:13px;line-height:var(--leading-normal)}.wake .dim{color:var(--faint)}.wakebar{margin-block:calc(var(--spacing) * 1.5);height:calc(var(--spacing) * 1.5);background-color:var(--fill);border-radius:3.40282e38px;overflow:hidden}.wakebar i{background-color:var(--accent);border-radius:3.40282e38px;height:100%;transition:width .6s;display:block}#healthcard details{margin-top:calc(var(--spacing) * 6);padding-top:calc(var(--spacing) * 5);color:var(--dim);box-shadow:inset 0 1px 0 var(--line);font-size:13px}#healthcard summary{cursor:pointer;--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium);color:var(--accent)}.wins{padding:0;padding-bottom:calc(var(--spacing) * 2);margin:0;list-style-type:none}.wins li{cursor:pointer;column-gap:calc(var(--spacing) * 3);row-gap:calc(var(--spacing) * .5);padding-inline:calc(var(--spacing) * 7);padding-block:calc(var(--spacing) * 3.5);transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration));grid-template-columns:32px 1fr;display:grid}@media (hover:hover){.wins li:hover{background-color:var(--fill)}}.wins li{box-shadow:inset 0 1px 0 var(--line)}.wins li:focus-visible{background-color:var(--fill);--tw-outline-style:none;outline-style:none}.wins .rank{font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:var(--text-xl);line-height:var(--tw-leading,var(--text-xl--line-height));--tw-leading:var(--leading-tight);line-height:var(--leading-tight);--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);color:var(--faint);font-variant-numeric:tabular-nums;grid-row:span 2/span 2}.wins li:first-child .rank{color:var(--accent)}.wins .t{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium);overflow-wrap:break-word}.wins .a,.wins .loc{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint);grid-column-start:2}.winsfoot{padding-inline:calc(var(--spacing) * 7);padding-top:calc(var(--spacing) * 3);padding-bottom:calc(var(--spacing) * 6);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint)}li.static{cursor:default}@media (hover:hover){li.static:hover{background-color:#0000}}.reviewqueue>summary{cursor:pointer;align-items:baseline;gap:calc(var(--spacing) * 2.5);padding-inline:calc(var(--spacing) * 7);padding-block:calc(var(--spacing) * 6);--tw-leading:var(--leading-tight);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:19px;line-height:var(--leading-tight);--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);--tw-tracking:-.02em;letter-spacing:-.02em;list-style-type:none;display:flex}.reviewqueue>summary::-webkit-details-marker{display:none}.reviewqueue>summary:after{content:"Show";--tw-font-weight:var(--font-weight-normal);font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:15px;font-weight:var(--font-weight-normal);--tw-tracking:var(--tracking-normal);letter-spacing:var(--tracking-normal);color:var(--accent);margin-left:auto}.reviewqueue[open]>summary:after{content:"Hide"}.reviewqueue .cnt{--tw-font-weight:var(--font-weight-normal);font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:13px;font-weight:var(--font-weight-normal);--tw-tracking:var(--tracking-normal);letter-spacing:var(--tracking-normal);color:var(--faint)}.reviewqueue.needs .cnt{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);color:var(--high)}.reviewqueue[open]{padding-bottom:calc(var(--spacing) * 4)}.question{margin-inline:calc(var(--spacing) * 7);margin-bottom:calc(var(--spacing) * 3);gap:calc(var(--spacing) * 3);border-radius:var(--radius-2xl);background-color:var(--fill);padding:calc(var(--spacing) * 4);font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));display:grid}.question-actions{gap:calc(var(--spacing) * 2);flex-wrap:wrap;display:flex}.tiles{grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}.tile{cursor:pointer;border-radius:var(--radius-card);background-color:var(--panel);padding-inline:calc(var(--spacing) * 6);padding-block:calc(var(--spacing) * 5);transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}@media (hover:hover){.tile:hover{background-color:var(--panel2)}}.tile{box-shadow:var(--lift)}.tile.on{box-shadow:inset 0 0 0 2px var(--accent)}.tile .n{--tw-leading:1.05;--tw-font-weight:var(--font-weight-semibold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:34px;line-height:1.05;font-weight:var(--font-weight-semibold);--tw-tracking:-.04em;letter-spacing:-.04em;font-variant-numeric:tabular-nums}.tile .k{margin-top:calc(var(--spacing) * 1.5);color:var(--dim);font-size:13px}.tile .k .ic{margin-right:calc(var(--spacing) * 1.5)}.tile .sub{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint)}.tile.good .n{color:var(--ok)}.hosttile .n{column-gap:calc(var(--spacing) * 2.5);padding-top:calc(var(--spacing) * 1.5);font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));--tw-leading:var(--leading-relaxed);line-height:var(--leading-relaxed);--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);--tw-tracking:var(--tracking-normal);letter-spacing:var(--tracking-normal);flex-wrap:wrap;display:flex}table{border-collapse:collapse;width:100%;font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}th,td{padding-inline:calc(var(--spacing) * 4);padding-block:calc(var(--spacing) * 3);text-align:left;vertical-align:top}th:first-child,td:first-child{padding-left:calc(var(--spacing) * 7)}th:last-child,td:last-child{padding-right:calc(var(--spacing) * 7)}thead th{z-index:1;background-color:var(--panel);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);color:var(--faint);box-shadow:inset 0 -1px 0 var(--line);position:sticky;top:0}tbody tr{box-shadow:inset 0 1px 0 var(--line)}tbody tr:first-child{box-shadow:none}tbody tr:hover{background-color:var(--fill)}tr.clickable{cursor:pointer}.expand,.expand:hover{background-color:var(--panel2)}.expand td{padding-inline:calc(var(--spacing) * 7);padding-block:calc(var(--spacing) * 4)}.title{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.detail{overflow-wrap:break-word;color:var(--dim)}.where{margin-top:var(--spacing);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));word-break:break-all;color:var(--faint)}.kv{column-gap:calc(var(--spacing) * 5);row-gap:calc(var(--spacing) * 1.5);grid-template-columns:max-content 1fr;margin:0;font-size:13px;display:grid}.kv dt{color:var(--faint)}.kv dd{overflow-wrap:break-word;margin:0}.pill{align-items:center;gap:var(--spacing);background-color:var(--fill);padding-inline:calc(var(--spacing) * 2.5);padding-block:calc(var(--spacing) * .5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-leading:1.4;--tw-font-weight:var(--font-weight-semibold);line-height:1.4;font-weight:var(--font-weight-semibold);white-space:nowrap;color:var(--dim);text-transform:capitalize;border-radius:3.40282e38px;display:inline-flex}.pill.critical{background:var(--crit-soft);color:var(--crit)}.pill.high{background:var(--high-soft);color:var(--high)}.pill.medium{background:var(--med-soft);color:var(--med)}.pill.low{color:var(--low)}.pill.ok{background:var(--ok-soft);color:var(--ok)}.tag{border-radius:var(--radius-md);background-color:var(--fill);padding-inline:calc(var(--spacing) * 2);padding-block:calc(var(--spacing) * .5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-leading:var(--leading-normal);line-height:var(--leading-normal);--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium);white-space:nowrap;color:var(--dim);display:inline-block}.sev{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);white-space:nowrap;text-transform:capitalize}.c-critical{color:var(--crit)}.c-high{color:var(--high)}.c-medium{color:var(--med)}.c-low{color:var(--low)}.c-ok{color:var(--ok)}.findtools{align-items:center;gap:calc(var(--spacing) * 2);padding-inline:calc(var(--spacing) * 7);padding-bottom:calc(var(--spacing) * 4);flex-wrap:wrap;display:flex}.grouprow{background-color:var(--panel2);--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.job{align-items:center;gap:calc(var(--spacing) * 3);padding-block:calc(var(--spacing) * 3);box-shadow:inset 0 1px 0 var(--line);display:flex}.job:first-child{box-shadow:none}.dot{width:calc(var(--spacing) * 2);height:calc(var(--spacing) * 2);background-color:var(--ok);border-radius:3.40282e38px;flex:none}.dot.stale{background-color:var(--med)}.dot.err,.dot.never{background-color:var(--crit)}.dot.run{background-color:var(--accent);animation:1s infinite beat}.job .name{flex:1;min-width:0}.job .name b{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.job .name .c-critical,.job .name .c-high,.job .name .c-medium,.job .name .c-low,.job .name .c-ok{margin-left:var(--spacing);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.job .age{text-align:right;font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));--tw-leading:var(--leading-snug);line-height:var(--leading-snug);white-space:nowrap;color:var(--faint)}.bar{margin-top:calc(var(--spacing) * 1.5);height:var(--spacing);background-color:var(--fill);border-radius:3.40282e38px;overflow:hidden}.bar i{background-color:var(--accent);border-radius:3.40282e38px;height:100%;display:block}.errbox{padding-bottom:calc(var(--spacing) * 2);padding-left:calc(var(--spacing) * 5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));white-space:pre-wrap;color:var(--crit)}.stat{padding-block:calc(var(--spacing) * 3.5);font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));color:var(--dim);box-shadow:inset 0 1px 0 var(--line)}.stat b{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);color:var(--fg)}.stat.head{box-shadow:none;padding-top:0}.stat.head b{margin-right:calc(var(--spacing) * 2);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:var(--text-title);--tw-leading:1;--tw-font-weight:var(--font-weight-bold);line-height:1;font-weight:var(--font-weight-bold);--tw-tracking:-.03em;letter-spacing:-.03em}.chart{height:calc(var(--spacing) * 24);align-items:flex-end;gap:3px;display:flex}.chart .col{height:100%;min-width:calc(var(--spacing) * .5);gap:calc(var(--spacing) * .5);border-radius:var(--radius-sm);flex-direction:column-reverse;flex:1;display:flex}@media (hover:hover){.chart .col:hover{background-color:var(--fill)}}.chart .col i{border-radius:2px;width:100%;display:block}.chart .empty{flex:1;align-self:center}.legend{margin-top:calc(var(--spacing) * 3);align-items:center;gap:calc(var(--spacing) * 4);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--dim);flex-wrap:wrap;display:flex}.legend i{margin-right:calc(var(--spacing) * 1.5);width:calc(var(--spacing) * 2);height:calc(var(--spacing) * 2);border-radius:3.40282e38px;display:inline-block}.catgrid{margin-top:calc(var(--spacing) * 4);border-radius:var(--radius-xl);background-color:var(--line);grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;display:grid;overflow:hidden}.catgrid div{justify-content:space-between;gap:calc(var(--spacing) * 2);background-color:var(--panel);padding-inline:calc(var(--spacing) * 3);padding-block:calc(var(--spacing) * 2);color:var(--dim);font-size:13px;display:flex}.catgrid b{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);color:var(--fg);font-variant-numeric:tabular-nums}.scoretrend{height:calc(var(--spacing) * 36);width:100%;display:block}.scoretrend text{display:none}.trendmeta{margin-top:calc(var(--spacing) * 1.5);justify-content:space-between;gap:calc(var(--spacing) * 3);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint);display:flex}.attackhead{margin-bottom:calc(var(--spacing) * 6);gap:calc(var(--spacing) * 10);flex-wrap:wrap;display:flex}.attackhead div b{--tw-leading:1;--tw-font-weight:var(--font-weight-semibold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:36px;line-height:1;font-weight:var(--font-weight-semibold);--tw-tracking:-.04em;letter-spacing:-.04em;font-variant-numeric:tabular-nums;display:block}.attackhead div span{color:var(--faint);font-size:13px}.attack{align-items:center;column-gap:calc(var(--spacing) * 4);row-gap:calc(var(--spacing) * 2.5);grid-template-columns:minmax(150px,max-content) 1fr 72px;font-size:13px;display:grid}.attack .tn{white-space:nowrap;color:var(--dim)}.attack .tn:first-letter{text-transform:uppercase}.attack .tb{height:calc(var(--spacing) * 2);gap:calc(var(--spacing) * .5);display:flex}.attack .tb i{border-radius:2px;height:100%;display:block}.attack .tc{text-align:right;color:var(--faint);font-variant-numeric:tabular-nums}.lv-validated{background-color:var(--accent)}.lv-claimed{background:var(--accent)}@supports (color:color-mix(in lab, red, red)){.lv-claimed{background:color-mix(in srgb, var(--accent) 35%, var(--panel))}}.lv-blind{background-color:var(--fill)}.lv-regressed{background-color:var(--crit)}.sw{margin-right:calc(var(--spacing) * 1.5);width:calc(var(--spacing) * 2);height:calc(var(--spacing) * 2);border-radius:3.40282e38px;display:inline-block}.intel-head{padding-inline:calc(var(--spacing) * 7);padding-block:calc(var(--spacing) * 3);color:var(--dim);box-shadow:inset 0 -1px 0 var(--line);font-size:13px}.intel-head b{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold);color:var(--fg)}.kindrow{gap:calc(var(--spacing) * 1.5);padding-inline:calc(var(--spacing) * 7);padding-block:calc(var(--spacing) * 3);flex-wrap:wrap;display:flex}.kindrow .tag b{color:var(--fg)}h3.sub{margin-inline:calc(var(--spacing) * 7);margin-top:calc(var(--spacing) * 5);margin-bottom:calc(var(--spacing) * 2);--tw-font-weight:var(--font-weight-semibold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Text,InterVariable,Inter,Segoe UI Variable Text,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:13px;font-weight:var(--font-weight-semibold);color:var(--faint)}.panelnote{padding-inline:calc(var(--spacing) * 7);padding-top:calc(var(--spacing) * 4);padding-bottom:calc(var(--spacing) * 2);color:var(--dim);font-size:13px}.groupname{padding-inline:calc(var(--spacing) * 7);padding-top:calc(var(--spacing) * 5);padding-bottom:calc(var(--spacing) * 2);--tw-font-weight:var(--font-weight-semibold);font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,InterVariable,Inter,Segoe UI Variable Display,Segoe UI,Helvetica Neue,Helvetica,Arial,sans-serif;font-size:15px;font-weight:var(--font-weight-semibold)}.geoframe{border-style:var(--tw-border-style);width:100%;height:460px;box-shadow:inset 0 1px 0 var(--line);border-width:0;display:block}.jarvis .voicebar{align-items:center;gap:calc(var(--spacing) * 3);padding-inline:calc(var(--spacing) * 7);padding-top:var(--spacing);padding-bottom:calc(var(--spacing) * 4);flex-wrap:wrap;display:flex}.orb{width:calc(var(--spacing) * 6);height:calc(var(--spacing) * 6);background-color:var(--accent-soft);opacity:.6;transition-property:opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration));border-radius:3.40282e38px;flex:none;position:relative}.orb:after{content:"";background-color:var(--accent);border-radius:3.40282e38px;position:absolute;inset:7px}.orb.on{opacity:1}.orb.think{opacity:1;animation:1.2s ease-in-out infinite think}.orb.speak{opacity:1;animation:.45s ease-in-out infinite alternate speak}.caption{min-width:180px;font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));flex:1}.caption small{margin-top:calc(var(--spacing) * .5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint);display:block}.jarvis select{max-width:200px}.opener,.chat-answer{margin-inline:calc(var(--spacing) * 7);margin-bottom:calc(var(--spacing) * 3);border-radius:var(--radius-2xl);padding-inline:calc(var(--spacing) * 4);padding-block:calc(var(--spacing) * 3.5);font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.opener{background-color:var(--accent-soft)}.opener:empty{display:none}.chat-answer{min-height:calc(var(--spacing) * 11);background-color:var(--fill);white-space:pre-wrap}.chat-source{margin-top:calc(var(--spacing) * 2.5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint)}.chat{gap:calc(var(--spacing) * 2);padding-inline:calc(var(--spacing) * 7);padding-top:var(--spacing);padding-bottom:calc(var(--spacing) * 3);grid-template-columns:1fr auto;display:grid}.chat input{width:100%;min-width:0;padding-inline:calc(var(--spacing) * 4);padding-block:calc(var(--spacing) * 3);font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));border-radius:3.40282e38px}.chat button{padding-inline:calc(var(--spacing) * 5);padding-block:calc(var(--spacing) * 3);background:var(--accent);color:var(--accent-ink);border-radius:3.40282e38px}.greet p{margin-bottom:calc(var(--spacing) * 1.5)}.greet p:first-child{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.greet p.warn{color:var(--high)}.quick{padding-inline:calc(var(--spacing) * 7);padding-bottom:calc(var(--spacing) * 6)}#tip{pointer-events:none;z-index:50;border-radius:var(--radius-lg);background-color:var(--fg);max-width:300px;padding-inline:calc(var(--spacing) * 2.5);padding-block:calc(var(--spacing) * 2);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--bg);opacity:0;transition-property:opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration));--tw-duration:.1s;transition-duration:.1s;position:fixed}#tip.on{opacity:1}.toasts{right:calc(var(--spacing) * 6);bottom:calc(var(--spacing) * 6);z-index:40;gap:calc(var(--spacing) * 2.5);width:min(380px,100vw - 48px);display:grid;position:fixed}.toast{border-radius:var(--radius-2xl);padding-inline:calc(var(--spacing) * 5);padding-block:calc(var(--spacing) * 3.5);font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height));background:var(--material);-webkit-backdrop-filter:saturate(180%)blur(20px);backdrop-filter:saturate(180%)blur(20px);box-shadow:0 10px 40px #00000038, 0 0 0 .5px var(--hairline);animation:.25s rise}.toast.good{box-shadow:0 10px 40px #00000038, inset 4px 0 0 var(--ok)}.toast.warn{box-shadow:0 10px 40px #00000038, inset 4px 0 0 var(--high)}.toast.alert{box-shadow:0 10px 40px #00000038, inset 4px 0 0 var(--crit)}.toast small{margin-top:calc(var(--spacing) * .5);font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height));color:var(--faint);display:block}@media (max-width:640px){header,.nav{padding-inline:calc(var(--spacing) * 4)}header .meta,#pause{display:none}.nav{scrollbar-width:none;flex-wrap:nowrap;top:58px;overflow-x:auto}.nav a{flex-shrink:0}input[type=search]{order:9999;width:100%}main{padding-inline:calc(var(--spacing) * 4);padding-top:calc(var(--spacing) * 6);padding-bottom:calc(var(--spacing) * 16)}.alertbar,.results,.loadnotice{margin-top:calc(var(--spacing) * 4);width:calc(100% - 32px)}main>h2,details.section>summary{font-size:28px}.card>h2,.card .body,.prio .lbl,.prio .big,.prio li,.prio .act,.wins li,.winsfoot,.findtools,.question,.opener,.chat-answer,.chat,.quick,.jarvis .voicebar,.panelnote,.groupname,.intel-head,.kindrow{padding-inline:calc(var(--spacing) * 4)}.question,.opener,.chat-answer{margin-inline:calc(var(--spacing) * 4)}th:first-child,td:first-child{padding-left:calc(var(--spacing) * 4)}th:last-child,td:last-child{padding-right:calc(var(--spacing) * 4)}}}@layer utilities;@font-face{font-family:InterVariable;font-style:normal;font-weight:100 900;font-display:swap;src:url(/static/vendor/InterVariable.woff2)format("woff2")}@keyframes beat{50%{opacity:.3}}@keyframes think{50%{transform:scale(.8)}}@keyframes speak{0%{box-shadow:0 0 0 0 var(--accent-soft)}to{box-shadow:0 0 0 8px var(--accent-soft)}}@keyframes rise{0%{opacity:0;transform:translateY(8px)}}@property --tw-leading{syntax:"*";inherits:false}@property --tw-font-weight{syntax:"*";inherits:false}@property --tw-tracking{syntax:"*";inherits:false}@property --tw-duration{syntax:"*";inherits:false}@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}
+/* shell.css: plain CSS appended by build_ui.sh */
+/* ==========================================================================
+   ARGUS-1 application shell: sidebar, views, beginner-facing Overview.
 
-  /* cut-corner geometry, shared by every framed surface */
-  .card, .tile, .toast, .question, .chat-answer, .opener {
-    clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),
-                      calc(100% - var(--cut)) 100%,0 100%,0 var(--cut)); }
-  button, select, input, .status, .pill, .delta, .tag, kbd {
-    clip-path:polygon(var(--cut-sm) 0,100% 0,100% calc(100% - var(--cut-sm)),
-                      calc(100% - var(--cut-sm)) 100%,0 100%,0 var(--cut-sm)); }
-  /* the diagonal edges get their own hairlines, so the frame stays unbroken */
-  .card, .tile { position:relative; box-shadow:inset 0 0 0 1px var(--line); }
-  .card::before, .card::after, .tile::before, .tile::after {
-    content:""; position:absolute; height:1px; width:calc(var(--cut) * 1.4142);
-    background:var(--line); pointer-events:none; z-index:2; }
-  .card::before, .tile::before { left:0; top:var(--cut); transform-origin:0 0; transform:rotate(-45deg); }
-  .card::after, .tile::after { right:0; bottom:var(--cut); transform-origin:100% 100%; transform:rotate(-45deg); }
+   Plain CSS (no Tailwind directives). scripts/dev/build_ui.sh appends this
+   file to the compiled design system in the page's inline stylesheet, so the page
+   still ships exactly one stylesheet. Colours come from the existing theme
+   tokens (--bg, --panel, --fg, --crit ...) so Light/Dark keep working; only
+   the sidebar has its own fixed near-black palette, as in the reference.
+   ========================================================================== */
+:root {
+  --sb-bg: #0a0c0b; --sb-line: #1c211e; --sb-fg: #e7ece9; --sb-dim: #8d9791;
+  --sb-hover: rgba(255, 255, 255, .06); --sb-active-bg: rgba(52, 211, 120, .16);
+  --sb-green: #3ddc84; --sb-ring: #3ddc84; --sb-w: 252px;
+}
 
-  /* header */
-  header { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-           padding:14px 28px; position:sticky; top:0; z-index:20;
-           background:color-mix(in srgb, var(--bg) 88%, transparent);
-           backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
-  .brand { font-weight:800; font-size:15px; letter-spacing:.32em; margin-right:6px; }
-  .brand::before { content:""; display:inline-block; width:9px; height:9px; margin-right:10px;
-                   background:var(--accent); transform:rotate(45deg); vertical-align:1px; }
-  .status { padding:4px 12px; font:700 10.5px/1.4 var(--sans); letter-spacing:.14em;
-            text-transform:uppercase; white-space:nowrap; }
-  .s-critical{background:var(--crit);color:#fff} .s-high{background:var(--high);color:#140800}
-  .s-medium{background:var(--med);color:#140f00} .s-low{background:var(--low);color:#fff}
-  .s-ok{background:var(--ok);color:#021108}
-  .spacer { flex:1; }
-  .meta { color:var(--faint); font-size:11px; letter-spacing:.04em; }
-  .live { display:flex; align-items:center; gap:7px; font-size:10.5px; color:var(--dim);
-          text-transform:uppercase; letter-spacing:.14em; }
-  .beat { width:6px; height:6px; background:var(--ok); transform:rotate(45deg); }
-  .beat.off { background:var(--faint); }
-  .beat.on { animation:beat 2s infinite; }
-  @keyframes beat { 50% { opacity:.25 } }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor;
+       stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.skip { position: absolute; left: 12px; top: -48px; z-index: 100; padding: 10px 14px;
+        border-radius: 10px; background: var(--sb-green); color: #04140b; font-weight: 600; }
+.skip:focus { top: 12px; }
 
-  /* grid */
-  main { padding:28px; display:grid; gap:var(--gap); max-width:1720px; margin:0 auto;
-         counter-reset:section; }
-  .row { display:grid; gap:var(--gap); }
-  .row.split { grid-template-columns:minmax(320px,1fr) minmax(320px,1.15fr); }
-  @media (max-width:1000px) { .row.split { grid-template-columns:1fr; } }
-  @media (max-width:640px) { main { padding:16px; } header { padding:12px 16px; } }
+/* ---------- layout ---------- */
+.content { min-width: 0; margin-left: var(--sb-w); }
+.sidebar {
+  position: fixed; inset: 0 auto 0 0; z-index: 40; width: var(--sb-w);
+  display: flex; flex-direction: column; gap: 4px; padding: 20px 14px 16px;
+  overflow-y: auto; background: var(--sb-bg); color: var(--sb-fg);
+  border-right: 1px solid var(--sb-line);
+}
+.side-brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; }
+.side-brand .logo { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+                    background: var(--sb-green); color: #04140b; }
+.side-brand .logo .ico { width: 20px; height: 20px; stroke-width: 2.1; }
+.side-brand .name { font: 700 19px/1 var(--font-display, system-ui); letter-spacing: -.02em; }
+.side-brand .sub { display: block; margin-top: 3px; font: 500 11px/1 var(--font-sans, system-ui);
+                   letter-spacing: .02em; color: var(--sb-dim); }
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+.sidebar a {
+  display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 12px;
+  border-radius: 12px; color: var(--sb-dim); font-size: 14.5px; font-weight: 500;
+  text-decoration: none; transition: background .12s, color .12s;
+}
+.sidebar a:hover { background: var(--sb-hover); color: var(--sb-fg); }
+.sidebar a[aria-current="page"] { background: var(--sb-active-bg); color: var(--sb-green); font-weight: 600; }
+.sidebar a:focus-visible { outline: 2px solid var(--sb-ring); outline-offset: 2px; }
+.sidebar a .n { margin-left: auto; min-width: 22px; padding: 2px 7px; border-radius: 999px;
+                background: rgba(255, 255, 255, .1); color: var(--sb-fg); font-size: 11.5px;
+                font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.sidebar a .n:empty { display: none; }
+.sidebar a .n.bad { background: rgba(255, 90, 80, .22); color: #ff9a92; }
+.sidebar a .n.warn { background: rgba(255, 190, 70, .2); color: #ffd083; }
+.sidebar a .ext { margin-left: auto; width: 15px; height: 15px; opacity: .7; }
+.side-group { margin: 18px 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+              text-transform: uppercase; color: #66706a; }
+.side-foot { margin-top: auto; padding: 14px 12px 4px; border-top: 1px solid var(--sb-line);
+             font-size: 12.5px; line-height: 1.45; color: var(--sb-dim); }
+.side-foot strong { display: block; color: var(--sb-fg); font-weight: 600; }
+.menu { display: none; align-items: center; justify-content: center; width: 40px; height: 40px;
+        padding: 0; border-radius: 12px; }
+.scrim { position: fixed; inset: 0; z-index: 35; background: rgba(0, 0, 0, .55); }
+.scrim[hidden] { display: none; }
 
-  /* cards */
-  .card { background:var(--panel); overflow:hidden; }
-  .card > h2 { margin:0; padding:16px 20px 12px; font:600 11px/1.3 var(--sans);
-               letter-spacing:.16em; text-transform:uppercase; color:var(--fg);
-               display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-               border-bottom:1px solid var(--line); }
-  .card > h2::before { counter-increment:section; content:counter(section, decimal-leading-zero);
-                       font:500 10px/1 var(--mono); color:var(--accent); letter-spacing:.06em;
-                       margin-right:4px; }
-  .card > h2 .cnt { color:var(--faint); font-weight:500; letter-spacing:.1em; }
-  .card .body { padding:16px 20px; }
-  .scroll { overflow-x:auto; }
-  .vscroll { max-height:560px; overflow-y:auto; }
+/* a view shows only the blocks tagged for it; with scripting off, Overview shows */
+body[data-view="overview"] [data-views]:not([data-views~="overview"]),
+body[data-view="security"] [data-views]:not([data-views~="security"]),
+body[data-view="accounts"] [data-views]:not([data-views~="accounts"]),
+body[data-view="network"] [data-views]:not([data-views~="network"]),
+body[data-view="monitoring"] [data-views]:not([data-views~="monitoring"]),
+body[data-view="assistant"] [data-views]:not([data-views~="assistant"]),
+body[data-view="settings"] [data-views]:not([data-views~="settings"]) { display: none !important; }
+body[data-view="network"] #tab-ops, body[data-view="network"] #tab-intel, body[data-view="network"] #tab-events,
+body[data-view="settings"] #tab-peers, body[data-view="settings"] #tab-internet { display: none; }
+.row.split { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+main:focus { outline: none; }
 
-  /* hero */
-  .hero { display:grid; gap:var(--gap); align-items:start;
-          grid-template-columns:minmax(300px,1.05fr) minmax(360px,1.35fr) minmax(280px,1fr); }
-  @media (max-width:1250px) { .hero { grid-template-columns:1fr 1fr; }
-                              .hero #winscard { grid-column:1 / -1; } }
-  @media (max-width:820px)  { .hero { grid-template-columns:1fr; } }
-  .scorebox { display:flex; gap:22px; align-items:center; }
-  .ring { position:relative; width:150px; height:150px; flex:none; }
-  .ring svg { width:100%; height:100%; transform:rotate(-90deg); }
-  .ring .track { stroke:var(--line); }
-  .ring .fill { transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1), stroke .4s; stroke-linecap:butt; }
-  .ring .num { position:absolute; inset:0; display:flex; flex-direction:column;
-               align-items:center; justify-content:center; line-height:.9; }
-  .ring .num b { font-size:58px; font-weight:300; letter-spacing:-.05em; }
-  .ring .num span { font:500 9.5px/1 var(--sans); color:var(--faint); margin-top:8px;
-                    letter-spacing:.2em; text-transform:uppercase; }
-  .scoremeta { display:grid; gap:8px; min-width:0; flex:1; }
-  .scoremeta .grade { font-size:22px; font-weight:600; letter-spacing:-.02em; text-transform:capitalize; }
-  .scoremeta .cov { font-size:12px; color:var(--dim); }
-  .delta { display:inline-flex; align-items:center; gap:5px; padding:3px 10px;
-           font:600 11px/1.4 var(--sans); letter-spacing:.04em; }
-  .delta.up { background:var(--ok-soft); color:var(--ok); }
-  .delta.down { background:var(--high-soft); color:var(--high); }
-  .delta.flat { background:var(--panel2); color:var(--dim); }
-  .spark { height:34px; width:100%; margin-top:2px; }
-  .health .grade { font-size:12px; color:var(--dim); }
-  .meter { height:3px; background:var(--line); overflow:hidden; margin-top:10px; }
-  .meter > i { display:block; height:100%; transition:width .6s cubic-bezier(.2,.8,.2,1); }
-  .meter.sm { height:3px; margin-top:0; }
-  .areas { display:grid; grid-template-columns:auto 1fr auto; gap:9px 14px; align-items:center;
-           font-size:12.5px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
-  .areas .nm { white-space:nowrap; color:var(--dim); }
-  .areas .pc { text-align:right; white-space:nowrap; color:var(--faint);
-               font-variant-numeric:tabular-nums; font-size:11.5px; }
+.pagehead { margin: 0 0 4px; }
+.pagehead h1 { margin: 0; font: 700 34px/1.12 var(--font-display, system-ui); letter-spacing: -.03em; }
+.pagehead h1:focus { outline: none; }
+.pagehead p { margin: 6px 0 0; max-width: 70ch; color: var(--dim); font-size: 15px; }
 
-  /* JARVIS panel */
-  .jarvis .voicebar { display:flex; align-items:center; gap:14px; padding:14px 20px;
-                      border-bottom:1px solid var(--line); }
-  .orb { width:26px; height:26px; flex:none; position:relative; transform:rotate(45deg);
-         border:1px solid var(--accent); opacity:.45; transition:opacity .3s; }
-  .orb::after { content:""; position:absolute; inset:6px; background:var(--accent); }
-  .orb.on { opacity:1; }
-  .orb.think { opacity:1; animation:think 1.2s ease-in-out infinite; }
-  .orb.speak { opacity:1; animation:speak .45s ease-in-out infinite alternate; }
-  @keyframes think { 50% { transform:rotate(225deg) } }
-  @keyframes speak { from { box-shadow:0 0 0 0 var(--accent-soft) } to { box-shadow:0 0 0 7px var(--accent-soft) } }
-  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } }
-  .caption { flex:1; min-width:0; font-size:13.5px; }
-  .caption small { display:block; color:var(--faint); font-size:11px; margin-top:2px; }
-  .jarvis select { max-width:180px; }
-  .opener { margin:14px 20px 0; padding:12px 16px; background:var(--accent-soft);
-            color:var(--fg); font-size:13.5px; }
-  .opener:empty { display:none; }
-  .chat { display:grid; grid-template-columns:1fr auto; gap:8px; padding:14px 20px; }
-  .chat input { min-width:0; width:100%; padding:10px 12px; font-size:13px; }
-  .chat button { padding:10px 18px; }
-  .chat-answer { margin:14px 20px 0; padding:14px 16px; background:var(--panel2);
-                 white-space:pre-wrap; min-height:44px; font-size:13.5px; }
-  .chat-source { color:var(--faint); font-size:10px; margin-top:10px; letter-spacing:.14em;
-                 text-transform:uppercase; }
-  .greet p { margin:0 0 5px; } .greet p:first-child { font-weight:600; font-size:15px; }
-  .greet p.warn { color:var(--high); }
-  .question { margin:0 20px 10px; padding:12px 14px; background:var(--panel2);
-              display:grid; gap:9px; font-size:13px; }
-  .question-actions { display:flex; gap:7px; flex-wrap:wrap; }
-  .wake { font-size:12px; line-height:1.55; margin-top:4px; }
-  .wake .dim { color:var(--faint); }
-  .wakebar { height:4px; background:var(--line2); margin:4px 0 6px; overflow:hidden; }
-  .wakebar i { display:block; height:100%; background:var(--accent); transition:width .6s ease; }
-  .ring.held .fill { opacity:.55; }
-  .rechk { font:10px/1 var(--mono); color:var(--accent); margin-left:6px; letter-spacing:.04em; }
-  @media (prefers-reduced-motion: reduce) { .wakebar i { transition:none; } }
-  .reviewqueue > summary { cursor:pointer; padding:16px 20px; font:600 11px/1.3 var(--sans);
-                           letter-spacing:.16em; text-transform:uppercase; }
-  .reviewqueue > summary:hover { color:var(--accent); }
-  .reviewqueue[open] > summary { border-bottom:1px solid var(--line); margin-bottom:12px; }
-  .reviewqueue .cnt { color:var(--faint); margin-left:8px; }
-  .reviewqueue.needs > summary { border-left:3px solid var(--high); }
-  .reviewqueue.needs .cnt { color:var(--high); }
-  .loadnotice { margin:16px 28px 0; padding:11px 14px; border-left:3px solid var(--high);
-                background:var(--high-soft); color:var(--fg); font-size:12px; }
-  .loadnotice[hidden] { display:none; }
-  .loadnotice button { margin-left:12px; }
-  @media (max-width:640px) { .loadnotice { margin:12px 16px 0; } }
+/* ---------- Overview ---------- */
+.ovstatus { display: grid; gap: 14px; padding: 26px 28px; border-radius: var(--radius-card, 22px);
+            background: var(--panel); box-shadow: inset 5px 0 0 var(--faint); }
+.ovstatus[data-level="attention"] { box-shadow: inset 5px 0 0 var(--crit); background: var(--crit-soft); }
+.ovstatus[data-level="incomplete"] { box-shadow: inset 5px 0 0 var(--med); background: var(--med-soft); }
+.ovstatus[data-level="ok"] { box-shadow: inset 5px 0 0 var(--ok); background: var(--ok-soft); }
+.ovstatus h2 { margin: 0; display: flex; align-items: center; gap: 12px;
+               font: 700 28px/1.15 var(--font-display, system-ui); letter-spacing: -.025em; }
+.ovstatus h2 .ico { width: 30px; height: 30px; }
+.ovstatus p { margin: 0; max-width: 78ch; font-size: 15.5px; }
+.ovstatus .score { color: var(--dim); font-size: 14.5px; }
+.ovstatus .score button { margin-left: 6px; }
+.ovcounts { display: flex; flex-wrap: wrap; gap: 10px; margin: 2px 0 0; padding: 0; list-style: none; }
+.ovcounts li { display: flex; align-items: baseline; gap: 8px; padding: 9px 14px; border-radius: 14px;
+               background: var(--panel); font-size: 13px; color: var(--dim); }
+.ovcounts li b { font: 700 20px/1 var(--font-display, system-ui); color: var(--fg);
+                 font-variant-numeric: tabular-nums; }
+.ovfoot { margin: 0; font-size: 12.5px; color: var(--faint); }
+.ovgrid { display: grid; gap: 20px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.ovnext .body { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 15.5px; }
+.ovnext .body p { margin: 0; flex: 1 1 360px; }
+.ovmeter { height: 10px; border-radius: 999px; background: var(--fill); overflow: hidden; margin: 10px 0 6px; }
+.ovmeter > i { display: block; height: 100%; border-radius: 999px; background: var(--ok); }
+.ovlist { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 14px; }
+.ovlist li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.ovlist .why { flex-basis: 100%; color: var(--dim); font-size: 13px; }
+.ovactions, .fxa { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
 
-  /* gains */
-  .wins { list-style:none; margin:0; padding:0; counter-reset:win; }
-  .wins li { display:grid; grid-template-columns:34px 1fr; gap:3px 12px; padding:13px 20px;
-             cursor:pointer; border-top:1px solid var(--line); transition:background .12s; }
-  .wins li:first-child { border-top:0; }
-  .wins li:hover, .wins li:focus-visible { background:var(--panel2); outline:none; }
-  .wins .t { font-weight:500; min-width:0; overflow-wrap:anywhere; font-size:13.5px; }
-  .wins .a { grid-column:2; font-size:11px; color:var(--faint); letter-spacing:.04em; }
-  .wins .rank { grid-row:span 2; font:300 26px/1 var(--sans); color:var(--faint);
-                letter-spacing:-.04em; }
-  .wins li:first-child .rank { color:var(--accent); }
-  .wins .loc { color:var(--faint); font-weight:400; font-size:11.5px; }
-  .winsfoot { padding:12px 20px; font-size:11px; color:var(--faint); border-top:1px solid var(--line);
-              letter-spacing:.02em; }
+/* ---------- findings in plain language ---------- */
+.fx { margin: 0 0 14px; padding: 18px 20px; border-radius: 18px; background: var(--panel2);
+      box-shadow: inset 4px 0 0 var(--faint); }
+.fx.k-suspicious { box-shadow: inset 4px 0 0 var(--high); }
+.fx.k-confirmed { box-shadow: inset 4px 0 0 var(--med); }
+.fx.k-monitoring { box-shadow: inset 4px 0 0 var(--accent); }
+.fx.k-unverified { box-shadow: inset 4px 0 0 var(--low); }
+.fx h3 { margin: 8px 0 8px; font-size: 17px; line-height: 1.3; letter-spacing: -.01em; }
+.fx p { margin: 6px 0; font-size: 14px; }
+.fx p b { font-weight: 600; }
+.fxh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.kind { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+        background: var(--fill); font-size: 12px; font-weight: 600; }
+.kind .ico { width: 14px; height: 14px; }
+.kind.k-suspicious { background: var(--high-soft); color: var(--high); }
+.kind.k-confirmed { background: var(--med-soft); color: var(--med); }
+.kind.k-monitoring { background: var(--accent-soft); color: var(--accent); }
+.kind.k-info, .kind.k-unverified { color: var(--dim); }
+.fx .sev { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+.fx .unc { color: var(--dim); }
+.fx details.tech { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.fx details.tech > summary { cursor: pointer; font-size: 13.5px; font-weight: 600; padding: 4px 0; }
+.fx details.tech .kv { margin-top: 8px; }
+.glossary dt { margin-top: 10px; font-weight: 600; }
+.glossary dd { margin: 2px 0 0; color: var(--dim); font-size: 14px; }
+.prose { max-width: 74ch; font-size: 14.5px; }
+.prose p { margin: 0 0 10px; }
+.empty-good { color: var(--dim); font-size: 14px; }
 
-  /* tiles */
-  .tiles { display:grid; gap:var(--gap); grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); }
-  .tile { background:var(--panel); padding:16px 16px 14px; cursor:pointer; transition:background .12s; }
-  .tile:hover { background:var(--panel2); }
-  .tile.on { background:var(--panel2); box-shadow:inset 0 0 0 1px var(--accent); }
-  .tile.on::before, .tile.on::after { background:var(--accent); }
-  .tile .n { font-size:34px; font-weight:300; line-height:1.05; letter-spacing:-.04em; }
-  .tile .k { font:600 9.5px/1.4 var(--sans); text-transform:uppercase; letter-spacing:.16em;
-             color:var(--dim); margin-top:8px; }
-  .tile .k .ic { margin-right:5px; }
-  .tile .sub { font-size:10px; color:var(--faint); margin-top:2px; }
-  .tiles .tile.good .n { color:var(--ok); }
-  .hosttile .n { font-size:12.5px !important; font-weight:500 !important; padding-top:6px !important;
-                 line-height:1.6; display:flex; flex-wrap:wrap; gap:0 9px; letter-spacing:0 !important; }
+/* ---------- monitoring health ---------- */
+.dhrow { margin: 0 0 8px; padding: 10px 12px; border-radius: 14px; background: var(--panel2); }
+.dhrow > summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 14px; }
+.dhrow .more { margin-top: 8px; font-size: 13.5px; display: grid; gap: 4px; }
+.dhrow small { color: var(--faint); }
 
-  /* tables */
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  td, th { padding:10px 14px; text-align:left; vertical-align:top; }
-  thead th { position:sticky; top:0; background:var(--panel); z-index:1; font:600 9.5px/1.4 var(--sans);
-             text-transform:uppercase; letter-spacing:.16em; color:var(--faint);
-             border-bottom:1px solid var(--line); }
-  tbody tr { border-top:1px solid var(--line); }
-  tbody tr:hover { background:var(--panel2); }
-  tbody tr.clickable { cursor:pointer; }
-  tbody tr.sevrow td:first-child { box-shadow:inset 2px 0 0 var(--sevc, transparent); }
-  .sev { font-weight:700; font-size:10px; letter-spacing:.12em; white-space:nowrap; text-transform:uppercase; }
-  .c-critical{color:var(--crit)} .c-high{color:var(--high)} .c-medium{color:var(--med)}
-  .c-low{color:var(--low)} .c-ok{color:var(--ok)}
-  .pill { display:inline-flex; align-items:center; gap:5px; padding:2px 9px 2px 8px;
-          font:700 9.5px/1.6 var(--sans); letter-spacing:.14em; white-space:nowrap; text-transform:uppercase; }
-  .pill.critical { background:var(--crit-soft); color:var(--crit); }
-  .pill.high { background:var(--high-soft); color:var(--high); }
-  .pill.medium { background:var(--panel2); color:var(--med); }
-  .pill.low { background:var(--panel2); color:var(--low); }
-  .tag { display:inline-block; padding:1px 7px; background:var(--panel2); font-size:10.5px;
-         color:var(--dim); white-space:nowrap; }
-  .detail { color:var(--dim); word-break:break-word; }
-  .where { color:var(--faint); font-size:11px; word-break:break-all; margin-top:3px; }
-  .title { font-weight:500; }
-  .expand { background:var(--panel2); }
-  .expand td { padding:12px 16px; }
-  .kv { display:grid; grid-template-columns:max-content 1fr; gap:4px 18px; }
-  .kv dt { color:var(--faint); font:600 9.5px/1.8 var(--sans); text-transform:uppercase; letter-spacing:.14em; }
-  .kv dd { margin:0; word-break:break-word; }
+/* ---------- assistant ---------- */
+.sec { margin: 0 0 9px; }
+.sec b.tag { margin-right: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+             text-transform: uppercase; color: var(--faint); }
+.chat-actions, .chat-chips, .suggest { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.suggest { margin: 0; padding: 12px 28px 4px; }
+.suggest-h { margin: 0; padding: 14px 28px 0; font-size: 13px; font-weight: 600; color: var(--dim); }
+.chat-model { margin-top: 8px; font-size: 12.5px; color: var(--dim); }
+.modelline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 4px 28px 14px;
+             font-size: 12.5px; color: var(--dim); }
 
-  /* collectors */
-  .job { display:flex; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--line); }
-  .job:first-child { border-top:0; }
-  .dot { width:7px; height:7px; flex:none; background:var(--ok); transform:rotate(45deg); }
-  .dot.stale { background:var(--med); } .dot.err, .dot.never { background:var(--crit); }
-  .dot.run { background:var(--accent); animation:beat 1s infinite; }
-  .job .name { flex:1; min-width:0; }
-  .job .name b { font-weight:500; }
-  .job .age { color:var(--faint); font-size:11px; white-space:nowrap; text-align:right; }
-  .bar { height:2px; background:var(--line); margin-top:6px; overflow:hidden; }
-  .bar i { display:block; height:100%; background:var(--accent); }
-  .errbox { color:var(--crit); font-size:11px; white-space:pre-wrap; padding:0 0 8px 19px; }
-  .showmore { width:100%; margin-top:10px; padding:9px; color:var(--dim); }
+/* ---------- responsive ---------- */
+@media (max-width: 1100px) {
+  .content { margin-left: 0; }
+  .menu { display: inline-flex; }
+  .sidebar { transform: translateX(-102%); transition: transform .18s ease; box-shadow: 0 0 40px rgba(0, 0, 0, .5); }
+  .sidebar.open { transform: none; }
+  .ovgrid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .pagehead h1 { font-size: 28px; }
+  .ovstatus { padding: 20px; } .ovstatus h2 { font-size: 23px; }
+  .row.split { grid-template-columns: minmax(0, 1fr); }
+  .suggest, .suggest-h, .modelline { padding-left: 16px; padding-right: 16px; }
+}
+@media (min-width: 1101px) { .content > header .brand { display: none; } }
+@media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
 
-  /* controls */
-  button, select, input { font:500 12px/1.2 var(--sans); padding:7px 13px; background:var(--panel2);
-                          color:var(--fg); border:0; box-shadow:inset 0 0 0 1px var(--line2);
-                          letter-spacing:.02em; transition:background .12s, color .12s, box-shadow .12s; }
-  button { cursor:pointer; }
-  button:hover { background:var(--accent-soft); color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
-  button.on, button:active { background:var(--accent); color:var(--accent-ink); box-shadow:none; }
-  input[type=search] { min-width:220px; }
-  input:focus, select:focus { outline:none; box-shadow:inset 0 0 0 1px var(--accent); }
-  .filters { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-  .tabs { display:flex; gap:6px; flex-wrap:wrap; }
-  kbd { background:var(--panel2); padding:1px 6px; font-size:10.5px; }
-  .empty { color:var(--faint); padding:28px; text-align:center; font-size:13px; }
+#more { display: grid; gap: 20px; }
+.plainsum { cursor: pointer; padding: 22px 28px; font: 600 19px/1.3 var(--font-display, system-ui); letter-spacing: -.02em; }
+.prose p { margin: 0 0 10px; }
 
-  /* charts */
-  .chart { display:flex; align-items:flex-end; gap:3px; height:96px; }
-  .chart .col { flex:1; min-width:2px; height:100%; display:flex; flex-direction:column-reverse; gap:2px; }
-  .chart .col:hover { background:var(--panel2); }
-  .chart .col i { display:block; width:100%; }
-  .scoretrend { width:100%; height:140px; display:block; }
-  .trendmeta { display:flex; justify-content:space-between; gap:12px;
-               color:var(--faint); font:11px/1.4 var(--mono); margin-top:5px; }
-  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:10.5px; color:var(--dim);
-            letter-spacing:.08em; text-transform:uppercase; align-items:center; }
-  .legend i { display:inline-block; width:8px; height:8px; margin-right:6px; vertical-align:-1px; }
-  .catgrid { display:grid; gap:1px; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-             background:var(--line); box-shadow:inset 0 0 0 1px var(--line); }
-  .catgrid div { display:flex; justify-content:space-between; gap:8px; padding:7px 10px;
-                 background:var(--panel); font-size:12px; color:var(--dim); }
-  .catgrid b { color:var(--fg); font-weight:500; font-variant-numeric:tabular-nums; }
-
-  /* ATT&CK coverage */
-  .attack { display:grid; grid-template-columns:minmax(150px,max-content) 1fr 70px; gap:10px 16px;
-            align-items:center; font-size:12px; }
-  .attack .tn { color:var(--dim); text-transform:capitalize; white-space:nowrap; }
-  .attack .tb { display:flex; gap:2px; height:10px; }
-  .attack .tb i { display:block; height:100%; }
-  .attack .tc { text-align:right; color:var(--faint); font-variant-numeric:tabular-nums; }
-  .lv-validated { background:var(--accent); }
-  .lv-claimed { background:color-mix(in srgb, var(--accent) 38%, var(--panel)); }
-  .lv-blind { background:var(--line2); }
-  .lv-regressed { background:var(--crit); }
-  .attackhead { display:flex; gap:36px; flex-wrap:wrap; margin-bottom:22px; }
-  .attackhead div b { display:block; font-size:36px; font-weight:300; letter-spacing:-.04em; line-height:1; }
-  .attackhead div span { font:600 9.5px/1.4 var(--sans); text-transform:uppercase; letter-spacing:.16em; color:var(--faint); }
-
-  /* side panels */
-  .intel-head { padding:12px 16px; font-size:12px; color:var(--dim); border-bottom:1px solid var(--line); }
-  .intel-head b { color:var(--fg); font-weight:500; }
-  .kindrow { display:flex; flex-wrap:wrap; gap:5px; padding:12px 16px; }
-  .kindrow .tag b { color:var(--fg); }
-  h3.sub { margin:16px 16px 6px; font:600 9.5px/1.4 var(--sans); text-transform:uppercase;
-           letter-spacing:.16em; color:var(--faint); }
-
-  /* overlays */
-  #tip { position:fixed; z-index:50; pointer-events:none; padding:7px 10px; background:var(--fg);
-         color:var(--bg); font-size:11.5px; max-width:300px; opacity:0; transition:opacity .1s;
-         clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
-  #tip.on { opacity:1; }
-  .toasts { position:fixed; right:20px; bottom:20px; z-index:40; display:grid; gap:10px;
-            width:min(380px, calc(100vw - 40px)); }
-  .toast { background:var(--panel2); box-shadow:inset 3px 0 0 var(--accent), var(--shadow);
-           padding:12px 16px; font-size:13px; animation:rise .25s ease; }
-  .toast.good { box-shadow:inset 3px 0 0 var(--ok), var(--shadow); }
-  .toast.warn { box-shadow:inset 3px 0 0 var(--high), var(--shadow); }
-  .toast.alert { box-shadow:inset 3px 0 0 var(--crit), var(--shadow); }
-  .toast small { display:block; color:var(--faint); font-size:10px; margin-top:3px;
-                 letter-spacing:.14em; text-transform:uppercase; }
-  @keyframes rise { from { transform:translateY(8px); opacity:0 } }
+/* the page heading replaces the old collapsible section title inside views */
+details.section[data-views] > summary { display: none; }
 </style>
 </head>
-<body>
+<body data-view="overview">
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-overview" viewBox="0 0 24 24"><path d="M3.5 11 12 3.8 20.5 11M5.5 9.5V20h4.5v-5.5h4V20h4.5V9.5"/></symbol>
+  <symbol id="i-security" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z"/><path d="m9 12 2.2 2.2L15.2 10"/></symbol>
+  <symbol id="i-processes" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><path d="M9.5 3v3.5M14.5 3v3.5M9.5 17.5V21M14.5 17.5V21M3 9.5h3.5M3 14.5h3.5M17.5 9.5H21M17.5 14.5H21"/></symbol>
+  <symbol id="i-accounts" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.5 20.5c.6-3.8 3.6-6 7.5-6s6.9 2.2 7.5 6"/></symbol>
+  <symbol id="i-network" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5S9.4 5.9 12 3.5z"/></symbol>
+  <symbol id="i-monitoring" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6.5L14 19l2.7-7H21"/></symbol>
+  <symbol id="i-assistant" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.5L3.5 20.5l1.2-4.3A8.5 8.5 0 1 1 20.5 12z"/><path d="M8.5 11.5h7M8.5 14.5h4"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M8 16 16.5 7.5M9.5 7.5h7v7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 19.5h18z"/><path d="M12 10v4.5M12 17.2v.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.9v.2"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.6M12 16.8v.2"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+</svg>
+<a class="skip" href="#main">Skip to main content</a>
+<div class="app">
+<aside class="sidebar" id="sidebar" aria-label="Main navigation">
+  <div class="side-brand"><span class="logo" aria-hidden="true"><svg class="ico"><use href="#i-security"/></svg></span><span><span class="name">ARGUS-1</span><span class="sub">Security assistant</span></span></div>
+  <nav id="sidenav" aria-label="Sections">
+    <a href="#overview" data-view="overview" title="Is my computer okay, and what should I do next"><svg class="ico" aria-hidden="true"><use href="#i-overview"/></svg><span>Overview</span><span class="n" id="nav-prio"></span></a>
+    <a href="#security" data-view="security" title="Everything ARGUS-1 observed, with evidence"><svg class="ico" aria-hidden="true"><use href="#i-security"/></svg><span>Security</span><span class="n" id="nav-find"></span></a>
+    <a href="/procs" title="Live map of running programs (opens its own page)"><svg class="ico" aria-hidden="true"><use href="#i-processes"/></svg><span>Processes</span><svg class="ico ext" aria-hidden="true"><use href="#i-ext"/></svg></a>
+    <a href="#accounts" data-view="accounts" title="Sign-ins, stored credentials and hidden accounts"><svg class="ico" aria-hidden="true"><use href="#i-accounts"/></svg><span>Accounts</span></a>
+    <a href="#network" data-view="network" title="Connections, traffic and location"><svg class="ico" aria-hidden="true"><use href="#i-network"/></svg><span>Network</span></a>
+    <a href="#monitoring" data-view="monitoring" title="Is ARGUS-1's own checking working"><svg class="ico" aria-hidden="true"><use href="#i-monitoring"/></svg><span>Monitoring</span><span class="n" id="nav-mon"></span></a>
+    <a href="#assistant" data-view="assistant" title="Ask questions in plain language"><svg class="ico" aria-hidden="true"><use href="#i-assistant"/></svg><span>Assistant</span></a>
+    <a href="#settings" data-view="settings" title="Setup, privacy and data on this computer"><svg class="ico" aria-hidden="true"><use href="#i-settings"/></svg><span>Settings</span></a>
+  </nav>
+  <div class="side-group">Also</div>
+  <nav aria-label="More pages">
+    <a href="/coverage" title="What ARGUS-1 can and cannot see (opens its own page)"><svg class="ico" aria-hidden="true"><use href="#i-monitoring"/></svg><span>Coverage map</span><svg class="ico ext" aria-hidden="true"><use href="#i-ext"/></svg></a>
+    <a href="/geo" title="Device location and trusted zones (opens its own page)"><svg class="ico" aria-hidden="true"><use href="#i-network"/></svg><span>GeoSecurity</span><svg class="ico ext" aria-hidden="true"><use href="#i-ext"/></svg></a>
+  </nav>
+  <div class="side-foot" id="side-foot" aria-live="polite">Waiting for results…</div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+<div class="content" id="content">
 <header>
-  <span class="brand">JARVIS</span>
+  <button id="menu" class="menu" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation menu"><svg class="ico" aria-hidden="true"><use href="#i-menu"/></svg></button>
+  <span class="brand">ARGUS-1</span>
   <span id="status" class="status s-ok">—</span>
   <span class="live"><span id="beat" class="beat on"></span><span id="livetxt">live</span></span>
-  <button id="pause" onclick="togglePause()">pause</button>
-  <button id="voice" onclick="toggleVoice()" title="Spoken security briefing (press v to re-brief)">voice</button>
-  <button onclick="runAll()">run all</button>
-  <a href="/geo" title="GeoSecurity globe" style="color:inherit;text-decoration:none;padding:4px 10px;border:1px solid #1c2c46;border-radius:6px">geo</a>
   <span class="spacer"></span>
-  <input type="search" id="q" placeholder="search findings…  ( / )" oninput="onSearch()">
+  <input type="search" id="q" placeholder="Search findings, checks, collectors…  ( / )" oninput="onSearch()" aria-label="Search">
+  <button id="notify" class="notify" onclick="toggleNotify()" title="Pop a notification on this computer when a new critical finding appears">Notify me</button>
+  <span class="segmented" id="theme" role="group" aria-label="Appearance">
+    <button data-t="auto" onclick="setTheme('auto')" title="Follow the system setting">Auto</button>
+    <button data-t="light" onclick="setTheme('light')">Light</button>
+    <button data-t="dark" onclick="setTheme('dark')">Dark</button>
+  </span>
+  <button id="pause" onclick="togglePause()" title="Pause live updates (space)">Pause</button>
   <span class="meta" id="meta">connecting…</span>
 </header>
+
+<div id="alertbar" class="alertbar" role="alert" hidden>
+  <b id="alertcount">0</b>
+  <div class="what"><span id="alerttext"></span><small id="alertsub"></small></div>
+  <button onclick="setSev('critical'); jump('findings-section')">Show them</button>
+  <button onclick="jump('priorities')">Priorities</button>
+</div>
+
+<div id="results" class="results" hidden>
+  <div class="head"><span id="resulthead"></span><span class="spacer"></span>
+    <span class="meta">enter opens the findings list · esc clears</span>
+    <button onclick="clearAll()">Clear</button></div>
+  <ul id="resultlist"></ul>
+</div>
 
 <div id="loadnotice" class="loadnotice" role="status" hidden>
   <span id="loadmessage"></span><button onclick="tick()">retry now</button>
 </div>
 
-<main>
-  <section class="hero">
+<main id="main" tabindex="-1">
+  <div class="pagehead" data-views="overview"><h1 id="h-overview" tabindex="-1">Overview</h1>
+    <p>Is my computer okay, what needs my attention, what has ARGUS-1 checked, and what should I do next.</p></div>
+  <section class="ovstatus" id="ov-status" data-views="overview" role="status" aria-live="polite" aria-label="Overall status"><p>Reading the current state…</p></section>
+  <div class="ovgrid" data-views="overview">
+    <section class="card" aria-labelledby="ov-attn-h"><h2 id="ov-attn-h">What needs your attention <span class="cnt" id="ov-attn-cnt"></span></h2>
+      <div class="body" id="ov-attn"></div></section>
+    <section class="card" aria-labelledby="ov-chk-h"><h2 id="ov-chk-h">What ARGUS-1 has checked <span class="cnt" id="ov-chk-cnt"></span></h2>
+      <div class="body" id="ov-checked"></div></section>
+  </div>
+  <section class="card ovnext" data-views="overview" aria-labelledby="ov-next-h"><h2 id="ov-next-h">Your next step</h2>
+    <div class="body" id="ov-next"></div></section>
+  <h2 id="score-details" data-views="overview">Your score, explained</h2>
+  <section class="hero" data-views="overview">
     <div class="card" id="healthcard">
       <h2>Security health <span class="cnt" id="healthsub"></span></h2>
-      <div class="body" id="health" style="padding:14px 16px">computing…</div>
-    </div>
-
-    <div class="card jarvis" id="chatcard">
-      <h2>JARVIS <span class="cnt">local data · offline model · takes no action</span>
-        <span class="spacer"></span>
-        <select id="voicesel" onchange="pickVoice()" title="Speaking voice" aria-label="Speaking voice"></select>
-      </h2>
-      <div class="voicebar">
-        <span class="orb" id="orb" aria-hidden="true"></span>
-        <div class="caption" id="caption" aria-live="polite">Voice is off.
-          <small>Press <kbd>v</kbd> for a spoken briefing.</small></div>
-        <button onclick="briefNow()">brief me</button>
-      </div>
-      <div class="opener" id="opener"></div>
-      <div class="chat-answer" id="askanswer" aria-live="polite">JARVIS is reading the current state…</div>
-      <form class="chat" onsubmit="askJarvis(event)">
-        <input id="askq" autocomplete="off" maxlength="4000" aria-label="Ask JARVIS"
-               placeholder="What needs me? What's my score? Explain a finding…">
-        <button id="askbtn" type="submit">ask</button>
-      </form>
-      <div style="padding:0 13px 10px"><button class="showmore" onclick="scoreCoach()"
-        title="The deterministic plan: weakest area, each task's projected points, all from live data">how do I raise my score?</button></div>
+      <div class="body" id="health">computing…</div>
     </div>
 
     <div class="card" id="winscard">
@@ -386,17 +291,77 @@
     </div>
   </section>
 
-  <div class="card" id="trendcard">
+  <div class="card" id="trendcard" data-views="overview">
     <h2>Verified host score · last 24 hours <span class="cnt" id="trendcnt"></span></h2>
     <div class="body" id="trend"><div class="empty">waiting for verified samples…</div></div>
   </div>
 
-  <details class="card reviewqueue" id="reviewqueue">
+  <details class="card" id="how-score" data-views="overview">
+    <summary class="plainsum">How the score is calculated</summary>
+    <div class="body prose">
+      <p>The score is computed from what ARGUS-1's checks last observed, grouped into protection areas. Each area loses points for its open findings, and critical and high findings cost far more than medium ones. Low-severity items are inventory, not risk, so they do not lower it.</p>
+      <p>A check that is failing, stale or has never run is <b>not</b> counted as safe. It is shown as unverified and pulls the score down in proportion to how much of the computer is unobserved. A finding you have marked as expected is counted as low, with a reason and an expiry.</p>
+      <p>The score reflects what ARGUS-1 could check. A low score is not proof of an attack and a high score is not proof of safety.</p>
+    </div></details>
+  <details class="card glossary" id="glossary" data-views="overview">
+    <summary class="plainsum">Words used in ARGUS-1</summary>
+    <div class="body"><dl class="glossary">
+      <dt>Collector</dt><dd>One of ARGUS-1's checks. Each looks at one area, such as startup items or the firewall, and reports what it found.</dd>
+      <dt>Stale data</dt><dd>A check's last result is too old to trust. It is not counted as checked.</dd>
+      <dt>Persistence</dt><dd>A way for a program to start again after a restart, such as a scheduled task. Normal software uses it, and so does malware.</dd>
+      <dt>Firewall rule</dt><dd>A setting that allows or blocks network connections for a program or port.</dd>
+      <dt>Unsigned program</dt><dd>A program without a publisher's digital signature. Many developer tools are unsigned, so it is a reason to look, not proof of harm.</dd>
+      <dt>Credential exposure</dt><dd>A password or key stored where others might read it. It matters if the credential is real and still active.</dd>
+      <dt>Coverage</dt><dd>How much of the computer ARGUS-1's checks are currently able to see.</dd>
+    </dl></div></details>
+  <div class="pagehead" data-views="security"><h1 id="h-security" tabindex="-1">Security</h1>
+    <p>What ARGUS-1 observed on this computer, with the evidence behind it. These are observations to review, not confirmed attacks.</p></div>
+  <h2 id="priorities" data-views="security">Priorities</h2>
+  <section class="prio" id="prio" data-views="security"></section>
+  <details class="card reviewqueue" id="reviewqueue" data-views="security">
     <summary>Review queue <span class="cnt" id="reviewcount">loading…</span></summary>
     <div id="jarvisquestions"></div>
     <div id="fix"></div>
   </details>
 
+  <div class="card" id="findings-section" data-views="security">
+    <h2>
+      <span>Findings</span>
+      <span class="cnt" id="findcnt"></span>
+      <span class="spacer"></span>
+      <span class="segmented" id="filters"></span>
+    </h2>
+    <div class="findtools">
+      <span class="filters">
+        <select id="jobsel" onchange="onFilter()"><option value="">All collectors</option></select>
+        <select id="hostsel" onchange="onFilter()">
+          <option value="">Both hosts</option><option value="win">Windows</option>
+          <option value="wsl">WSL</option>
+        </select>
+        <button id="grp" onclick="toggleGroup()">Group by collector</button>
+        <span class="meta" id="filtermeta"></span>
+      </span>
+    </div>
+    <div class="scroll vscroll" id="findings"></div>
+  </div>
+
+  <div class="pagehead" data-views="accounts"><h1 id="h-accounts" tabindex="-1">Accounts</h1>
+    <p>Sign-ins, stored credentials and hidden accounts. Sensitive values are always masked.</p></div>
+  <section class="card" data-views="accounts" aria-labelledby="acc-h"><h2 id="acc-h">Account and credential observations <span class="cnt" id="acc-cnt"></span></h2>
+    <div class="body" id="acc-list"></div></section>
+
+  <div class="pagehead" data-views="network"><h1 id="h-network" tabindex="-1">Network</h1>
+    <p>Connections, firewall rules, traffic and where this device is.</p></div>
+  <section class="card" data-views="network" aria-labelledby="net-h"><h2 id="net-h">Network observations <span class="cnt" id="net-cnt"></span></h2>
+    <div class="body" id="net-list"></div></section>
+
+  <div class="pagehead" data-views="monitoring"><h1 id="h-monitoring" tabindex="-1">Monitoring</h1>
+    <p>Is ARGUS-1's own checking working? This is separate from security findings: a check that is not running means a blind spot, not an attack.</p></div>
+  <section class="card" id="detectorcard" data-views="monitoring" aria-labelledby="dh-h"><h2 id="dh-h">Monitoring health <span class="cnt" id="detectorsub"></span></h2>
+    <div class="body" id="detectors" aria-live="polite">Checking…</div></section>
+  <details class="section" id="monitoring" data-views="monitoring" open>
+    <summary>Monitoring <span class="cnt" id="moncnt">collectors · performance · coverage</span></summary>
+    <div class="grid">
   <div class="tiles" id="tiles"></div>
 
   <div class="card">
@@ -414,27 +379,6 @@
     <div class="body" id="activity"><div class="empty">correlating…</div></div>
   </div>
 
-  <div class="card">
-    <h2>
-      <span>Findings</span>
-      <span class="cnt" id="findcnt"></span>
-      <span class="spacer" style="flex:1"></span>
-      <span class="filters" id="filters"></span>
-    </h2>
-    <div class="body" style="border-bottom:1px solid var(--line);padding:8px 13px">
-      <span class="filters">
-        <select id="jobsel" onchange="onFilter()"><option value="">all collectors</option></select>
-        <select id="hostsel" onchange="onFilter()">
-          <option value="">both hosts</option><option value="win">windows</option>
-          <option value="wsl">wsl</option>
-        </select>
-        <button id="grp" onclick="toggleGroup()">group by collector</button>
-        <span class="meta" id="filtermeta"></span>
-      </span>
-    </div>
-    <div class="scroll vscroll" id="findings"></div>
-  </div>
-
   <div class="row split">
     <div class="card">
       <h2>Collectors <span class="cnt" id="jobcnt"></span></h2>
@@ -444,7 +388,7 @@
       <h2>Findings over the last 24 hours</h2>
       <div class="body">
         <div class="chart" id="chart"></div>
-        <div class="legend" style="margin-top:9px">
+        <div class="legend">
           <span><i style="background:var(--crit)"></i>critical</span>
           <span><i style="background:var(--high)"></i>high</span>
           <span><i style="background:var(--med)"></i>medium</span>
@@ -452,7 +396,7 @@
           <span class="spacer"></span>
           <span id="chartmeta"></span>
         </div>
-        <div class="catgrid" id="cats" style="margin-top:11px"></div>
+        <div class="catgrid" id="cats"></div>
       </div>
     </div>
   </div>
@@ -461,15 +405,69 @@
     <h2>ATT&amp;CK coverage <span class="cnt" id="attackcnt"></span></h2>
     <div class="body" id="attack"><div class="empty">measuring…</div></div>
   </div>
+    </div>
+  </details>
 
-  <div class="card" id="geocard">
+  <div class="pagehead" data-views="assistant"><h1 id="h-assistant" tabindex="-1">Assistant</h1>
+    <p>Ask, listen, decide · local model · takes no action. Ask in plain language: answers come from your real ARGUS-1 data, and nothing changes without your approval.</p></div>
+  <details class="section" id="assistant" data-views="assistant" open>
+    <summary>Assistant <span class="cnt">ask, listen, decide · local model · takes no action</span></summary>
+    <div class="grid">
+    <div class="card jarvis" id="chatcard">
+      <h2>ARGUS-1 <span class="cnt">local data · offline model · takes no action</span>
+        <span class="spacer"></span>
+        <select id="voicesel" onchange="pickVoice()" title="Speaking voice" aria-label="Speaking voice"></select>
+      </h2>
+      <div class="voicebar">
+        <button id="voice" onclick="toggleVoice()" title="Spoken security briefing (press v to re-brief)">Voice</button>
+        <button onclick="runAll()" title="Run every collector now">Run all</button>
+        <span class="orb" id="orb" aria-hidden="true"></span>
+        <div class="caption" id="caption" aria-live="polite">Voice is off.
+          <small>Press <kbd>v</kbd> for a spoken briefing.</small></div>
+        <button onclick="briefNow()">Brief me</button>
+      </div>
+      <div class="opener" id="opener"></div>
+      <p class="suggest-h" id="suggest-h">Try asking</p>
+      <div class="suggest" role="group" aria-labelledby="suggest-h">
+        <button data-ask="Is my computer okay?">Is my computer okay?</button>
+        <button data-ask="What needs my attention first?">What needs my attention first?</button>
+        <button data-ask="Explain this finding in simple language.">Explain this finding in simple language</button>
+        <button data-ask="Why is ARGUS-1 showing this warning?">Why is ARGUS-1 showing this warning?</button>
+        <button data-ask="Which checks are not working?">Which checks are not working?</button>
+        <button data-ask="What can I safely do next?">What can I safely do next?</button>
+        <button data-ask="What does my security score mean?">What does my security score mean?</button>
+      </div>
+      <div class="chat-answer" id="askanswer" aria-live="polite">ARGUS-1 is reading the current state…</div>
+      <form class="chat" onsubmit="askJarvis(event)">
+        <input id="askq" autocomplete="off" maxlength="4000" aria-label="Ask ARGUS-1"
+               placeholder="Ask anything, for example: Is my computer okay?">
+        <button id="askbtn" type="submit">Ask</button>
+      </form>
+      <p class="modelline"><span id="modelstatus" aria-live="polite">Local AI has not been checked yet. Basic assistance is working.</span>
+        <button onclick="assistantCheckModel()">Check local AI</button></p>
+      <div class="quick"><button onclick="scoreCoach()"
+        title="The deterministic plan: weakest area, each task's projected points, all from live data">How do I raise my score?</button></div>
+    </div>
+
+    </div>
+  </details>
+
+  <div class="pagehead" data-views="settings"><h1 id="h-settings" tabindex="-1">Settings</h1>
+    <p>Setup, alerts and what stays on this computer. Appearance and notifications are in the top bar.</p></div>
+  <section class="card" data-views="settings" aria-labelledby="priv-h"><h2 id="priv-h">Privacy and data</h2>
+    <div class="body prose">
+      <p>The dashboard is served only on this computer's own address (127.0.0.1). It loads nothing from other websites.</p>
+      <p>The assistant's local model is only contacted on this computer; other addresses are refused. If it is not running, the assistant still answers from ARGUS-1's own data.</p>
+      <p>Secret-looking values such as keys, tokens and passwords are masked wherever findings are shown here.</p>
+    </div></section>
+  <div class="grid" id="more" data-views="network security settings">
+  <div class="card" id="geocard" data-views="network">
     <h2>GeoSecurity
       <span class="cnt" id="geocnt">device location · trusted zones</span>
       <span class="spacer"></span>
-      <a href="/geo" style="color:inherit;font-size:12px;text-decoration:none;border:1px solid #1c2c46;border-radius:6px;padding:2px 8px">open full ↗</a>
+      <a class="linkbtn" href="/geo">Open full view</a>
     </h2>
-    <iframe id="geoframe" src="/geo" title="GeoSecurity globe" loading="lazy"
-            style="display:block;width:100%;height:460px;border:0;border-radius:0 0 10px 10px"></iframe>
+    <iframe id="geoframe" class="geoframe" src="/geo" title="GeoSecurity globe" loading="lazy"></iframe>
   </div>
   <script>
     function geoSummary(){
@@ -483,29 +481,32 @@
   </script>
 
   <div class="row split">
-    <div class="card">
+    <div class="card" data-views="security">
       <h2>Verified clean <span class="cnt" id="checkcnt"></span></h2>
       <div class="scroll vscroll" id="checks"></div>
     </div>
-    <div class="card">
+    <div class="card" data-views="network settings">
       <h2>
         <span class="tabs">
-          <button id="tab-peers" class="on" onclick="setTab('peers')">public peers</button>
-          <button id="tab-internet" onclick="setTab('internet')">app traffic</button>
-          <button id="tab-events" onclick="setTab('events')">alert history</button>
-          <button id="tab-intel" onclick="setTab('intel')">threat intel</button>
-          <button id="tab-ops" onclick="setTab('ops')">ops &amp; setup</button>
+          <button id="tab-peers" class="on" onclick="setTab('peers')">Peers</button>
+          <button id="tab-internet" onclick="setTab('internet')">Traffic</button>
+          <button id="tab-events" onclick="setTab('events')">Alerts</button>
+          <button id="tab-intel" onclick="setTab('intel')">Threat intel</button>
+          <button id="tab-ops" onclick="setTab('ops')">Setup</button>
         </span>
       </h2>
       <div class="scroll vscroll" id="side"></div>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" data-views="settings">
     <h2>Database</h2>
     <div class="body meta" id="dbinfo"></div>
   </div>
+    </div>
 </main>
+</div>
+</div>
 <div id="tip" role="tooltip"></div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
@@ -518,7 +519,334 @@ let state = null, sevFilter = null, jobFilter = "", hostFilter = "",
     findingLimit = 80, lastFindingRender = "", tickPending = false;
 const FINDING_BATCH = 80;
 
-const esc = s => String(s ?? "").replace(/[&<>"']/g,
+/* ---------- theme: explicit switch, system setting as the default ---------- */
+const THEME_KEY = "jarvis.theme", THEMES = ["auto", "light", "dark"];
+function readTheme() { try { return localStorage.getItem(THEME_KEY) || "auto"; } catch (_) { return "auto"; } }
+function applyTheme(t) {
+  if (!THEMES.includes(t)) t = "auto";
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  for (const b of document.querySelectorAll("#theme button"))
+    b.className = b.dataset.t === t ? "on" : "";
+}
+function setTheme(t) {
+  try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
+  applyTheme(t);
+}
+applyTheme(readTheme());
+
+/* ---------- desktop notifications from this page ----------
+   The daemon raises Windows toasts on its own for new criticals; this is the
+   browser's channel, for the screen the dashboard is open on. Only criticals
+   that are new since the page last saw them; the first render seeds the set. */
+const SEEN_KEY = "jarvis.seenCriticals";
+let seenCriticals = null;
+function critKey(f) { return `${f.job}|${f.title}|${f.where || ""}`; }
+function notifyOn() { return typeof Notification !== "undefined" && Notification.permission === "granted"; }
+function renderNotifyButton() {
+  const b = document.getElementById("notify");
+  if (!b) return;
+  if (typeof Notification === "undefined") { b.hidden = true; return; }
+  b.className = "notify" + (notifyOn() ? " on" : "");
+  b.textContent = notifyOn() ? "Notifications on" : Notification.permission === "denied" ? "Notifications blocked" : "Notify me";
+}
+async function toggleNotify() {
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission !== "granted") {
+    const p = await Notification.requestPermission();
+    if (p === "granted") { toast("Critical findings will pop up on this computer while this page is open.", "good"); }
+  } else {
+    toast("Notifications stay on for this site; turn them off in the browser's site settings.", "");
+  }
+  renderNotifyButton();
+}
+function notifyCriticals(s) {
+  const crit = (s.findings || []).filter(f => f.severity === "critical");
+  const keys = new Set(crit.map(critKey));
+  if (seenCriticals === null) {
+    try { seenCriticals = new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || "[]")); } catch (_) { seenCriticals = new Set(); }
+    if (!seenCriticals.size) { seenCriticals = keys; }           // first visit: seed, never spam
+  }
+  const fresh = crit.filter(f => !seenCriticals.has(critKey(f)));
+  for (const f of fresh.slice(0, 3)) {
+    toast(`Critical: ${f.title}`, "warn", `${f.job} · ${f.host || ""}`);
+    if (notifyOn()) {
+      try { const n = new Notification("ARGUS-1: " + brand(f.title).slice(0, 90),
+              { body: `${f.job}: ${String(f.detail || "").slice(0, 160)}`, tag: critKey(f).slice(0, 120) });
+            n.onclick = () => { window.focus(); setSev("critical"); jump("findings-section"); }; } catch (_) {}
+    }
+  }
+  if (fresh.length > 3) toast(`${fresh.length - 3} more new critical findings`, "warn");
+  if (fresh.length) {
+    for (const k of keys) seenCriticals.add(k);
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seenCriticals].slice(-500))); } catch (_) {}
+  }
+}
+renderNotifyButton();
+
+
+// brand:begin -- identical in every page; tests/test_ui_brand.py keeps the copies equal.
+// The product is ARGUS-1. Server text can still say JARVIS (finding titles keep their
+// identity for acknowledgements and history), so it is re-branded at display time.
+// Real Windows objects keep their spelling so they can be found in Task Scheduler
+// and Services; lowercase commands (jarvis ..., jarvis.service) are never touched.
+// Idempotent: a name already followed by -1 is left alone, so text that went
+// through the rule twice, or a build that renames JARVIS to ARGUS, never reads ARGUS-1-1.
+const BRAND = "ARGUS-1";
+const BRAND_KEEP = /^ (input hook|independent health monitor|connectivity guard|native sensor|Jarvis)/;
+const brand = (s) => String(s ?? "").replace(/\bJARVIS\b(?!-1)/g,
+  (m, i, all) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
+// brand:end
+// plain:begin -- pure helpers behind the beginner-facing views. No DOM access: tests/test_dashboard_shell.py
+// runs exactly this block in node. Plain-language text is derived from the real finding (its title, detail and
+// category); the category guidance below is general background and is always labelled as such.
+const SECRET_PATTERNS = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+  /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}/g,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}/g, /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
+  /\bAKIA[0-9A-Z]{12,}/g, /\bAIza[0-9A-Za-z_-]{20,}/g, /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+  /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+\/=-]{8,}/gi,
+];
+const SECRET_ASSIGN = /\b([\w-]*(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|recovery[_-]?code)[\w-]*)(\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s,;}]+)/gi;
+const URL_CREDENTIAL = /\b([a-z][a-z0-9+.-]*:\/\/[^\s:\/@]+:)[^\s@\/]+@/gi;
+function redact(text) {
+  let t = String(text ?? "");
+  for (const p of SECRET_PATTERNS) t = t.replace(p, "[hidden]");
+  t = t.replace(URL_CREDENTIAL, "$1[hidden]@");
+  return t.replace(SECRET_ASSIGN, (m, key, sep) => key + sep + "[hidden]");
+}
+function clip(text, n) { const t = redact(text).replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; }
+
+// Monitoring problems are about ARGUS-1's own checks, not about the computer.
+const MON_CATEGORIES = new Set(["daemon", "collectors", "visibility", "coverage", "model"]);
+const MON_JOBS = new Set(["coverage", "watchdogs", "bridge", "model", "report"]);
+// Categories where ARGUS-1 reads a setting or exposure directly (a fact, whose importance depends on the user).
+const CONFIG_CATEGORIES = new Set(["rules", "remote", "internet", "posture", "malware defense", "defense",
+                                   "mitigations", "byovd", "boot integrity", "extension"]);
+function kindOf(f) { return MON_CATEGORIES.has(f.category) || MON_JOBS.has(f.job) ? "monitoring" : "security"; }
+
+// -> {key, label, note}. ARGUS-1 never labels a finding a confirmed attack; it says what was observed.
+function stateOf(f) {
+  if (kindOf(f) === "monitoring")
+    return { key: "monitoring", label: "Monitoring problem",
+             note: "This is about ARGUS-1's own checks. It does not mean your computer has been attacked." };
+  const sev = f.severity;
+  if (sev !== "critical" && sev !== "high" && sev !== "medium")
+    return { key: "info", label: "For information", note: "Recorded for awareness; it does not lower the score." };
+  if (CONFIG_CATEGORIES.has(f.category))
+    return { key: "confirmed", label: "Confirmed setting",
+             note: "ARGUS-1 read this setting directly. Whether it is a problem depends on how you use this computer." };
+  return { key: "suspicious", label: "Suspicious - needs review",
+           note: "ARGUS-1 observed this behaviour. It has not been confirmed as malicious, and it may be expected." };
+}
+
+const GUIDE = {
+  "data at rest": ["A file appears to contain a credential, such as an API key or password.",
+    "If it is a real, active credential and the file can be read by others, it could be misused.",
+    "Review the affected file and decide whether the credential is real. If it is, revoke or rotate it using the service's own process."],
+  persistence: ["Something is set up to start automatically or run on a trigger, such as a scheduled task or a WMI subscription.",
+    "Legitimate software does this, but so can malware that wants to survive a restart.",
+    "Check whether you recognise the item and the program it runs. If you do not, investigate before removing anything."],
+  staging: ["A new, unsigned program was recently written to a place where programs are often dropped.",
+    "Installers and developer tools do this too, but unexpected unsigned programs are a common way malware arrives.",
+    "Check whether you installed or built something just before this appeared."],
+  rules: ["A firewall rule allows connections in a permissive way.",
+    "Broad rules can let other computers reach programs on this one.",
+    "Review who the rule allows and whether the program needs it."],
+  remote: ["A rule or setting allows connections into this computer.",
+    "Remote access you did not set up could let someone else in.",
+    "Confirm you expect this remote access."],
+  access: ["An app is using or can use a sensitive device such as the camera or microphone.",
+    "That is normal during a call, but unexpected if you are not using it.",
+    "Check which app it is and whether you started it."],
+  internet: ["A program is listening for connections beyond this computer, or traffic monitoring is limited.",
+    "Programs reachable from the network are a way in if they have flaws.",
+    "Check whether you want this program reachable from other devices."],
+  impersonation: ["Credentials stored on this computer could be used to sign in as you.",
+    "Anyone who can run programs as you could use them.",
+    "Review which stored sign-ins you still need."],
+  accounts: ["An account is hidden from the sign-in screen or looks unusual.",
+    "Hidden accounts are sometimes used to keep access, though some are created by software on purpose.",
+    "Identify what created the account before changing anything."],
+  interception: ["A trusted root certificate that is not a standard one was found.",
+    "A trusted certificate can let its owner read protected web traffic.",
+    "Check that the certificate belongs to software you installed on purpose."],
+  "injected code": ["A program has executable memory that is not backed by a file on disk.",
+    "Some software does this legitimately; malware uses it to hide.",
+    "See whether the program is one you know and run."],
+  clickfix: ["The Run dialog history shows commands that may have been pasted from a website.",
+    "Fake 'fix it' pages trick people into running commands themselves.",
+    "Check whether you ran these commands on purpose."],
+  av: ["Windows Defender reported a detection.",
+    "Defender has already flagged this item, so it deserves a look.",
+    "Open Windows Security to see what it found and what it did."],
+  posture: ["A Windows protection setting is off or could not be read.",
+    "Protections that are off leave less between you and an attack.",
+    "Open the details to see which setting and whether you want it on."],
+  "malware defense": ["A malware protection feature is not enabled.",
+    "That feature would otherwise help block threats.",
+    "Decide whether you want it enabled."],
+  defense: ["A Windows Defender setting could not be read.",
+    "ARGUS-1 cannot confirm protection it cannot read.",
+    "Open the details to see which setting."],
+  mitigations: ["A program runs without a hardening feature that limits what attackers can do.",
+    "This makes that program easier to exploit if it has a flaw.",
+    "Usually informational; keep the program updated."],
+  screen: ["An app may capture the screen without showing a capture border.",
+    "Screen capture can reveal anything on your display.",
+    "Check whether you use a screen-sharing or recording app."],
+  extension: ["A browser extension is installed.",
+    "Extensions can read pages you visit, so each one is trusted with that.",
+    "Keep only extensions you recognise."],
+  daemon: ["ARGUS-1's own monitor or one of its services is not running as expected.",
+    "While it is not running, ARGUS-1 cannot watch that area.",
+    "Open Monitoring to see the reason and the steps to restore it."],
+  collectors: ["One of ARGUS-1's checks could not complete.",
+    "ARGUS-1 cannot currently confirm the security of that area.",
+    "Open Monitoring to see the reason."],
+  visibility: ["ARGUS-1 has limited visibility into part of this computer.",
+    "It cannot report on what it cannot see.",
+    "Open Monitoring to see what is limited and why."],
+};
+const SEVERITY_WHY = {
+  critical: "ARGUS-1 rates this critical: if it is real it can seriously harm the computer or your data.",
+  high: "ARGUS-1 rates this high: it deserves attention soon.",
+  medium: "ARGUS-1 rates this medium: worth a look, rarely urgent.",
+  low: "ARGUS-1 rates this low: informational.",
+};
+// -> {means, why, next, general}. `general` is true when the wording is category background, not the finding itself.
+function guideFor(f) {
+  const g = GUIDE[f.category];
+  if (g) return { means: g[0], why: g[1], next: g[2], general: true };
+  if (kindOf(f) === "monitoring") return { means: GUIDE.collectors[0], why: GUIDE.collectors[1], next: GUIDE.collectors[2], general: true };
+  return { means: "ARGUS-1 reported this observation.", why: SEVERITY_WHY[f.severity] || "ARGUS-1 has not rated this observation.",
+           next: "View the details and decide whether you expect this on your computer.", general: true };
+}
+
+// One entry per distinct (collector, title); sorted most severe first, then most frequent.
+const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, ok: 4 };
+function groupFindings(list) {
+  const by = new Map();
+  for (const f of list || []) {
+    const k = f.job + "|" + f.title;
+    const g = by.get(k) || { key: k, sample: f, count: 0, items: [] };
+    g.count += 1; g.items.push(f);
+    by.set(k, g);
+  }
+  return [...by.values()].sort((a, b) => (SEV_RANK[a.sample.severity] ?? 9) - (SEV_RANK[b.sample.severity] ?? 9) || b.count - a.count);
+}
+
+const DETECTOR_WORDS = {
+  never_ran: "has not produced a result yet", stale: "has not reported fresh results", failing: "failed on its last run",
+  malformed: "returned a result that could not be read", permission_restricted: "is not allowed to read something it needs",
+  missing_dependency: "is missing a component it depends on", unsupported: "is not supported on this computer",
+  late: "is running behind schedule",
+};
+// Monitoring health problems from the server's detector report, or from the collector list on older servers.
+function monitoringProblems(s) {
+  const dh = s.detector_health;
+  if (dh && Array.isArray(dh.detectors)) {
+    return dh.detectors.filter(d => d.state !== "healthy" && d.state !== "not_applicable").map(d => ({
+      id: d.id, label: d.label || d.id, state: d.state, coverage: d.coverage, reason: d.reason, impact: d.impact,
+      next: d.next_action, error: d.error || "", last: d.last_success }));
+  }
+  return (s.jobs || []).filter(j => j.stale || j.error).map(j => ({
+    id: j.name, label: j.label || j.name, state: j.error ? "failing" : "stale", coverage: "blind",
+    reason: j.error ? "Its last run failed." : "It has not reported recently.",
+    impact: "ARGUS-1 may be missing activity in this area.", next: "Open Monitoring for the reason.", error: j.error || "", last: j.ts }));
+}
+function monitoringTotals(s) {
+  const dh = s.detector_health;
+  if (dh && Array.isArray(dh.detectors)) {
+    const c = dh.counts || {};
+    return { total: dh.total || 0, verified: c.verified || 0, partial: c.partial || 0, blind: c.blind || 0,
+             notApplicable: dh.detectors.filter(d => d.state === "not_applicable").length };
+  }
+  const jobs = s.jobs || [], bad = jobs.filter(j => j.stale || j.error).length;
+  return { total: jobs.length, verified: jobs.length - bad, partial: 0, blind: bad, notApplicable: 0 };
+}
+
+// The Overview's headline. Every sentence is supported by the counts it carries; with no data it says so.
+function overviewModel(s) {
+  const sec = s.security || null, all = s.findings || [];
+  const secGroups = groupFindings(all.filter(f => kindOf(f) === "security" && stateOf(f).key !== "info"));
+  const review = secGroups.filter(g => g.sample.severity === "critical" || g.sample.severity === "high");
+  const problems = monitoringProblems(s), tot = monitoringTotals(s);
+  const monFindings = groupFindings(all.filter(f => kindOf(f) === "monitoring" && f.severity !== "ok"));
+  const unverified = problems.filter(p => p.state === "never_ran" || p.state === "stale" || p.state === "malformed").length;
+  const counts = {
+    confirmed: secGroups.filter(g => stateOf(g.sample).key === "confirmed").length,
+    suspicious: secGroups.filter(g => stateOf(g.sample).key === "suspicious").length,
+    monitoring: problems.length + monFindings.length,
+    unverified, expected: (sec && sec.acknowledged) || 0,
+  };
+  const notReporting = problems.length;
+  let level, headline, detail;
+  if (!sec && !all.length && !tot.total) {
+    level = "unknown"; headline = "Status not available yet";
+    detail = "ARGUS-1 has not received enough results to describe this computer. Wait a moment, or open Monitoring.";
+  } else if (sec && sec.state === "verifying") {
+    const pg = sec.progress || {};
+    level = "info"; headline = "ARGUS-1 is re-checking its monitors";
+    detail = `It is re-checking after a gap (${pg.checked ?? "?"} of ${pg.total ?? "?"} reporting). The last fully verified score was ${sec.score}%.`;
+  } else if (review.length) {
+    level = "attention"; headline = "Needs attention";
+    const raw = review.reduce((n, g) => n + g.count, 0);
+    detail = `ARGUS-1 observed ${review.length} serious item${review.length === 1 ? "" : "s"}${raw !== review.length ? ` (${raw} findings in total)` : ""} that deserve your review. These are observations, not confirmed attacks.` +
+      (notReporting ? ` ${notReporting} check${notReporting === 1 ? " is" : "s are"} also not reporting, so this picture may be incomplete.` : "");
+  } else if (notReporting) {
+    level = "incomplete"; headline = "Some protection checks are incomplete";
+    detail = `${tot.verified} of ${tot.total} checks are reporting. ARGUS-1 cannot confirm the other ${notReporting}, so having no serious findings does not mean those areas are safe.`;
+  } else {
+    level = "ok"; headline = "No current issues detected in the areas checked";
+    detail = `All ${tot.total} checks are reporting and none produced a critical or high observation. This reflects only what ARGUS-1 can check.`;
+  }
+  let scoreLine = "";
+  if (sec && sec.score != null) {
+    scoreLine = `Security score ${sec.score}% (${sec.grade}).`;
+    if (notReporting && !review.length)
+      scoreLine += " Part of this reflects checks that are not reporting, not known problems.";
+    else scoreLine += " Findings lower it; checks that are not reporting are never counted as safe.";
+  }
+  return { level, headline, detail, scoreLine, counts, review, secGroups, problems, monFindings, totals: tot };
+}
+
+// What to put under "What needs your attention": serious security items first, then monitoring problems.
+function attentionItems(s, limit = 5) {
+  const m = overviewModel(s), out = [];
+  for (const g of m.secGroups) {
+    if (stateOf(g.sample).key === "info") continue;
+    out.push({ kind: "finding", group: g, state: stateOf(g.sample) });
+  }
+  const sev = out.filter(i => i.group.sample.severity === "critical" || i.group.sample.severity === "high");
+  const rest = out.filter(i => !sev.includes(i));
+  const mon = m.problems.slice().sort((a, b) => (a.coverage === "blind" ? 0 : 1) - (b.coverage === "blind" ? 0 : 1))
+    .map(p => ({ kind: "monitor", problem: p, state: { key: p.state === "never_ran" || p.state === "stale" ? "unverified" : "monitoring",
+      label: p.state === "never_ran" || p.state === "stale" ? "Not verified" : "Monitoring problem",
+      note: "This is about ARGUS-1's own checks. It does not mean your computer has been attacked." } }));
+  const items = [...sev.slice(0, limit), ...mon.slice(0, 2), ...rest];
+  return { items: items.slice(0, limit), total: out.length + mon.length, model: m };
+}
+
+// The single next step, always pointing at a destination that exists.
+function nextStep(s) {
+  const m = overviewModel(s), q = (s.questions || []).length;
+  if (m.review.length) {
+    const t = clip(m.review[0].sample.title, 80);
+    return { text: `Start with "${t}". Open the details to see what ARGUS-1 observed, then decide whether you expect it.`,
+             label: "Investigate", go: "security", query: m.review[0].sample.title };
+  }
+  if (m.problems.length)
+    return { text: "Some checks are not reporting correctly. Open Monitoring to see which checks need attention and why.",
+             label: "View monitoring status", go: "monitoring" };
+  if (q) return { text: `ARGUS-1 has ${q} question${q === 1 ? "" : "s"} waiting for you. Your answers help it judge what is normal here.`,
+                  label: "Open review queue", go: "reviewqueue" };
+  return { text: "Nothing needs you right now. ARGUS-1 keeps watching. You can ask the assistant anything.",
+           label: "Ask the assistant", go: "assistant" };
+}
+// plain:end
+const esc = s => redact(brand(s)).replace(/[&<>"']/g,
   c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function ago(ts) {
@@ -559,8 +887,73 @@ function progress(s) {
 }
 
 /* ---------- rendering ---------- */
+/* ---------- priorities and the alert bar ---------- */
+function dedupe(list, limit) {
+  const seen = new Set(), out = [];
+  for (const f of list) { const k = `${f.job}|${f.title}`; if (seen.has(k)) continue; seen.add(k); out.push(f); if (out.length >= limit) break; }
+  return out;
+}
+function prioList(items, empty) {
+  if (!items.length) return `<ul><li><small>${esc(empty)}</small></li></ul>`;
+  return `<ul>` + items.map(x => `<li><span class="t">${esc(x.title)}</span><small>${esc(x.sub || "")}</small></li>`).join("") + `</ul>`;
+}
+function renderPriorities(s) {
+  const el = document.getElementById("prio");
+  if (!el) return;
+  const all = s.findings || [];
+  const crit = all.filter(f => f.severity === "critical"), high = all.filter(f => f.severity === "high");
+  const qs = s.questions || [], fx = Array.isArray(s.fix) ? s.fix : [];
+  const questions = qs.length, fixes = fx.length;
+  const youCount = questions + fixes;
+  const blind = (s.jobs || []).filter(j => j.stale || j.error);
+  const live = (s.jobs || []).length - blind.length;
+  const sub = f => `${f.job}${f.host ? " · " + f.host : ""}${f.where ? " · " + f.where : ""}`;
+  el.innerHTML = `
+    <div class="card crit"><div class="big c-critical">${crit.length}</div><div class="lbl">Critical · act now</div>
+      ${prioList(dedupe(crit, 4).map(f => ({ title: f.title, sub: sub(f) })), "None open")}
+      <div class="act"><button onclick="setSev('critical'); jump('findings-section')">Show all critical</button></div></div>
+    <div class="card high"><div class="big c-high">${high.length}</div><div class="lbl">High · fix soon</div>
+      ${prioList(dedupe(high, 4).map(f => ({ title: f.title, sub: sub(f) })), "None open")}
+      <div class="act"><button onclick="setSev('high'); jump('findings-section')">Show all high</button></div></div>
+    <div class="card you"><div class="big">${youCount}</div><div class="lbl">Needs your decision</div>
+      ${prioList([...(() => {
+                    const by = new Map();
+                    for (const q of qs) { const k = q.prompt || "A question from ARGUS-1"; by.set(k, (by.get(k) || 0) + 1); }
+                    return [...by].slice(0, 3).map(([k, n]) => ({ title: k, sub: n > 1 ? `Question · ${n} of them` : "Question" }));
+                  })(),
+                  ...fx.slice(0, 2).map(f => ({ title: f.title || f.id, sub: "Proposed fix · " + (f.status || "waiting") }))], "Nothing is waiting on you")}
+      <div class="act"><button onclick="document.getElementById('reviewqueue').open = true; jump('reviewqueue')">Open review queue</button></div></div>
+    <div class="card ${blind.length ? "blind" : "clean"}"><div class="big ${blind.length ? "c-medium" : "c-ok"}">${live}/${(s.jobs || []).length}</div><div class="lbl">Collectors reporting</div>
+      ${prioList(blind.slice(0, 4).map(j => ({ title: j.label || j.name, sub: j.error ? "Error" : "Not reporting" })), "All collectors are fresh")}
+      <div class="act"><button onclick="jump('monitoring')">Open monitoring</button></div></div>`;
+  const nav = document.getElementById("nav-prio"); if (nav) { nav.textContent = crit.length + high.length + youCount ? crit.length + high.length + youCount : ""; nav.className = "n " + (crit.length ? "c-critical" : high.length ? "c-high" : ""); }
+  const nf = document.getElementById("nav-find"); if (nf) nf.textContent = s.findings_total || "";
+}
+function renderAlertBar(s) {
+  const bar = document.getElementById("alertbar");
+  if (!bar) return;
+  const all = s.findings || [];
+  const live = all.filter(urgent), crit = all.filter(f => f.severity === "critical");
+  const n = live.length || crit.length;
+  if (!n) { bar.hidden = true; return; }
+  bar.hidden = false;
+  document.getElementById("alertcount").textContent = n;
+  document.getElementById("alerttext").textContent = live.length
+    ? `live alert${live.length > 1 ? "s" : ""}: ${brand(live[0].title)}`
+    : `critical finding${crit.length > 1 ? "s" : ""} need attention: ${brand(crit[0].title)}`;
+  document.getElementById("alertsub").textContent = live.length
+    ? "something is happening on this machine right now"
+    : "these lower the score most and can mean an active problem";
+}
+
 function render(s) {
   state = s;
+  renderPriorities(s);
+  renderOverview(s);
+  renderViewLists(s);
+  renderDetectors(s);
+  renderAlertBar(s);
+  notifyCriticals(s);
 
   const st = document.getElementById("status");
   const liveThreats = (s.findings || []).filter(urgent).length;
@@ -592,6 +985,7 @@ function render(s) {
   renderCats(s);
   renderFilters(s);
   renderFindings();
+  renderResults();
   renderChecks(s);
   renderSide(s);
   renderReviewQueue(s);
@@ -605,7 +999,7 @@ function render(s) {
     `${s.stats.procs} fingerprints (${s.stats.approved} approved) &nbsp;·&nbsp; ` +
     `${s.stats.peers} peers seen (${s.stats.peers_public} public) &nbsp;·&nbsp; ` +
     `${s.stats.events} alerts recorded` +
-    `<br><span style="color:var(--faint)">shortcuts: ` +
+    `<br><span class="faint">shortcuts: ` +
     `<kbd>/</kbd> search &nbsp; <kbd>r</kbd> refresh &nbsp; <kbd>space</kbd> pause ` +
     `&nbsp; <kbd>v</kbd> speak briefing &nbsp; <kbd>esc</kbd> clear filters</span>`;
 }
@@ -618,11 +1012,11 @@ function renderQuestions(s) {
   el.innerHTML = shown.map(q => `<div class="question">
     <div>${pill(q.severity)} ${esc(q.prompt)}</div>
     <div class="question-actions">
-      <button onclick="answerQuestion('${esc(q.id)}','yes')">yes · ${esc(q.yes)}</button>
-      <button onclick="answerQuestion('${esc(q.id)}','no')">no · ${esc(q.no)}</button>
-    </div></div>`).join("") + (qs.length > 2 ? `<div style="padding:0 13px 12px">
+      <button onclick="answerQuestion('${esc(q.id)}','yes')">Yes · ${esc(q.yes)}</button>
+      <button onclick="answerQuestion('${esc(q.id)}','no')">No · ${esc(q.no)}</button>
+    </div></div>`).join("") + (qs.length > 2 ? `<div class="quick">
       <button class="showmore" onclick="showAllQuestions=!showAllQuestions;renderQuestions(state)">${
-      showAllQuestions ? "show fewer questions" : `${qs.length - 2} more question${qs.length > 3 ? "s" : ""} JARVIS would like answered`}</button></div>` : "");
+      showAllQuestions ? "Show fewer" : `${qs.length - 2} more question${qs.length > 3 ? "s" : ""}`}</button></div>` : "");
 }
 
 function renderReviewQueue(s) {
@@ -647,26 +1041,26 @@ function renderFix(s) {
   if (!items.length) { el.innerHTML = ""; return; }
   el.innerHTML = items.map(f => {
     const action = f.status === "proposed"
-      ? `<button onclick="decideFix('${esc(f.id)}','approve')">approve investigation + draft</button>`
+      ? `<button onclick="decideFix('${esc(f.id)}','approve')">Approve investigation</button>`
       : f.status === "review"
-      ? `<button onclick="decideFix('${esc(f.id)}','authorize')">authorize this patch</button>`
+      ? `<button onclick="decideFix('${esc(f.id)}','authorize')">Authorize patch</button>`
       : f.status === "draft_failed"
-      ? `<button onclick="decideFix('${esc(f.id)}','retry')">retry drafting</button>` : "";
+      ? `<button onclick="decideFix('${esc(f.id)}','retry')">Retry draft</button>` : "";
     const progress = f.generation_error
       ? `<div class="crit">draft failed: ${esc(f.generation_error)}</div>`
-      : `<div style="opacity:.75">generation: ${esc(f.generation_state || "awaiting decision")}${
+      : `<div class="note">generation: ${esc(f.generation_state || "awaiting decision")}${
           f.patch_chars ? ` · ${esc(f.patch_chars)} patch characters` : ""}</div>`;
     const directive = f.directive_objective
-      ? `<div style="opacity:.8">Ollama directive: ${esc(f.directive_objective)}</div>` : "";
+      ? `<div class="note">Ollama directive: ${esc(f.directive_objective)}</div>` : "";
     return `<div class="question" id="fix-${esc(f.id)}">
-    <div>🔧 fix proposal <b>${esc(f.id)}</b> [${esc(f.status)}]: ${esc(f.title)}</div>
-    <div style="opacity:.8">${esc(f.problem || "")}</div>
+    <div><b>${esc(f.title)}</b> <span class="faint">· fix proposal ${esc(f.id)} · ${esc(f.status)}</span></div>
+    <div class="note">${esc(f.problem || "")}</div>
     ${progress}${directive}
     <div class="question-actions">
       ${action}
-      <button onclick="decideFix('${esc(f.id)}','reject')">reject</button>
+      <button class="quiet" onclick="decideFix('${esc(f.id)}','reject')">Reject</button>
     </div>
-    <div style="opacity:.7;font-size:.85em">investigation approval generates a draft only.
+    <div class="fine">investigation approval generates a draft only.
     Patch application requires a separate authorization and
     <kbd>jarvis fix apply ${esc(f.id)}</kbd>; nothing is applied from this page.</div>
   </div>`}).join("");
@@ -696,7 +1090,7 @@ const ICON = { critical: "◆", high: "▲", medium: "●", low: "○", ok: "✓
 const pill = sev => `<span class="pill ${esc(sev)}"><span aria-hidden="true">${ICON[sev] || ""}</span>${esc(sev)}</span>`;
 
 function wakeHTML(h, now = Date.now() / 1000) {
-  // While JARVIS re-checks after a wake or restart, the held figure is the last
+  // While ARGUS-1 re-checks after a wake or restart, the held figure is the last
   // verified result, labelled as such; progress replaces the partial live score.
   const pr = h.progress || {checked: (h.live || {}).observed || 0, total: (h.live || {}).jobs || 0,
                             pending: [], retrying: [], running: []};
@@ -794,7 +1188,7 @@ function renderHealth(s) {
 
   const top = (h.next_steps || [])[0];
   document.getElementById("healthsub").textContent =
-    waking ? "JARVIS is waking up and re-checking every collector"
+    waking ? "ARGUS-1 is waking up and re-checking every collector"
     : verifying ? "re-checking collectors before updating the score"
     : pr.score > 0 ? "climbing, nicely done"
     : h.score >= 90 ? "in fine shape"
@@ -815,10 +1209,10 @@ function renderWins(h) {
           <span class="rank">${i + 1}</span>
           <span class="t">${pill(g.severity)} ${esc(g.title)}${g.count > 1 ? ` <span class="loc">× ${g.count} places</span>` : ""}</span>
           <span class="a">${esc(g.area)} · ${esc(g.job)}</span></li>`).join("")
-    : h.verifying ? `<li style="cursor:default"><span class="rank">…</span><span class="t">Re-verifying collectors.</span>
+    : h.verifying ? `<li class="static"><span class="rank">…</span><span class="t">Re-verifying collectors.</span>
          <span class="a">Next steps will return with fresh evidence.</span></li>`
-    : `<li style="cursor:default"><span class="rank">✓</span><span class="t">Nothing left to gain here.</span>
-         <span class="a">Splendid. JARVIS keeps watching.</span></li>`;
+    : `<li class="static"><span class="rank">✓</span><span class="t">Nothing left to gain here.</span>
+         <span class="a">Splendid. ARGUS-1 keeps watching.</span></li>`;
   document.getElementById("winsfoot").textContent = steps.length
     ? "Click one to see its evidence below. The first is worth the most." : "";
 }
@@ -837,7 +1231,7 @@ function renderAttack(s) {
                 ["blind", t.blind, "nothing looks for it"]]
     .concat(t.regressed ? [["regressed", t.regressed, "a detector stopped firing"]] : [])
     .map(([k, n, tip]) => `<div data-tip="${tip}"><b class="${k === "regressed" ? "c-critical" : ""}">${n}</b>
-        <span><i class="lv-${k}" style="display:inline-block;width:8px;height:8px;margin-right:6px"></i>${k} · ${pct(n)}%</span></div>`).join("");
+        <span><i class="sw lv-${k}"></i>${k} · ${pct(n)}%</span></div>`).join("");
   const rows = Object.entries(a.tactics).filter(([, v]) => v.total).map(([name, v]) => {
     const seg = ["validated", "claimed", "regressed", "blind"].filter(k => v[k]).map(k =>
       `<i class="lv-${k}" style="flex:${v[k]}" data-tip="${esc(name.replace(/-/g, " "))}: ${v[k]} ${k}"></i>`).join("");
@@ -865,29 +1259,29 @@ function renderTiles(s) {
   document.getElementById("tiles").innerHTML = `
     <div class="tile good" data-tip="Checks that ran and came back clean">
       <div class="n c-ok">${(s.checks || []).length}</div>
-      <div class="k"><span class="ic">✓</span>verified clean</div>
+      <div class="k"><span class="ic">✓</span>Verified clean</div>
     </div>
     <div class="tile ${live === s.jobs.length ? "good" : ""}" data-tip="Collectors that are fresh and error-free">
       <div class="n ${live === s.jobs.length ? "c-ok" : "c-high"}">${live}/${s.jobs.length}</div>
-      <div class="k">collectors ok</div>
+      <div class="k">Collectors OK</div>
     </div>` +
     SEV.map(k => `
       <div class="tile ${sevFilter === k ? "on" : ""}" onclick="setSev('${k}')" role="button" tabindex="0"
            onkeydown="if(event.key==='Enter')setSev('${k}')" data-tip="Show only ${k} findings">
         <div class="n c-${k}">${s.totals[k] || 0}</div>
-        <div class="k"><span class="ic c-${k}" aria-hidden="true">${ICON[k]}</span>${k}</div>
+        <div class="k"><span class="ic c-${k}" aria-hidden="true">${ICON[k]}</span>${k[0].toUpperCase() + k.slice(1)}</div>
       </div>`).join("") + `
     <div class="tile ${sevFilter === null ? "on" : ""}" onclick="setSev(null)" role="button" tabindex="0"
          onkeydown="if(event.key==='Enter')setSev(null)">
-      <div class="n">${s.findings_total}</div><div class="k">all findings</div>
+      <div class="n">${s.findings_total}</div><div class="k">All findings</div>
     </div>
     <div class="tile hosttile ${hostFilter === "win" ? "on" : ""}" onclick="setHost('win')" role="button" tabindex="0">
       <div class="n">${hostBits("win")}</div>
-      <div class="k">windows</div>
+      <div class="k">Windows</div>
     </div>
     <div class="tile hosttile ${hostFilter === "wsl" ? "on" : ""}" onclick="setHost('wsl')" role="button" tabindex="0">
       <div class="n">${hostBits("wsl")}</div>
-      <div class="k">wsl</div>
+      <div class="k">WSL</div>
     </div>`;
 }
 
@@ -916,13 +1310,13 @@ function renderJobs(s) {
       </span>
       <span class="age">${j.running ? "running…"
         : ago(j.ts) + (j.duration ? " · " + j.duration + "s" : "")}
-        <br><span style="color:var(--faint)">every ${dur(j.interval)}${
+        <br><span class="faint">every ${dur(j.interval)}${
           j.next > 0 && !j.running ? " · next " + dur(j.next) : ""}</span></span>
-      <button onclick="runJob('${esc(j.name)}')">run</button>
+      <button class="small" onclick="runJob('${esc(j.name)}')">Run</button>
     </div>` + (j.error
       ? `<div class="errbox">${esc(j.error.trim().split("\n").pop())}</div>` : "");
   }).join("") + (healthy ? `<button class="showmore" onclick="showHealthy=!showHealthy;renderJobs(state)">${
-    showHealthy ? "hide healthy collectors" : `show ${healthy} healthy collector${healthy > 1 ? "s" : ""} ✓`}</button>` : "");
+    showHealthy ? "Hide healthy collectors" : `Show ${healthy} healthy collector${healthy > 1 ? "s" : ""}`}</button>` : "");
 }
 
 function renderPerformance(s) {
@@ -936,7 +1330,7 @@ function renderPerformance(s) {
   const rows = (p.top || []).map(j => `<div class="job">
     <span class="dot ${j.duty_pct >= 70 ? "err" : j.duty_pct >= 30 ? "stale" : ""}"></span>
     <span class="name"><b>${esc(j.label || j.name)}</b><div class="bar"><i style="width:${Math.min(100, j.duty_pct)}%"></i></div></span>
-    <span class="age">${Number(j.duration).toFixed(1)}s/run<br><span style="color:var(--faint)">${Number(j.duty_pct).toFixed(1)}% duty</span></span>
+    <span class="age">${Number(j.duration).toFixed(1)}s/run<br><span class="faint">${Number(j.duty_pct).toFixed(1)}% duty</span></span>
   </div>`).join("");
   const profile = p.subsystems || {}, owners = profile.owners || {};
   const ownerRows = Object.entries(owners).filter(([name]) => name !== "other").map(([name, v]) =>
@@ -945,11 +1339,11 @@ function renderPerformance(s) {
     `${esc(t.name)} ${(Number(t.bytes || 0)/1048576).toFixed(0)} MiB`).join(" · ");
   const acc = p.accelerator || {}, gpuNames = (acc.gpus || []).map(g => g.name).filter(Boolean);
   const ov = acc.openvino || {}, ovDevices = (ov.devices || []).join(", ") || "none";
-  const accel = gpuNames.length ? `<div style="padding:10px 0;border-top:1px solid var(--line)"><b>accelerator</b> · ${esc(gpuNames.join(", "))} · OpenVINO ${ov.installed ? esc(ovDevices) : "not installed"} · Ollama ${((acc.ollama || {}).reachable) ? "reachable" : "not loaded/reachable"}</div>` : "";
-  document.getElementById("performance").innerHTML = `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
+  const accel = gpuNames.length ? `<div class="stat"><b>accelerator</b> · ${esc(gpuNames.join(", "))} · OpenVINO ${ov.installed ? esc(ovDevices) : "not installed"} · Ollama ${((acc.ollama || {}).reachable) ? "reachable" : "not loaded/reachable"}</div>` : "";
+  document.getElementById("performance").innerHTML = `<div class="stat head">
     <b class="${cls}">${duty.toFixed(1)}%</b> scheduled duty · sum of each collector's last duration ÷ cadence
   </div>${rows || '<div class="empty">waiting for collector timings…</div>'}${ownerRows}
-  ${db.bytes ? `<div style="padding:10px 0;border-top:1px solid var(--line)"><b>database ${(Number(db.bytes)/1048576).toFixed(0)} MiB</b> · ${dbRows}</div>` : ""}${accel}`;
+  ${db.bytes ? `<div class="stat"><b>database ${(Number(db.bytes)/1048576).toFixed(0)} MiB</b> · ${dbRows}</div>` : ""}${accel}`;
 }
 
 /* ---------- continuity + activity ----------
@@ -961,16 +1355,16 @@ function continuityHTML(cont) {
   const rows = names.map(k => {
     const v = inv[k] || {};
     return `<div class="job"><span class="dot ${v.ok ? "" : "err"}" title="${v.ok ? "holding" : "violated"}"></span>` +
-      `<span class="name"><b>${esc(k)}</b><div style="opacity:.75">${esc(v.reason || "")}</div></span>` +
-      `<span class="age">${v.ok ? "holding" : "VIOLATED"}</span></div>`;
+      `<span class="name"><b>${esc(k)}</b><div class="note">${esc(v.reason || "")}</div></span>` +
+      `<span class="age">${v.ok ? "Holding" : "Violated"}</span></div>`;
   }).join("");
   const gov = cont.governor || {};
   const govRow = `<div class="job"><span class="dot ${gov.pressured ? "stale" : ""}"></span>` +
-    `<span class="name"><b>governor</b><div style="opacity:.75">${esc(gov.reason || "unknown")}</div></span>` +
+    `<span class="name"><b>governor</b><div class="note">${esc(gov.reason || "unknown")}</div></span>` +
     `<span class="age">${gov.pressured ? "deferring noncritical" : "all tiers"}</span></div>`;
   const p = cont.perception;
   const percRow = p ? `<div class="job"><span class="name"><b>perception</b>` +
-    `<div style="opacity:.75">${p.verified || 0} verified · ${p.unreconciled || 0} unreconciled · ${p.unknown || 0} unknown` +
+    `<div class="note">${p.verified || 0} verified · ${p.unreconciled || 0} unreconciled · ${p.unknown || 0} unknown` +
     `${p.windows_processes != null ? ` across ${p.windows_processes} windows processes` : ""}</div></span></div>` : "";
   return rows + govRow + percRow;
 }
@@ -981,7 +1375,7 @@ function activityHTML(chains) {
     const over = c.member_overflow ? ` · +${c.member_overflow} more` : "";
     const causal = c.causal ? ` · causal edge` : ` · grouped, causality unverified`;
     return `<div class="job"><span class="name">${pill(c.worst_severity)} <b>${esc(c.headline || "")}</b>` +
-      `<div style="opacity:.75">${c.count} observation${c.count === 1 ? "" : "s"} · ${(c.jobs || []).map(esc).join(", ")} · ${esc(c.host || "")}${causal}${over}</div></span>` +
+      `<div class="note">${c.count} observation${c.count === 1 ? "" : "s"} · ${(c.jobs || []).map(esc).join(", ")} · ${esc(c.host || "")}${causal}${over}</div></span>` +
       `<span class="age">${c.last ? ago(c.last) : ""}</span></div>`;
   }).join("");
 }
@@ -1054,7 +1448,7 @@ function renderChart(s) {
         return `<div class="col" data-tip="${new Date(p.ts * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})} · ${
           tot} findings: ${p.critical} critical, ${p.high} high, ${p.medium} medium, ${p.low} low">${seg}</div>`;
       }).join("")
-    : `<div class="empty" style="flex:1">no history yet</div>`;
+    : `<div class="empty">no history yet</div>`;
   document.getElementById("chartmeta").textContent =
     h.length ? `${h.length} samples · 15-minute buckets` : "";
 }
@@ -1070,12 +1464,12 @@ function renderFilters(s) {
   document.getElementById("filters").innerHTML =
     [["all", null], ...SEV.map(k => [k, k])].map(([label, k]) =>
       `<button class="${sevFilter === k ? "on" : ""}" onclick="setSev(${
-        k ? `'${k}'` : "null"})">${label}</button>`).join("");
+        k ? `'${k}'` : "null"})">${label[0].toUpperCase() + label.slice(1)}</button>`).join("");
 
   const sel = document.getElementById("jobsel");
   const want = s.jobs.map(j => j.name);
   if (sel.options.length !== want.length + 1) {
-    sel.innerHTML = `<option value="">all collectors</option>` +
+    sel.innerHTML = `<option value="">All collectors</option>` +
       s.jobs.map(j => `<option value="${esc(j.name)}">${esc(j.label)}</option>`).join("");
   }
   sel.value = jobFilter;
@@ -1097,12 +1491,13 @@ function findingRow(f, i) {
         ${f.where && !isOpen ? `<div class="where">${esc(f.where)}</div>` : ""}
       </td>
     </tr>` + (isOpen ? `<tr class="expand"><td colspan="4"><dl class="kv">
+        <dt>in simple terms</dt><dd>${esc(guideFor(f).means)} <span class="faint">(general background)</span></dd>
         <dt>category</dt><dd>${esc(f.category || "—")}</dd>
         <dt>collector</dt><dd>${esc(f.job)}</dd>
         <dt>host</dt><dd>${esc(f.host || "—")}</dd>
         <dt>location</dt><dd>${esc(f.where || "—")}</dd>
         <dt>detail</dt><dd>${esc(f.detail)}</dd>
-        ${(f.forensics || []).length ? `<dt>forensics</dt><dd><pre style="white-space:pre-wrap;margin:0">${esc(f.forensics.join("\n"))}</pre></dd>` : ""}
+        ${(f.forensics || []).length ? `<dt>forensics</dt><dd><pre class="pre">${esc(f.forensics.join("\n"))}</pre></dd>` : ""}
       </dl></td></tr>` : "");
 }
 
@@ -1131,8 +1526,8 @@ function renderFindings() {
     const by = {};
     shown.forEach((f, i) => (by[f.job] = by[f.job] || []).push([f, i]));
     html = Object.keys(by).sort().map(job =>
-      head + `<tr><td colspan="4" style="background:var(--panel2);font-weight:700">
-        ${esc(job)} <span class="cnt" style="color:var(--faint)">${by[job].length}</span>
+      head + `<tr><td colspan="4" class="grouprow">
+        ${esc(job)} <span class="cnt">${by[job].length}</span>
         </td></tr>` +
       by[job].map(([f, i]) => findingRow(f, i)).join("") + `</tbody></table>`).join("");
   } else {
@@ -1216,13 +1611,13 @@ function renderIntel(s) {
 function renderSide(s) {
   if (tab === "internet") {
     const samples = s.internet || {};
-    document.getElementById("side").innerHTML = `<div class="detail" style="padding:12px">Socket samples, not packet capture. Direction is inferred only when a matching listener exists. Short connections can be missed.</div>` +
+    document.getElementById("side").innerHTML = `<div class="panelnote">Socket samples, not packet capture. Direction is inferred only when a matching listener exists. Short connections can be missed.</div>` +
       ["wsl", "win"].map(host => {
         const sample = samples[host];
         if (!sample) return `<div class="empty">${esc(host)}: no traffic sample available</div>`;
         const rows = sample.connections || [];
-        return `<div class="detail" style="padding:12px">${esc(host)} · ${esc(sample.status || 'saved')} · saved sample ${ago(sample.ts)} · ${rows.length} endpoints${sample.truncated ? " · truncated" : ""}<div>${esc((sample.errors || []).join('; '))}</div></div>
-          <div style="overflow-x:auto"><table><thead><tr><th>App</th><th>Local</th><th>Remote</th><th>State / direction</th></tr></thead><tbody>` +
+        return `<div class="panelnote">${esc(host)} · ${esc(sample.status || 'saved')} · saved sample ${ago(sample.ts)} · ${rows.length} endpoints${sample.truncated ? " · truncated" : ""}<div>${esc((sample.errors || []).join('; '))}</div></div>
+          <div class="scroll"><table><thead><tr><th>App</th><th>Local</th><th>Remote</th><th>State / direction</th></tr></thead><tbody>` +
           rows.map(r => `<tr><td title="${esc(r.exe || '')}">${esc(r.name)} <span class="detail">${esc(r.pid)}</span></td>
             <td>${esc(r.local_ip)}:${esc(r.local_port)}</td><td>${esc(r.remote_ip || '—')}:${esc(r.remote_port || '—')}</td>
             <td>${esc(r.proto)} ${esc(r.state)}<div class="detail">${esc(r.direction)}</div></td></tr>`).join("") + `</tbody></table></div>`;
@@ -1293,7 +1688,29 @@ function onFilter() {
 }
 function onSearch() {
   query = document.getElementById("q").value; open.clear(); findingLimit = FINDING_BATCH;
-  if (state) { renderFindings(); }
+  if (state) { renderFindings(); renderResults(); }
+}
+/* The results panel sits under the search box: a search must visibly do
+   something where the user is looking, not only in a table far below. */
+function renderResults() {
+  const panel = document.getElementById("results");
+  if (!panel || !state) return;
+  const q = query.trim().toLowerCase();
+  if (!q) { panel.hidden = true; return; }
+  const has = (...parts) => parts.join(" ").toLowerCase().includes(q);
+  const findings = visible();
+  const checks = (state.checks || []).filter(c => has(c.title, c.detail, c.job, c.where));
+  const jobs = (state.jobs || []).filter(j => has(j.name, j.label));
+  document.getElementById("resulthead").textContent =
+    `${findings.length} finding${findings.length === 1 ? "" : "s"} · ${checks.length} verified-clean check${checks.length === 1 ? "" : "s"} · ${jobs.length} collector${jobs.length === 1 ? "" : "s"} match “${query.trim()}”`;
+  const row = (sev, job, title, detail, act) =>
+    `<li onclick="${act}"><span>${pill(sev)}</span><span class="tag">${esc(job)}</span><span><span class="t">${esc(title)}</span> <span class="d">${esc(String(detail || "").slice(0, 120))}</span></span></li>`;
+  document.getElementById("resultlist").innerHTML =
+    findings.slice(0, 8).map(f => row(f.severity, f.job, f.title, f.detail, "jump('findings-section')")).join("") +
+    checks.slice(0, 4).map(c => row("ok", c.job, c.title, c.detail, "jump('checks')")).join("") +
+    jobs.slice(0, 4).map(j => row(j.error ? "high" : j.stale ? "medium" : "ok", j.name, j.label || j.name, j.error || (j.stale ? "stale" : "fresh"), "jump('monitoring')")).join("") ||
+    `<li><span></span><span></span><span class="d">nothing matches</span></li>`;
+  panel.hidden = false;
 }
 function toggleGroup() { grouped = !grouped; open.clear(); if (state) render(state); }
 function toggle(id) {
@@ -1350,13 +1767,13 @@ function renderOps() {
     ]],
   ];
   document.getElementById("side").innerHTML =
-    `<div class="detail" style="padding:12px 12px 4px">Commands run on the host, not in the browser. Click a row to copy. Paths are relative to the JARVIS checkout.</div>` +
+    `<div class="panelnote">Commands run on the host, not in the browser. Click a row to copy. Paths are relative to the checkout (~/jarvis).</div>` +
     groups.map(([name, rows]) => `
-      <div class="title" style="padding:10px 12px 4px">${esc(name)}</div>
+      <div class="groupname">${esc(name)}</div>
       <table><tbody>${rows.map(([label, cmd]) => `
         <tr>
           <td style="width:38%">${esc(label)}</td>
-          <td><code style="white-space:pre-wrap;word-break:break-all">${esc(cmd)}</code></td>
+          <td><code class="pre">${esc(cmd)}</code></td>
           <td style="width:56px"><button onclick='cp(this, ${JSON.stringify(cmd)})'>copy</button></td>
         </tr>`).join("")}</tbody></table>`).join("");
 }
@@ -1367,7 +1784,7 @@ function clearAll() {
 }
 function togglePause() {
   paused = !paused;
-  document.getElementById("pause").textContent = paused ? "resume" : "pause";
+  document.getElementById("pause").textContent = paused ? "Resume" : "Pause";
   document.getElementById("pause").className = paused ? "on" : "";
   document.getElementById("beat").className = "beat " + (paused ? "off" : "on");
   document.getElementById("livetxt").textContent = paused ? "paused" : "live";
@@ -1383,37 +1800,6 @@ async function runAll() {
     await fetch("/api/run?job=" + encodeURIComponent(j.name), { method: "POST" });
   }
   setTimeout(tick, 400);
-}
-
-async function askJarvis(event) {
-  event.preventDefault();
-  const input = document.getElementById("askq");
-  const button = document.getElementById("askbtn");
-  const output = document.getElementById("askanswer");
-  const question = input.value.trim();
-  if (!question) return;
-  button.disabled = true;
-  button.textContent = "thinking…";
-  output.textContent = "Reading current JARVIS state…";
-  try {
-    const response = await fetch("/api/ask", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({question})
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || response.status);
-    output.dataset.kind = "answer";
-    output.innerHTML = esc(data.answer) + `<div class="chat-source">${
-      data.source === "ollama" ? "offline Ollama synthesis · no action taken" :
-      data.source === "builtin" ? "exact answer from JARVIS data" :
-      data.source === "busy" ? "local model busy" :
-      "local model unavailable"}</div>`;
-  } catch (error) {
-    output.textContent = "Could not answer: " + error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "ask";
-  }
 }
 
 /* The score coach: the same projection the protocols engine uses, rendered
@@ -1433,13 +1819,13 @@ async function scoreCoach() {
   }
 }
 
-/* ---------- JARVIS speaks first ----------
+/* ---------- ARGUS-1 speaks first ----------
    The chat opens with a briefing built from live data on the server (no model,
-   so it is instant and cannot invent a status), and any question JARVIS is
+   so it is instant and cannot invent a status), and any question ARGUS-1 is
    waiting on comes with its answer buttons. */
 function showJarvis(text, pending, source) {
   const buttons = pending ? `
-    <div class="question-actions" style="margin-top:9px">${["yes", "no"].map(choice =>
+    <div class="question-actions">${["yes", "no"].map(choice =>
       `<button data-protocol="${esc(pending.protocol)}" data-choice="${choice}"
                onclick="answerProtocol(this)">${choice === "yes" ? "Yes" : "No"}</button>`).join("")}
     </div>` : "";
@@ -1475,7 +1861,7 @@ async function greet(speak = true) {
     if (speak && voice) briefAloud(data.text.split("\n").slice(0, 3));
   } catch (error) {
     document.getElementById("askanswer").textContent =
-      "JARVIS could not brief you yet: " + error.message;
+      "ARGUS-1 could not brief you yet: " + error.message;
   }
 }
 
@@ -1490,7 +1876,7 @@ async function answerProtocol(button) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || data.error || response.status);
     const next = data.pending ? "\n\n" + data.pending.question : "";
-    showJarvis(data.message + next, data.pending, "answer recorded by JARVIS");
+    showJarvis(data.message + next, data.pending, "answer recorded by ARGUS-1");
     document.getElementById("askanswer").dataset.kind = "answer";
     say(data.message);
   } catch (error) {
@@ -1509,7 +1895,7 @@ async function answerQuestion(id, choice) {
     if (!response.ok) throw new Error(data.message || data.error || response.status);
     output.dataset.kind = "answer";
     output.innerHTML = esc(data.message) +
-      `<div class="chat-source">explicit answer recorded by JARVIS</div>`;
+      `<div class="chat-source">explicit answer recorded by ARGUS-1</div>`;
     toast(data.message, "good", "answer recorded");
     await tick();
   } catch (error) {
@@ -1567,7 +1953,8 @@ function idleCaption() {
 
 function say(text) {
   if (!voice || !text || !window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(text);
+  // Spoken, the name is "Argus One": voices read "ARGUS-1" as letters or "minus one".
+  const u = new SpeechSynthesisUtterance(brand(text).replace(/\bARGUS-1\b/g, "Argus One"));
   const v = chosenVoice();
   if (v) u.voice = v;
   u.lang = v ? v.lang : "en-GB"; u.rate = 1.02; u.pitch = 0.95;
@@ -1586,7 +1973,7 @@ function toast(text, kind, note) {
   while (box.children.length > 3) box.firstChild.remove();
   setTimeout(() => el.remove(), 9000);
 }
-function announce(text, kind, note) { toast(text, kind, note); say(text); }
+function announce(text, kind, note) { text = brand(text); toast(text, kind, note); say(text); }
 
 /* The model writes only the opening line. It is fetched first, then the
    deterministic lines follow, so facts never wait on or come from the model;
@@ -1608,8 +1995,8 @@ async function briefAloud(lines) {
   clearTimeout(timer);
   if (token !== briefToken || !voice) return;
   const op = document.getElementById("opener");
-  op.textContent = opener;
-  op.title = byModel ? "written by the local model, checked against the facts" : "JARVIS's written-in line";
+  op.textContent = brand(opener);
+  op.title = byModel ? "written by the local model, checked against the facts" : "ARGUS-1's written-in line";
   if (opener) say(opener);
   lines.filter(Boolean).forEach(say);
   if (!opener && !lines.length) idleCaption();
@@ -1783,6 +2170,7 @@ function toggleVoice() {
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") {
     if (e.key === "Escape") { e.target.blur(); clearAll(); }
+    if (e.key === "Enter" && e.target.id === "q" && query.trim()) jump("findings-section");
     return;
   }
   if (e.key === "/") { e.preventDefault(); document.getElementById("q").focus(); }
@@ -1799,6 +2187,290 @@ function loadNotice(message) {
   el.hidden = !message;
 }
 
+/* ---------- application shell: views, sidebar drawer ----------
+   One page, several views. The location hash names the view, so the back and
+   forward buttons, bookmarks and the old anchors (#priorities, #findings-section,
+   #monitoring ...) all still land somewhere sensible. Filters, search text and
+   expanded rows live in page state, so they survive switching views. */
+const VIEWS = { overview: "Overview", security: "Security", accounts: "Accounts", network: "Network",
+                monitoring: "Monitoring", assistant: "Assistant", settings: "Settings" };
+const LEGACY = { priorities: "security", "findings-section": "security", findings: "security", reviewqueue: "security",
+                 checks: "security", more: "network", geocard: "network", "score-details": "overview" };
+let currentView = "overview", assistantChecked = false;
+const $ = id => document.getElementById(id);
+
+function viewOf(id) {
+  if (VIEWS[id]) return id;
+  if (LEGACY[id]) return LEGACY[id];
+  const el = $(id), host = el && el.closest("[data-views]");
+  return host ? host.dataset.views.split(" ")[0] : null;
+}
+function showView(v, opts = {}) {
+  if (!VIEWS[v]) v = "overview";
+  currentView = v;
+  document.body.dataset.view = v;
+  for (const a of document.querySelectorAll("#sidenav a[data-view]")) {
+    if (a.dataset.view === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  document.title = `${VIEWS[v]} · ${BRAND}`;
+  if (v === "network" && !["peers", "internet"].includes(tab)) setTab("peers");
+  if (v === "settings" && !["ops", "events", "intel"].includes(tab)) setTab("ops");
+  closeDrawer(false);
+  if (v === "assistant" && !assistantChecked) { assistantChecked = true; refreshModelStatus(); }
+  if (opts.focus) { window.scrollTo(0, 0); const h = $("h-" + v); if (h) h.focus({ preventScroll: true }); }
+}
+function routeFromHash(initial) {
+  const id = decodeURIComponent(location.hash.slice(1));
+  // Focus moves to the new heading only when the user navigates. On first load it stays at the
+  // top of the page, so the first Tab reaches the skip link and the sidebar.
+  showView(id ? (viewOf(id) || "overview") : "overview", { focus: initial !== true });
+  if (id && !VIEWS[id]) {
+    const el = $(id);
+    if (el) { const d = el.closest("details"); if (d) d.open = true; requestAnimationFrame(() => el.scrollIntoView({ block: "start" })); }
+  }
+}
+function go(v) { if (location.hash.slice(1) === v) routeFromHash(); else location.hash = v; }
+function jump(id) {
+  const v = viewOf(id);
+  if (v && v !== currentView) go(v);
+  const el = $(id);
+  if (el && !VIEWS[id]) { const d = el.closest("details"); if (d) d.open = true; setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }
+}
+window.addEventListener("hashchange", routeFromHash);
+
+/* narrow screens: the sidebar is a drawer. While it is open the page behind it is inert,
+   so focus stays inside the drawer; Escape, the scrim and choosing a destination close it. */
+function drawerOpen() { return $("sidebar").classList.contains("open"); }
+function openDrawer() {
+  $("sidebar").classList.add("open"); $("scrim").hidden = false; $("content").inert = true;
+  $("menu").setAttribute("aria-expanded", "true");
+  const first = document.querySelector("#sidenav a"); if (first) first.focus();
+}
+function closeDrawer(restoreFocus = true) {
+  if (!drawerOpen()) return;
+  $("sidebar").classList.remove("open"); $("scrim").hidden = true; $("content").inert = false;
+  $("menu").setAttribute("aria-expanded", "false");
+  if (restoreFocus) $("menu").focus();
+}
+$("menu").addEventListener("click", () => (drawerOpen() ? closeDrawer() : openDrawer()));
+$("scrim").addEventListener("click", () => closeDrawer());
+document.addEventListener("keydown", e => { if (e.key === "Escape" && drawerOpen()) { e.preventDefault(); closeDrawer(); } });
+window.matchMedia("(min-width: 1101px)").addEventListener("change", e => { if (e.matches) closeDrawer(false); });
+
+/* ---------- findings and monitoring problems in plain language ---------- */
+const KIND_ICON = { suspicious: "alert", confirmed: "sliders", monitoring: "monitoring", info: "info", unverified: "help" };
+const ico = name => `<svg class="ico" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+function jobLabel(job) { const j = (state && state.jobs || []).find(x => x.name === job); return j ? (j.label || j.name) : job; }
+
+function findingCardHTML(g, compact) {
+  const f = g.sample, st = stateOf(f), gd = guideFor(f);
+  const j = (state && state.jobs || []).find(x => x.name === f.job) || {};
+  const where = [...new Set(g.items.map(x => x.where).filter(Boolean))].slice(0, 5);
+  const row = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  return `<article class="fx k-${st.key}">
+    <div class="fxh"><span class="kind k-${st.key}">${ico(KIND_ICON[st.key])}${esc(st.label)}</span>
+      <span class="sev">${esc(f.severity)} severity</span>${g.count > 1 ? `<span class="sev">· ${g.count} found</span>` : ""}</div>
+    <h3>${esc(f.title)}</h3>
+    <p><b>What ARGUS-1 observed:</b> ${esc(clip(f.detail || "No detail was recorded.", 200))}</p>
+    ${compact ? "" : `<p><b>What this usually means:</b> ${esc(gd.means)} <small class="faint">(general background)</small></p>`}
+    <p><b>Why it may matter:</b> ${esc(gd.why)}</p>
+    <p class="unc"><b>Still uncertain:</b> ${esc(st.note)}</p>
+    <p><b>Suggested next step:</b> ${esc(gd.next)}</p>
+    <div class="fxa">
+      <button data-act="tech">View evidence and details</button>
+      ${f.id ? `<button data-act="explain" data-id="${esc(f.id)}">Explain simply</button>` : ""}
+      <button data-act="investigate" data-q="${esc(f.title)}">Investigate</button>
+    </div>
+    <details class="tech"><summary>Technical details</summary><dl class="kv">
+      ${row("severity", esc(f.severity))}${row("category", esc(f.category || "-"))}
+      ${row("collector", `${esc(jobLabel(f.job))} <span class="faint">(${esc(f.job)})</span>`)}
+      ${row("host", esc(f.host || "-"))}${row("last checked", esc(ago(j.ts)))}
+      ${row("location", where.length ? where.map(esc).join("<br>") : "-")}
+      ${row("detail", esc(clip(f.detail || "-", 600)))}
+      ${row("verification", "Observed by the collector. Not independently verified.")}
+      ${f.id ? row("finding id", `<code>${esc(f.id)}</code>`) : ""}
+      ${(f.forensics || []).length ? row("forensics", `<pre class="pre">${esc(f.forensics.join("\n"))}</pre>`) : ""}
+    </dl></details>
+  </article>`;
+}
+function monitorCardHTML(p, compact) {
+  const st = (p.state === "never_ran" || p.state === "stale") ? { key: "unverified", label: "Not verified" } : { key: "monitoring", label: "Monitoring problem" };
+  return `<article class="fx k-${st.key}">
+    <div class="fxh"><span class="kind k-${st.key}">${ico(KIND_ICON[st.key])}${esc(st.label)}</span>
+      <span class="sev">coverage: ${esc(p.coverage || "blind")}</span></div>
+    <h3>${esc(p.label)} ${esc(DETECTOR_WORDS[p.state] || "is not reporting")}</h3>
+    <p><b>What ARGUS-1 observed:</b> ${esc(p.reason || "No reason was recorded.")}${p.error ? ` Recorded error: ${esc(clip(p.error, 160))}` : ""}</p>
+    <p><b>Why it may matter:</b> ${esc(p.impact || GUIDE.collectors[1])}</p>
+    <p class="unc"><b>Still uncertain:</b> This does not mean your computer has been attacked. It means this area is not currently confirmed.</p>
+    ${p.next ? `<p><b>Suggested next step:</b> ${esc(p.next)}</p>` : ""}
+    <div class="fxa">
+      <button data-act="go" data-go="monitoring">View monitoring status</button>
+      <button data-act="checkmon" data-job="${esc(p.id)}">Ask the assistant to check</button>
+      <button data-act="rerun" data-job="${esc(p.id)}">Re-run this check</button>
+    </div></article>`;
+}
+function renderOverview(s) {
+  const m = overviewModel(s), tot = m.totals, att = attentionItems(s, 5), nx = nextStep(s), c = m.counts;
+  const icon = { attention: "alert", incomplete: "help", ok: "check", info: "monitoring", unknown: "help" }[m.level];
+  const st = $("ov-status");
+  st.dataset.level = m.level;
+  st.innerHTML = `<h2>${ico(icon)}${esc(m.headline)}</h2><p>${esc(m.detail)}</p>
+    ${m.scoreLine ? `<p class="score">${esc(m.scoreLine)} <button data-act="go" data-go="how-score">How is this calculated?</button></p>` : ""}
+    <ul class="ovcounts" aria-label="What ARGUS-1 found, by kind">
+      <li><b>${c.suspicious}</b> suspicious activity to review</li><li><b>${c.confirmed}</b> confirmed settings to review</li>
+      <li><b>${c.monitoring}</b> monitoring problems</li><li><b>${c.unverified}</b> not yet verified</li>
+      <li><b>${c.expected}</b> marked as expected</li></ul>
+    <p class="ovfoot">ARGUS-1 reports what it observed. It never declares an attack confirmed on its own.</p>`;
+  $("ov-attn-cnt").textContent = att.total ? `showing ${att.items.length} of ${att.total}` : "";
+  $("ov-attn").innerHTML = att.items.length
+    ? att.items.map(i => i.kind === "finding" ? findingCardHTML(i.group, true) : monitorCardHTML(i.problem, true)).join("") +
+      (att.total > att.items.length ? `<div class="ovactions"><button data-act="go" data-go="security">See all ${att.total} in Security</button></div>` : "")
+    : `<p class="empty-good">Nothing in the current results needs your attention.</p>`;
+  const pct = tot.total ? Math.round(100 * tot.verified / tot.total) : 0;
+  $("ov-chk-cnt").textContent = tot.total ? `${tot.verified} of ${tot.total} reporting` : "";
+  $("ov-checked").innerHTML = tot.total
+    ? `<p><b>${tot.verified} of ${tot.total}</b> checks are reporting fresh, valid results.</p>
+       <div class="ovmeter" role="img" aria-label="${pct} percent of checks reporting"><i style="width:${pct}%"></i></div>
+       ${m.problems.length ? `<p>These are <b>not</b> counted as checked:</p><ul class="ovlist">${m.problems.slice(0, 5).map(p =>
+          `<li><b>${esc(p.label)}</b><span class="kind k-${p.state === "never_ran" || p.state === "stale" ? "unverified" : "monitoring"}">${esc(p.state.replace(/_/g, " "))}</span><span class="why">${esc(p.reason || "")}</span></li>`).join("")}</ul>
+          ${m.problems.length > 5 ? `<p class="faint">…and ${m.problems.length - 5} more.</p>` : ""}` : ""}
+       ${tot.notApplicable ? `<p class="faint">${tot.notApplicable} more do not apply to this computer and are not counted.</p>` : ""}
+       <p class="faint">${(s.checks || []).length} individual checks completed and found nothing.</p>
+       <div class="ovactions"><button data-act="go" data-go="monitoring">View monitoring status</button>
+         <a class="linkbtn" href="/coverage">Coverage map</a></div>`
+    : `<p class="empty-good">No check results have arrived yet.</p>`;
+  $("ov-next").innerHTML = `<p>${esc(nx.text)}</p><button data-act="go" data-go="${esc(nx.go)}" ${nx.query ? `data-q="${esc(nx.query)}"` : ""}>${esc(nx.label)}</button>`;
+  const mon = $("nav-mon");
+  if (mon) { mon.textContent = m.problems.length || ""; mon.className = "n " + (m.problems.some(p => p.coverage === "blind") ? "bad" : "warn"); }
+  $("side-foot").innerHTML = tot.total ? `<strong>${tot.verified} of ${tot.total} checks reporting</strong>${esc(m.headline)}` : "Waiting for results…";
+}
+function renderViewLists(s) {
+  const fill = (listId, cntId, test, empty) => {
+    const groups = groupFindings((s.findings || []).filter(f => kindOf(f) === "security" && test(f)));
+    $(cntId).textContent = groups.length ? `${groups.length} item${groups.length === 1 ? "" : "s"}` : "";
+    $(listId).innerHTML = groups.length
+      ? groups.slice(0, 12).map(g => findingCardHTML(g, false)).join("") +
+        (groups.length > 12 ? `<p class="faint">${groups.length - 12} more are in the Security view.</p>` : "")
+      : `<p class="empty-good">${esc(empty)}</p>`;
+  };
+  const ACCOUNTS = new Set(["accounts", "impersonation", "data at rest"]), ACCOUNT_JOBS = new Set(["identity", "bruteforce", "secrets", "backdoor"]);
+  const NETWORK = new Set(["peer", "network", "internet", "rules", "remote", "interception"]), NETWORK_JOBS = new Set(["firewall", "netwatch", "internet", "sniffing"]);
+  fill("acc-list", "acc-cnt", f => ACCOUNTS.has(f.category) || ACCOUNT_JOBS.has(f.job),
+       "Nothing about accounts or stored credentials is in the current results. That only covers the checks that are reporting.");
+  fill("net-list", "net-cnt", f => NETWORK.has(f.category) || NETWORK_JOBS.has(f.job),
+       "Nothing about the network is in the current results. That only covers the checks that are reporting.");
+}
+function renderDetectors(s) {
+  const d = s.detector_health, el = $("detectors");
+  if (!el) return;
+  if (!d || !Array.isArray(d.detectors)) { el.innerHTML = `<p class="empty-good">Detector health is not available from this server.</p>`; return; }
+  $("detectorsub").textContent = d.total ? `${(d.counts || {}).verified || 0} of ${d.total} verified` : "";
+  const bad = d.detectors.filter(x => x.state !== "healthy" && x.state !== "not_applicable");
+  const na = d.detectors.filter(x => x.state === "not_applicable");
+  const when = t => (t ? new Date(t * 1000).toLocaleString() : "never");
+  const row = x => `<details class="dhrow"><summary><span class="kind k-${x.coverage === "blind" ? "monitoring" : "unverified"}">${esc((x.state || "").replace(/_/g, " "))}</span>
+      <b>${esc(x.label || x.id)}</b> <small>coverage: ${esc(x.coverage)}</small></summary>
+      <div class="more"><div>${esc(x.reason)}</div><div>${esc(x.impact)}</div>
+      ${x.next_action ? `<div><b>Next:</b> ${esc(x.next_action)}</div>` : ""}
+      <small>Last good result: ${esc(when(x.last_success))}${x.error ? " · recorded error: " + esc(x.error) : ""}${x.failure_count ? " · failures in a row: " + x.failure_count : ""} · recovery: ${esc(x.recovery_state)}${x.recovery_confirmed ? " (confirmed by a fresh result)" : ""}</small>
+      <div class="fxa"><button data-act="checkmon" data-job="${esc(x.id)}">Ask the assistant to check</button>
+        <button data-act="rerun" data-job="${esc(x.id)}">Re-run this check</button></div></div></details>`;
+  el.innerHTML = `<p>${esc(d.summary)}</p>` + bad.map(row).join("") +
+    (na.length ? `<details class="dhrow"><summary><small>${na.length} not applicable on this computer</small></summary><div class="more">${na.map(x => `<small>${esc(x.id)}: ${esc(x.reason)}</small>`).join("")}</div></details>` : "");
+}
+
+/* one place for every button the new views add; each maps to an existing page function or endpoint */
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("[data-act]");
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === "go") { go(viewOf(b.dataset.go) || b.dataset.go); if (!VIEWS[b.dataset.go]) jump(b.dataset.go); if (b.dataset.q) setSearch(b.dataset.q); }
+  else if (act === "investigate") { setSearch(b.dataset.q); go("security"); }
+  else if (act === "tech") { const d = b.closest("article").querySelector("details.tech"); d.open = true; d.querySelector("summary").focus(); }
+  else if (act === "explain") assistantRun({ op: "run", action: "explain_finding", target: { id: b.dataset.id } });
+  else if (act === "checkmon") assistantRun({ op: "run", action: "check_monitor", target: { job: b.dataset.job } });
+  else if (act === "rerun") { runJob(b.dataset.job); toast("Queued. ARGUS-1 will show the result when the check finishes.", ""); }
+});
+function setSearch(text) {
+  query = String(text || ""); $("q").value = query; findingLimit = FINDING_BATCH; open.clear();
+  if (state) renderFindings();
+}
+/* On the Findings card, filters are page state; "Investigate" fills the search box, and Esc clears it. */
+
+/* ---------- assistant: suggested questions, honest model status, guided actions ---------- */
+let chatOffer = null, chatActions = [];
+const SECTION_TAG = { verified: "verified", recommend: "recommended", assumption: "assumption" };
+function renderModelStatus(model) {
+  const el = $("modelstatus");
+  if (!el) return;
+  el.textContent = model && model.label ? model.label : "Local AI has not been checked yet. Basic assistance is working.";
+}
+async function refreshModelStatus() {
+  try {
+    const r = await fetch("/api/assistant/action", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "run", action: "check_model" }) });
+    const d = await r.json(); if (r.ok && d.model) renderModelStatus(d.model);
+  } catch (_) { renderModelStatus(null); }
+}
+function renderAssistant(data) {
+  const out = $("askanswer");
+  out.dataset.kind = "answer";
+  chatOffer = data.offer || null; chatActions = data.actions || [];
+  const body = (data.sections && data.sections.length)
+    ? data.sections.map(sec => `<div class="sec">${SECTION_TAG[sec.kind] ? `<b class="tag">${SECTION_TAG[sec.kind]}:</b> ` : ""}${esc(sec.text)}</div>`).join("")
+    : esc(data.answer);
+  const buttons = chatActions.length ? `<div class="chat-actions">${chatActions.map((a, i) =>
+    `<button data-chat-action="${i}">${esc(a.label)}</button>`).join("")}</div>` : "";
+  const chips = (data.suggestions || []).length ? `<div class="chat-chips">${data.suggestions.map(q =>
+    `<button class="showmore" data-ask="${esc(q)}">${esc(q)}</button>`).join("")}</div>` : "";
+  if (data.model) renderModelStatus(data.model);
+  out.innerHTML = body + buttons + chips + `<div class="chat-source">${
+    data.source === "ollama" ? "local AI explanation · no action taken" :
+    data.source === "builtin" ? "answered from ARGUS-1 data · basic assistance" :
+    data.source === "busy" ? "local model busy" : "local model unavailable"}</div>`;
+}
+async function assistantRun(body) {
+  go("assistant");
+  const out = $("askanswer");
+  out.textContent = "Working…";
+  try {
+    const r = await fetch("/api/assistant/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    renderAssistant(d); tick();
+  } catch (e) { out.textContent = "That didn't work. Please try again in a moment."; }
+}
+function assistantAction(i) {
+  const a = chatActions[i];
+  if (!a) return;
+  if (a.action === "approve" || a.action === "cancel") return assistantRun({ op: a.action, token: a.token });
+  return assistantRun({ op: a.action === "rerun_monitor" ? "propose" : "run", action: a.action, target: a.target });
+}
+function assistantCheckModel() { return assistantRun({ op: "run", action: "check_model" }); }
+document.addEventListener("click", ev => {
+  const act = ev.target.closest("[data-chat-action]"), ask = ev.target.closest("[data-ask]");
+  if (act) assistantAction(Number(act.dataset.chatAction));
+  else if (ask) askText(ask.dataset.ask);
+});
+function askText(text) { $("askq").value = text; askJarvis(new Event("submit", { cancelable: true })); }
+async function askJarvis(event) {
+  event.preventDefault();
+  const input = $("askq"), button = $("askbtn"), output = $("askanswer"), question = input.value.trim();
+  if (!question) return;
+  button.disabled = true; button.textContent = "Thinking…";
+  output.textContent = "Reading current ARGUS-1 state…";
+  try {
+    const r = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, offer: chatOffer }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    input.value = ""; renderAssistant(d);
+  } catch (e) { output.textContent = "I couldn't get an answer just now. Please try again in a moment."; }
+  finally { button.disabled = false; button.textContent = "Ask"; }
+}
+
+routeFromHash(true);
+
 async function tick() {
   // One request at a time, each bounded: a stalled connection must surface, not spin forever.
   if (paused || tickPending) return;
@@ -1809,14 +2481,14 @@ async function tick() {
     if (!r.ok) throw new Error(r.status);
     render(await r.json());
     loadNotice("");
-    if (lostConn) { lostConn = false; announce("Reconnected to the JARVIS daemon. Back on watch.", "good"); }
+    if (lostConn) { lostConn = false; announce("Reconnected to the ARGUS-1 daemon. Back on watch.", "good"); }
   } catch (e) {
     loadNotice(e && e.name === "AbortError"
-      ? `JARVIS did not answer within ${STATE_TIMEOUT_MS / 1000} seconds. Retrying automatically.`
-      : "Could not load JARVIS state. Retrying automatically.");
+      ? `ARGUS-1 did not answer within ${STATE_TIMEOUT_MS / 1000} seconds. Retrying automatically.`
+      : "Could not load ARGUS-1 state. Retrying automatically.");
     document.getElementById("meta").textContent = "daemon unreachable — retrying";
     document.getElementById("beat").className = "beat off";
-    if (!lostConn) { lostConn = true; announce("Lost connection to the JARVIS daemon. Retrying.", "warn"); }
+    if (!lostConn) { lostConn = true; announce("Lost connection to the ARGUS-1 daemon. Retrying.", "warn"); }
   } finally {
     clearTimeout(guard);
     tickPending = false;

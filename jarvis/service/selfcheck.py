@@ -214,6 +214,37 @@ def timer_state():
     return vals.get("ActiveState", ""), vals.get("UnitFileState", "")
 
 
+def systemd_supervision():
+    """(watchdog seconds, Restart=) of this daemon's own system unit. A unit with
+    a watchdog and Restart=always is an out-of-process supervisor: systemd kills
+    and restarts the daemon when the scheduler stops reporting progress. (0, "")
+    when unreadable."""
+    rc, out, _ = _systemctl("show", UNIT, "-p", "WatchdogUSec", "-p", "Restart")
+    if rc != 0:
+        return 0, ""
+    vals = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+    raw = vals.get("WatchdogUSec", "0")
+    seconds = 0
+    try:
+        seconds = int(raw) // 1_000_000 if raw.isdigit() else _span_seconds(raw)
+    except ValueError:
+        seconds = 0
+    return seconds, vals.get("Restart", "")
+
+
+def _span_seconds(text):
+    """'15min' / '1h 30s' / 'infinity' -> seconds (0 when unset or infinite)."""
+    if not text or text in ("0", "infinity"):
+        return 0
+    units = {"h": 3600, "min": 60, "s": 1, "ms": 0.001, "us": 0.000001}
+    total = 0.0
+    for part in text.split():
+        num = "".join(ch for ch in part if ch.isdigit() or ch == ".")
+        unit = part[len(num):]
+        total += float(num) * units.get(unit, 0)
+    return int(total)
+
+
 def timer_will_fire():
     """True only if the timer has a next elapse scheduled.
 
@@ -344,7 +375,7 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
                     f"{iso(verdict['newest_ts'])} ({verdict['age']}s ago)\n"
                     f"unit: {UNIT} {verdict['active_state']} "
                     f"({verdict['scope']} manager)\n")
-            err = alert.send_email(conf, "[JARVIS] the monitor is back up", body)
+            err = alert.deliver(conf, "[JARVIS] the monitor is back up", body)
             if not err:
                 alert.record_send(store)
                 store.set_meta(_M_LAST_STATE, state)
@@ -382,7 +413,7 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
         lines += ["", "This message was sent by JARVIS (`jarvis selfcheck`), which runs "
                       "outside the daemon precisely so a dead daemon still "
                       "reaches you."]
-        err = alert.send_email(
+        err = alert.deliver(
             conf, "[JARVIS] the monitor is DOWN — nothing is being watched",
             "\n".join(lines) + "\n")
         if not err:

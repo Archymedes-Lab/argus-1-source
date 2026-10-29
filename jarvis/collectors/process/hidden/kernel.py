@@ -174,14 +174,47 @@ def io_uring_state():
     return out
 
 
+FTRACE_PATHS = ("/sys/kernel/tracing/enabled_functions",
+                "/sys/kernel/debug/tracing/enabled_functions")
+# The kernel's own HID-BPF dispatcher: since Linux 6.3 the HID subsystem attaches
+# a BPF program to it at boot (fmod_ret), on every stock kernel that has HID-BPF.
+KERNEL_BPF_HOOKS = frozenset({"__hid_bpf_tail_call", "hid_bpf_device_event"})
+
+
+def ftrace_hook_records(text):
+    """[(function, kind)] from enabled_functions. A function line may be followed
+    by indented continuation lines naming where the call goes; a direct call to a
+    bpf_trampoline is an eBPF fentry/fexit/fmod_ret attachment (attributable in
+    the eBPF program list), anything else an ftrace_ops callback, the technique
+    ftrace rootkits use. kind: "kernel_bpf", "bpf" or "ftrace"."""
+    records = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if line[0].isspace():
+            if records and "bpf_trampoline" in line and records[-1][1] == "ftrace":
+                func = records[-1][0]
+                records[-1] = (func, "kernel_bpf" if func in KERNEL_BPF_HOOKS else "bpf")
+            continue
+        func = line.split()[0]
+        kind = "ftrace"
+        if "bpf_trampoline" in line:
+            kind = "kernel_bpf" if func in KERNEL_BPF_HOOKS else "bpf"
+        records.append((func, kind))
+    return records[:40]
+
+
 def ftrace_hooks():
     """Kernel functions currently hooked via ftrace — how many rootkits patch
     syscalls without touching the syscall table itself."""
-    for path in ("/sys/kernel/tracing/enabled_functions",
-                 "/sys/kernel/debug/tracing/enabled_functions"):
-        body = _read(path).strip()
-        if body:
-            return [l.split()[0] for l in body.splitlines() if l.strip()][:40]
+    return [f for f, _ in ftrace_hook_list()]
+
+
+def ftrace_hook_list():
+    for path in FTRACE_PATHS:
+        body = _read(path)
+        if body.strip():
+            return ftrace_hook_records(body)
     return []
 
 

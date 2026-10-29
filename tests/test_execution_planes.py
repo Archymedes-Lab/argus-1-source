@@ -2,10 +2,23 @@
 
 import unittest
 
-from jarvis.core.execution import (baseline, causal, deltas, dotnet,
-                                   fingerprint, forensic, ledger, memory,
-                                   modules, panel, sampling, schedule,
-                                   threads, visibility_score, watch)
+from jarvis.core.execution import (
+    baseline,
+    causal,
+    deltas,
+    dotnet,
+    fingerprint,
+    forensic,
+    ledger,
+    memory,
+    modules,
+    panel,
+    sampling,
+    schedule,
+    threads,
+    visibility_score,
+    watch,
+)
 
 
 class MemoryTests(unittest.TestCase):
