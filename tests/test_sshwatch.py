@@ -9,6 +9,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 import unittest
 
 from jarvis.collectors.identity import sshwatch
@@ -238,6 +239,36 @@ class Keys(Fixture):
         self.write("home/alice/.ssh/authorized_keys", lines, mode=0o600)
         vis = [f for f in self.run_audit() if f["category"] == "visibility"]
         self.assertTrue(vis and "more than" in vis[0]["detail"])
+
+
+    def test_fifo_as_authorized_keys_does_not_stall_the_scan(self):
+        # Any local user can mkfifo ~/.ssh/authorized_keys; a blocking open()
+        # held the main lane until the watchdog restarted the daemon.
+        import threading
+        fifo = os.path.join(self.root, "home/alice/.ssh/authorized_keys")
+        os.makedirs(os.path.dirname(fifo), exist_ok=True)
+        os.mkfifo(fifo, 0o600)
+
+        def unblock():
+            try:   # frees a reader stuck in open() (the unfixed code)
+                os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+            except OSError:
+                pass
+        self.addCleanup(unblock)
+        result = []
+        t = threading.Thread(target=lambda: result.append(self.run_audit()), daemon=True)
+        t.start()
+        t.join(10)
+        self.assertFalse(t.is_alive(), "the key scan blocked on a FIFO")
+        vis = [f for f in result[0] if f["category"] == "visibility"]
+        self.assertTrue(vis and "not a regular file" in vis[0]["detail"])
+
+    def test_option_split_is_linear_and_respects_quotes(self):
+        self.assertEqual(sshwatch._split_options('command="a,b",no-pty,from="x,y"'),
+                         ['command="a,b"', "no-pty", 'from="x,y"'])
+        start = time.monotonic()
+        self.assertEqual(len(sshwatch._split_options("," * 200000)), 200001)
+        self.assertLess(time.monotonic() - start, 2.0)
 
 
 class Tunnels(Fixture):
