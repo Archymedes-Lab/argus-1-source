@@ -231,6 +231,9 @@ class ElevatedEnvironmentTests(unittest.TestCase):
             self.assertNotIn("HKCU:\\", text.replace("'HKCU:')", ""), name)
         for name in ("memscan.ps1", "vault.ps1"):
             self.assertIn("ProfileList\\$sid", code(WIN / name), name)
+        # An unloaded hive is reported as unknown, not as an absent setting.
+        for name in ("posture.ps1", "internetwatch.ps1"):
+            self.assertIn("$o.user_hive = ", code(WIN / name), name)
 
     def test_audit_expects_a_system_principal_for_the_broker(self):
         from jarvis.platform.provenance import persistence as mp

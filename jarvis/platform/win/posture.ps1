@@ -9,6 +9,9 @@ $UserSid = ''
 try { $UserSid = [string](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'user.json') -Raw | ConvertFrom-Json).sid } catch { }
 if ($UserSid -notmatch '^S-1-(5-21|12-1)(-\d+)+$') { $UserSid = '' }
 $o = [ordered]@{}
+# Per-user settings are unknown, not absent, when the recorded user's hive
+# is not loaded (that user is signed out) or no user was recorded.
+$o.user_hive = if (-not $UserSid) { 'no recorded user' } elseif (Test-Path -LiteralPath "Registry::HKEY_USERS\$UserSid") { 'loaded' } else { 'not loaded' }
 
 $o.defender = Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled,
   IoavProtectionEnabled, AntispywareEnabled, BehaviorMonitorEnabled,

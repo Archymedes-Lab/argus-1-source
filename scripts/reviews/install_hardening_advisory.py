@@ -36,7 +36,8 @@ STATE = {
     'limits': [
         'nothing was executed elevated; static review and unit tests only',
         'a handle opened on a squatted folder before install can keep its access',
-        'the broker task still runs as the user elevated token, not SYSTEM',
+        'the broker task now runs as SYSTEM; per-user reads use HKEY_USERS of the recorded SID '
+        'and are empty when that hive is not loaded',
         'site-repo installers are reported, not fixed',
     ],
 }
@@ -57,9 +58,10 @@ QUESTIONS = {
         'reinstalled and its task results are read back on a real Windows host?',
         'criteria': {'true': 'Describe as statically verified only', 'false': 'Can be called validated now'}},
     'system_principal': {'type': 'noul', 'instructions':
-        'Should running the broker task as the user elevated token rather than SYSTEM remain an open '
-        'hardening gap in the report?',
-        'criteria': {'true': 'Keep it as an open gap', 'false': 'It is not a gap'}},
+        'With the broker task moved to SYSTEM and per-user registry state read from the recorded '
+        "user's HKEY_USERS hive, should an unloaded hive be reported as unknown rather than as an "
+        'absent setting?',
+        'criteria': {'true': 'Report as unknown', 'false': 'Absent is acceptable'}},
 }
 if __name__ == '__main__':
     STATE['phase'] = 'implementation' if '--implementation' in sys.argv else 'design'

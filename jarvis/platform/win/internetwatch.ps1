@@ -9,6 +9,9 @@ $UserSid = ''
 try { $UserSid = [string](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'user.json') -Raw | ConvertFrom-Json).sid } catch { }
 if ($UserSid -notmatch '^S-1-(5-21|12-1)(-\d+)+$') { $UserSid = '' }
 $o = @{errors=@(); connections=@(); apps=@(); profiles=@(); logs=@(); browserPolicies=@()}
+# Per-user policies are unknown, not absent, when the recorded user's hive
+# is not loaded (that user is signed out) or no user was recorded.
+$o.user_hive = if (-not $UserSid) { 'no recorded user' } elseif (Test-Path -LiteralPath "Registry::HKEY_USERS\$UserSid") { 'loaded' } else { 'not loaded' }
 try {
   $o.connections = @(Get-NetTCPConnection | Where-Object { $_.State -in 'Listen','Established' } |
     ForEach-Object { @{pid=[int]$_.OwningProcess; proto='tcp'; local_ip=[string]$_.LocalAddress;
