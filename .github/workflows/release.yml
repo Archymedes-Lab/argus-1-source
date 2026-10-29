@@ -76,27 +76,30 @@ jobs:
     outputs:
       digests: ${{ steps.digests.outputs.server }}
       key: ${{ steps.digests.outputs.server_key }}
-    container:
-      # glibc 2.28: the program runs on RHEL 8+, Debian 10+, Ubuntu 20.04+.
-      image: quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae # 2026.10.10-1
     env:
-      PY: /opt/python/cp312-cp312/bin/python
+      # glibc 2.28: the program runs on RHEL 8+, Debian 10+, Ubuntu 20.04+. The
+      # build runs in this image through `docker run`, not as a job container,
+      # so the cache below is saved by the runner (a job container's cache uses
+      # its own compression and cannot be restored on the runner).
+      IMAGE: quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae # 2026.10.10-1
+      VERSION: ${{ needs.verify.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build tools (pinned by hash)
+      - name: Native server program (in the pinned manylinux image, no network credentials)
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          $PY -m pip install --disable-pip-version-check --require-hashes -r release/build-tools.txt
-          $PY -m pip install --disable-pip-version-check --require-hashes --no-build-isolation -r release/requirements-build.txt
-      - name: Static libpython for Nuitka (supplied by the pinned image)
-        run: cd /opt/_internal && tar xf static-libs-for-embedding-only.tar.xz
-      - name: Native server program
-        run: $PY release/build_server.py --version "${{ needs.verify.outputs.version }}" --out out/server --jobs 4
+          docker run --rm -e VERSION -v "$PWD:/src" -w /src "$IMAGE" bash -euo pipefail -c '
+            PY=/opt/python/cp312-cp312/bin/python
+            git config --global --add safe.directory /src
+            (cd /opt/_internal && tar xf static-libs-for-embedding-only.tar.xz)
+            $PY -m pip install --disable-pip-version-check --require-hashes -r release/build-tools.txt
+            $PY -m pip install --disable-pip-version-check --require-hashes --no-build-isolation -r release/requirements-build.txt
+            $PY release/build_server.py --version "$VERSION" --out out/server --jobs 4
+            chown -R '"$(id -u):$(id -g)"' out'
       - name: Record the build's digests
         id: digests
-        run: $PY release/digests.py record out/server server
+        run: python3 release/digests.py record out/server server
       - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: out/server
