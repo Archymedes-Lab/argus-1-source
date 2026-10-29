@@ -55,6 +55,7 @@ try:
 except ImportError:      # native Windows: no passwd database, and no caller there
     pwd = None
 
+from jarvis.core import safeio
 from jarvis.core.finding import finding as _finding
 
 STATE_META = "sshwatch_state_v1"     # {"learned_at", "keys": {acct: {fp: {...}}}, "hostkeys": {path: fp}}
@@ -100,11 +101,28 @@ SFTP_RE = re.compile(r"(^|/)(sftp-server|internal-sftp)(\s|$)")
 KEY_TYPES = re.compile(r"^(ssh-(rsa|dss|ed25519)|ecdsa-sha2-\S+|sk-\S+@openssh\.com|\S+-cert-v01@openssh\.com)$")
 
 
+def _split_options(opts):
+    """authorized_keys options split on commas outside double quotes, in one
+    pass (the lookahead regex this replaces was quadratic in the comma count)."""
+    out, cur, quoted = [], [], False
+    for ch in opts:
+        if ch == '"':
+            quoted = not quoted
+        if ch == "," and not quoted:
+            out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    out.append("".join(cur))
+    return out
+
+
 def _read(path, limit=MAX_FILE):
     """(text, problem). problem is "" when read, "missing" or a reason."""
+    # authorized_keys lives in folders other users own: a FIFO there would
+    # block a plain open() forever and stall the lane (safeio).
     try:
-        with open(path, "rb") as fh:
-            data = fh.read(limit + 1)
+        data = safeio.read_regular(path, limit)
     except FileNotFoundError:
         return "", "missing"
     except OSError as exc:
@@ -415,8 +433,7 @@ def scan_keys(cfg, passwd=None, root="/"):
                 bits = rsa_bits(blob) if ktype == "ssh-rsa" else 0
                 inventory.setdefault(name, {})[fp] = {
                     "file": path, "type": ktype, "bits": bits, "comment": comment[:120],
-                    "options": [o.split("=", 1)[0] for o in re.split(r",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", opts)
-                                if o][:12]}
+                    "options": [o.split("=", 1)[0] for o in _split_options(opts) if o][:12]}
                 label = f"{ktype} {fp} {comment[:60] or '(no comment)'}"
                 nologin = (shell or "").endswith(("nologin", "false"))
                 if 0 < uid < 1000:

@@ -18,6 +18,7 @@ is the signal. It cannot see a slow, low-volume guess that stays under the
 threshold, and it says so.
 """
 
+import json
 import re
 import subprocess
 
@@ -59,10 +60,15 @@ def _refusal(status, sub):
         return POLICY_REFUSALS[sub]
     return POLICY_REFUSALS.get(status, "")
 
+# The username is chosen by the remote client and may contain " from <ip>": the
+# source is the address in sshd's own trailing " from IP port N", so the user
+# part is greedy and the line is anchored at its end. pam_unix writes rhost=
+# before user=, so its first rhost= is pam's own.
+_SSHD_TAIL = r" from (?P<{ip}>\S+) port \d+(?: ssh2)?(?: \[preauth\])?\]?\s*$"
 _LINUX_FAIL = re.compile(
-    r"Failed password for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+)"
-    r"|authentication failure;.*?(?:user=(?P<user2>\S+))?.*?rhost=(?P<ip2>\S+)"
-    r"|Invalid user (?P<user3>\S+) from (?P<ip3>\S+)")
+    r"Failed password for (?:invalid user )?(?P<user>.*?)" + _SSHD_TAIL.format(ip="ip")
+    + r"|authentication failure;.*?rhost=(?P<ip2>\S+)(?:.*?\buser=(?P<user2>\S+))?"
+    r"|Invalid user (?P<user3>.*?)" + _SSHD_TAIL.format(ip="ip3"))
 
 
 def sort_findings(f):
@@ -71,17 +77,53 @@ def sort_findings(f):
 
 # ── Linux ───────────────────────────────────────────────────────────────────
 
+class _Lines(list):
+    """Auth lines, with the number of failure lines left out because an
+    unprivileged process wrote them (kept visible, never counted)."""
+    untrusted = 0
+
+
+def _journal_messages(stdout):
+    """MESSAGE of each `journalctl -o json` entry written by a root process.
+
+    Any local user can put authpriv lines in the journal (`logger -p
+    authpriv.notice "Failed password for x from <ip> port 1 ssh2"`) and invent
+    a brute force from an innocent address; _UID is set by journald itself and
+    cannot be forged. sshd, sshd-session, sudo and pam all log as root."""
+    out = _Lines()
+    for raw in stdout.splitlines():
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        msg = entry.get("MESSAGE")
+        if entry.get("_UID") != "0":
+            if isinstance(msg, str) and _LINUX_FAIL.search(msg):
+                out.untrusted += 1
+            continue
+        if isinstance(msg, list):                  # non-UTF-8 messages come as byte arrays
+            try:
+                msg = bytes(b for b in msg if isinstance(b, int) and 0 <= b < 256).decode("utf-8", "replace")
+            except ValueError:
+                continue
+        if isinstance(msg, str):
+            out.append(msg)
+    return out
+
+
 def _linux_lines():
     """Recent auth lines, from the journal if present, else the flat logs."""
     since = f"{WINDOW_H} hours ago"
     try:
         r = subprocess.run(
             ["journalctl", "--since", since, "--no-pager", "-q",
-             "SYSLOG_FACILITY=10", "-o", "cat"],
+             "SYSLOG_FACILITY=10", "-o", "json", "--output-fields=MESSAGE,_UID"],
             capture_output=True, text=True,
             errors="replace", timeout=30)
         if r.returncode == 0 and r.stdout.strip():
-            return r.stdout.splitlines()
+            return _journal_messages(r.stdout)
     except (OSError, subprocess.SubprocessError):
         pass
     lines = []
@@ -99,7 +141,7 @@ def _linux(lines=None):
     """`lines` are auth-log lines already read (the coverage map's probes)."""
     out = []
     lines = _linux_lines() if lines is None else lines
-    if not lines:
+    if not lines and not isinstance(lines, _Lines):     # an empty journal read is still a read
         out.append(_finding(
             "bruteforce", "low", "no readable auth log on the Linux side",
             "neither the journal nor /var/log/auth.log could be read, so "
@@ -152,6 +194,16 @@ def _linux(lines=None):
             "bruteforce", "ok", "no failed-login spike on the Linux side",
             f"{total} failed attempts in {WINDOW_H}h, none concentrated on one "
             f"source", "auth log"))
+    untrusted = getattr(lines, "untrusted", 0)
+    if untrusted:
+        # Not counted (anyone can write them), but never silently dropped: an
+        # sshd that does not run as root would also land here.
+        out.append(_finding(
+            "bruteforce", "low",
+            f"{untrusted} failed-login line(s) in the journal written by a non-root process",
+            "not counted toward brute-force detection, because any local user can "
+            "write such lines; if this host's sshd runs unprivileged, they may be real",
+            "journal (authpriv)"))
     return out
 
 

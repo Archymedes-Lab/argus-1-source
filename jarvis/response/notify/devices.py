@@ -46,13 +46,22 @@ def add(device, path=None, now=None):
     save(doc, path)
 
 
+MIN_PREFIX = 4
+
+
 def revoke(dev, path=None, now=None):
+    """Revoke the one active device whose id is `dev` or starts with it.
+
+    An empty, too short or ambiguous prefix revokes nothing: it used to revoke
+    every match here while the relay was told about only the last one."""
     doc = load(path)
-    hit = False
-    for d in doc["devices"]:
-        if (d.get("dev") == dev or d.get("dev", "").startswith(dev)) and not d.get("revoked_at"):
-            d["revoked_at"] = int(time.time() if now is None else now)
-            hit = d["dev"]
-    if hit:
-        save(doc, path)
-    return hit
+    dev = str(dev or "")
+    live = [d for d in doc["devices"] if not d.get("revoked_at")]
+    hits = [d for d in live if d.get("dev") == dev]
+    if not hits and len(dev) >= MIN_PREFIX:
+        hits = [d for d in live if str(d.get("dev", "")).startswith(dev)]
+    if len(hits) != 1:
+        return False
+    hits[0]["revoked_at"] = int(time.time() if now is None else now)
+    save(doc, path)
+    return hits[0]["dev"]

@@ -389,6 +389,13 @@ class WiringTests(unittest.TestCase):
             for field in ("sha256", ".path", "cmdline", "CommandLine"):
                 self.assertNotIn(field, text, f"{name} mentions {field}")
 
+    def test_helper_supplied_fields_are_escaped_in_the_detail_card(self):
+        # The session id comes from the Windows helper's frames, which the feed
+        # checks only for pid/ppid; it is markup in card.innerHTML unless escaped.
+        text = (STATIC / "procs.js").read_text()
+        self.assertNotIn("${p.session}", text)
+        self.assertIn("${esc(p.session)}", text)
+
 
 if __name__ == "__main__":
     unittest.main()

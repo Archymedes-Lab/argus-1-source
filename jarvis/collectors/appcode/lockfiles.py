@@ -14,6 +14,7 @@ import re
 import tomllib
 import xml.etree.ElementTree as ET
 
+from jarvis.core import safeio
 from jarvis.core.osvindex import normalise
 
 MAX_BYTES = 16 * 1024 * 1024
@@ -31,11 +32,9 @@ def is_lockfile(name):
 
 
 def _read(path):
+    # Not a link, FIFO or device swapped in after the walk; never past MAX_BYTES.
     try:
-        if os.path.getsize(path) > MAX_BYTES:
-            return None
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            return fh.read(MAX_BYTES + 1)
+        return safeio.read_text(path, MAX_BYTES, follow=False)
     except OSError:
         return None
 
@@ -194,7 +193,10 @@ def parse(path):
                 out.add((eco, normalise(eco, pkg), str(version).strip()))
             if len(out) >= MAX_PACKAGES:
                 break
-    except (ValueError, TypeError, AttributeError, KeyError, ET.ParseError, tomllib.TOMLDecodeError):
+    except (ValueError, TypeError, AttributeError, KeyError, ET.ParseError, tomllib.TOMLDecodeError,
+            RecursionError):
+        # RecursionError: "[[[[..." nested past the parser's depth. One hostile
+        # lockfile used to abort the whole appcode run for every project.
         return []
     return sorted(out)
 

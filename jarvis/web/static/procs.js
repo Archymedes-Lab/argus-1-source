@@ -151,7 +151,7 @@ function showCard(p, x, y) {
     ['Domain', HOST_NAME[p.h]],
     ['PID', `<span class="num">${p.pid}</span>`],
     ['Parent', parent ? `${esc(parent.name)} <span class="num">${parent.pid}</span>` : `<span class="num">${p.ppid}</span> (exited)`],
-    ...(p.h === 'win' ? [['Session', `<span class="num">${p.session}</span>`]] : []),
+    ...(p.h === 'win' ? [['Session', `<span class="num">${esc(p.session)}</span>`]] : []),
     ['CPU', `<span class="num">${p.cpu.toFixed(1)}%</span> of machine`],
     ['Memory', `<span class="num">${fmtMem(p.rss)}</span>`],
     ['Started', fmtAge(p.created) + ' ago'],

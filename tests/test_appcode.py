@@ -236,6 +236,17 @@ class OsvDump(unittest.TestCase):
         Path(path).write_bytes(_dump([_osv("MAL-2024-1", "npm", "evil-pkg", [{"introduced": "0"}])]))
         self.assertTrue(osv.parse_dump(path, "npm", {"evil-pkg"})["evil-pkg"][0]["malicious"])
 
+    def test_one_malformed_advisory_does_not_fail_the_ecosystem(self):
+        path = os.path.join(self.tmp, "npm.zip")
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("DEEP.json", "[" * 100000)
+            zf.writestr("BADAFF.json", json.dumps({"id": "X-1", "affected": [1, "x"]}))
+            zf.writestr("BADRANGE.json", json.dumps({"id": "X-2", "affected": [
+                {"package": {"ecosystem": "npm", "name": "evil-pkg"}, "ranges": [7]}]}))
+            zf.writestr("GOOD.json", json.dumps(_osv("MAL-2024-1", "npm", "evil-pkg", [{"introduced": "0"}])))
+        got = osv.parse_dump(path, "npm", {"evil-pkg"})
+        self.assertEqual([e["id"] for e in got["evil-pkg"]], ["MAL-2024-1"])
+
     def test_oversized_member_is_refused(self):
         path = os.path.join(self.tmp, "npm.zip")
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:

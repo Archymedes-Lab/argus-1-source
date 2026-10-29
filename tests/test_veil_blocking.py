@@ -259,5 +259,49 @@ console.log(JSON.stringify(send()));
         self.assertEqual(sorted(out), ["https://static.hotjar.com", "https://www.clarity.ms"])
 
 
+CONTENT_HARNESS = r"""
+import fs from "node:fs";
+import vm from "node:vm";
+const sent = [];
+let onMessage = null;
+const ctx = {
+  location: {origin: "https://evil.example"},
+  chrome: {runtime: {sendMessage: (m) => sent.push(m)}},
+  Date, Object,
+};
+ctx.window = {addEventListener: (t, f) => { if (t === "message") onMessage = f; }};
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync("content.js", "utf8"), ctx);
+const post = (payload) => onMessage({source: ctx.window, data: {channel: "jarvis-veil", payload}});
+"""
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class ContentRelayTests(unittest.TestCase):
+    """Any page script can post the probe's message: the relay must not let it
+    speak for another site or smuggle extra fields to the daemon."""
+
+    def test_page_cannot_forge_the_origin_or_add_fields(self):
+        out = _node(CONTENT_HARNESS + """
+post({top_origin: "https://bank.example", egress_origins: ["https://x.example"],
+      transports: {fetch: 1}, injected: "<img src=x onerror=alert(1)>"});
+console.log(JSON.stringify(sent));
+""")
+        self.assertEqual(len(out), 1)
+        payload = out[0]["payload"]
+        self.assertEqual(payload["top_origin"], "https://evil.example")
+        self.assertNotIn("injected", payload)
+        self.assertEqual(payload["egress_origins"], ["https://x.example"])
+
+    def test_non_object_payloads_are_dropped_and_reports_stay_rate_limited(self):
+        out = _node(CONTENT_HARNESS + """
+post("junk"); post(null);
+post({transports: {fetch: 1}}); post({transports: {fetch: 2}});
+console.log(JSON.stringify(sent));
+""")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["payload"]["transports"], {"fetch": 1})
+
+
 if __name__ == "__main__":
     unittest.main()

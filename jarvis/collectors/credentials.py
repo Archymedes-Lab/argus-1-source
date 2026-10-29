@@ -10,6 +10,8 @@ import math
 import os
 import re
 
+from jarvis.core import safeio
+
 # (name, regex, severity floor). Ordered most-specific first: a match on a
 # vendor-prefixed token is a fact, while a generic assignment is a guess.
 PATTERNS = [
@@ -132,10 +134,53 @@ def _looks_real(name, value):
 _PRIVATE_BLOCK = re.compile(
     r"-----BEGIN ((?:ENCRYPTED |RSA |EC |OPENSSH |DSA )?PRIVATE KEY)-----"
     r"(.*?)-----END \1-----", re.S)
+_PRIVATE_BEGIN = re.compile(r"-----BEGIN ((?:ENCRYPTED |RSA |EC |OPENSSH |DSA )?PRIVATE KEY)-----")
+
+
+class _Block:
+    """The slice of one BEGIN..END block, shaped like the regex match it replaces."""
+
+    def __init__(self, text, start, body_start, body_end, end, label):
+        self._text, self._start, self._end = text, start, end
+        self._groups = {1: label, 2: text[body_start:body_end]}
+
+    def start(self):
+        return self._start
+
+    def group(self, *ids):
+        if ids == (0,):
+            return self._text[self._start:self._end]
+        return tuple(self._groups[i] for i in ids) if len(ids) > 1 else self._groups[ids[0]]
+
+
+def _block_matches(text):
+    """What _PRIVATE_BLOCK.finditer(text) finds, in linear time.
+
+    The lazy `(.*?)` retried from every BEGIN that has no END: a file of
+    unterminated BEGIN lines took minutes (quadratic). Once a label's END is
+    known to be absent past some point, later BEGINs of that label are skipped."""
+    pos, no_end_after = 0, {}
+    while True:
+        m = _PRIVATE_BEGIN.search(text, pos)
+        if not m:
+            return
+        label = m.group(1)
+        if label in no_end_after and m.end() >= no_end_after[label]:
+            pos = m.start() + 1
+            continue
+        end_marker = f"-----END {label}-----"
+        q = text.find(end_marker, m.end())
+        if q < 0:
+            no_end_after[label] = m.end()
+            pos = m.start() + 1
+            continue
+        yield _Block(text, m.start(), m.end(), q, q + len(end_marker), label)
+        pos = q + len(end_marker)
 
 
 def _private_blocks(text):
-    for match in _PRIVATE_BLOCK.finditer(text):
+    line, counted = 1, 0            # line numbers counted incrementally, not from 0 per block
+    for match in _block_matches(text):
         label, body = match.group(1, 2)
         protection = "unknown"
         if label == "ENCRYPTED PRIVATE KEY" or "Proc-Type: 4,ENCRYPTED" in body:
@@ -156,21 +201,25 @@ def _private_blocks(text):
             protection = "unencrypted"
         # Hash the whole block, normalized for wrapping; never the shared header.
         value = "".join(match.group(0).split())
-        yield (f"private key block ({protection})", value,
-               text.count("\n", 0, match.start()) + 1,
+        line += text.count("\n", counted, match.start())
+        counted = match.start()
+        yield (f"private key block ({protection})", value, line,
                "low" if protection == "encrypted" else "high")
 
 
-def scan_file(path, max_bytes=2 * 1024 * 1024):
-    """Return [(kind, secret, lineno, severity)] without keeping any of it."""
+def scan_file(path, max_bytes=2 * 1024 * 1024, follow=True):
+    """Return [(kind, secret, lineno, severity)] without keeping any of it.
+
+    The read is bounded and refuses FIFOs and devices whatever the size the
+    path claimed (safeio); follow=False also refuses a symlink, for walks
+    that decided not to follow links."""
     out = []
     try:
-        if os.path.getsize(path) > max_bytes:
-            return out
-        with open(path, "r", errors="strict") as fh:
-            text = fh.read()
+        text = safeio.read_text(path, max_bytes, follow=follow, errors="strict")
     except (OSError, UnicodeDecodeError, ValueError):
         return out          # binary or unreadable: not our business
+    if text is None:
+        return out
 
     out.extend(_private_blocks(text))
     for lineno, line in enumerate(text.splitlines(), 1):

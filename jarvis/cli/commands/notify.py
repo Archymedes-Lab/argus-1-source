@@ -19,6 +19,13 @@ PAIR_WAIT_S = 600
 POLL_S = 3
 
 
+def _printable(text, limit=40):
+    """A name chosen by whoever claimed the code, made safe for the terminal:
+    control characters (escape sequences could hide or fake the 6-digit code
+    printed after it) become spaces."""
+    return "".join(ch if ch.isprintable() else " " for ch in str(text))[:limit].strip() or "phone"
+
+
 def _conf():
     return alert.load_conf()
 
@@ -70,7 +77,7 @@ def cmd_pair(args, store):
     except (KeyError, ValueError) as exc:
         sys.exit(f"notify: the relay returned a malformed claim ({exc}); nothing was paired")
     sas = crypto.sas(ident.sig_pub, ident.enc_pub, d_sig, d_enc)
-    name = str(claim.get("name") or "phone")[:40]
+    name = _printable(claim.get("name") or "phone")
     print(f"\n  “{name}” wants to receive this server's alerts.\n"
           f"  It shows a code. Pair only if it is exactly:\n\n      {sas[:3]} {sas[3:]}\n", flush=True)
     answer = input("  Same code on the phone? [y/N] ")
@@ -101,7 +108,7 @@ def cmd_devices(args, store):
     for d in doc["devices"]:
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(d.get("paired_at", 0)))
         state = "revoked " + time.strftime("%Y-%m-%d", time.localtime(d["revoked_at"])) if d.get("revoked_at") else "active"
-        print(f"  {d['dev'][:10]}  {d.get('name', '?'):<24} paired {when}  {state}")
+        print(f"  {_printable(d.get('dev', '?'), 10)}  {_printable(d.get('name', '?'), 40):<24} paired {when}  {state}")
 
 
 def cmd_revoke(args, store):

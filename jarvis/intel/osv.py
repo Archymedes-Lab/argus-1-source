@@ -107,11 +107,14 @@ def parse_dump(path, eco, wanted):
                 raw = fh.read(MAX_MEMBER + 1)
             if len(raw) > MAX_MEMBER:
                 raise ValueError(f"{info.filename} exceeds {MAX_MEMBER} bytes")
+            # One malformed advisory (nested past the parser depth, or a list
+            # where an object belongs) is skipped; it must not fail the refresh.
             try:
                 doc = json.loads(raw)
-            except ValueError:
+                found = list(_entries(doc, eco, wanted))
+            except (ValueError, RecursionError, AttributeError, TypeError):
                 continue
-            for name, entry in _entries(doc, eco, wanted):
+            for name, entry in found:
                 out.setdefault(name, []).append(entry)
     return out
 
