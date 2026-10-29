@@ -27,7 +27,15 @@ from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.platform import procfeed
-from jarvis.response import acknowledge, advisor, alert, assistant, protocols, questions, remediation
+from jarvis.response import (
+    acknowledge,
+    advisor,
+    alert,
+    assistant,
+    protocols,
+    questions,
+    remediation,
+)
 from jarvis.response.reporting import score, voice
 from jarvis.service import attackmap, detectorhealth, sdnotify
 from jarvis.service import posture as posture_mod
