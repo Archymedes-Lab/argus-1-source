@@ -149,6 +149,13 @@ class BruteForceAttribution(unittest.TestCase):
         self.assertEqual(len(msgs), 2)
         self.assertNotIn(forged, msgs)
         self.assertIn("203.0.113.6", msgs[1])
+        self.assertEqual(msgs.untrusted, 2)
+        # Left out of the count, but stated, so an unprivileged sshd is not invisible.
+        out = bruteforce._linux(lines=msgs)
+        self.assertIn("ok", [f["severity"] for f in out])
+        self.assertTrue(any("non-root" in f["title"] and f["severity"] == "low" for f in out))
+        empty = bruteforce._linux(lines=bruteforce._journal_messages(json.dumps({"_UID": "0", "MESSAGE": "x"})))
+        self.assertEqual([f["severity"] for f in empty], ["ok"])
 
 
 if __name__ == "__main__":
