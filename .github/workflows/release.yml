@@ -81,9 +81,6 @@ jobs:
       - name: Build tools (pinned by hash)
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          # manylinux ships no shared libpython; Nuitka links the static one,
-          # which the image keeps in an archive for exactly this.
-          (cd /opt/_internal && tar xf static-libs-for-embedding-only.tar.xz)
           $PY -m pip install --disable-pip-version-check --require-hashes -r release/build-tools.txt
           $PY -m pip install --disable-pip-version-check --require-hashes --no-build-isolation -r release/requirements-build.txt
       - name: Static libpython for Nuitka (supplied by the pinned image)
