@@ -1,0 +1,13 @@
+# The native server build (release/build_server.py), installed with
+#   pip install --require-hashes --no-build-isolation -r release/requirements-build.txt
+# after build-tools.txt. Pinned by version and SHA-256; at least two weeks old.
+#
+# Nuitka compiles Argus to C and links a standalone native program.
+nuitka==4.3 --hash=sha256:8b102c6bf30d9504e82e69674d396972729092b25cefa680e8fd05678fdfa30b
+# Phone notifications seal with X25519/AES-GCM/Ed25519 (response/notify/crypto.py);
+# compiled into the program, so no system Python package is needed.
+cryptography==50.0.2 \
+    --hash=sha256:630ebfea3bf689d075f82316324ff7433dc447fe6bc1bfc76524b74b4a9567d2 \
+    --hash=sha256:4061c0079120205fb760c58acab6443e217307dcf05e3702cf970e0689972856
+cffi==2.1.1 --hash=sha256:c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf
+pycparser==3.11 --hash=sha256:51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80

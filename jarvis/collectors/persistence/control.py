@@ -403,6 +403,11 @@ def _verified_unit(path):
                         and user == "jarvis" and argv and _root_only(argv[0])
                         and _root_only(launcher)):
                     return "runs the sealed JARVIS server release as the jarvis account"
+            # The native edition (release/launcher.py compiled, no Python at all):
+            # the root-owned binary itself, as the jarvis account.
+            if (argv[:1] == ["/opt/jarvis/bin/jarvis-server"] and argv[1:3] == ["serve", "--port"]
+                    and user == "jarvis" and _root_only(argv[0])):
+                return "runs the sealed native JARVIS server binary as the jarvis account"
     except (OSError, KeyError, ValueError, AttributeError):
         return ""
     return ""

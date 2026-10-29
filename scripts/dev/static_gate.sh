@@ -11,14 +11,14 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$HOME/.cache/uv}"
 
 echo "[1/3] ruff (F, E9, I, B, PLE; see pyproject.toml)"
-uvx ruff check jarvis tests
+uvx "ruff@${RUFF_VERSION:-0.17.3}" check jarvis tests release
 
 # Typed gate on the pure engines and the verification package. Transitive
 # modules are followed silently so this stage grows package by package rather
 # than failing on the whole tree at once; widen TYPED when a package is clean.
 TYPED=(jarvis/core/reasoning jarvis/core/execution jarvis/core/mechanisms.py jarvis/response/reporting jarvis/verify)
 echo "[2/3] mypy on ${TYPED[*]}"
-uvx mypy --ignore-missing-imports --follow-imports=silent "${TYPED[@]}"
+uvx "mypy@${MYPY_VERSION:-2.4.1}" --ignore-missing-imports --follow-imports=silent "${TYPED[@]}"
 
 if [[ "${1:-}" == "--quick" ]]; then exit 0; fi
 echo "[3/3] property checks and model checking"

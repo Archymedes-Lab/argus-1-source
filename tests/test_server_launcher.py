@@ -24,6 +24,14 @@ class ServerLauncherIsRecognised(unittest.TestCase):
             self.assertIn("sealed JARVIS server release",
                           self.check(["/opt/jarvis/python/bin/python3", "-I", launcher, "serve", "--port", "8787"]))
 
+    def test_native_binary(self):
+        argv = ["/opt/jarvis/bin/jarvis-server", "serve", "--port", "8787"]
+        self.assertIn("sealed native JARVIS server binary", self.check(argv))
+        self.assertEqual(self.check(argv, user="www-data"), "")
+        self.assertEqual(self.check(argv, root_only=False), "")
+        self.assertEqual(self.check(["/tmp/jarvis-server", "serve", "--port", "8787"]), "")
+        self.assertEqual(self.check(["/opt/jarvis/bin/jarvis-server", "shell"]), "")
+
     def test_lookalikes_are_not_recognised(self):
         argv = ["/usr/bin/python3", "-I", "/opt/jarvis/app/jarvis-release.pyc", "serve", "--port", "1"]
         self.assertEqual(self.check(argv, user="www-data"), "")
