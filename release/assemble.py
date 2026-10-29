@@ -51,7 +51,7 @@ def load_previous(where):
 def sbom(version, commit):
     """CycloneDX 1.5: the pinned Python build inputs and the Rust crates of the desktop app."""
     comps = []
-    for req in ("requirements-build.txt",):
+    for req in ("requirements-build.txt", "requirements-runtime.txt"):
         for line in (HERE / req).read_text().splitlines():
             m = re.match(r"^([A-Za-z0-9_.-]+)==([^\s\\]+)", line)
             if m:
