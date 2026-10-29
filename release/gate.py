@@ -211,7 +211,12 @@ def members_of(path, kind):
     raise ValueError(f"unknown artifact kind {kind!r}")
 
 
-def scan_bytes(label, data, policy):
+def third_party(path, policy):
+    tp = policy.get("third_party") or {}
+    return any(glob_match(path, pat) for pat in tp.get("paths", []))
+
+
+def scan_bytes(label, data, policy, skip=()):
     """Problems found in one file's bytes, whatever the file is."""
     problems = []
     for magic in policy["_magic"]:
@@ -223,7 +228,7 @@ def scan_bytes(label, data, policy):
     for start in range(0, max(len(data), 1), CHUNK):
         window = data[max(0, start - OVERLAP):start + CHUNK]
         for mid, rx in policy["_markers"]:
-            m = rx.search(window) if mid not in seen else None
+            m = rx.search(window) if mid not in seen and mid not in skip else None
             if m:
                 seen.add(mid)
                 problems.append(f"{label}: contains {mid} ({evidence(mid, m.group(0))})")
@@ -291,7 +296,8 @@ def check_artifact(path, rule, policy):
         if m.mode & 0o111 and m.path not in rule.get("executables", []) \
                 and not m.path.endswith((".so",)) and ".so." not in m.path:
             problems.append(f"{label}: executable but not listed as one")
-        problems += scan_bytes(label, m.data, policy)
+        skip = (policy.get("third_party") or {}).get("skip_markers", []) if third_party(m.path, policy) else ()
+        problems += scan_bytes(label, m.data, policy, skip)
     return problems, count
 
 

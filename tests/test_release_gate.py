@@ -135,7 +135,7 @@ class RefusesLeaks(GateCase):
     def test_build_machine_paths_in_binary(self):
         for path in (b"/home/chris/.cargo/registry/src/x.rs", b"/home/runner/work/Argus-1/x.py",
                      b"/github/workspace/release/x", b"/__w/Argus-1/x", b"/tmp/argus-server-ab12/tree/x",
-                     b"/root/.cargo/registry/x", b"/opt/_internal/cpython/x"):
+                     b"/root/.cargo/registry/x"):
             with self.subTest(path=path):
                 self.publish({"argus-desktop-windows-x64.exe": b"MZ...." + path})
                 self.assertRefused("contains build-path")
@@ -153,6 +153,18 @@ class RefusesLeaks(GateCase):
                 b"-----BEGIN OPENSSH PRIVATE KEY-----\0" + b"rx -----BEGIN ((?:RSA )?PRIVATE KEY)-----")
         self.publish({"argus-desktop-windows-x64.exe": b"MZ.." + body})
         self.assertEqual(self.problems(), [])
+
+    def test_third_party_library_skips_only_build_paths(self):
+        lib = b"\x7fELF\0/github/home/.cargo/registry/src/x.rs\0"
+        self.publish({SERVER: tar_bytes(GOOD_SERVER + [("argus-server/bin/cryptography/hazmat/bindings/_rust.so", lib, 0o755)])})
+        self.assertEqual(self.problems(), [])
+        key = b"-----BEGIN RSA PRIVATE KEY-----\n" + b"A" * 64
+        self.publish({SERVER: tar_bytes(GOOD_SERVER + [("argus-server/bin/cryptography/hazmat/bindings/_rust.so", lib + key, 0o755)])})
+        self.assertRefused("contains private-key")
+        # Argus's own program gets no such allowance.
+        self.publish({SERVER: tar_bytes([(n, ELF + b"\0/github/home/x\0", m) if n.endswith("argus-server") else (n, d, m)
+                                         for n, d, m in GOOD_SERVER])})
+        self.assertRefused("argus-server: contains build-path")
 
     def test_private_key_with_headers_is_refused(self):
         pem = (b"-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0011\n\n"

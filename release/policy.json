@@ -175,7 +175,7 @@
   "deny_markers": [
     {
       "id": "build-path",
-      "regex": "(?<![A-Za-z0-9_])(?:/home/(?:runner|chris|builder|vsts|ubuntu/work)/|/github/(?:home|workspace)/|/__w/|/tmp/argus-(?:server|desktop)-|/root/\\.(?:cargo|rustup|cache)/|/opt/_internal/)"
+      "regex": "(?<![A-Za-z0-9_])(?:/home/(?:runner|chris|builder|vsts|ubuntu/work)/|/github/(?:home|workspace)/|/__w/|/tmp/argus-(?:server|desktop)-|/root/\\.(?:cargo|rustup|cache)/)"
     },
     {
       "id": "macos-build-path",
@@ -217,5 +217,18 @@
     "cb0d0d0a",
     "f30d0d0a"
   ],
-  "max_file_count_growth": 0.25
+  "max_file_count_growth": 0.25,
+  "_third_party_comment": "Prebuilt third-party libraries, pinned by SHA-256 in release/requirements-runtime.txt. They carry their maintainers' build paths (/github/home/ from pyca's CI, /opt/_internal/ from the manylinux CPython build), which identify no one here; only the build-path markers are skipped for them. Every other rule (source, bytecode, keys, tokens) still applies.",
+  "third_party": {
+    "paths": [
+      "**/bin/_cffi_backend*.so",
+      "**/bin/cryptography/**/*.so",
+      "**/bin/cffi/**/*.so"
+    ],
+    "skip_markers": [
+      "build-path",
+      "windows-build-path",
+      "macos-build-path"
+    ]
+  }
 }

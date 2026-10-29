@@ -104,12 +104,17 @@ def probe_masquerade():
 
 
 def probe_private_key():
-    from jarvis.collectors.identity.secrets import patterns
     # Only the openssh-key-v1 header with "none" cipher fields, repeated: no
     # key material. The armor is assembled at runtime so this source file is
     # not itself a key-shaped literal for the secrets collector to report.
+    # The body is encoded at runtime too: a compiler that folds constants
+    # (the native release build) would otherwise store a key-shaped string.
+    import base64
+
+    from jarvis.collectors.identity.secrets import patterns
     armor = "OPENSSH PRIVATE KEY"
-    body = (f"-----BEGIN {armor}-----\n" + "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ" * 4 +
+    header = b"openssh-key-v1\0\0\0\0\4none\0\0\0\4none" * 3
+    body = (f"-----BEGIN {armor}-----\n" + base64.b64encode(header).decode() +
             f"\n-----END {armor}-----\n")
     with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False) as fh:
         fh.write(body)
