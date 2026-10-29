@@ -41,6 +41,7 @@ class ManagedTask:
     release_script: str = ""  # script path inside the sealed release, fingerprinted live
     fixed_hash: str = ""      # reviewed fingerprint for scripts JARVIS does not ship
     kind: str = "powershell"  # "powershell" or "wsl_start"
+    principal: str = "user"   # "user": the current Windows user; "system": LocalSystem
 
 
 MANAGED_TASKS = (
@@ -68,7 +69,10 @@ MANAGED_TASKS = (
         # The one task that runs elevated, by design, and only from the
         # administrator-only ProgramData folder, never LocalAppData.
         name="jarvis elevated broker", script="jarvis-elevated-broker.ps1",
-        release_script="jarvis-elevated-broker.ps1", logon="interactive", run_level="highest",
+        # Runs as SYSTEM: a task holding the user's elevated token also gets
+        # the user's environment (HKCU\\Environment), which the user can write.
+        release_script="jarvis-elevated-broker.ps1", logon="serviceaccount", run_level="highest",
+        principal="system",
         args=POWERSHELL_PREFIX + r'-File "C:\ProgramData\Jarvis\Broker\jarvis-elevated-broker.ps1" -Run'),
     ManagedTask(
         # The few-second revival loop, staged by its own -Install.
@@ -194,6 +198,10 @@ def _principal_problem(task, live, data):
     if (live.get("runLevel") or "").casefold() != task.run_level:
         return f"principal run level is not {task.run_level}"
     actual_user = (live.get("user") or "").casefold().rsplit("\\", 1)[-1]
+    if task.principal == "system":
+        if actual_user not in ("system", "s-1-5-18"):
+            return "principal is not SYSTEM"
+        return ""
     current_user = (data.get("currentUser") or "").casefold().rsplit("\\", 1)[-1]
     if not actual_user or actual_user != current_user:
         return "principal is not the current Windows user"

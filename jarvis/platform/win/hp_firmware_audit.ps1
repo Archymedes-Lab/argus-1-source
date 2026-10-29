@@ -20,6 +20,8 @@
 # Any failure refuses the read and says why; nothing is loaded.
 #
 # It changes no setting and writes nothing. Output: base64 JSON on stdout.
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'Stop'
 $out = [ordered]@{ schema = 1; available = $false; reason = ''; module = $null
                    records = @(); problems = @(); errors = @(); truncated = $false }

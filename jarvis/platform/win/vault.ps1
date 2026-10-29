@@ -20,12 +20,31 @@
 # GZipStream stops at the first gzip member); the daemon verifies vaulted
 # copies read-only and reports any that fail. Output: base64 JSON, counts only.
 
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'Stop'
+# The user the broker was installed for, recorded by SID at install in this
+# administrator-only folder. The broker runs as SYSTEM, so per-user state is
+# read from HKEY_USERS\<SID>, read-only, never from this process's environment.
+$UserSid = ''
+try { $UserSid = [string](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'user.json') -Raw | ConvertFrom-Json).sid } catch { }
+if ($UserSid -notmatch '^S-1-(5-21|12-1)(-\d+)+$') { $UserSid = '' }
+function Get-UserLocalAppData([string]$sid) {
+    # From the administrator-owned profile list, not an environment variable.
+    if (-not $sid) { return '' }
+    $key = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid"
+    $profile = (Get-ItemProperty -LiteralPath $key -Name ProfileImagePath -ErrorAction SilentlyContinue).ProfileImagePath
+    if (-not $profile) { return '' }
+    return (Join-Path $profile 'AppData\Local')
+}
 $Sys32 = [Environment]::SystemDirectory
 # The vault path comes from the system drive, not %ProgramData%, which the
 # user's own environment can redefine for this elevated process.
 $Vault = Join-Path ([IO.Path]::GetPathRoot($Sys32)) 'ProgramData\Jarvis\Vault'
-$Inbox = Join-Path $env:LOCALAPPDATA 'Jarvis\VaultInbox'
+# The inbox in the recorded user's profile, located through the
+# administrator-owned profile list; '' (and an error below) if unknown.
+$UserLocal = Get-UserLocalAppData $UserSid
+$Inbox = if ($UserLocal) { Join-Path $UserLocal 'Jarvis\VaultInbox' } else { '' }
 $MaxBytes = 20GB
 $BudgetSeconds = 90
 $AnchorPattern = '^[0-9a-f]{64}(\.[a-z0-9]+)*\.(json|ots)$'
@@ -49,18 +68,22 @@ $result = [ordered]@{
 }
 
 function Lock-Folder([string]$path) {
-  # SYSTEM and Administrators: full. The owning user (whose elevated token
-  # runs the broker): read, so the daemon can verify. No other account: the
-  # history holds command lines. No inherited ProgramData ACEs.
-  # Owner Administrators: a folder created before the first run by the
-  # unelevated user would otherwise stay theirs, and its owner can rewrite
-  # the ACL.
-  $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-  & (Join-Path $Sys32 'icacls.exe') $path /setowner '*S-1-5-32-544' | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "icacls /setowner failed on $path ($LASTEXITCODE)" }
-  & (Join-Path $Sys32 'icacls.exe') $path /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' `
-      "*${owner}:(OI)(CI)RX" | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "icacls failed on $path ($LASTEXITCODE)" }
+  # SYSTEM and Administrators: full. The recorded user: read, so the daemon
+  # can verify. No other account: the history holds command lines. Owner
+  # Administrators and the whole DACL replaced, not merged: a folder created
+  # before the first run keeps neither its owner nor any extra entry.
+  $sid = { param($v) New-Object Security.Principal.SecurityIdentifier($v) }
+  $acl = New-Object Security.AccessControl.DirectorySecurity
+  $acl.SetOwner((& $sid 'S-1-5-32-544'))
+  $acl.SetAccessRuleProtection($true, $false)
+  $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+  foreach ($grant in @(@('S-1-5-18', 'FullControl'), @('S-1-5-32-544', 'FullControl'),
+                       @($UserSid, 'ReadAndExecute'))) {
+    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+      (& $sid $grant[0]), [Security.AccessControl.FileSystemRights]$grant[1], $inherit,
+      [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)))
+  }
+  [IO.Directory]::SetAccessControl($path, $acl)
 }
 
 # The inbox is written by the unelevated user, and this job runs elevated. A
@@ -112,6 +135,9 @@ function Open-InboxFile([string]$path) {
       throw "refused: staged $path resolves to another location"
     }
     if ([JarvisInboxHandle]::Links($fs) -ne 1) { throw "refused: staged $path is a hard link" }
+    # Staged by the recorded user's daemon, so owned by that user.
+    $owner = $fs.GetAccessControl().GetOwner([Security.Principal.SecurityIdentifier]).Value
+    if ($owner -ne $UserSid) { throw "refused: staged $path is owned by $owner, not the recorded user" }
     return $fs
   } catch { $fs.Dispose(); throw }
 }
@@ -167,6 +193,19 @@ function Install-Copy([string]$source, [string]$target) {
 
 try {
   if ($HandleTypeError) { throw "inbox handle checks unavailable: $HandleTypeError" }
+  if (-not $UserSid -or -not $Inbox) { throw 'no recorded user or profile; reinstall the broker' }
+  # The inbox folders themselves must be real folders, not links.
+  foreach ($dir in @($Inbox, (Join-Path $Inbox 'eventlog'), (Join-Path $Inbox 'eventlog\segments'),
+                     (Join-Path $Inbox 'anchors'))) {
+    if ((Test-Path -LiteralPath $dir) -and
+        ((Get-Item -LiteralPath $dir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+      throw "refused: inbox folder $dir is a link"
+    }
+  }
+  if ((Test-Path -LiteralPath $Vault) -and
+      ((Get-Item -LiteralPath $Vault -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw "refused: $Vault is a link"
+  }
   $clock = [Diagnostics.Stopwatch]::StartNew()
   $segDir = Join-Path $Vault 'eventlog\segments'
   foreach ($dir in @($Vault, $segDir, (Join-Path $Vault 'anchors'), (Join-Path $Vault 'divergence'))) {

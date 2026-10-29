@@ -26,6 +26,8 @@
 # paths, signer status, hook types and counts. Never key codes, window titles
 # or command lines.
 
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'Stop'
 $Name = 'JarvisInputAudit'
 $Sys32 = [Environment]::SystemDirectory

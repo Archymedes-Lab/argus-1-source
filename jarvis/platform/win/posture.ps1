@@ -1,5 +1,13 @@
 
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'SilentlyContinue'
+# The user the broker was installed for, recorded by SID at install in this
+# administrator-only folder. The broker runs as SYSTEM, so per-user state is
+# read from HKEY_USERS\<SID>, read-only, never from this process's environment.
+$UserSid = ''
+try { $UserSid = [string](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'user.json') -Raw | ConvertFrom-Json).sid } catch { }
+if ($UserSid -notmatch '^S-1-(5-21|12-1)(-\d+)+$') { $UserSid = '' }
 $o = [ordered]@{}
 
 $o.defender = Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled,
@@ -105,8 +113,8 @@ $o.pslog = [pscustomobject]@{
 }
 
 $o.consolehost = [pscustomobject]@{
-  console=[string](RVal 'HKCU:\Console\%%Startup' 'DelegationConsole')
-  terminal=[string](RVal 'HKCU:\Console\%%Startup' 'DelegationTerminal')
+  console=$(if ($UserSid) { [string](RVal "Registry::HKEY_USERS\$UserSid\Console\%%Startup" 'DelegationConsole') } else { '' })
+  terminal=$(if ($UserSid) { [string](RVal "Registry::HKEY_USERS\$UserSid\Console\%%Startup" 'DelegationTerminal') } else { '' })
 }
 
 $o.autologon = [pscustomobject]@{

@@ -1,5 +1,13 @@
 
+# First statement: module autoloading searches only the system module folders.
+$env:PSModulePath = "$([Environment]::SystemDirectory)\WindowsPowerShell\v1.0\Modules;$([Environment]::GetFolderPath('ProgramFiles'))\WindowsPowerShell\Modules"
 $ErrorActionPreference = 'Stop'
+# The user the broker was installed for, recorded by SID at install in this
+# administrator-only folder. The broker runs as SYSTEM, so per-user state is
+# read from HKEY_USERS\<SID>, read-only, never from this process's environment.
+$UserSid = ''
+try { $UserSid = [string](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'user.json') -Raw | ConvertFrom-Json).sid } catch { }
+if ($UserSid -notmatch '^S-1-(5-21|12-1)(-\d+)+$') { $UserSid = '' }
 $o = @{errors=@(); connections=@(); apps=@(); profiles=@(); logs=@(); browserPolicies=@()}
 try {
   $o.connections = @(Get-NetTCPConnection | Where-Object { $_.State -in 'Listen','Established' } |
@@ -29,13 +37,16 @@ $specs = @(
 )
 foreach ($spec in $specs) {
   if (@($o.apps | Where-Object { $_.name -eq $spec.app }).Count -eq 0) { continue }
-  foreach ($hive in @('HKLM:', 'HKCU:')) {
+  $hives = @('HKLM:')
+  if ($UserSid) { $hives += "Registry::HKEY_USERS\$UserSid" }
+  foreach ($hive in $hives) {
     foreach ($suffix in @('', '\Recommended')) {
       $path = $hive + '\' + $spec.path + $suffix
       foreach ($key in $spec.keys) {
         $value = Get-ItemProperty -LiteralPath $path -Name $key -ErrorAction SilentlyContinue
         if ($null -ne $value) {
-          $o.browserPolicies += @{app=$spec.app; key=$key; value=$value.$key; source=$path}
+          # Reported under the HKCU: name the consumers already use.
+          $o.browserPolicies += @{app=$spec.app; key=$key; value=$value.$key; source=($path -replace '^Registry::HKEY_USERS\\S-1-[0-9-]+', 'HKCU:')}
         }
       }
     }

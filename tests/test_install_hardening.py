@@ -160,22 +160,92 @@ class BrokerScriptTests(unittest.TestCase):
 
     def test_paths_come_from_the_os_not_the_user_environment(self):
         self.assertIn("$Sys32 = [Environment]::SystemDirectory", self.code)
-        for var in ("ProgramData", "SystemRoot", "TEMP", "LOCALAPPDATA", "windir"):
-            for use in re.finditer(rf"\$env:{var}\b", self.code, re.I):
-                line = self.code[self.code.rfind("\n", 0, use.start()) + 1:self.code.find("\n", use.end())]
-                self.assertRegex(line.strip(), rf"^\$env:{var}\s*=", f"read of $env:{var}: {line}")
 
-    def test_module_path_and_temp_are_reset_before_jobs_run(self):
-        self.assertIn("$env:PSModulePath = (Join-Path $Sys32", self.code)
-        run = self.code.index("if ($Run) {")
-        self.assertLess(self.code.index("$env:TEMP = $Tmp"), self.code.index("Start-Process", run))
-        self.assertLess(self.code.index("$env:TMP = $Tmp"), self.code.index("Start-Process", run))
+    def test_task_runs_as_system_never_with_the_users_token(self):
+        install = self.code[self.code.index("if ($Install) {"):self.code.index("if ($Run) {")]
+        self.assertIn("New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount", install)
+        self.assertNotIn("-UserId $user", install)
+        # The user is recorded by SID, for read-only per-user reads.
+        self.assertIn("Set-Content -LiteralPath $UserFile", install)
 
-    def test_only_the_protected_copy_runs_jobs(self):
+    def test_children_get_an_explicit_clean_environment(self):
         run = self.code[self.code.index("if ($Run) {"):]
-        guard = run.index("$PSCommandPath")
-        self.assertLess(guard, run.index("Start-Process"))
-        self.assertIn("Find-Untrusted $dir", run[:run.index("Start-Process")])
+        self.assertNotIn("Start-Process", run)
+        clear = run.index("$psi.EnvironmentVariables.Clear()")
+        self.assertLess(clear, run.index("[Diagnostics.Process]::Start($psi)"))
+        env = run[run.index("$childEnv = [ordered]@{"):run.index("\n        }\n", run.index("$childEnv"))]
+        for name in ("TEMP = $Tmp", "TMP = $Tmp", "PSModulePath = $ModulePath"):
+            self.assertIn(name, env)
+        for name in ("COR_", "PSModulePath = $env", "$env:"):
+            self.assertNotIn(name, env)
+
+    def test_only_the_protected_unchanged_copy_runs_jobs(self):
+        run = self.code[self.code.index("if ($Run) {"):]
+        start = run.index("[Diagnostics.Process]::Start")
+        self.assertLess(run.index("$PSCommandPath"), start)
+        checks = run[:start]
+        self.assertIn("$checked = @($JarvisDir, $Root, $BrokerCopy, $UserFile)", checks)
+        self.assertIn("Join-Path $Root $_.script", checks)
+        self.assertIn("Test-Protected $path", checks)
+        # A refusal is recorded in the status, per job, and nothing starts.
+        self.assertIn("refused = [string]$refusal", checks)
+        self.assertIn("if ($refusal) {", checks)
+        prot = self.code[self.code.index("function Test-Protected"):]
+        prot = prot[:prot.index("\n}\n")]
+        for piece in ("Find-Untrusted $path", "$WriteMask", "$TrustedOwners -notcontains $sid"):
+            self.assertIn(piece, prot)
+
+    def test_install_refuses_links_and_takes_ownership(self):
+        install = self.code[self.code.index("if ($Install) {"):]
+        refuse = install.index("refusing to install: $dir is a link")
+        self.assertIn("foreach ($dir in @($JarvisDir, $Root, $Vault))", install[:refuse])
+        self.assertLess(refuse, install.index("New-Item"))
+        self.assertIn("$Vault /setowner '*S-1-5-32-544'", install)
+
+
+class ElevatedEnvironmentTests(unittest.TestCase):
+    """No elevated script builds a path it runs, loads or writes from $env:."""
+
+    SCRIPTS = [BROKER] + [WIN / n for n in BROKER_JOBS]
+
+    def test_env_is_only_ever_assigned_never_read(self):
+        for path in self.SCRIPTS:
+            for n, line in enumerate(code(path).splitlines(), 1):
+                for m in re.finditer(r"\$env:[A-Za-z_][A-Za-z0-9_()]*", line):
+                    assigned = re.match(r"\s*" + re.escape(m.group(0)) + r"\s*=", line[:m.end() + 3]) \
+                        and line.lstrip().startswith(m.group(0))
+                    self.assertTrue(assigned, f"{path.name}:{n} reads {m.group(0)}: {line.strip()}")
+
+    def test_module_path_is_the_first_statement(self):
+        for path in self.SCRIPTS:
+            lines = [l for l in code(path).splitlines() if l.strip()]
+            if lines[0].lstrip().startswith("param("):
+                lines = lines[lines.index(next(l for l in lines if l.strip() == ")")) + 1:]
+            self.assertTrue(lines[0].startswith("$env:PSModulePath = "), f"{path.name}: {lines[0]}")
+            self.assertNotIn("Documents", lines[0])
+
+    def test_per_user_state_comes_from_the_recorded_sid(self):
+        for name in ("posture.ps1", "internetwatch.ps1", "memscan.ps1", "vault.ps1"):
+            text = code(WIN / name)
+            self.assertIn("Join-Path $PSScriptRoot 'user.json'", text, name)
+            self.assertNotIn("HKCU:\\", text.replace("'HKCU:')", ""), name)
+        for name in ("memscan.ps1", "vault.ps1"):
+            self.assertIn("ProfileList\\$sid", code(WIN / name), name)
+
+    def test_audit_expects_a_system_principal_for_the_broker(self):
+        from jarvis.platform.provenance import persistence as mp
+        task = mp.BY_NAME["jarvis elevated broker"]
+        self.assertEqual((task.principal, task.logon), ("system", "serviceaccount"))
+        live = {"user": "DESKTOP\\chris", "runLevel": "Highest"}
+        self.assertEqual(mp._principal_problem(task, live, {"currentUser": "DESKTOP\\chris"}),
+                         "principal is not SYSTEM")
+        live["user"] = "SYSTEM"
+        self.assertEqual(mp._principal_problem(task, live, {"currentUser": "DESKTOP\\chris"}), "")
+
+
+class BrokerFolderTests(unittest.TestCase):
+    def setUp(self):
+        self.code = code(BROKER)
 
     def test_lock_replaces_owner_and_dacl_and_parent_is_locked(self):
         lock = self.code[self.code.index("function Lock-Folder"):self.code.index("function Find-Untrusted")]
@@ -230,10 +300,14 @@ class TempFileTests(unittest.TestCase):
         grant = text[text.index("function Grant-Folder"):]
         grant = grant[:grant.index("\n}\n")]
         self.assertLess(grant.index("/setowner '*S-1-5-32-544'"), grant.index("/inheritance:r"))
-        for path in [VAULT, SYSMON_APPLY]:
-            lock = code(path)
-            lock = lock[lock.index("function Lock-Folder"):]
-            self.assertIn("/setowner '*S-1-5-32-544'", lock[:lock.index("\n}\n")], path.name)
+        lock = code(SYSMON_APPLY)
+        lock = lock[lock.index("function Lock-Folder"):]
+        self.assertIn("/setowner '*S-1-5-32-544'", lock[:lock.index("\n}\n")])
+        lock = code(VAULT)
+        lock = lock[lock.index("function Lock-Folder"):]
+        lock = lock[:lock.index("\n}\n")]
+        self.assertIn("SetOwner((& $sid 'S-1-5-32-544'))", lock)
+        self.assertIn("SetAccessRuleProtection($true, $false)", lock)
 
 
 class VaultInboxTests(unittest.TestCase):
@@ -254,6 +328,14 @@ class VaultInboxTests(unittest.TestCase):
         install = install[:install.index("\n}\n")]
         self.assertIn("Open-InboxFile $source", install)
         self.assertNotIn("Copy-Item", install)
+
+    def test_inbox_files_must_belong_to_the_recorded_user_and_folders_not_be_links(self):
+        opener = self.code[self.code.index("function Open-InboxFile"):]
+        opener = opener[:opener.index("\n}\n")]
+        self.assertIn("$fs.GetAccessControl().GetOwner", opener)
+        self.assertIn("$owner -ne $UserSid", opener)
+        self.assertIn("refused: inbox folder $dir is a link", self.code)
+        self.assertIn("(Join-Path $Inbox 'eventlog\\segments')", self.code)
 
     def test_a_missing_handle_type_fails_the_job_rather_than_reading_unchecked(self):
         self.assertIn('if ($HandleTypeError) { throw', self.code)
