@@ -211,12 +211,7 @@ def members_of(path, kind):
     raise ValueError(f"unknown artifact kind {kind!r}")
 
 
-def third_party(path, policy):
-    tp = policy.get("third_party") or {}
-    return any(glob_match(path, pat) for pat in tp.get("paths", []))
-
-
-def scan_bytes(label, data, policy, skip=()):
+def scan_bytes(label, data, policy):
     """Problems found in one file's bytes, whatever the file is."""
     problems = []
     for magic in policy["_magic"]:
@@ -228,7 +223,7 @@ def scan_bytes(label, data, policy, skip=()):
     for start in range(0, max(len(data), 1), CHUNK):
         window = data[max(0, start - OVERLAP):start + CHUNK]
         for mid, rx in policy["_markers"]:
-            m = rx.search(window) if mid not in seen and mid not in skip else None
+            m = rx.search(window) if mid not in seen else None
             if m:
                 seen.add(mid)
                 problems.append(f"{label}: contains {mid} ({evidence(mid, m.group(0))})")
@@ -240,11 +235,13 @@ def scan_bytes(label, data, policy, skip=()):
 
 
 def evidence(marker_id, found):
-    """What matched, short and printable; key material is cut to its header."""
-    if marker_id == "private-key":
-        found = found.split(b"-----", 2)[1] if b"-----" in found else found[:24]
-    text = found[:120].decode("ascii", "replace")
-    return repr("".join(c if c.isprintable() else "?" for c in text))
+    """What matched, safe to print in a public CI log: a path is shown up to its
+    user name; a key or token never, only its kind, length and first characters."""
+    if marker_id.endswith("path") or marker_id == "source-map":
+        text = found[:80].decode("ascii", "replace")
+        return repr("".join(c if c.isprintable() else "?" for c in text))
+    head = found.split(b"-----", 2)[1] if marker_id == "private-key" and b"-----" in found else found[:4]
+    return f"{head.decode('ascii', 'replace')}... {len(found)} bytes, redacted"
 
 
 def embedded_zip_names(data):
@@ -296,8 +293,7 @@ def check_artifact(path, rule, policy):
         if m.mode & 0o111 and m.path not in rule.get("executables", []) \
                 and not m.path.endswith((".so",)) and ".so." not in m.path:
             problems.append(f"{label}: executable but not listed as one")
-        skip = (policy.get("third_party") or {}).get("skip_markers", []) if third_party(m.path, policy) else ()
-        problems += scan_bytes(label, m.data, policy, skip)
+        problems += scan_bytes(label, m.data, policy)
     return problems, count
 
 

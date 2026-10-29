@@ -171,23 +171,31 @@
     "target",
     "src"
   ],
-  "_markers_comment": "Searched in every file's bytes, binaries included. Argus is a security scanner: its rules and self-tests legitimately contain example paths (/home/u/.ssh/..., C:\\\\Users\\\\x\\\\...) and key header strings, so the markers name the build environments themselves (GitHub runners, the manylinux container, the build's temp folders, the owner's machine) and require real key material after a key header. Builds remap source paths (Rust --remap-path-prefix, Nuitka --file-reference-choice=runtime) so none of these survive.",
+  "_markers_comment": "Searched in every file's bytes, binaries included. Home-folder markers refuse any user's home path except a short list of placeholder names (u, x, alice, Public, ...) that Argus's own detection rules and self-tests use as examples; build-path markers name our CI environments. A private-key header counts only with key material after it, with real or escaped (\\\\n) newlines, so a scanner's own rules may name the header. Third-party libraries get no exemption: their maintainers' paths (/github/home/, /opt/_internal/) are not home folders and are not ours.",
   "deny_markers": [
     {
-      "id": "build-path",
-      "regex": "(?<![A-Za-z0-9_])(?:/home/(?:runner|chris|builder|vsts|ubuntu/work)/|/github/(?:home|workspace)/|/__w/|/tmp/argus-(?:server|desktop)-|/root/\\.(?:cargo|rustup|cache)/)"
+      "id": "home-path",
+      "regex": "(?<![A-Za-z0-9_])/home/(?!(?:u|x|a|b|user|you|alice|bob|ubuntu|example)/)[A-Za-z_][A-Za-z0-9_.-]*/"
     },
     {
-      "id": "macos-build-path",
-      "regex": "(?<![A-Za-z0-9_])/Users/(?:runner|chris)/"
+      "id": "build-path",
+      "regex": "(?<![A-Za-z0-9_])(?:/github/workspace/|/__w/|/tmp/argus-(?:server|desktop)-|/root/\\.(?:cargo|rustup|cache)/)"
+    },
+    {
+      "id": "macos-home-path",
+      "regex": "(?<![A-Za-z0-9_])/Users/(?!(?:Shared|u|x|a|user|you|example)/)[A-Za-z_][A-Za-z0-9_.-]*/"
+    },
+    {
+      "id": "windows-home-path",
+      "regex": "(?i)[A-Z]:\\\\Users\\\\(?!(?:u|x|a|b|user|you|alice|bob|example|Public|Default|All Users)\\\\)[A-Za-z_][A-Za-z0-9_.-]*\\\\"
     },
     {
       "id": "windows-build-path",
-      "regex": "(?i)(?:[A-Z]:\\\\Users\\\\(?:runneradmin|chris)\\\\|[A-Z]:\\\\a\\\\[A-Za-z0-9_.-]+\\\\|[A-Z]:\\\\actions-runner\\\\)"
+      "regex": "(?i)(?:[A-Z]:\\\\a\\\\[A-Za-z0-9_.-]+\\\\|[A-Z]:\\\\actions-runner\\\\)"
     },
     {
       "id": "private-key",
-      "regex": "-----BEGIN [A-Z ]*PRIVATE KEY-----\\r?\\n(?:[A-Za-z0-9-]+: [^\\n]*\\r?\\n)*\\r?\\n?[A-Za-z0-9+/=]{64}"
+      "regex": "-----BEGIN [A-Z ]*PRIVATE KEY-----(?:\\r?\\n|\\\\(?:r\\\\)?n)(?:[A-Za-z0-9-]+: [^\\n\\\\]*(?:\\r?\\n|\\\\(?:r\\\\)?n))*(?:\\r?\\n|\\\\(?:r\\\\)?n)?[A-Za-z0-9+/=]{40}"
     },
     {
       "id": "github-token",
@@ -217,18 +225,5 @@
     "cb0d0d0a",
     "f30d0d0a"
   ],
-  "max_file_count_growth": 0.25,
-  "_third_party_comment": "Prebuilt third-party libraries, pinned by SHA-256 in release/requirements-runtime.txt. They carry their maintainers' build paths (/github/home/ from pyca's CI, /opt/_internal/ from the manylinux CPython build), which identify no one here; only the build-path markers are skipped for them. Every other rule (source, bytecode, keys, tokens) still applies.",
-  "third_party": {
-    "paths": [
-      "**/bin/_cffi_backend*.so",
-      "**/bin/cryptography/**/*.so",
-      "**/bin/cffi/**/*.so"
-    ],
-    "skip_markers": [
-      "build-path",
-      "windows-build-path",
-      "macos-build-path"
-    ]
-  }
+  "max_file_count_growth": 0.25
 }
