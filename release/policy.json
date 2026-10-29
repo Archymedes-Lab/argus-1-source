@@ -171,23 +171,31 @@
     "target",
     "src"
   ],
-  "_markers_comment": "Searched in every file's bytes, binaries included. A build must remap source paths (Rust --remap-path-prefix, Nuitka --file-reference-choice=runtime) so no build-machine path survives.",
+  "_markers_comment": "Searched in every file's bytes, binaries included. Home-folder markers refuse any user's home path except a short list of placeholder names (u, x, alice, Public, ...) that Argus's own detection rules and self-tests use as examples; build-path markers name our CI environments. A private-key header counts only with key material after it, with real or escaped (\\\\n) newlines, so a scanner's own rules may name the header. Third-party libraries get no exemption: their maintainers' paths (/github/home/, /opt/_internal/) are not home folders and are not ours.",
   "deny_markers": [
     {
       "id": "home-path",
-      "regex": "(?<![A-Za-z0-9_])/home/[A-Za-z_][A-Za-z0-9_.-]*/"
+      "regex": "(?<![A-Za-z0-9_])/home/(?!(?:u|x|a|b|user|you|alice|bob|ubuntu|example)/)[A-Za-z_][A-Za-z0-9_.-]*/"
+    },
+    {
+      "id": "build-path",
+      "regex": "(?<![A-Za-z0-9_])(?:/github/workspace/|/__w/|/tmp/argus-(?:server|desktop)-|/root/\\.(?:cargo|rustup|cache)/)"
     },
     {
       "id": "macos-home-path",
-      "regex": "(?<![A-Za-z0-9_])/Users/[A-Za-z_][A-Za-z0-9_.-]*/"
+      "regex": "(?<![A-Za-z0-9_])/Users/(?!(?:Shared|u|x|a|user|you|example)/)[A-Za-z_][A-Za-z0-9_.-]*/"
     },
     {
       "id": "windows-home-path",
-      "regex": "(?i)[A-Z]:\\\\Users\\\\[A-Za-z_][A-Za-z0-9_.-]*\\\\"
+      "regex": "(?i)[A-Z]:\\\\Users\\\\(?!(?:u|x|a|b|user|you|alice|bob|example|Public|Default|All Users)\\\\)[A-Za-z_][A-Za-z0-9_.-]*\\\\"
+    },
+    {
+      "id": "windows-build-path",
+      "regex": "(?i)(?:[A-Z]:\\\\a\\\\[A-Za-z0-9_.-]+\\\\|[A-Z]:\\\\actions-runner\\\\)"
     },
     {
       "id": "private-key",
-      "regex": "-----BEGIN [A-Z ]*PRIVATE KEY-----"
+      "regex": "-----BEGIN [A-Z ]*PRIVATE KEY-----(?:\\r?\\n|\\\\(?:r\\\\)?n)(?:[A-Za-z0-9-]+: [^\\n\\\\]*(?:\\r?\\n|\\\\(?:r\\\\)?n))*(?:\\r?\\n|\\\\(?:r\\\\)?n)?[A-Za-z0-9+/=]{40}"
     },
     {
       "id": "github-token",

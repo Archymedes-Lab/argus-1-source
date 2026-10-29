@@ -66,7 +66,9 @@ def nuitka(tree, work, jobs):
            # with `-m <module>`. Nuitka refuses any such self-call unless told otherwise; the
            # launcher itself allows only the three modules in launcher.CHILD_MODULES
            # (tests/test_release_signing.py: "-m os" exits 2), so the guard is not what limits it.
-           "--no-deployment-flag=self-execution"]
+           "--no-deployment-flag=self-execution",
+           # C accelerators the daemon leans on (Nuitka's anti-bloat drops them).
+           "--include-module=_json", "--include-module=_bisect"]
     pkg = tree / "argus"
     for pattern in DATA_KEEP:
         for f in sorted(pkg.glob(pattern)):

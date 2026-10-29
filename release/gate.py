@@ -223,14 +223,25 @@ def scan_bytes(label, data, policy):
     for start in range(0, max(len(data), 1), CHUNK):
         window = data[max(0, start - OVERLAP):start + CHUNK]
         for mid, rx in policy["_markers"]:
-            if mid not in seen and rx.search(window):
+            m = rx.search(window) if mid not in seen else None
+            if m:
                 seen.add(mid)
-                problems.append(f"{label}: contains {mid}")
+                problems.append(f"{label}: contains {mid} ({evidence(mid, m.group(0))})")
     # A zip appended to or embedded in a binary (PyInstaller, a self-extractor).
     if b"PK\x01\x02" in data and not data.startswith(b"PK\x03\x04"):
         problems += [f"{label}: embedded archive member {n}" for n in embedded_zip_names(data)
                      if denied_path(n, policy)]
     return problems
+
+
+def evidence(marker_id, found):
+    """What matched, safe to print in a public CI log: a path is shown up to its
+    user name; a key or token never, only its kind, length and first characters."""
+    if marker_id.endswith("path") or marker_id == "source-map":
+        text = found[:80].decode("ascii", "replace")
+        return repr("".join(c if c.isprintable() else "?" for c in text))
+    head = found.split(b"-----", 2)[1] if marker_id == "private-key" and b"-----" in found else found[:4]
+    return f"{head.decode('ascii', 'replace')}... {len(found)} bytes, redacted"
 
 
 def embedded_zip_names(data):

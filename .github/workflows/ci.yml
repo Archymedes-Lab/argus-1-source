@@ -33,7 +33,7 @@ jobs:
       - name: Static gate
         run: scripts/dev/static_gate.sh
       - name: Release tooling (content gate, signatures, launcher)
-        run: python -m unittest tests.test_release_gate tests.test_release_signing tests.test_release_keys tests.test_release_version tests.test_host_attest tests.test_server_launcher -v
+        run: python -m unittest tests.test_release_gate tests.test_release_signing tests.test_release_keys tests.test_release_version tests.test_host_attest tests.test_release_digests tests.test_server_launcher -v
       - name: Unit suite
         run: python scripts/dev/ci_suite.py
 
