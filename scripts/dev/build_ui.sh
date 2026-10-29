@@ -8,6 +8,14 @@
 # Development-only: the Tailwind standalone CLI (v4.3.3, verified against the
 # release's sha256sums.txt) lives in ~/.cache/jarvis-ui-tools, outside the
 # repository and outside every release. The product ships the compiled CSS.
+# It is a Linux x64 binary and is downloaded on first use: run this from Linux
+# or WSL, with network access you are content to grant for that one download.
+#
+# The page's stylesheet is the Tailwind output followed by
+# jarvis/web/styles/shell.css (plain CSS, appended verbatim after a marker
+# comment), so the page still carries one stylesheet. tests/test_dashboard_shell.py
+# keeps the appended tail equal to shell.css. Python here reads files with the
+# platform default encoding: on Windows set PYTHONUTF8=1.
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
 TW_VERSION=v4.3.3

@@ -27,7 +27,15 @@ from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.platform import procfeed
-from jarvis.response import acknowledge, advisor, alert, assistant, protocols, questions, remediation
+from jarvis.response import (
+    acknowledge,
+    advisor,
+    alert,
+    assistant,
+    protocols,
+    questions,
+    remediation,
+)
 from jarvis.response.reporting import score, voice
 from jarvis.service import attackmap, detectorhealth, sdnotify
 from jarvis.service import posture as posture_mod
@@ -322,6 +330,7 @@ def build_state(db_path, scheduler):
             "db": db_path,
             "reliability": _reliability_state(scheduler, snaps),
             "detector_health": _detector_health(store, scheduler, snaps),
+            "assistant": _assistant_state(store),
             "performance": {**_performance_state(jobs, scheduler),
                             "subsystems": _meta_object(store, "resource_profile_v1"),
                             "accelerator": _meta_object(store, "accelerator_probe_v2")
@@ -340,6 +349,16 @@ def _wake_phase(scheduler):
         return fn() if callable(fn) else {}
     except Exception:
         return {}
+
+
+def _assistant_state(store):
+    """Recent assistant activity, open proposals and what ARGUS-1 has changed. Never raises."""
+    try:
+        return {"audit": advisor.audit_log(store)[-25:],
+                "pending": advisor.pending_proposals(store, JOBS),
+                "changes": advisor.changes_summary(store)}
+    except Exception:
+        return {"audit": [], "pending": [], "changes": None}
 
 
 def _detector_health(store, scheduler, snaps):
@@ -372,10 +391,11 @@ def _reliability_state(scheduler, snaps):
 def _fix_state(db_path):
     """Open self-fix proposals waiting on the operator. Never raises."""
     try:
+        from jarvis.response import report as agent_report
         from jarvis.response import selffix
         store = Store(db_path)
         try:
-            return [{"id": e["id"], "title": e.get("title", ""),
+            return [{"report": agent_report.fix_report(e), "id": e["id"], "title": e.get("title", ""),
                      "status": e.get("status", ""), "problem": e.get("problem", ""),
                      "created_at": e.get("created_at", 0),
                      "generation_state": e.get("generation_state", ""),

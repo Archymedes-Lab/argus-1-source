@@ -9,7 +9,7 @@ import urllib.error
 from unittest import mock
 
 from jarvis.core.store import Store
-from jarvis.response import acknowledge, advisor, assistant, llm
+from jarvis.response import advisor, assistant, llm
 from jarvis.response.reporting import triage
 from jarvis.service.schedule import JOBS
 
