@@ -132,16 +132,36 @@ class RefusesSource(GateCase):
 
 
 class RefusesLeaks(GateCase):
-    def test_build_machine_home_path_in_binary(self):
-        self.publish({"argus-desktop-windows-x64.exe": b"MZ..../home/chris/.cargo/registry/src/x.rs"})
-        self.assertRefused("contains home-path")
+    def test_build_machine_paths_in_binary(self):
+        for path in (b"/home/chris/.cargo/registry/src/x.rs", b"/home/runner/work/Argus-1/x.py",
+                     b"/github/workspace/release/x", b"/__w/Argus-1/x", b"/tmp/argus-server-ab12/tree/x",
+                     b"/root/.cargo/registry/x", b"/opt/_internal/cpython/x"):
+            with self.subTest(path=path):
+                self.publish({"argus-desktop-windows-x64.exe": b"MZ...." + path})
+                self.assertRefused("contains build-path")
 
-    def test_windows_home_path(self):
-        self.publish({"argus-desktop-windows-x64.exe": b"MZ..C:\\Users\\runneradmin\\.cargo\\x"})
-        self.assertRefused("contains windows-home-path")
+    def test_windows_build_paths(self):
+        for path in (b"C:\\Users\\runneradmin\\.cargo\\x", b"D:\\a\\Argus-1\\Argus-1\\desktop\\x",
+                     b"C:\\Users\\chris\\AppData\\x"):
+            with self.subTest(path=path):
+                self.publish({"argus-desktop-windows-x64.exe": b"MZ.." + path})
+                self.assertRefused("contains windows-build-path")
+
+    def test_detection_examples_are_not_build_paths(self):
+        # Argus's own rules and self-tests name example victims' paths and key headers.
+        body = (b"cp /home/u/.ssh/id_ed25519 /dev/shm/k\0C:\\Users\\x\\AppData\\Local\\Temp\\a.exe\0"
+                b"-----BEGIN OPENSSH PRIVATE KEY-----\0" + b"rx -----BEGIN ((?:RSA )?PRIVATE KEY)-----")
+        self.publish({"argus-desktop-windows-x64.exe": b"MZ.." + body})
+        self.assertEqual(self.problems(), [])
+
+    def test_private_key_with_headers_is_refused(self):
+        pem = (b"-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0011\n\n"
+               + b"A" * 64 + b"\n")
+        self.publish({"argus-desktop-windows-x64.exe": b"MZ.." + pem})
+        self.assertRefused("contains private-key")
 
     def test_private_key_and_token(self):
-        key = b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n"
+        key = b"-----BEGIN OPENSSH PRIVATE KEY-----\n" + b"b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW" + b"\n"
         tok = b"token=ghp_" + b"a" * 36
         self.publish({SERVER: tar_bytes(GOOD_SERVER + [("argus-server/bin/argus/intel/data/k.json", key + tok, 0o644)])})
         self.assertRefused("contains private-key")
