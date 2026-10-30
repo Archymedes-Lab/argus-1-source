@@ -24,8 +24,15 @@ function makeEl() {
 
 export function loadPage(relPath, exportNames) {
   const html = readFileSync(join(ROOT, relPath), "utf8");
-  const scripts = [...html.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)]
-    .map((m) => m[1]).filter((s) => s.trim());
+  // The page's own classic scripts, in order: inline blocks (none are allowed
+  // any more under the CSP, see tests/test_static_csp.py) and /static/*.js
+  // files. Vendored libraries and remote scripts are not evaluated here.
+  const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)].map((m) => {
+    const src = /\bsrc="\/static\/([^"]+)"/.exec(m[1]);
+    if (/type="module"/.test(m[1])) return "";
+    if (src) return src[1].startsWith("vendor/") ? "" : readFileSync(join(ROOT, "jarvis/web/static", src[1]), "utf8");
+    return /\bsrc=/.test(m[1]) ? "" : m[2];
+  }).filter((s) => s.trim());
   const listeners = [];
   globalThis.__documentListeners = listeners;
   globalThis.document = {
@@ -55,6 +62,10 @@ export function loadPage(relPath, exportNames) {
   globalThis.clearTimeout = () => {};
   const names = exportNames.join(",");
   // Indirect eval keeps "use strict" scripts scoped; re-export explicitly.
-  (0, eval)(scripts.join("\n;\n") + `\n;globalThis.__page = {${names}};`);
-  return { html, page: globalThis.__page };
+  // A leading statement keeps a page's "use strict" from scoping its top-level
+  // declarations to this eval: in a browser they are globals, and tests rely on that.
+  (0, eval)("void 0;\n" + scripts.join("\n;\n") + `\n;globalThis.__page = {${names}};`);
+  // `html` is the page together with its own scripts, so contract checks find
+  // wiring wherever it now lives; `markup` is the HTML alone.
+  return { html: html + "\n" + scripts.join("\n"), markup: html, page: globalThis.__page };
 }

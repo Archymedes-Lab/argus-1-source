@@ -18,7 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "jarvis" / "web" / "static"
-BRANDED_PAGES = ("dashboard.html", "geo.html", "coverage.js")
+# The page scripts that carry the rule (the pages run no inline script).
+BRANDED_PAGES = ("dashboard.js", "geo.js", "coverage.js")
 KEEP = ["input hook", "independent health monitor", "connectivity guard", "native sensor",
         "Jarvis"]
 CASES = {
@@ -78,7 +79,7 @@ class BrandRuleTests(unittest.TestCase):
             self.assertIn("brand(s)", esc, name)
 
     def test_desktop_copies_keep_the_same_names(self):
-        web = re.search(r"BRAND_KEEP = /\^ \((.*?)\)/", block(STATIC / "dashboard.html")).group(1)
+        web = re.search(r"BRAND_KEEP = /\^ \((.*?)\)/", block(STATIC / "dashboard.js")).group(1)
         ts = (ROOT / "desktop/ui/src/lib/brand.ts").read_text(encoding="utf-8")
         rs = (ROOT / "desktop/src/brand.rs").read_text(encoding="utf-8")
         self.assertEqual(web.split("|"), KEEP)
@@ -88,7 +89,7 @@ class BrandRuleTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("node"), "node not available")
     def test_the_web_rule_itself(self):
-        script = block(STATIC / "dashboard.html") + (
+        script = block(STATIC / "dashboard.js") + (
             f"\nconst cases = {json.dumps(list(CASES))};"
             "\nprocess.stdout.write(JSON.stringify(cases.map(brand)));")
         out = subprocess.run(["node", "-e", script], capture_output=True, text=True,
@@ -105,14 +106,14 @@ class BrandRuleTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node not available")
     def test_the_rule_is_idempotent(self):
         once = list(CASES.values())
-        self.assertEqual(self.run_rule(block(STATIC / "dashboard.html"), once), once)
+        self.assertEqual(self.run_rule(block(STATIC / "dashboard.js"), once), once)
 
     @unittest.skipUnless(shutil.which("node"), "node not available")
     def test_the_argus_build_rename_never_produces_argus_1_1(self):
         # archymedes-site/scripts/argus/build.py rewrites JARVIS -> ARGUS in the
         # whole tree (rename_text). The rule then reads \bARGUS\b, which also
         # matches inside "ARGUS-1"; page text already says ARGUS-1.
-        renamed = block(STATIC / "dashboard.html").replace("JARVIS", "ARGUS") \
+        renamed = block(STATIC / "dashboard.js").replace("JARVIS", "ARGUS") \
             .replace("Jarvis", "Argus").replace("jarvis", "argus")
         got = self.run_rule(renamed, ["ARGUS-1 is waking up", "ARGUS is up",
                                       "ARGUS input hook", "ARGUS-1's view"])
@@ -121,7 +122,7 @@ class BrandRuleTests(unittest.TestCase):
 
     def test_null_never_renders_as_text(self):
         # brand() feeds esc(); a missing field must stay empty, not "null".
-        self.assertIn('String(s ?? "")', block(STATIC / "dashboard.html"))
+        self.assertIn('String(s ?? "")', block(STATIC / "dashboard.js"))
 
 
 class StaticTextTests(unittest.TestCase):
@@ -157,7 +158,7 @@ class StaticTextTests(unittest.TestCase):
     def test_preferences_survive_the_rename(self):
         # localStorage keys are not shown; renaming them would reset every
         # viewer's theme, voice and seen-alert memory.
-        text = (STATIC / "dashboard.html").read_text(encoding="utf-8")
+        text = (STATIC / "dashboard.js").read_text(encoding="utf-8")
         for key in ('"jarvis.theme"', '"jarvis.seenCriticals"', '"jarvis.voice"'):
             self.assertIn(key, text)
 
