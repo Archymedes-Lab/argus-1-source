@@ -13,6 +13,7 @@ from unittest.mock import Mock
 from jarvis.core.store import Store
 from jarvis.service.scheduler import Scheduler
 from jarvis.web.server import Handler, build_state
+from tests import _apiauth
 
 
 class DashboardStateTests(unittest.TestCase):
@@ -60,7 +61,7 @@ class DashboardStateTests(unittest.TestCase):
         handler = Handler.__new__(Handler)
         handler.db_path = self.path
         handler.scheduler = self.scheduler
-        handler.headers = {"Host": "localhost:8787"}
+        handler.headers = {"Host": "localhost:8787", **_apiauth.grant(self)}
         handler._send = Mock()
         handler.path = "/api/state"
         handler.do_GET()
@@ -74,7 +75,7 @@ class DashboardStateTests(unittest.TestCase):
         handler = Handler.__new__(Handler)
         handler.db_path = self.path
         handler.scheduler = self.scheduler
-        handler.headers = {"Host": "localhost:8787"}
+        handler.headers = {"Host": "localhost:8787", **_apiauth.grant(self)}
         handler._send = Mock()
         handler.path = "/api/geo"
         handler.do_GET()

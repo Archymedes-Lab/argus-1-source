@@ -31,6 +31,7 @@ from jarvis.core.store import Store
 from jarvis.intel import worldwatch as w
 from jarvis.response.reporting import score
 from jarvis.service import geosecurity, schedule
+from tests import _apiauth
 
 STATIC = Path(__file__).parents[1] / "jarvis/web/static"
 NOW = 1_800_000_000.0
@@ -448,7 +449,9 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("https://", self.js)
 
     def test_page_loads_one_same_origin_script_and_nothing_foreign(self):
-        self.assertEqual(self.html.count("<script"), 1)
+        # session.js (the shared 403->/pair helper) and the page's own module.
+        self.assertEqual(self.html.count("<script"), 2)
+        self.assertIn('<script src="/static/session.js"></script>', self.html)
         self.assertIn('<script type="module" src="/static/world.js"></script>', self.html)
         self.assertNotIn("http://", self.html)
         self.assertNotIn("https://", self.html)
@@ -486,8 +489,9 @@ class RouteTests(unittest.TestCase):
         self.base = f"http://localhost:{self.httpd.server_address[1]}"
 
     def get(self, path):
+        req = urllib.request.Request(self.base + path, headers=_apiauth.grant(self))
         try:
-            with urllib.request.urlopen(self.base + path, timeout=10) as res:
+            with urllib.request.urlopen(req, timeout=10) as res:
                 return res.status, dict(res.headers), res.read()
         except urllib.error.HTTPError as exc:
             return exc.code, dict(exc.headers), exc.read()

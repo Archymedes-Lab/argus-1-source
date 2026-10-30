@@ -7,6 +7,7 @@ from unittest.mock import Mock
 from jarvis.response import acknowledge, protocols, remediation
 from jarvis.response.reporting import score
 from jarvis.service import posture
+from tests import _apiauth
 
 
 class PostureTests(unittest.TestCase):
@@ -99,7 +100,7 @@ class PostureTests(unittest.TestCase):
             Store(path).close()
             handler = Handler.__new__(Handler)
             handler.db_path = path
-            handler.headers = {"Host": "localhost:8787"}
+            handler.headers = {"Host": "localhost:8787", **_apiauth.grant(self)}
             handler._send = Mock()
             for route in ("/api/posture", "/api/posture/path-to-100"):
                 handler.path = route

@@ -182,12 +182,17 @@ class DashboardCookieTests(_Base):
         self.assertNotIn("Set-Cookie", headers)
         self.assertNotIn(self.token.encode(), body)
 
-    def test_root_and_unattributable_peers_keep_the_cookie(self):
-        for uid in (0, None):
-            with self.subTest(uid=uid), mock.patch.object(api_token, "peer_uid",
-                                                          return_value=uid):
-                _, headers, _ = self.srv.request("GET", "/")
-                self.assertIn("Set-Cookie", headers)
+    def test_root_keeps_the_cookie_and_an_unattributable_peer_does_not(self):
+        with mock.patch.object(api_token, "peer_uid", return_value=0):
+            _, headers, _ = self.srv.request("GET", "/")
+            self.assertIn("Set-Cookie", headers)
+        # Fail closed: a peer whose owner cannot be determined (a Windows
+        # program across WSL networking) pairs explicitly instead.
+        with mock.patch.object(api_token, "peer_uid", return_value=None):
+            status, headers, body = self.srv.request("GET", "/")
+            self.assertEqual(status, 200)
+            self.assertNotIn("Set-Cookie", headers)
+            self.assertNotIn(self.token.encode(), body)
 
     def test_the_token_is_not_in_any_response_body_or_error(self):
         for method, path in (("GET", "/api/defender"), ("GET", "/nope"),
@@ -245,7 +250,9 @@ class PeerAttributionTests(unittest.TestCase):
         self.assertEqual(api_token.peer_uid(addr, lst.getsockname()), os.geteuid())
 
     def test_policy(self):
-        self.assertTrue(api_token.may_receive(None))
+        self.assertFalse(api_token.may_receive(None))
+        self.assertTrue(api_token.may_receive(1234, {"JARVIS_OWNER_UID": "1234"}))
+        self.assertFalse(api_token.may_receive(1235, {"JARVIS_OWNER_UID": "1234,x"}))
         self.assertTrue(api_token.may_receive(0))
         self.assertTrue(api_token.may_receive(os.geteuid()))
         self.assertFalse(api_token.may_receive(os.geteuid() + 1))
@@ -283,9 +290,8 @@ class ShippedLimitsTests(unittest.TestCase):
         self.assertTrue(0 < SHIPPED_TIMEOUT <= 120)
 
 
-# Inline handlers whose interpolation is a client-side constant (the severity
-# filter's own SEV list; renderResults' fixed jump targets). Reviewed 2026-10-30.
-CLIENT_CONSTANT_HANDLERS = {'onclick="setSev(${\n        k ? `\'${k}', 'onclick="${act}'}
+# No inline handler may remain at all (tests/test_static_csp.py is the full check).
+CLIENT_CONSTANT_HANDLERS = set()
 
 
 class DashboardRenderingTests(unittest.TestCase):
@@ -295,7 +301,8 @@ class DashboardRenderingTests(unittest.TestCase):
     def test_no_server_value_is_interpolated_into_an_inline_handler(self):
         import re
         for name in ("dashboard.html", "geo.html", "coverage.html", "procs.html",
-                     "world.html", "coverage.js", "procs.js", "procs-scene.js", "world.js"):
+                     "world.html", "pair.html", "coverage.js", "procs.js", "procs-scene.js",
+                     "world.js", "dashboard.js", "geo.js", "session.js", "pair.js"):
             text = (STATIC / name).read_text(encoding="utf-8")
             with self.subTest(name=name):
                 found = re.findall(r"\bon[a-z]+=[\"'][^\"']*\$\{[^}]*\}?", text)

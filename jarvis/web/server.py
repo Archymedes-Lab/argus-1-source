@@ -43,10 +43,16 @@ from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS, NOT_APPLICABLE
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
-from jarvis.web import procview, stream
+from jarvis.web import clients, procview, stream
 from jarvis.web import token as api_token
 
 PAGE = str(STATIC_DIR / "dashboard.html")
+PAIR_PAGE = str(STATIC_DIR / "pair.html")
+# Open without a credential, and then only these fields: enough for a
+# supervisor to tell running, making progress and protected apart.
+LIVENESS_ROUTES = ("/api/health", "/api/live")
+LIVENESS_FIELDS = ("service", "time", "live", "healthy", "ready", "protection_healthy",
+                   "progress_age", "fast_lane_age")
 GEO_PAGE = str(STATIC_DIR / "geo.html")
 # The /coverage view and its two scripts, served from this origin only. The
 # vendored three.js build is pinned: a file that no longer matches is refused,
@@ -68,6 +74,31 @@ COVERAGE_ASSETS = {
     "/static/procs-state.js": ("procs-state.js", "text/javascript; charset=utf-8", None),
     "/static/procs-scene.js": ("procs-scene.js", "text/javascript; charset=utf-8", None),
     "/static/procs-layout.js": ("procs-layout.js", "text/javascript; charset=utf-8", None),
+    # The dashboard's and /geo's own scripts (no inline script under the CSP),
+    # and the shared session helper every page loads before its own script.
+    "/static/dashboard.js": ("dashboard.js", "text/javascript; charset=utf-8", None),
+    "/static/geo.js": ("geo.js", "text/javascript; charset=utf-8", None),
+    "/static/session.js": ("session.js", "text/javascript; charset=utf-8", None),
+    # Leaflet 1.9.4 (BSD-2-Clause, vendor/leaflet/LICENSE.txt), from the
+    # leaflet@1.9.4 npm release; leaflet.js and leaflet.css match the
+    # project's published SRI hashes. Only the images its CSS references.
+    "/static/vendor/leaflet/leaflet.js": (
+        "vendor/leaflet/leaflet.js", "text/javascript; charset=utf-8",
+        "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a"),
+    "/static/vendor/leaflet/leaflet.css": (
+        "vendor/leaflet/leaflet.css", "text/css; charset=utf-8",
+        "a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6"),
+    "/static/vendor/leaflet/images/layers.png": (
+        "vendor/leaflet/images/layers.png", "image/png",
+        "1dbbe9d028e292f36fcba8f8b3a28d5e8932754fc2215b9ac69e4cdecf5107c6"),
+    "/static/vendor/leaflet/images/layers-2x.png": (
+        "vendor/leaflet/images/layers-2x.png", "image/png",
+        "066daca850d8ffbef007af00b06eac0015728dee279c51f3cb6c716df7c42edf"),
+    "/static/vendor/leaflet/images/marker-icon.png": (
+        "vendor/leaflet/images/marker-icon.png", "image/png",
+        "574c3a5cca85f4114085b6841596d62f00d7c892c7b03f28cbfa301deb1dc437"),
+    # The /pair page's script (the page itself is served by do_GET).
+    "/static/pair.js": ("pair.js", "text/javascript; charset=utf-8", None),
     "/static/vendor/world-50m.json": (
         "vendor/world-50m.json", "application/json",
         "bd89e13c5073e3fba5dbe16ca9231a1d7d7de5844961f426e9d35d95b4ec4a28"),
@@ -476,6 +507,25 @@ class Handler(BaseHTTPRequestHandler):
             name = host.rsplit(":", 1)[0] if ":" in host else host
         return name.lower() in ALLOWED_HOSTS
 
+    def _authorized(self):
+        """True when the request carries the per-start token or an active paired
+        client token (web/clients.py). Every API route but liveness needs it."""
+        if api_token.accepts(self.headers):
+            return True
+        offered = [v for v in api_token.candidates(self.headers) if clients.looks_like(v)]
+        if not offered:
+            return False
+        try:
+            store = Store(self.db_path)
+        except Exception:
+            return False
+        try:
+            return any(clients.verify(store, v) for v in offered)
+        except Exception:
+            return False
+        finally:
+            store.close()
+
     def _token_cookie(self):
         """The token cookie for this page load, or None.
 
@@ -519,33 +569,39 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return payload if isinstance(payload, dict) else None
 
-    # The dashboard is self-contained and forbids anything external, except that
-    # it may frame its own GeoSecurity page.
-    CSP_STRICT = ("default-src 'none'; style-src 'unsafe-inline'; "
-                  "script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; "
-                  "font-src 'self'; img-src data:; frame-ancestors 'self'")
-    # The GeoSecurity globe is inherently external: the Cesium engine and the
-    # satellite tiles come from named third parties, place-name lookup from
-    # OpenStreetMap, and the 2D street map from OSM and Esri tiles. This
-    # relaxation is scoped to the /geo page alone and names the exact
-    # origins; every other route keeps the strict policy above.
+    # The dashboard runs only its own script files (/static/*.js); no inline
+    # script and no inline event handler can run. style-src keeps
+    # 'unsafe-inline': the page's compiled stylesheet is an inline <style>
+    # block and its templates set CSS variables through style="" attributes;
+    # all data reaching those attributes is escaped. It may frame /geo.
+    CSP_STRICT = ("default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; "
+                  "connect-src 'self'; frame-src 'self'; font-src 'self'; img-src data:; "
+                  "object-src 'none'; base-uri 'none'; form-action 'self'; "
+                  "frame-ancestors 'self'")
+    # The GeoSecurity globe still loads the Cesium engine from one CDN, but only
+    # from its exact version directory (1.121.1), and the page's <script>/<link>
+    # tags carry SRI hashes for the two files it names. Leaflet is vendored and
+    # hash-pinned. Map tiles and place-name lookup remain named third parties.
+    CESIUM = "https://cdn.jsdelivr.net/npm/cesium@1.121.1/Build/Cesium/"
     CSP_GEO = (
         "default-src 'none'; "
-        "script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; "
-        "style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "img-src 'self' data: blob: https://gibs.earthdata.nasa.gov https://cdn.jsdelivr.net "
+        f"script-src 'self' 'wasm-unsafe-eval' {CESIUM}; "
+        f"style-src 'self' 'unsafe-inline' {CESIUM}; "
+        f"img-src 'self' data: blob: https://gibs.earthdata.nasa.gov {CESIUM} "
         "https://server.arcgisonline.com https://tiles.maps.eox.at "
         "https://tile.openstreetmap.org; "
-        "connect-src 'self' blob: https://gibs.earthdata.nasa.gov "
-        "https://cdn.jsdelivr.net https://nominatim.openstreetmap.org "
+        f"connect-src 'self' blob: https://gibs.earthdata.nasa.gov {CESIUM} "
+        "https://nominatim.openstreetmap.org "
         "https://server.arcgisonline.com https://tiles.maps.eox.at "
         "https://tile.openstreetmap.org; "
-        "worker-src blob: https://cdn.jsdelivr.net; child-src blob:; font-src data:; "
-        "frame-ancestors 'self'")
+        f"worker-src blob: {CESIUM}; child-src blob:; font-src data:; "
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'self'")
 
-    # /coverage runs no inline script and loads nothing from another origin.
+    # /coverage, /procs, /world (and assets) run no inline script and load
+    # nothing from another origin.
     CSP_COVERAGE = ("default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; "
-                    "connect-src 'self'; img-src data:; frame-ancestors 'self'")
+                    "connect-src 'self'; img-src data:; object-src 'none'; base-uri 'none'; "
+                    "frame-ancestors 'self'")
 
     def _coverage_asset(self, path):
         name, ctype, digest = COVERAGE_ASSETS[path]
@@ -556,7 +612,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(500, f"{name} missing", "text/plain")
         if digest and hashlib.sha256(body).hexdigest() != digest:
             return self._send(500, f"{name} does not match its pinned hash", "text/plain")
-        return self._send(200, body, ctype, csp=self.CSP_COVERAGE)
+        cookie = self._token_cookie() if ctype.startswith("text/html") else None
+        return self._send(200, body, ctype, csp=self.CSP_COVERAGE, cookie=cookie)
 
     def _send(self, code, body, ctype="application/json", csp=None, cookie=None):
         if isinstance(body, str):
@@ -697,10 +754,25 @@ class Handler(BaseHTTPRequestHandler):
                 store.close()
         if not self._same_origin():
             return self._send(403, json.dumps({"error": "cross-site request"}))
-        # Every state-changing route needs the per-start token (header or the
-        # dashboard's cookie). See jarvis/web/token.py for what this does and
-        # does not close.
-        if not api_token.accepts(self.headers):
+        if url.path == "/api/session":
+            # The /pair page: a browser that could not be given the dashboard
+            # cookie (its owner is not identifiable) presents a paired client
+            # token once and keeps it as an HttpOnly, SameSite=Strict cookie.
+            payload = self._json_body(1024)
+            value = str((payload or {}).get("token") or "").strip()
+            store = Store(self.db_path)
+            try:
+                cid = clients.verify(store, value)
+            finally:
+                store.close()
+            if not cid:
+                return self._send(403, json.dumps({"error": "unknown or revoked client token"}))
+            return self._send(200, json.dumps({"ok": True, "client": cid}),
+                              cookie=api_token.client_cookie_header(value))
+        # Every state-changing route needs a credential: the per-start token
+        # (header or the dashboard's cookie) or a paired client token. See
+        # jarvis/web/token.py for what this does and does not close.
+        if not self._authorized():
             return self._send(403, json.dumps({"error": "missing or wrong API token"}))
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]
@@ -904,6 +976,28 @@ class Handler(BaseHTTPRequestHandler):
                                    "reach this dashboard as http://localhost:PORT",
                               "text/plain")
         url = urlparse(self.path)
+        if url.path in LIVENESS_ROUTES:
+            # Open, so supervisors can tell "down" from "degraded" without a
+            # credential; anonymous callers get liveness only, nothing about
+            # findings or sources. A credential gets the full document.
+            state = health(self.db_path, self.scheduler)
+            ok = state['live'] if url.path == '/api/live' else state['healthy']
+            if not self._authorized():
+                state = {k: state.get(k) for k in LIVENESS_FIELDS}
+            return self._send(200 if ok else 503, json.dumps(state, default=str))
+        if (url.path.startswith("/api/") or url.path == "/metrics") and not self._authorized():
+            # Every data route needs a credential: the findings, processes and
+            # peers it serves are exactly what another local account or a
+            # Windows program should not read unpaired.
+            return self._send(403, json.dumps({"error": "missing or wrong API token; "
+                                                        "open /pair to pair this browser"}))
+        if url.path == "/pair":
+            try:
+                with open(PAIR_PAGE, "r", encoding="utf-8", errors="replace") as fh:
+                    return self._send(200, fh.read(), "text/html; charset=utf-8",
+                                      csp=self.CSP_COVERAGE)
+            except OSError:
+                return self._send(500, "pair.html missing", "text/plain")
         if url.path in ("/", "/index.html"):
             try:
                 with open(PAGE, "r", encoding="utf-8", errors="replace") as fh:
@@ -1052,17 +1146,33 @@ class Handler(BaseHTTPRequestHandler):
             except metrics.Unavailable as exc:
                 return self._send(503, f"store unavailable: {exc}\n", "text/plain")
 
-        if url.path in ("/api/health", "/api/live"):
-            state = health(self.db_path, self.scheduler)
-            ok = state['live'] if url.path == '/api/live' else state['healthy']
-            return self._send(200 if ok else 503, json.dumps(state))
-
         # /api/run is a state-changing action, so it is POST-only: a cross-site
         # page cannot force one without a preflight it will not survive.
         if url.path == "/api/run":
             return self._send(405, json.dumps({"error": "use POST"}))
 
         return self._send(404, json.dumps({"error": "not found"}))
+
+
+def _check_state_dir(state_dir=None, marker_path=None):
+    """Refuse to start under the service account while the state directory is
+    open to other accounts (it holds the API token, keys and the evidence);
+    in the legacy per-user mode, say what is open and carry on."""
+    from jarvis.core import statedir
+    state_dir = state_dir or os.path.dirname(api_token.TOKEN_PATH)
+    marker = statedir.load_marker(marker_path or statedir.MARKER)
+    problems = statedir.private_problems(state_dir)
+    if not problems:
+        return True
+    for line in problems[:20]:
+        print(f"state directory: {line}", flush=True)
+    if marker:
+        raise SystemExit("refusing to start: the state directory must be owner-only "
+                         "(0700, files 0600) under the service account; see "
+                         "docs/guides/SERVICE-ACCOUNT.md")
+    print("state directory is not owner-only; the service-account install fixes this "
+          "(docs/guides/SERVICE-ACCOUNT.md)", flush=True)
+    return False
 
 
 def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
@@ -1096,6 +1206,7 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
 
     Handler.db_path = db_path
     Handler.scheduler = scheduler
+    _check_state_dir()
     api_token.issue()               # fresh per start; 0600 beside the store
     Handler.hub = stream.Hub(db_path, scheduler)
     Handler.cover_hub = None        # built on first use, for this database and scheduler

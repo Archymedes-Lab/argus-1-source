@@ -6,18 +6,18 @@
 //! validate their arguments against the daemon's own formats, and make one
 //! bounded loopback request. The page never sees the API token.
 //!
-//! The token is the one the daemon hands to its own dashboard as a cookie on
-//! page load (jarvis/web/token.py): reading it that way needs no file path,
-//! works on WSL and native installs alike, and grants nothing the daemon's
-//! own page does not already have.
+//! Every request carries the app's paired client token (pairing.rs): the
+//! daemon requires a credential on every route but liveness, and it no longer
+//! hands its dashboard cookie to a peer whose account it cannot identify,
+//! which from Windows across WSL it never can. Unpaired, every command fails
+//! with the steps to pair.
 
 use serde_json::{json, Value};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::sync::Mutex;
 use std::time::Duration;
 
-use crate::pulse;
+use crate::{pairing, pulse};
 
 /// The state document is about 0.5 MB on a busy machine; 8 MB bounds a
 /// misbehaving peer without truncating a real one.
@@ -149,32 +149,6 @@ fn request_to(
     parse_response(&mut BufReader::new(sock))
 }
 
-/// `jarvis_token=<64 hex>` from the dashboard's Set-Cookie header.
-pub fn token_from_cookie(set_cookie: &str) -> Option<String> {
-    let first = set_cookie.split(';').next()?.trim();
-    let value = first.strip_prefix("jarvis_token=")?;
-    (value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())).then(|| value.to_ascii_lowercase())
-}
-
-static TOKEN: Mutex<Option<String>> = Mutex::new(None);
-
-fn fetch_token() -> Result<String, String> {
-    let r = request("GET", "/", None, None, ACTION_TIMEOUT).map_err(|e| unreachable(&e))?;
-    r.headers
-        .iter()
-        .filter(|(k, _)| k.eq_ignore_ascii_case("set-cookie"))
-        .find_map(|(_, v)| token_from_cookie(v))
-        .ok_or_else(|| "the daemon did not issue an API token".to_string())
-}
-
-fn token(refresh: bool) -> Result<String, String> {
-    let mut slot = TOKEN.lock().map_err(|_| "token lock poisoned".to_string())?;
-    if refresh || slot.is_none() {
-        *slot = Some(fetch_token()?);
-    }
-    Ok(slot.clone().unwrap_or_default())
-}
-
 fn unreachable(e: &io::Error) -> String {
     match e.kind() {
         io::ErrorKind::ConnectionRefused => "JARVIS is not running (nothing answers on the loopback port)".into(),
@@ -187,34 +161,41 @@ fn json_of(r: &Response) -> Result<Value, String> {
     serde_json::from_slice(&r.body).map_err(|_| format!("JARVIS answered HTTP {} with a body that is not JSON", r.status))
 }
 
+/// A 403 that names the token: the pairing was revoked or never made.
+fn refused_token(r: &Response, v: &Value) -> bool {
+    r.status == 403 && v.get("error").and_then(Value::as_str).is_some_and(|m| m.contains("token"))
+}
+
 fn get_json(path: &str, timeout: Duration) -> Result<Value, String> {
-    let r = request("GET", path, None, None, timeout).map_err(|e| unreachable(&e))?;
+    let t = pairing::client_token()?;
+    let r = request("GET", path, Some(&t), None, timeout).map_err(|e| unreachable(&e))?;
     if r.status != 200 {
+        let v = json_of(&r).unwrap_or(Value::Null);
+        if refused_token(&r, &v) {
+            return Err(REVOKED.into());
+        }
         return Err(format!("JARVIS answered HTTP {}", r.status));
     }
     json_of(&r)
 }
 
-/// A state-changing call: token attached, refreshed once if the daemon
-/// restarted since it was read (each start issues a new one).
+const REVOKED: &str = "ARGUS-1 refused this app's pairing (revoked, or from another install). \
+                       Pair again: `jarvis desktop pair --name desktop`, then replace client.token.";
+
+/// A state-changing call with the paired client token.
 fn post_json(path: &str, body: &Value, timeout: Duration) -> Result<Value, String> {
     let bytes = serde_json::to_vec(body).map_err(|e| e.to_string())?;
-    for attempt in 0..2 {
-        let t = token(attempt == 1)?;
-        let r = request("POST", path, Some(&t), Some(&bytes), timeout).map_err(|e| unreachable(&e))?;
-        let v = json_of(&r).unwrap_or(Value::Null);
-        let token_refused = r.status == 403
-            && v.get("error").and_then(Value::as_str).is_some_and(|m| m.contains("token"));
-        if token_refused && attempt == 0 {
-            continue;
-        }
-        if (200..300).contains(&r.status) {
-            return Ok(v);
-        }
-        let msg = v.get("message").or_else(|| v.get("error")).and_then(Value::as_str).unwrap_or("refused");
-        return Err(format!("JARVIS refused: {msg} (HTTP {})", r.status));
+    let t = pairing::client_token()?;
+    let r = request("POST", path, Some(&t), Some(&bytes), timeout).map_err(|e| unreachable(&e))?;
+    let v = json_of(&r).unwrap_or(Value::Null);
+    if refused_token(&r, &v) {
+        return Err(REVOKED.into());
     }
-    Err("JARVIS refused the API token twice".into())
+    if (200..300).contains(&r.status) {
+        return Ok(v);
+    }
+    let msg = v.get("message").or_else(|| v.get("error")).and_then(Value::as_str).unwrap_or("refused");
+    Err(format!("JARVIS refused: {msg} (HTTP {})", r.status))
 }
 
 // ---- argument formats, mirrored from the daemon ---------------------------
@@ -320,8 +301,7 @@ mod tests {
         .unwrap();
         assert_eq!(r.status, 200);
         assert_eq!(r.body, b"hello");
-        let cookie = r.header("set-cookie").unwrap();
-        assert_eq!(token_from_cookie(cookie).unwrap().len(), 64);
+        assert!(r.header("set-cookie").is_some());
     }
 
     #[test]
@@ -349,17 +329,6 @@ mod tests {
     fn oversized_body_without_length_is_refused() {
         let raw = format!("HTTP/1.0 200 OK\r\n\r\n{}", "x".repeat(MAX_BODY + 10));
         assert!(parse(&raw).is_err());
-    }
-
-    #[test]
-    fn token_cookie_is_exactly_the_daemons_format() {
-        let hex = "ab".repeat(32);
-        assert_eq!(token_from_cookie(&format!("jarvis_token={hex}; Path=/")), Some(hex.clone()));
-        assert_eq!(token_from_cookie(&format!("jarvis_token={hex}")), Some(hex.clone()));
-        assert_eq!(token_from_cookie("jarvis_token=short; Path=/"), None);
-        assert_eq!(token_from_cookie(&format!("other={hex}")), None);
-        assert_eq!(token_from_cookie(&format!("jarvis_token={}", "zz".repeat(32))), None);
-        assert_eq!(token_from_cookie(&format!("jarvis_token={hex}\r\nInjected: 1")), None);
     }
 
     // ---- against a fake daemon on a real socket --------------------------------
@@ -398,7 +367,7 @@ mod tests {
 
         let (port, h) = fake_daemon(b"HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{}".to_vec(), Duration::ZERO);
         request_to(port, "GET", "/api/state", None, None, Duration::from_secs(5)).unwrap();
-        assert!(!h.join().unwrap().contains("X-JARVIS-Token"), "reads never carry the token");
+        assert!(!h.join().unwrap().contains("X-JARVIS-Token"), "no token unless the caller passes one");
     }
 
     #[test]

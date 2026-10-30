@@ -347,12 +347,20 @@ foreach ($entry in $channels) {
 # A Windows service can look healthy while the WSL ingester or the other
 # collectors are blind. Refuse cutover until the running system supplies a
 # fresh, complete baseline that can be compared with new receipts.
-$jarvisHealth = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/health' -TimeoutSec 10
+# Health sources and the state need a paired client token (jarvis desktop pair);
+# without one, the cutover is refused below rather than judged on liveness alone.
+$jarvisTokenPath = if ($env:JARVIS_CLIENT_TOKEN_FILE) { $env:JARVIS_CLIENT_TOKEN_FILE } else { Join-Path $env:LOCALAPPDATA 'Jarvis\client.token' }
+$jarvisToken = try { ([IO.File]::ReadAllText($jarvisTokenPath)).Trim() } catch { '' }
+if ($jarvisToken -cnotmatch '^jc1_[0-9a-f]{12}_[A-Za-z0-9_-]{43}$') {
+    throw "No paired client token at $jarvisTokenPath (jarvis desktop pair --name sensor-install); no cutover attempted."
+}
+$jarvisAuth = @{ 'X-JARVIS-Token' = $jarvisToken }
+$jarvisHealth = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/health' -TimeoutSec 10 -Headers $jarvisAuth
 if (-not $jarvisHealth.healthy -or $jarvisHealth.sources.native.status -ne 'complete' -or
     $jarvisHealth.sources.bridge.status -ne 'complete') {
     throw 'JARVIS health/native/bridge baseline is incomplete; no cutover attempted.'
 }
-$jarvisState = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/state' -TimeoutSec 30
+$jarvisState = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/state' -TimeoutSec 30 -Headers $jarvisAuth
 $coverage = $jarvisState.jobs | Where-Object { $_.name -eq 'coverage' } | Select-Object -First 1
 $collectorFailures = @($jarvisState.findings | Where-Object {
     $_.job -eq 'coverage' -and $_.category -eq 'collectors' -and

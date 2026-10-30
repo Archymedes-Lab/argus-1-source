@@ -12,6 +12,11 @@
 #                             (needs sudo once)
 #   ./install.sh --windows    ...and print the one Windows command that keeps
 #                             WSL itself alive across reboots
+#   ./install.sh --service-account
+#                             RECOMMENDED: --priority, then move the daemon to
+#                             its own `jarvis` account (state 0700/0600, token
+#                             unreadable by this account and by Windows); see
+#                             docs/guides/SERVICE-ACCOUNT.md (needs sudo once)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,12 +41,14 @@ case ":$PATH:" in
 esac
 
 want_service=false; want_windows=false; want_priority=false; want_seal=false
+want_account=false
 for arg in "$@"; do
   case "$arg" in
     --service) want_service=true ;;
     --priority) want_service=true; want_priority=true ;;
     --seal) want_service=true; want_priority=true; want_seal=true ;;
     --windows) want_windows=true ;;
+    --service-account) want_service=true; want_priority=true; want_account=true ;;
   esac
 done
 
@@ -147,7 +154,12 @@ EOF
   sudo systemctl enable --now jarvis.service
   echo "now managed by:  sudo systemctl status jarvis"
   echo "verify:          systemctl show jarvis -p Nice -p OOMScoreAdjust -p CPUWeight"
+  if ! $want_account; then
+    echo "recommended:     ./install.sh --service-account  (the daemon under its own account;"
+    echo "                 docs/guides/SERVICE-ACCOUNT.md)"
+  fi
 fi
+
 
 if $want_seal; then
   echo
@@ -264,4 +276,12 @@ and linger keeps it up with no session attached.
 To undo:  Unregister-ScheduledTask -TaskName "WSL jarvis 24x7"
 --------------------------------------------------------------------
 EOF
+fi
+
+# Last, so a --seal in the same run has installed the user self-check timer
+# that the switch then moves to the jarvis account.
+if $want_account; then
+  echo
+  echo "Moving the daemon to its own account (docs/guides/SERVICE-ACCOUNT.md)."
+  sudo JARVIS_OWNER="$USER" "$HERE/scripts/repair/install-service-user.sh"
 fi

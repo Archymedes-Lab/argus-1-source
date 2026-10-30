@@ -1,25 +1,24 @@
-"""Per-start API token for the state-changing routes.
+"""Per-start API token, and who may receive it.
 
-`jarvis serve` writes a fresh random token to a 0600 file when it starts; the
-dashboard receives it as a SameSite cookie on the page load, and the CLI reads
-the file. Every POST route that changes state (run, answer, fix, geo) requires
-it as the `X-JARVIS-Token` header or the `jarvis_token` cookie.
+`jarvis serve` writes a fresh random token to a 0600 file when it starts. Every
+API route except liveness (/api/health, /api/live) requires a credential: this
+token as the `X-JARVIS-Token` header, `Authorization: Bearer`, or the
+`jarvis_token` cookie; or a paired client token (web/clients.py) the same ways
+or as the `jarvis_client` cookie a browser gets from the /pair page.
 
-What this closes: DNS-rebound pages, cross-site pages, and any client that can
-neither read the token file nor load the dashboard page as an allowed peer.
+The dashboard's HTML pages hand the per-start token to whoever loads them, so
+that hand-over is gated: on Linux the connecting socket's owner is looked up in
+/proc/net/tcp{,6} and the cookie goes only to the daemon's own account, root
+(both can read the file) and the owner account named in JARVIS_OWNER_UID when
+the daemon runs under its own service account. Any other account, and any peer
+whose owner cannot be determined -- a Windows program reaching the daemon
+through WSL networking -- gets no cookie: it pairs explicitly instead
+(`jarvis desktop pair`, then the app's token file or the /pair page).
 
-The dashboard page hands the token to whoever loads it, so the page load is
-itself gated: on Linux the connecting socket's owner is looked up in
-/proc/net/tcp{,6} and the cookie is issued only to this account or root (both
-can read the file anyway). A peer whose owner cannot be seen there -- a Windows
-process reaching the daemon through WSL mirrored networking -- still receives
-it; that is the residual exposure until the daemon runs as its own user
-(PROTECTION-REVIEW-2026-10-21 F2). Until then the token is a gate, not a wall:
-a process of the same account can read the file, and from Windows through
-\\\\wsl.localhost.
-
-With no token issued (serve() not started) every state-changing request is
-refused: the gate fails closed.
+With no token issued (serve() not started) nothing is accepted: the gate fails
+closed. A process running as the daemon's own account can still read the file;
+that is why the daemon is meant to run as its own account
+(docs/guides/SERVICE-ACCOUNT.md).
 """
 
 import os
@@ -81,29 +80,56 @@ def read(path=TOKEN_PATH):
         return ""
 
 
-def presented(headers):
-    """The token a request carries, from the header or the cookie, or ""."""
+CLIENT_COOKIE = "jarvis_client"
+CLIENT_COOKIE_MAX_AGE = 30 * 86400
+
+
+def _cookies(headers):
+    out = {}
+    for part in (headers.get("Cookie") or "").split(";")[:64]:
+        name, _, val = part.strip().partition("=")
+        if name and name not in out:
+            out[name] = val.strip()
+    return out
+
+
+def candidates(headers):
+    """Every credential a request carries, in order: the header, a Bearer
+    Authorization, the dashboard cookie, the paired-browser cookie."""
+    out = []
     value = (headers.get(HEADER) or "").strip()
     if value:
-        return value
-    for part in (headers.get("Cookie") or "").split(";"):
-        name, _, val = part.strip().partition("=")
-        if name == COOKIE:
-            return val.strip()
-    return ""
+        out.append(value)
+    auth = (headers.get("Authorization") or "").strip()
+    if auth[:7].lower() == "bearer " and auth[7:].strip():
+        out.append(auth[7:].strip())
+    cookies = _cookies(headers)
+    for name in (COOKIE, CLIENT_COOKIE):
+        if cookies.get(name):
+            out.append(cookies[name])
+    return [v[:256] for v in out]
+
+
+def presented(headers):
+    """The first credential a request carries, or ""."""
+    found = candidates(headers)
+    return found[0] if found else ""
 
 
 def accepts(headers):
     """True only when a token is in force and the request carries exactly it.
 
-    Fails closed: with no token issued nothing state-changing is accepted. The
-    comparison is constant time over bytes, so a non-ASCII header value is a
-    plain mismatch rather than an exception.
+    Fails closed: with no token issued nothing is accepted. The comparison is
+    constant time over bytes, so a non-ASCII header value is a plain mismatch
+    rather than an exception.
     """
     if _TOKEN is None:
         return False
-    given = presented(headers).encode("utf-8", "replace")
-    return secrets.compare_digest(given, _TOKEN.encode("ascii"))
+    want = _TOKEN.encode("ascii")
+    ok = False
+    for value in candidates(headers):
+        ok |= secrets.compare_digest(value.encode("utf-8", "replace"), want)
+    return ok
 
 
 def cookie_header():
@@ -115,6 +141,12 @@ def cookie_header():
     if _TOKEN is None:
         return None
     return f"{COOKIE}={_TOKEN}; Path=/; HttpOnly; SameSite=Strict"
+
+
+def client_cookie_header(client_token):
+    """Set-Cookie value that keeps a paired browser's client token."""
+    return (f"{CLIENT_COOKIE}={client_token}; Path=/; HttpOnly; SameSite=Strict; "
+            f"Max-Age={CLIENT_COOKIE_MAX_AGE}")
 
 
 # ---- who may receive the token with the dashboard page ------------------------
@@ -172,14 +204,26 @@ def peer_uid(client, server, tables=PROC_NET):
     return None
 
 
-def may_receive(uid):
+def owner_uids(environ=None):
+    """Extra accounts that may receive the dashboard cookie: the owner named by
+    the service-account install (JARVIS_OWNER_UID, comma separated)."""
+    raw = (environ if environ is not None else os.environ).get("JARVIS_OWNER_UID", "")
+    out = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            out.add(int(part))
+    return out
+
+
+def may_receive(uid, environ=None):
     """Whether a peer owned by `uid` may be handed the token with the page.
 
-    This account and root may (both can read the token file anyway). Any other
-    attributed account may not. An unattributable peer (None) keeps today's
-    behaviour -- see the module docstring for that residual exposure.
+    This account, root (both can read the token file anyway) and a configured
+    owner account may. Any other account may not, and neither may a peer whose
+    owner cannot be determined (None): it pairs explicitly instead. Fails closed.
     """
     if uid is None:
-        return True
+        return False
     euid = os.geteuid() if hasattr(os, "geteuid") else None
-    return uid == 0 or uid == euid
+    return uid == 0 or uid == euid or uid in owner_uids(environ)

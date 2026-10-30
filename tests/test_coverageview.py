@@ -15,6 +15,7 @@ from jarvis.core.store import Store
 from jarvis.service import attackmap, coveragemap
 from jarvis.service.schedule import JOBS
 from jarvis.web import server
+from tests import _apiauth
 
 
 class SourcesTests(unittest.TestCase):
@@ -339,7 +340,8 @@ class RouteTests(unittest.TestCase):
 
     def get(self, path):
         try:
-            with urllib.request.urlopen(self.base + path, timeout=10) as res:
+            req = urllib.request.Request(self.base + path, headers=_apiauth.grant(self))
+            with urllib.request.urlopen(req, timeout=10) as res:
                 return res.status, dict(res.headers), res.read()
         except urllib.error.HTTPError as exc:
             return exc.code, dict(exc.headers), exc.read()
@@ -360,7 +362,8 @@ class RouteTests(unittest.TestCase):
     def stream(self, headers=None):
         import http.client
         conn = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=5)
-        conn.request("GET", "/api/coverage/stream", headers=headers or {})
+        conn.request("GET", "/api/coverage/stream",
+                     headers={**_apiauth.grant(self), **(headers or {})})
         self.addCleanup(conn.close)
         return conn.getresponse()
 
@@ -407,7 +410,8 @@ class RouteTests(unittest.TestCase):
     def test_page_loads_no_inline_or_foreign_script(self):
         _status, _headers, body = self.get("/coverage")
         page = body.decode()
-        self.assertEqual(page.count("<script"), 1)
+        self.assertEqual(page.count("<script"), 2)
+        self.assertIn('<script src="/static/session.js"></script>', page)
         self.assertIn('<script type="module" src="/static/coverage.js"></script>', page)
         self.assertNotIn("http://", page)
         self.assertNotIn("https://", page)

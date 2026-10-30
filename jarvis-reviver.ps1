@@ -81,6 +81,19 @@ function Save-State($s) {
     } catch { }
 }
 
+function Get-JarvisClientToken {
+    # A paired client token (`jarvis desktop pair --name supervisor`, saved on its own
+    # line). Every API route but liveness needs one; without it this script sees
+    # liveness only. Keep the file readable by this account alone.
+    $path = if ($env:JARVIS_CLIENT_TOKEN_FILE) { $env:JARVIS_CLIENT_TOKEN_FILE } else { Join-Path $env:LOCALAPPDATA 'Jarvis\client.token' }
+    try { $t = ([IO.File]::ReadAllText($path)).Trim() } catch { return $null }
+    if ($t -cmatch '^jc1_[0-9a-f]{12}_[A-Za-z0-9_-]{43}$') { return $t }
+    return $null
+}
+function Add-JarvisToken($req) {
+    $tok = Get-JarvisClientToken
+    if ($tok) { $req.Headers.Add('X-JARVIS-Token', $tok) }
+}
 function Now { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
 
 # --- install / remove --------------------------------------------------------
@@ -127,6 +140,7 @@ function Get-Health {
     # Invoke-RestMethod can block past its timeout in a hidden task session.
     try {
         $req = [Net.HttpWebRequest]::Create($HealthUrl)
+        Add-JarvisToken $req
         $req.Proxy = $null; $req.Timeout = 4000; $req.ReadWriteTimeout = 4000; $req.KeepAlive = $false
         $resp = $req.GetResponse()
     } catch [Net.WebException] {
@@ -146,6 +160,7 @@ function Invoke-Run([string]$job) {
     try {
         $req = [Net.HttpWebRequest]::Create("$base/api/run?job=$([uri]::EscapeDataString($job))")
         $req.Proxy = $null; $req.Timeout = 4000; $req.Method = 'POST'; $req.ContentLength = 0
+        Add-JarvisToken $req
         $req.GetResponse().Dispose()
         return $true
     } catch { return $false }

@@ -52,6 +52,10 @@ impl From<io::Error> for End {
 }
 
 fn open(path: &str) -> io::Result<(u16, BufReader<TcpStream>)> {
+    // Every data route needs the paired client token (pairing.rs). Unpaired,
+    // the stream is not attempted: the caller's poll reports the steps.
+    let token = crate::pairing::client_token()
+        .map_err(|e| io::Error::new(io::ErrorKind::PermissionDenied, e))?;
     let (addr, port) = (SocketAddr::from(([127, 0, 0, 1], port())), port());
     let sock = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)?;
     sock.set_read_timeout(Some(READ_TIMEOUT))?;
@@ -59,7 +63,8 @@ fn open(path: &str) -> io::Result<(u16, BufReader<TcpStream>)> {
     (&sock).write_all(
         format!(
             "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUser-Agent: jarvis-desktop\r\n\
-             Accept: text/event-stream, application/json\r\nConnection: close\r\n\r\n"
+             Accept: text/event-stream, application/json\r\nX-JARVIS-Token: {token}\r\n\
+             Connection: close\r\n\r\n"
         )
         .as_bytes(),
     )?;

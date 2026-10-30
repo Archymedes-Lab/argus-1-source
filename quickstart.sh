@@ -49,8 +49,20 @@ print("oldest pass: %.1f min ago" % (oldest / 60))
 
 health() {
   local out
-  if ! out="$(curl -fsS "http://127.0.0.1:$PORT/api/state" 2>/dev/null)"; then
-    echo "dashboard not answering on :$PORT"; return 1
+  # /api/state needs a credential; the API client reads it from the caller's
+  # paired token file or the daemon's token file, never from an argument.
+  if ! out="$(cd "$HERE" && python3 -c 'import json, sys
+from jarvis.web import apiclient
+try:
+    status, body = apiclient.request("GET", "/api/state", port=int(sys.argv[1]))
+except apiclient.Unpaired as exc:
+    sys.exit(str(exc))
+except OSError:
+    sys.exit(1)
+if status != 200:
+    sys.exit("HTTP %d" % status)
+print(json.dumps(body))' "$PORT" 2>/dev/null)"; then
+    echo "dashboard not answering on :$PORT (or this account is not paired: jarvis desktop pair)"; return 1
   fi
   printf '%s' "$out" | python3 -c "$HEALTH_PY"
 }
@@ -108,7 +120,7 @@ fi
 
 say "3/$total  Waiting for the dashboard"
 for i in $(seq 1 30); do
-  curl -fsS "http://127.0.0.1:$PORT/api/state" >/dev/null 2>&1 && { echo "up after ${i}s"; break; }
+  curl -fsS "http://127.0.0.1:$PORT/api/live" >/dev/null 2>&1 && { echo "up after ${i}s"; break; }
   sleep 1
 done
 

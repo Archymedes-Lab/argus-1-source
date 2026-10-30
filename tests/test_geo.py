@@ -11,6 +11,7 @@ from jarvis.collectors.host import geo
 from jarvis.core.store import Store
 from jarvis.service import geosecurity
 from jarvis.web.server import Handler
+from tests import _apiauth
 
 
 class _FakeScheduler:
@@ -216,7 +217,7 @@ class GeoCSPTests(unittest.TestCase):
 
     def _served_csp(self, path):
         handler = Handler.__new__(Handler)
-        handler.headers = {"Host": "localhost:8787"}
+        handler.headers = {"Host": "localhost:8787", **_apiauth.grant(self)}
         handler._send = Mock()
         handler.path = path
         old, Handler.scheduler = Handler.scheduler, _FakeScheduler()
@@ -257,7 +258,8 @@ class GeoCSPTests(unittest.TestCase):
 
     def test_global_detail_providers_use_layer_not_provider_minimums(self):
         """Global z8/z14 provider minimums make Cesium enumerate huge roots."""
-        html = (Path(__file__).parents[1] / "jarvis/web/static/geo.html").read_text()
+        static = Path(__file__).parents[1] / "jarvis/web/static"
+        html = (static / "geo.html").read_text() + (static / "geo.js").read_text()
         self.assertNotIn("minimumLevel: img.mid.min_level", html)
         self.assertNotIn("minimumLevel: img.detail.min_level", html)
         self.assertIn("minimumTerrainLevel: img.mid.min_level", html)
@@ -286,7 +288,7 @@ class GeoRouteTests(unittest.TestCase):
     def _get_geo(self):
         handler = Handler.__new__(Handler)
         handler.db_path = self.path
-        handler.headers = {"Host": "localhost:8787"}
+        handler.headers = {"Host": "localhost:8787", **_apiauth.grant(self)}
         handler._send = Mock()
         handler.path = "/api/geo"
         handler.do_GET()
@@ -349,8 +351,9 @@ class LocalMapTests(unittest.TestCase):
     """The 2D local map: modes, controls, zone editing, graceful degradation."""
 
     def setUp(self):
-        self.html = (Path(__file__).parents[1]
-                     / "jarvis/web/static/geo.html").read_text()
+        static = Path(__file__).parents[1] / "jarvis/web/static"
+        # The page and its script (no inline script under the CSP).
+        self.html = (static / "geo.html").read_text() + (static / "geo.js").read_text()
 
     def test_four_modes_are_offered(self):
         for mode in ("street", "satellite", "hybrid", "globe"):

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>ARGUS-1 · Pair this browser</title>
+<style>
+  :root { --bg: #f5f6f8; --ink: #14181f; --ink-2: #4a5465; --line: #d7dce4; --accent: #1f5fd1; --bad: #c2283b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0c0f14; --ink: #e8edf5; --ink-2: #9aa6b8; --line: #2a3140; --accent: #6aa1ff; --bad: #ff6b7d; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 10vh auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  p { color: var(--ink-2); }
+  code { font: 13px ui-monospace, SFMono-Regular, Consolas, monospace; }
+  label { display: block; margin: 20px 0 6px; font-weight: 600; }
+  input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 8px; background: transparent; color: inherit; font: 13px ui-monospace, monospace; }
+  button { margin-top: 14px; padding: 9px 16px; border: 0; border-radius: 8px;
+    background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  #result { min-height: 1.5em; margin-top: 14px; }
+  #result.bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pair this browser with ARGUS-1</h1>
+  <p>ARGUS-1 could not confirm which account this browser runs under, so it will not
+    show your security data until you pair it. On the machine running ARGUS-1, run
+    <code>jarvis desktop pair --name browser</code> (if ARGUS-1 runs under its own account:
+    <code>sudo jarvis-svc desktop pair --name browser</code>) and paste the token it prints.</p>
+  <p>The token is kept by this browser as a cookie that page scripts cannot read. You
+    can list and revoke paired clients with <code>jarvis desktop clients</code> and
+    <code>jarvis desktop revoke ID</code>.</p>
+  <form id="pair" autocomplete="off">
+    <label for="token">Client token</label>
+    <input id="token" name="token" type="password" spellcheck="false" required
+           pattern="jc1_[0-9a-f]{12}_[A-Za-z0-9_\-]{43}" placeholder="jc1_…">
+    <button type="submit">Pair</button>
+  </form>
+  <div id="result" role="status" aria-live="polite"></div>
+</main>
+<script src="/static/pair.js"></script>
+</body>
+</html>
