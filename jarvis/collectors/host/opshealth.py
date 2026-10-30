@@ -288,7 +288,10 @@ def audit(store, hosts=None, now=None, root="/", run=_run, cert_reader=cert_expi
             # last journal lines (Jev 2026-10-29: 0.76 that this can misfire).
             out.append(_finding("operations", "medium", "the server went down without shutting down",
                                 f"boot {e['boot'][:12]} ended with no clean shutdown: power loss, kernel panic, "
-                                "a hard reset or a hypervisor stop", "journal"))
+                                "a hard reset or a hypervisor stop",
+                                # One identity per boot (category+title+where): with a shared
+                                # "journal", three crashes merged into one alert and one ack.
+                                f"journal boot {e['boot'][:12]}"))
     if problems:
         out.append(_finding("visibility", "medium", "server operations not fully observed",
                             "; ".join(problems)[:1500], "opshealth"))

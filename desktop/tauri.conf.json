@@ -34,7 +34,7 @@
     "targets": [
       "nsis"
     ],
-    "publisher": "ARGUS-1",
+    "publisher": "Archymedes",
     "shortDescription": "ARGUS-1 desktop",
     "longDescription": "Native window, tray and notifications for the local ARGUS-1 daemon. The daemon does the monitoring; this app only shows it and passes on your explicit decisions.",
     "icon": [

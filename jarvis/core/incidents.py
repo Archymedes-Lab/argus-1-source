@@ -12,6 +12,9 @@ import math
 
 SEVERITIES = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 COVERAGE = {"complete", "partial", "unavailable"}
+# The error the scheduler stores when a run returned evidence but its coverage
+# was not complete and no collector error explains why (a visibility finding).
+COVERAGE_INCOMPLETE = "collector coverage incomplete"
 
 
 def encode(value):

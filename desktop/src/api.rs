@@ -151,14 +151,14 @@ fn request_to(
 
 fn unreachable(e: &io::Error) -> String {
     match e.kind() {
-        io::ErrorKind::ConnectionRefused => "JARVIS is not running (nothing answers on the loopback port)".into(),
-        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => "JARVIS did not answer in time".into(),
-        _ => format!("could not reach JARVIS: {e}"),
+        io::ErrorKind::ConnectionRefused => "ARGUS-1 is not running (nothing answers on the loopback port)".into(),
+        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => "ARGUS-1 did not answer in time".into(),
+        _ => format!("could not reach ARGUS-1: {e}"),
     }
 }
 
 fn json_of(r: &Response) -> Result<Value, String> {
-    serde_json::from_slice(&r.body).map_err(|_| format!("JARVIS answered HTTP {} with a body that is not JSON", r.status))
+    serde_json::from_slice(&r.body).map_err(|_| format!("ARGUS-1 answered HTTP {} with a body that is not JSON", r.status))
 }
 
 /// A 403 that names the token: the pairing was revoked or never made.
@@ -174,7 +174,7 @@ fn get_json(path: &str, timeout: Duration) -> Result<Value, String> {
         if refused_token(&r, &v) {
             return Err(REVOKED.into());
         }
-        return Err(format!("JARVIS answered HTTP {}", r.status));
+        return Err(format!("ARGUS-1 answered HTTP {}", r.status));
     }
     json_of(&r)
 }
@@ -195,7 +195,7 @@ fn post_json(path: &str, body: &Value, timeout: Duration) -> Result<Value, Strin
         return Ok(v);
     }
     let msg = v.get("message").or_else(|| v.get("error")).and_then(Value::as_str).unwrap_or("refused");
-    Err(format!("JARVIS refused: {msg} (HTTP {})", r.status))
+    Err(format!("ARGUS-1 refused: {msg} (HTTP {})", r.status))
 }
 
 // ---- argument formats, mirrored from the daemon ---------------------------

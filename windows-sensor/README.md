@@ -6,11 +6,21 @@ order, as immutable batch files. No console window, no WSL or PowerShell
 dependency, no network listener, no command execution. It keeps recording
 while WSL is down; JARVIS catches up from the spool when it returns.
 
-Install (elevated PowerShell, from this folder):
+Install with `jarvis sensor install [--enable-task-log] [--sysmon-log-mb 256]`:
+it hashes `install.ps1` and `JarvisSensor.cs` from the checkout before the UAC
+prompt, and the elevated shell runs them only after copying them into Program
+Files and matching those hashes. By hand (elevated PowerShell), pass the
+SHA-256 of the `JarvisSensor.cs` you reviewed; any other source is refused
+before it is compiled:
 
 ```powershell
-.\install.ps1 -Install -EnableTaskLog -SysmonLogMB 256
+.\install.ps1 -Install -SourceSha256 <reviewed SHA-256> -EnableTaskLog -SysmonLogMB 256
 ```
+
+`.\install.ps1 -Remove` also revokes the two grants install made, the
+logon-as-a-service right and Event Log Readers membership of
+`NT SERVICE\JarvisNativeSensor` (by SID, so they go even if the service is
+already deleted), and fails with a list of anything it could not remove.
 
 To cut over an existing installation to three isolated SCM services, stage the
 reviewed `JarvisSensor.cs`, `monitor-isolated.ps1`, `install-isolated.ps1`, and

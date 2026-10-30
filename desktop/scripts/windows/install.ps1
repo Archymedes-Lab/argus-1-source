@@ -1,25 +1,25 @@
 <#
 .SYNOPSIS
-  Install (or remove) the JARVIS desktop app for the current Windows user.
+  Install (or remove) the ARGUS-1 desktop app for the current Windows user.
 
 .DESCRIPTION
   No administrator rights, no network, no installer framework: every change is listed here
   and -Uninstall reverses all of them.
 
-    %LOCALAPPDATA%\Programs\JARVIS\jarvis-desktop.exe   the binary (hash-checked copy)
-    %LOCALAPPDATA%\Programs\JARVIS\jarvis.png           notification icon
-    %LOCALAPPDATA%\Programs\JARVIS\install-receipt.json what was installed, from which build
+    %LOCALAPPDATA%\Programs\ARGUS-1\jarvis-desktop.exe   the binary (hash-checked copy)
+    %LOCALAPPDATA%\Programs\ARGUS-1\jarvis.png           notification icon
+    %LOCALAPPDATA%\Programs\ARGUS-1\install-receipt.json what was installed, from which build
     HKCU\Software\Classes\AppUserModelId\local.jarvis.desktop
                                                          lets Windows show the app's toasts
-    Start menu\Programs\JARVIS.lnk                       launcher
-    Scheduled task "JARVIS desktop"                      at logon, current user, limited,
+    Start menu\Programs\ARGUS-1.lnk                       launcher
+    Scheduled task "ARGUS-1 desktop"                      at logon, current user, limited,
                                                          runs the binary with --hidden (tray)
 
   The app is a client: quitting or removing it never stops monitoring (`jarvis serve` and
   its tasks are untouched). WebView2 keeps its own profile in
   %LOCALAPPDATA%\local.jarvis.desktop; -Uninstall leaves it unless -Purge is given.
 
-  JARVIS's own control audit will list the "JARVIS desktop" task (an undeclared scheduled
+  ARGUS-1's own control audit will list the "ARGUS-1 desktop" task (an undeclared scheduled
   task, low) and the new unsigned binary. That is the correct report for a binary built
   here; it is not suppressed.
 
@@ -40,12 +40,12 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 
 $AppId = 'local.jarvis.desktop'           # tauri.conf.json "identifier": the toast AUMID
-$TaskName = 'JARVIS desktop'
-$Dest = Join-Path $env:LOCALAPPDATA 'Programs\JARVIS'
+$TaskName = 'ARGUS-1 desktop'
+$Dest = Join-Path $env:LOCALAPPDATA 'Programs\ARGUS-1'
 $Exe = Join-Path $Dest 'jarvis-desktop.exe'
 $Icon = Join-Path $Dest 'jarvis.png'
 $AumidKey = "HKCU:\Software\Classes\AppUserModelId\$AppId"
-$Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'JARVIS.lnk'
+$Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'ARGUS-1.lnk'
 $Me = "$env:USERDOMAIN\$env:USERNAME"
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -75,7 +75,7 @@ if ($Uninstall) {
     if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { $left += "task $TaskName" }
     if (Test-Path -LiteralPath $AumidKey) { $left += $AumidKey }
     if ($left.Count) { throw "Not fully removed: $($left -join ', ')" }
-    Write-Host 'JARVIS desktop removed. Monitoring is unaffected.' -ForegroundColor Green
+    Write-Host 'ARGUS-1 desktop removed. Monitoring is unaffected.' -ForegroundColor Green
     exit 0
 }
 
@@ -100,14 +100,14 @@ Copy-Item -LiteralPath (Join-Path $BuildRoot 'jarvis.png') -Destination $Icon -F
 
 # Toasts from an unpackaged app show only for a registered AppUserModelID.
 New-Item -Path $AumidKey -Force | Out-Null
-New-ItemProperty -Path $AumidKey -Name 'DisplayName' -Value 'JARVIS' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $AumidKey -Name 'DisplayName' -Value 'ARGUS-1' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $AumidKey -Name 'IconUri' -Value $Icon -PropertyType String -Force | Out-Null
 
 $shell = New-Object -ComObject WScript.Shell
 $lnk = $shell.CreateShortcut($Shortcut)
 $lnk.TargetPath = $Exe
 $lnk.WorkingDirectory = $Dest
-$lnk.Description = 'JARVIS desktop'
+$lnk.Description = 'ARGUS-1 desktop'
 $lnk.Save()
 
 if ($NoAutostart) {
@@ -119,7 +119,7 @@ if ($NoAutostart) {
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-        -Principal $taskPrincipal -Settings $settings -Description 'JARVIS desktop window and tray (a client; monitoring runs without it).' -Force | Out-Null
+        -Principal $taskPrincipal -Settings $settings -Description 'ARGUS-1 desktop window and tray (a client; monitoring runs without it).' -Force | Out-Null
 }
 
 # Read back what was installed rather than trusting the calls above.
@@ -136,7 +136,7 @@ if ($NoAutostart) {
 }
 $check = [ordered]@{
     binary_matches_build = ((Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant() -eq $hash)
-    aumid_registered     = ((Get-ItemProperty -LiteralPath $AumidKey -ErrorAction SilentlyContinue).DisplayName -eq 'JARVIS')
+    aumid_registered     = ((Get-ItemProperty -LiteralPath $AumidKey -ErrorAction SilentlyContinue).DisplayName -eq 'ARGUS-1')
     shortcut             = (Test-Path -LiteralPath $Shortcut)
     autostart            = $autostart
 }
@@ -168,4 +168,4 @@ if (-not $NoLaunch) {
         throw "Installed, but $Exe is not running 5 s after launch."
     }
 }
-Write-Host "JARVIS desktop installed ($hash)." -ForegroundColor Green
+Write-Host "ARGUS-1 desktop installed ($hash)." -ForegroundColor Green

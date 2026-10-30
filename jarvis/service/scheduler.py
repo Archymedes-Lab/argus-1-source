@@ -60,6 +60,8 @@ RESUME_JUMP_S = 60.0
 # A failed run inside its freshness budget keeps the last good result and is
 # retried after RETRY_S, at most HOLD_MAX times in a row before it is recorded.
 RETRY_S = 60
+# How often time-bounded containment (defense.expire) is checked for expiry.
+EXPIRY_SWEEP_S = 60
 # How overdue (as a share of its cadence) a forced job counts as, at least.
 FORCED_FLOOR = 1.0
 # How overdue a boot-scoped collector whose evidence predates the current boot
@@ -660,6 +662,8 @@ class Scheduler(threading.Thread):
                 setattr(self, beat, time.time())
                 setattr(self, beat + "_mono", time.monotonic())
                 self._note_resume()
+                if lane == "main":
+                    self._sweep_expiry(store)
                 name = self._due(lane)
                 if name is None:
                     time.sleep(1)
@@ -685,6 +689,21 @@ class Scheduler(threading.Thread):
                     pass
         finally:
             store.close()
+
+    def _sweep_expiry(self, store, now=None):
+        """Lift time-bounded containment whose time is up, at most once a minute.
+
+        Guarded like delivery: a failed lift is recorded on the ledger entry by
+        defense.expire, and nothing here can take down the scheduler.
+        """
+        now = time.monotonic() if now is None else now
+        if now < getattr(self, "_expiry_due", 0.0):
+            return
+        self._expiry_due = now + EXPIRY_SWEEP_S
+        try:
+            defense.expire(store)
+        except Exception:
+            pass
 
     def run_once(self, store, name):
         """Collect -> durable observation -> bounded response -> presentation.

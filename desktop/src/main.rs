@@ -27,6 +27,7 @@ mod api;
 mod brand;
 mod pairing;
 mod pulse;
+mod startmenu;
 mod watch;
 
 use std::thread;
@@ -175,6 +176,15 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn main() {
+    // `--remove-shortcut`: take the Start menu entry away (a bare exe's uninstall).
+    if std::env::args().any(|a| a == "--remove-shortcut") {
+        match startmenu::remove() {
+            Ok(true) => println!("removed the Start menu entry"),
+            Ok(false) => println!("there was no Start menu entry"),
+            Err(e) => eprintln!("could not remove the Start menu entry: {e}"),
+        }
+        return;
+    }
     // `--hidden`: start in the tray (used by the logon task).
     let hidden = std::env::args().any(|a| a == "--hidden");
     tauri::Builder::default()
@@ -198,6 +208,14 @@ fn main() {
                 .visible(!hidden)
                 .on_navigation(allowed)
                 .build()?;
+            // In the Start menu directly, under the ID its toasts use. Never fatal:
+            // the app works without the entry, and says why it is missing.
+            let aumid = app.config().identifier.clone();
+            thread::Builder::new().name("jarvis-startmenu".into()).spawn(move || {
+                if let Err(e) = startmenu::ensure(&aumid) {
+                    eprintln!("Start menu entry not written: {e}");
+                }
+            })?;
             let handle = app.handle().clone();
             thread::Builder::new()
                 .name("jarvis-pulse".into())

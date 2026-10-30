@@ -178,6 +178,16 @@ class Kernel(unittest.TestCase):
         out = opshealth.audit(store, root="/x", run=crash)
         self.assertEqual(len([f for f in out if "went down without shutting down" in f["title"]]), 1)
 
+    def test_each_unclean_boot_has_its_own_identity(self):
+        store = MetaStore()
+        opshealth.audit(store, root="/x", run=FakeRun(HEALTHY))          # learn
+        boots = [{"boot_id": c * 32} for c in "abcde"]
+        run = FakeRun({**HEALTHY, ("journalctl", "--list-boots"): (0, json.dumps(boots)),
+                       ("journalctl", "-b"): (0, "kernel: something\n")})
+        out = [f for f in opshealth.audit(store, root="/x", run=run) if "went down" in f["title"]]
+        self.assertGreaterEqual(len(out), 2)
+        self.assertEqual(len({(f["category"], f["title"], f["where"]) for f in out}), len(out))
+
     def test_volatile_journal_is_said(self):  # I1
         run = FakeRun({**HEALTHY, ("journalctl", "--list-boots"): (0, json.dumps([{"boot_id": "a" * 32}]))})
         real = os.path.isdir

@@ -67,12 +67,24 @@ class AssuranceTests(unittest.TestCase):
         # 2026-10-29: +2 partial in_app_notifications and investigation_reports.
         # 2026-10-30: +2 unverified signed_detection_content and
         # self_tamper_evidence (selfguard job); neither is validated.
-        self.assertEqual(gaps['implementation_unverified'], 28)
+        # 2026-10-30: +1 unverified bruteforce_deterrence (bruteforce job).
+        self.assertEqual(gaps['implementation_unverified'], 29)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 22)
-        self.assertEqual(gaps['containment_not_validated'], 53)  # +2 2026-10-30
-        self.assertEqual(gaps['validation_date_missing'], 53)  # +2 2026-10-30
+        self.assertEqual(gaps['containment_not_validated'], 54)  # +3 2026-10-30
+        self.assertEqual(gaps['validation_date_missing'], 54)  # +3 2026-10-30
         self.assertFalse(result['complete'])
+
+    def test_bruteforce_deterrence_claims_no_live_ban(self):
+        report = assurance.report({name: {'status': 'complete'} for required in
+                                   assurance.OBSERVATION_REQUIREMENTS.values() for name in required})
+        entry = report['capabilities']['bruteforce_deterrence']
+        self.assertEqual(entry['implementation'], 'unverified')
+        self.assertFalse(entry['validated_containment'])
+        self.assertIsNone(entry['last_validation'])
+        self.assertEqual(assurance.OBSERVATION_REQUIREMENTS['bruteforce_deterrence'], ('bruteforce',))
+        for limit in ('elevat', 'rotat', 'allowlist'):
+            self.assertIn(limit, entry['blind_spot'], limit)
 
     def test_assistant_detector_health_and_overview_claim_no_more_than_was_measured(self):
         report = assurance.report({name: {'status': 'complete'} for required in
