@@ -30,10 +30,6 @@ pub fn port() -> u16 {
     })
 }
 
-pub fn dashboard_url() -> String {
-    format!("http://127.0.0.1:{}/", port())
-}
-
 /// Why a stream ended. `Refused` (403/503) means the daemon is up but will
 /// not stream to us right now, so the caller should poll `/api/pulse`.
 /// `Io` covers timeouts, resets and malformed or oversized input alike: the
@@ -148,11 +144,6 @@ pub fn poll() -> io::Result<Value> {
     let mut body = Vec::new();
     r.by_ref().take(MAX_LINE).read_to_end(&mut body)?;
     serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-}
-
-/// Whether the daemon answers at all (used once, to pick the first page).
-pub fn reachable() -> bool {
-    TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port())), CONNECT_TIMEOUT).is_ok()
 }
 
 #[cfg(test)]

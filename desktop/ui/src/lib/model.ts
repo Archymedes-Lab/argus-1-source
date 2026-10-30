@@ -61,7 +61,7 @@ export function distinct(findings: Finding[], limit: number): (Finding & { count
 export function groupQuestions(qs: Question[]): { prompt: string; ids: Question[]; severity?: string }[] {
   const by = new Map<string, { prompt: string; ids: Question[]; severity?: string }>();
   for (const q of qs) {
-    const k = q.prompt || "A question from JARVIS";
+    const k = q.prompt || "A question from ARGUS-1";
     const g = by.get(k);
     if (g) g.ids.push(q); else by.set(k, { prompt: k, ids: [q], severity: q.severity });
   }

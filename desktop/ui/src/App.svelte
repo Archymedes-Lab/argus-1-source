@@ -24,7 +24,7 @@
       {#if app.daemon === "down" && app.data}
         <div class="mx-auto mt-6 max-w-[1200px] px-8">
           <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900">
-            <span class="dot dot-warn"></span>JARVIS is not answering right now. Showing the last state it reported; monitoring may still be running.
+            <span class="dot dot-warn"></span>ARGUS-1 is not answering right now. Showing the last state it reported; monitoring may still be running.
           </div>
         </div>
       {/if}

@@ -1,4 +1,4 @@
-//! JARVIS desktop: an always-open window, tray and notifications over the
+//! ARGUS-1 desktop: an always-open window, tray and notifications over the
 //! local daemon (docs/architecture/DESKTOP-APP.md).
 //!
 //! The app is a client, never the monitor. `jarvis serve` collects, scores
@@ -23,6 +23,7 @@
 #[cfg(all(dev, not(debug_assertions)))]
 compile_error!("release builds need `--features custom-protocol` (see docs/architecture/DESKTOP-APP.md)");
 
+mod brand;
 mod api;
 mod pulse;
 mod watch;
@@ -142,14 +143,14 @@ fn pulse_loop(app: AppHandle) {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let status = MenuItem::with_id(app, "status", "JARVIS — connecting", false, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", "Open JARVIS", true, None::<&str>)?;
+    let status = MenuItem::with_id(app, "status", "ARGUS-1 — connecting", false, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open ARGUS-1", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Close this app (monitoring continues)", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&status, &sep, &open, &quit])?;
     let icon = TrayIconBuilder::with_id("jarvis")
         .icon(dot(Level::Unknown))
-        .tooltip("JARVIS — connecting")
+        .tooltip("ARGUS-1 — connecting")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -190,7 +191,7 @@ fn main() {
         .setup(move |app| {
             build_tray(app)?;
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
-                .title("JARVIS")
+                .title("ARGUS-1")
                 .inner_size(1440.0, 920.0)
                 .min_inner_size(720.0, 480.0)
                 .visible(!hidden)
@@ -213,7 +214,7 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("JARVIS desktop failed to start");
+        .expect("ARGUS-1 desktop failed to start");
 }
 
 #[cfg(test)]
