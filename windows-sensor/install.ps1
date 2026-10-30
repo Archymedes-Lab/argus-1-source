@@ -1,7 +1,12 @@
 # Installs the JARVIS native sensor as a Windows service. Run elevated.
 #
-#   .\install.ps1 -Install [-User <account JARVIS runs as>] [-EnableTaskLog] [-SysmonLogMB 256]
+#   .\install.ps1 -Install -SourceSha256 <reviewed SHA-256 of JarvisSensor.cs>
+#                 [-User <account JARVIS runs as>] [-EnableTaskLog] [-SysmonLogMB 256]
 #   .\install.ps1 -Remove  [-PurgeSpool]
+#
+# The source hash is fixed before elevation (`jarvis sensor install` computes it
+# from the checkout): the elevated compiler builds only that exact file, never
+# whatever sits next to this script when it runs.
 #
 # Trust layout, so that nothing the unelevated user can modify ever runs as the
 # service:
@@ -27,7 +32,8 @@ param(
     # Sysmon's log wraps at 64 MB by default; records it overwrites before the
     # sensor reads them are lost (and reported as a gap). 0 leaves it alone.
     [int]$SysmonLogMB = 0,
-    [switch]$PurgeSpool
+    [switch]$PurgeSpool,
+    [string]$SourceSha256
 )
 
 $ErrorActionPreference = 'Stop'
@@ -105,6 +111,56 @@ function New-AdminOnlyDirectory([string]$prefix) {
     return $path
 }
 
+function Get-VirtualAccountSid([string]$service) {
+    # NT SERVICE\<name> is S-1-5-80- and the SHA-1 of the upper-cased UTF-16
+    # name as five little-endian 32-bit numbers. Computed, not looked up, so
+    # -Remove can still revoke after the service, and the name lookup, is gone.
+    $sha1 = [Security.Cryptography.SHA1]::Create()
+    try { $h = $sha1.ComputeHash([Text.Encoding]::Unicode.GetBytes($service.ToUpperInvariant())) }
+    finally { $sha1.Dispose() }
+    'S-1-5-80-' + ((0..4 | ForEach-Object { [BitConverter]::ToUInt32($h, $_ * 4) }) -join '-')
+}
+
+function Assert-ReviewedSource([string]$path, [string]$expected) {
+    if ($expected -notmatch '^[0-9A-Fa-f]{64}$') { throw 'No reviewed SHA-256 was given for the sensor source.' }
+    $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+    if ($actual -ne $expected) { throw "$path does not match the reviewed SHA-256; nothing was compiled." }
+}
+
+function Test-LogonRightHeld([string[]]$content, [string]$sid) {
+    foreach ($line in $content) {
+        if ($line -match '^SeServiceLogonRight\s*=\s*(.*)$') {
+            return [bool](@($Matches[1] -split ',' | ForEach-Object { $_.Trim() }) -contains "*$sid")
+        }
+    }
+    $false
+}
+
+function Remove-SidFromLogonRight([string[]]$content, [string]$sid) {
+    # Only SeServiceLogonRight, and only the exact entry: *S-1-5-80-1 is not *S-1-5-80-12.
+    foreach ($line in $content) {
+        if ($line -match '^(SeServiceLogonRight\s*=\s*)(.*)$') {
+            $prefix, $list = $Matches[1], $Matches[2]
+            $kept = @($list -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -ne "*$sid" })
+            $prefix + ($kept -join ',')
+        } else { $line }
+    }
+}
+
+function Export-UserRights([string]$tmp) {
+    $inf = Join-Path $tmp 'export.inf'
+    & (Join-Path $Sys32 'secedit.exe') /export /cfg $inf /areas USER_RIGHTS | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "secedit could not export user rights ($LASTEXITCODE)" }
+    Get-Content -LiteralPath $inf
+}
+
+function Set-UserRights([string]$tmp, [string[]]$content) {
+    $inf = Join-Path $tmp 'export.inf'
+    Set-Content -LiteralPath $inf -Value $content -Encoding Unicode
+    & (Join-Path $Sys32 'secedit.exe') /configure /db (Join-Path $tmp 'secedit.sdb') /cfg $inf /areas USER_RIGHTS | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "secedit could not apply user rights ($LASTEXITCODE)" }
+}
+
 function Grant-LogonAsService([string]$sid) {
     # A virtual service account needs SeServiceLogonRight or the service fails
     # to start with "Access is denied". sc.exe does not reliably grant it, so
@@ -112,23 +168,47 @@ function Grant-LogonAsService([string]$sid) {
     # written with a leading '*'.
     $tmp = New-AdminOnlyDirectory 'jarvis-secedit-'
     try {
-        $inf = Join-Path $tmp 'export.inf'
-        $db  = Join-Path $tmp 'secedit.sdb'
-        & (Join-Path $Sys32 'secedit.exe') /export /cfg $inf /areas USER_RIGHTS | Out-Null
-        $content = Get-Content -LiteralPath $inf
-        $line = $content | Where-Object { $_ -match '^SeServiceLogonRight' }
-        if ($line -and $line -match [regex]::Escape($sid)) { return }   # already granted
-        if ($line) {
+        $content = Export-UserRights $tmp
+        if (Test-LogonRightHeld $content $sid) { return }                # already granted
+        if ($content | Where-Object { $_ -match '^SeServiceLogonRight' }) {
             $content = $content -replace '^(SeServiceLogonRight\s*=\s*.*)$', "`$1,*$sid"
         } else {
             $content = $content -replace '(\[Privilege Rights\])', "`$1`r`nSeServiceLogonRight = *$sid"
         }
-        Set-Content -LiteralPath $inf -Value $content -Encoding Unicode
-        & (Join-Path $Sys32 'secedit.exe') /configure /db $db /cfg $inf /areas USER_RIGHTS | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "secedit could not grant the logon right ($LASTEXITCODE)" }
+        Set-UserRights $tmp $content
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Revoke-LogonAsService([string]$sid) {
+    $tmp = New-AdminOnlyDirectory 'jarvis-secedit-'
+    try {
+        $content = Export-UserRights $tmp
+        if (Test-LogonRightHeld $content $sid) { Set-UserRights $tmp (Remove-SidFromLogonRight $content $sid) }
+        Test-LogonRightHeld (Export-UserRights $tmp) $sid                 # $true: still held
+    } finally {
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-LocalGroupAdsi([string]$groupSid) {
+    # Through ADSI, by SID: the *-LocalGroupMember cmdlets fail on a group that
+    # holds an orphaned SID, which is what a deleted service account becomes.
+    $group = (New-Object Security.Principal.SecurityIdentifier($groupSid)).Translate(
+        [Security.Principal.NTAccount]).Value.Split('\')[-1]
+    [ADSI]"WinNT://$([Environment]::MachineName)/$group,group"
+}
+
+function Get-GroupMemberSids([string]$groupSid) {
+    foreach ($m in @((Get-LocalGroupAdsi $groupSid).psbase.Invoke('Members'))) {
+        $bytes = $m.GetType().InvokeMember('objectSid', 'GetProperty', $null, $m, $null)
+        (New-Object Security.Principal.SecurityIdentifier($bytes, 0)).Value
+    }
+}
+
+function Remove-GroupMemberSid([string]$groupSid, [string]$sid) {
+    (Get-LocalGroupAdsi $groupSid).Remove("WinNT://$sid")
 }
 
 function Stop-Sensor {
@@ -140,15 +220,33 @@ function Stop-Sensor {
     return $svc
 }
 
+if ($Install -and $SourceSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+    throw 'Pass -SourceSha256 <reviewed SHA-256 of JarvisSensor.cs>: an elevated install compiles only source whose hash was fixed before elevation.'
+}
 if (-not (Test-Admin)) { throw 'Run this from an elevated PowerShell.' }
 if ($Install -eq $Remove) { throw 'Choose exactly one of -Install or -Remove.' }
 
+$EventLogReaders = 'S-1-5-32-573'
+
 if ($Remove) {
+    $sid = Get-VirtualAccountSid $Name
     if (Stop-Sensor) { & (Join-Path $Sys32 'sc.exe') delete $Name | Out-Null }
     Remove-AsrExclusion $Exe
+    # Undo both grants -Install made, by SID: once the service is deleted the
+    # account name no longer resolves, and a grant to it would linger unseen.
+    if ((Get-GroupMemberSids $EventLogReaders) -contains $sid) { Remove-GroupMemberSid $EventLogReaders $sid }
+    $logonRightLeft = Revoke-LogonAsService $sid
     Remove-Item -LiteralPath $Bin -Recurse -Force -ErrorAction SilentlyContinue
     if ($PurgeSpool) { Remove-Item -LiteralPath $Spool -Recurse -Force -ErrorAction SilentlyContinue }
     else { Write-Host "Spool kept as evidence: $Spool (-PurgeSpool removes it)" }
+    # Read back rather than trust the calls above.
+    $left = @()
+    if (Get-Service -Name $Name -ErrorAction SilentlyContinue) { $left += "service $Name" }
+    if ((Get-GroupMemberSids $EventLogReaders) -contains $sid) { $left += "Event Log Readers membership of $sid" }
+    if ($logonRightLeft) { $left += "logon-as-a-service right of $sid" }
+    if (Test-Path -LiteralPath $Bin) { $left += $Bin }
+    if ($left.Count) { throw "Not fully removed: $($left -join ', ')" }
+    Write-Host 'Native sensor removed, including its logon right and Event Log Readers membership.'
     return
 }
 
@@ -168,10 +266,13 @@ Grant-Folder $Bin @('*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F',
 # Exclude the target path before compiling, so the ASR prevalence rule blocks
 # neither csc.exe creating the binary nor the service starting it.
 Add-AsrExclusion $Exe
-# Compile from a copy in the protected folder, so the file compiled is the
-# file that was checked, not one swapped in the checkout mid-install.
+# Compile from a copy in the protected folder, checked there against the hash
+# fixed before elevation: the file compiled is the file reviewed, whatever the
+# folder this script was run from now holds.
 $staged = Join-Path $Bin 'JarvisSensor.cs'
 Copy-Item -LiteralPath $source -Destination $staged -Force
+try { Assert-ReviewedSource $staged $SourceSha256 }
+catch { Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue; throw }
 & $compiler /nologo /target:winexe /platform:x64 /optimize+ /r:System.ServiceProcess.dll `
     /r:System.Web.Extensions.dll /out:$Exe $staged
 if ($LASTEXITCODE -ne 0) { throw 'Native sensor compilation failed' }

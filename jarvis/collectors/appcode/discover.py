@@ -30,7 +30,23 @@ SKIP_DIRS = {
     "tests", "test", "__tests__", "spec", "testdata", "fixtures", "examples",
     ".idea", ".vscode", ".local", ".config", ".mozilla", ".vscode-server", "snap",
     "__mocks__", "mocks", "e2e", "third_party", "third-party",
+    # Vendored copies and SDK installs: third-party code that arrives and updates
+    # with its tool, not the owner's code (2026-10-29: 276 of 367 "codebases"
+    # here were Go module-cache entries, plus vendored boto and NDK packages).
+    "vendored", "_vendor", "google-cloud-sdk",
 }
+# A Go module-cache entry is named module@version (e.g. grpc@v1.83.2); so is
+# every directory inside GOPATH/pkg/mod. No project folder has that shape.
+MODULE_CACHE = re.compile(r"@v\d")
+
+
+def _dependency_store(dirpath, name):
+    """A dependency or SDK store under dirpath: Go's module cache (pkg/mod and
+    module@version entries), the Android SDK."""
+    parent = os.path.basename(dirpath)
+    return (MODULE_CACHE.search(name) is not None
+            or (parent == "pkg" and name in ("mod", "sumdb"))
+            or (parent == "Android" and name == "Sdk"))
 # A bundled interpreter's standard library (lib/python3.11 inside an SDK).
 BUNDLED = re.compile(r"^python\d")
 # Test code is full of deliberate fakes (keys, eval, shell calls) and is not served.
@@ -87,7 +103,7 @@ def walk(roots, exclude=(), max_files=200_000, max_dirs=60_000, deadline_s=240.0
             # Hidden folders below a root are tool installs and caches (editor
             # servers, version managers), not applications; a hidden root is still walked.
             dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")
-                             and not BUNDLED.match(d)
+                             and not BUNDLED.match(d) and not _dependency_store(dirpath, d)
                              and os.path.realpath(os.path.join(dirpath, d)) not in skip)
             try:
                 if _world_writable(os.lstat(dirpath).st_mode):

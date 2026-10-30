@@ -37,6 +37,9 @@ class Action(ABC):
     # config flag that must be true for this action to run automatically;
     # empty means it can only ever be proposed for approval.
     enable_flag = ""
+    # most simultaneous applied instances before AUTO falls back to PROPOSE;
+    # 0 means no bound beyond one per target.
+    max_active = 0
 
     @abstractmethod
     def match(self, finding, job):
@@ -58,6 +61,25 @@ class Action(ABC):
         Actions opt in with a narrow, detector-specific rule.
         """
         return False
+
+    def identity(self, finding, target):
+        """A stable ledger key for this target, or None to key on the finding.
+
+        Override when the finding's title carries a changing count, so the
+        same target stays one action rather than a new one every pass.
+        """
+        return None
+
+    def permitted(self, target, conf):
+        """(ok, reason): an owner rule that forbids acting on this target at all."""
+        return True, ""
+
+    def ttl(self, target, prior):
+        """Seconds an applied action lasts before the ladder lifts it, or None.
+
+        `prior` is how many times it was applied to this target before.
+        """
+        return None
 
     @abstractmethod
     def preview(self, target):

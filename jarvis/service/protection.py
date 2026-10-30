@@ -3,7 +3,7 @@ import json
 import sqlite3
 import time
 
-from jarvis.core import mechanisms
+from jarvis.core import incidents, mechanisms
 from jarvis.core.assurance import report as assurance_report
 from jarvis.core.telemetry import META as TELEMETRY_META
 from jarvis.core.telemetry import parse as telemetry_parse
@@ -72,7 +72,11 @@ def _state(row, limit, stamp):
     problem = next((f for f in findings if f.get('severity') != 'ok' and
                     (f.get('category') in ('visibility', 'collectors') or
                      f.get('coverage_status') in ('partial', 'unavailable'))), None)
-    if row[2]:
+    # The scheduler's coverage marker over a named gap is a successful read
+    # with a blind spot: partial. A real error, or the marker with no gap to
+    # explain it, stays unavailable.
+    gap_only = row[2] == incidents.COVERAGE_INCOMPLETE and problem is not None
+    if row[2] and not gap_only:
         status, reason = 'unavailable', row[2]
     elif stamp - row[1] > limit or row[1] > stamp + 60:
         status, reason = 'stale', 'observation outside freshness window'

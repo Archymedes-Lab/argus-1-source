@@ -5,6 +5,7 @@ Importing the package registers every action, so decision code can just call
 """
 
 from . import (  # noqa: F401  (registration)
+    ban_source,
     block_network,
     disable_autostart,
     quarantine,

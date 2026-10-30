@@ -286,6 +286,23 @@ class LadderTests(unittest.TestCase):
         self.assertEqual(second["defense"]["rung"], defense.PROPOSE)
         self.assertTrue(os.path.exists(self.file))
 
+    def test_undo_is_never_fought_on_any_later_recurrence(self):
+        # Found by the V13 model (jarvis/verify/models/response_ladder.py): the
+        # first recurrence became a proposal, and the second applied it again.
+        conf = {"autonomous_defense": True, "auto_quarantine": True}
+        first = defense.process(self.store, conf, "hunt", [dropped(self.file, "critical", "sample match")])[0]
+        eid = first["defense"]["id"]
+        self.assertTrue(defense.undo(self.store, eid)[0])
+        for _ in range(3):
+            again = defense.process(self.store, conf, "hunt", [dropped(self.file, "critical", "sample match")])[0]
+            self.assertEqual(again["defense"]["rung"], defense.PROPOSE)
+            self.assertEqual(defense.load(self.store)[eid]["status"], "proposed")
+            self.assertTrue(os.path.exists(self.file))
+        # Only a new human decision applies it again.
+        self.assertTrue(defense.approve(self.store, eid, conf=conf)[0])
+        self.assertEqual(defense.load(self.store)[eid]["status"], "applied")
+        self.assertFalse(os.path.exists(self.file))
+
     def test_failed_action_waits_before_retrying(self):
         conf = {"autonomous_defense": True, "auto_quarantine": True}
         finding = dropped(self.file, "critical", "sample match")

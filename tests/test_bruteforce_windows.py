@@ -47,6 +47,12 @@ class WindowsBruteforceTests(unittest.TestCase):
         out = run(rows)
         self.assertIn(("medium", "45 failed Windows logons in 24h"), out)
 
+    def test_a_username_cannot_choose_the_source_address(self):
+        # TargetUserName is whatever the guesser typed; every field after it is
+        # set by Windows. A "|" in the name must not shift its text into the ip.
+        out = run([("x|8.8.8.8|203.0.113.9|0xc000006d|0xc0000064|", 30)])
+        self.assertIn(("high", "30 failed Windows logons for x|8.8.8.8 from 203.0.113.9 in 24h"), out)
+
     def test_lockouts_still_report(self):
         out = run([], total=0, lockouts=2)
         self.assertIn(("high", "2 account lockout(s) in the last 7 days"), out)

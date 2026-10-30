@@ -9,3 +9,16 @@ const BRAND_KEEP = /^ (input hook|independent health monitor|connectivity guard|
 export const brand = (s: unknown): string => String(s ?? "").replace(/\bJARVIS\b(?!-1)/g,
   (m, i, all) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
 // brand:end
+
+/** Every string value in a reply, branded once where it enters the interface;
+ *  structure and keys unchanged. */
+export function brandDeep<T>(value: T): T {
+  if (typeof value === "string") return brand(value) as T;
+  if (Array.isArray(value)) return value.map(brandDeep) as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = brandDeep(v);
+    return out as T;
+  }
+  return value;
+}

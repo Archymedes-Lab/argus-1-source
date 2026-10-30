@@ -1,10 +1,13 @@
 """Reading the posture sample from Windows, unelevated or through one UAC prompt."""
 
+import hashlib
 import os
+import shutil
 import subprocess
+import tempfile
 
 from jarvis.core.paths import load_win_script
-from jarvis.platform import host
+from jarvis.platform import elevation, host
 from jarvis.platform import windows as collect_windows
 from jarvis.platform.windows import ps_json
 
@@ -37,32 +40,40 @@ def elevated_data(timeout=300):
     """
     if not collect_windows.available():
         return None, "the Windows interop bridge is not available"
+    # A fresh, randomly named stage (no fixed name another process could
+    # pre-write), and the elevated shell runs only a checked copy of the script
+    # (platform/elevation.py), never the staged file itself.
     win_tmp, wsl_tmp = _win_temp()
-    script_wsl = os.path.join(wsl_tmp, "jarvis_posture.ps1")
-    out_wsl = os.path.join(wsl_tmp, "jarvis_posture.b64")
-    script_win = win_tmp + r"\jarvis_posture.ps1"
-    out_win = win_tmp + r"\jarvis_posture.b64"
-
-    for stale in (out_wsl,):
-        try:
-            os.unlink(stale)
-        except OSError:
-            pass
+    try:
+        stage_wsl = tempfile.mkdtemp(prefix="jarvis-posture-", dir=wsl_tmp)
+    except OSError as exc:
+        return None, f"could not stage the elevated script: {exc}"
+    stage_win = win_tmp + "\\" + os.path.basename(stage_wsl)
+    script_wsl = os.path.join(stage_wsl, "posture.ps1")
+    out_wsl = os.path.join(stage_wsl, "posture.b64")
+    out_win = stage_win + r"\posture.b64"
     try:
         # UTF-8 with BOM so PowerShell reads the file in the right encoding.
         with open(script_wsl, "w", encoding="utf-8-sig") as fh:
             fh.write(PS_POSTURE.replace(
                 "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))",
                 "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json)) "
-                "| Set-Content -Path '" + out_win + "' -Encoding ascii"))
+                "| Set-Content -Path " + elevation.literal(out_win) + " -Encoding ascii"))
+        with open(script_wsl, "rb") as fh:
+            digest = hashlib.sha256(fh.read()).hexdigest()
     except OSError as exc:
+        shutil.rmtree(stage_wsl, ignore_errors=True)
         return None, f"could not stage the elevated script: {exc}"
 
-    launcher = (
-        "$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
-        "-WindowStyle Hidden -ArgumentList "
-        "'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',"
-        "'-File','" + script_win + "'; exit $p.ExitCode")
+    try:
+        return _run_elevated(elevation.launcher(
+            elevation.inline_command(stage_win, {"posture.ps1": digest}, "posture.ps1", []), hidden=True),
+            out_wsl, timeout)
+    finally:
+        shutil.rmtree(stage_wsl, ignore_errors=True)
+
+
+def _run_elevated(launcher, out_wsl, timeout):
     try:
         subprocess.run([*collect_windows.interop_launcher(), collect_windows._PS,
                         "-NoProfile", "-NonInteractive", "-Command", launcher],
@@ -87,9 +98,3 @@ def elevated_data(timeout=300):
         return _json.loads(base64.b64decode(blob).decode("utf-8", "replace")), ""
     except Exception as exc:
         return None, f"could not decode the elevated result: {exc}"
-    finally:
-        for f in (script_wsl, out_wsl):
-            try:
-                os.unlink(f)
-            except OSError:
-                pass

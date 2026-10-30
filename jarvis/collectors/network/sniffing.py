@@ -131,6 +131,11 @@ def _packet_sockets_ss():
 PACKET_DAEMONS = ("systemd-networkd", "NetworkManager", "dhclient", "dhcpcd",
                   "wpa_supplicant", "avahi-daemon")
 SYSTEM_DIRS = ("/usr/", "/bin/", "/sbin/", "/lib/")
+# Microsoft's Sysmon for Linux holds a packet socket for its network events. It
+# runs from /opt/sysmon, outside the system directories, so it is proven the
+# way the control audit proves its unit: a byte-identical copy of the
+# package-verified /usr/bin/sysmon (2026-10-29: reported high before this).
+SYSMON = ("/opt/sysmon/sysmon", "/usr/bin/sysmon")
 SENSOR_LAUNCHERS = ("/opt/jarvis/app/jarvis-release.py", "/opt/jarvis/app/jarvis-release.pyc",
                     "/opt/jarvis/current/jarvis-release.py")
 
@@ -141,6 +146,19 @@ def _root_only(path):
     except OSError:
         return False
     return st.st_uid == 0 and not st.st_mode & 0o022
+
+
+def _sha256(path):
+    """Hex digest of a file, or None when it cannot be read."""
+    import hashlib
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for block in iter(lambda: fh.read(1 << 20), b""):
+                h.update(block)
+        return h.hexdigest()
+    except OSError:
+        return None
 
 
 def packet_holder_identity(pid, name, proc="/proc", owner=None):
@@ -154,6 +172,11 @@ def packet_holder_identity(pid, name, proc="/proc", owner=None):
         return "unverified"
     if exe.endswith(" (deleted)") or exe.startswith("/memfd:"):
         return "unexpected"
+    if exe == SYSMON[0]:
+        copy, packaged = _sha256(SYSMON[0]), _sha256(SYSMON[1])
+        if copy is None or packaged is None:
+            return "unverified"
+        return "verified" if copy == packaged and owner(SYSMON[1]) else "unexpected"
     # Matched on the image's file name: the process name is truncated to 15
     # characters (systemd-networkd shows as "systemd-network", found in the
     # 2026-10-29 VM run) and is the attacker's to choose anyway.

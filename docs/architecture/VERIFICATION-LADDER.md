@@ -21,6 +21,12 @@ Written before the code, from the existing design documents:
 | V7 | A release staged on a base that is no longer live is refused; rollback restores the previous release | DEPLOY, EVIDENCE-FABRIC P1/P5 | L2 |
 | V8 | A due fast-lane job never waits behind a main-lane job; protection jobs are in the fast lane | LANE-FAIRNESS | L2 (abstract) |
 | V9 | Every collector is declared once with a complete contract (scored or unscored with a reason, budgets below interval, no governed tier 0 or fast-lane job, lane duty under 0.8); every mechanism primitive names existing code and tests | MECHANISMS | L1 (declarations; files where tests/ ships) |
+| V10 | A health source reads unavailable only when its collection failed; a successful read with a named coverage gap reads partial; nothing with an error or gap reads complete (2026-10-30: one Sysmon start gap made a working `scan` read unavailable) | protection._state, collection.py | L1 (`tests/test_source_status.py`) |
+| V11 | The interop gate always recovers: slots stay in 0..2, backoff never exceeds 300 s, a refusal needs an open window, a probe or full slots, and from every reachable state finished launches plus one success close the gate | INTEROP-GATE | L2, drives the real `interop_gate.Gate` (`jarvis/verify/models/interop_gate.py`) |
+| V12 | Collectors, the service and core launch Windows programs only through the gated `platform.windows` path; each exception names why it cannot wait | INTEROP-GATE | L0 rule S1 (`jarvis/verify/static.py`), `tests/test_windows_launch_gate.py` |
+| V13 | A containment action is applied only by a human approval or by the automatic rung with its flags, high severity and complete coverage; automatic actions stay under their cap; a time-bounded action carries an expiry and is lifted only by a verified undo; after a human undo a recurrence is only proposed | defense.py, ban_source.py (2026-10-30) | L2 model driving the real `defense` code (`jarvis/verify/models/response_ladder.py`), tests |
+| V14 | An elevated shell runs only inline code fixed at launch, or files it verified in an administrator-only folder; no command line goes through a shell; launchers start PowerShell by full path | sensor/broker/posture installers (2026-10-30) | L0 rules S2-S4, `platform/elevation.py` tests |
+| V15 | Text the observed party controls never chooses a containment target | ban_source.py, bruteforce.py (2026-10-30) | L1 property, driven end to end through the real collector and action |
 
 ## The rungs
 
@@ -131,3 +137,67 @@ What a pass means: this copy keeps the eleven stated properties on the generated
 no reachable state of the three models breaks its invariant. It says nothing about
 inputs or states the catalogue leaves out, and nothing about the machine being monitored.
 Still not built: L3 (TLA+/Alloy specifications) and L4 (refinement proofs).
+
+## 2026-10-30: the framework that powers Argus-1
+
+Owner request: a formal verification framework, invariants and static analysis that
+Argus-1 runs on itself. The ladder above becomes one framework with three additions,
+all standard library and shipped in the package, so `python -m argus.verify`, the daily
+`verify` job, the build gate and the installers all run them with no new wiring.
+
+**The invariant registry** (`jarvis/verify/invariants.py`) is the single list of what is
+guarded. Each invariant names its checks (`property:`, `model:`, `static:`, `membership:`,
+`test:`). Conformance fails when an invariant has no executable check, when a named check
+does not exist, when a check proves an invariant nobody registered, or when this table
+drifts from the registry (`tests/test_verify_invariants.py`). The report prints it.
+
+**Shipped static rules** (`jarvis/verify/static.py`) for this product's own bug classes,
+each born from a defect found in it: S1 (V12) launches outside the interop gate; S2 (V14)
+an elevated shell started on a script file; S3 (V14) command lines through a shell; S4
+(V14) `.cmd` launchers calling PowerShell by bare name. There is no list of tolerated
+violations: S2 found three live ones (`broker.py` twice, `posture/collect.py`), and they
+were fixed before the rule shipped, all through one helper, `platform/elevation.py`
+(copy into Program Files, match a SHA-256 fixed before the prompt, run only that copy).
+Jev put "record known violations and fail only on new ones" at 0.35, the safe reading
+of which is what was done. A copy without sources (the sourceless Linux release) reads
+"not applicable", never a pass. The rules take 0.8 s over 563 files; each has a fast
+exit on text it needs to match at all.
+
+**V15 as a property**, driven through the real brute-force parsing and the real
+`ban_source.match`. Its first version did not catch the defect it was written for (four
+exact words in order never arose from single tokens in 150 cases); a planted-bug test
+(`tests/test_verify_props.py`) now restores the old pattern and requires the property to
+fail, and the generator writes whole clauses in the detector's shape.
+
+What it does not say: the rules are syntactic (a `-File` argument passed in from another
+function, or a literal split mid-token, is not seen); the hashes that guard elevation are
+taken by the same unprivileged user, so they close the staging-to-prompt window, not a
+modified checkout (release signing would; Jev 0.82 as the next gap).
+
+**V13 as a model of the real response ladder** (`jarvis/verify/models/response_ladder.py`).
+Each step rebuilds a ledger store from the state and calls the shipped `defense.process`,
+`approve`, `undo` or `expire` with one synthetic time-bounded action (cap 1, two sources,
+four flag combinations, a lift that can fail, a clock of three ticks). Invariants:
+authority (a collection pass applies only with both flags, high severity and complete
+coverage), the cap on automatic actions, an expiry on every applied action with the world
+matching the ledger, and human override. 14,773 states, 139,104 transitions, 8.4 s.
+
+**Its first run found a real defect in the ladder**, present for every automatic action:
+after a person undid an automatic action, the next recurrence became a proposal, and the
+one after that applied it again (`configure > collect > undo > collect > collect`). The
+module promised the opposite. The proposal now carries an `override` mark that keeps it a
+proposal on every later pass until a person approves it, which clears the mark
+(`tests/test_defense.py` reproduces the old behaviour with the real quarantine action).
+Restoring the old line in memory makes the model fail with exactly that path. Planted
+defects in the flags, the cap and an undo that lies are each found
+(`tests/test_verify_ladder_model.py`).
+
+Its abstractions, also in the model's docstring: evidence capture and apply always
+succeed; interrupted actions (`reconcile`) are not modelled; bookkeeping the ladder never
+reads back in these paths (timestamps, attempt counters) is folded, and `applications` is
+capped at the last TTL rung, which the code cannot tell apart; tests use a one-tick
+window, the shipped run three ticks.
+
+Next, in order: runtime monitors that evaluate the same predicates over the live ledger
+in the daily job; the interrupted-action paths in the ladder model; then L3 for the
+scheduler.

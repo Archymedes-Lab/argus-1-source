@@ -67,6 +67,9 @@ def cmd_defend(store, args):
         print(color("\nJARVIS ACTED — reversible, undo any of these", "bold", t))
         for eid, e in sorted(applied.items(), key=lambda kv: kv[1].get("at", 0), reverse=True):
             print(f"  {eid}  {e['title']} — {e.get('detail', '')}  ({iso(e.get('at', 0))})")
+            if e.get("expires_at"):
+                print(f"        lifts automatically at {iso(e['expires_at'])}"
+                      + (f" — last lift failed: {e['expire_error']}" if e.get("expire_error") else ""))
             print(f"        undo: jarvis defend undo {eid}")
     if uncertain:
         print(color("\nRECOVERY REVIEW REQUIRED — no repeat action was taken", "bold", t))

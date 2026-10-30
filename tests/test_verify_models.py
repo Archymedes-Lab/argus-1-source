@@ -2,7 +2,8 @@
 
 import unittest
 
-from jarvis.verify.models import lanes, privacy_seal, release
+from jarvis.platform import interop_gate as ig
+from jarvis.verify.models import interop_gate, lanes, privacy_seal, release
 
 
 class PrivacySealModelTests(unittest.TestCase):
@@ -65,6 +66,46 @@ class LaneModelTests(unittest.TestCase):
 
     def test_protection_jobs_are_in_the_fast_lane(self):
         self.assertTrue(lanes.required_fast_jobs_are_in_the_fast_lane())
+
+
+class InteropGateModelTests(unittest.TestCase):
+    def test_gate_invariants_hold_in_every_reachable_state(self):
+        r = interop_gate.model().check()
+        self.assertTrue(r.ok, str(r))
+        self.assertTrue(r.exhausted, str(r))
+        self.assertEqual(r.deadlocks, 0, str(r))
+
+    def test_the_maximum_backoff_and_a_probe_are_reachable(self):
+        # Not vacuous: the model reaches the longest refusal window and a probe.
+        m = interop_gate.model()
+        self.assertIsNotNone(m.reachable(lambda s: s.backoff == ig.BACKOFF_MAX and s.open))
+        self.assertIsNotNone(m.reachable(lambda s: s.probing and s.active == 1))
+
+    def test_planted_stuck_probe_is_caught(self):
+        # A failed probe that forgot to clear `probing` would refuse forever.
+        real = ig.Gate._record
+
+        def stuck(self, ok):
+            probing = self.probing
+            real(self, ok)
+            if not ok:
+                self.probing = probing
+        ig.Gate._record = stuck
+        try:
+            r = interop_gate.model().check()
+        finally:
+            ig.Gate._record = real
+        self.assertFalse(r.ok)
+        self.assertEqual(r.violated, "the gate always recovers")
+
+    def test_planted_unbounded_backoff_is_caught(self):
+        real = ig.BACKOFF_MAX
+        ig.BACKOFF_MAX = 10 ** 9
+        try:
+            r = interop_gate.model().check()
+        finally:
+            ig.BACKOFF_MAX = real
+        self.assertFalse(r.ok)
 
 
 if __name__ == "__main__":

@@ -18,7 +18,9 @@ from jarvis.platform import mounts
 from jarvis.platform.native import ingest
 
 SENSOR = "native sensor"
-INSTALL = "windows-sensor\\install.ps1 -Install (elevated PowerShell)"
+# The CLI pins the source hash before elevation; the script alone now refuses
+# an install without -SourceSha256.
+INSTALL = "`jarvis sensor install` (one UAC prompt)"
 # Gaps are events: they happened once, in one run. Keep re-reporting them for
 # a week so a lost stretch of history is not visible for a single minute.
 GAP_META = "native_gaps"

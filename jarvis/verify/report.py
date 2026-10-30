@@ -15,15 +15,9 @@ import time
 from pathlib import Path
 
 from jarvis.core import mechanisms
-from jarvis.verify import properties
-from jarvis.verify.models import lanes, privacy_seal, release
+from jarvis.verify import invariants, properties, static
+from jarvis.verify.models import MODELS, lanes
 from jarvis.verify.models.release import NotApplicable
-
-MODELS = (
-    ("V6", "privacy seal lifecycle", privacy_seal.model),
-    ("V7", "release switch", release.model),
-    ("V8", "scheduler lanes", lanes.model),
-)
 
 
 def _model(invariant, name, build):
@@ -57,13 +51,34 @@ def run(cases=properties.CASES, seed=0):
     except Exception as exc:
         membership, membership_error = False, f"{type(exc).__name__}: {exc}"[:300]
     mech = mechanism_conformance()
+    registry = invariant_registry()
+    rules = static_rules()
     ok = (all(p["ok"] for p in props) and all(m["ok"] for m in models) and membership
-          and mech["ok"])
+          and mech["ok"] and registry["ok"] and rules["ok"])
     return {"ok": ok, "at": int(started), "seconds": round(time.time() - started, 2),
             "python": platform.python_version(), "platform": sys.platform,
             "properties": props, "models": models,
             "lane_membership": {"ok": membership, "error": membership_error},
-            "mechanisms": mech}
+            "mechanisms": mech, "invariants": registry, "static": rules}
+
+
+def invariant_registry():
+    """Every registered invariant has a check and every check maps to one."""
+    try:
+        problems = invariants.conformance()
+    except Exception as exc:
+        problems = [f"{type(exc).__name__}: {exc}"[:300]]
+    return {"ok": not problems, "count": len(invariants.INVARIANTS), "problems": problems[:20]}
+
+
+def static_rules():
+    """The shipped rules over this copy's sources (n/a on a sourceless copy).
+    A crash of the engine is a failure, never a pass."""
+    try:
+        return static.run()
+    except Exception as exc:
+        return {"ok": False, "applicable": True, "files": 0, "rules": [], "violations": [],
+                "errors": [f"{type(exc).__name__}: {exc}"[:300]]}
 
 
 def mechanism_conformance(root=None):
@@ -117,6 +132,21 @@ def text(report):
                  f" {mc['collectors']} collectors, {mc['primitives']} primitives"
                  + ("" if mc["files_checked"] else " (no tests/ in this copy: files n/a)")
                  + "".join(f"\n         {p}" for p in mc["problems"]))
+    reg = report.get("invariants") or {}
+    lines.append(f"  {'ok  ' if reg.get('ok') else 'FAIL'} invariant registry: {reg.get('count', 0)} invariants,"
+                 " each with a check, every check registered"
+                 + "".join(f"\n         {p}" for p in reg.get("problems", [])))
+    st = report.get("static") or {}
+    if not st.get("applicable", True):
+        lines.append("  n/a  static rules: no sources in this copy")
+    else:
+        for r in st.get("rules", []):
+            lines.append(f"  {'ok  ' if not r['violations'] else 'FAIL'} {r['id']} {r['invariant']} {r['summary']}"
+                         f" ({st.get('files', 0)} files)")
+        for v in st.get("violations", [])[:20]:
+            lines.append(f"         {v['rule']} {v['path']}:{v['line']} {v['text']}")
+        for e in st.get("errors", []):
+            lines.append(f"  FAIL static rules: {e}")
     return "\n".join(lines)
 
 

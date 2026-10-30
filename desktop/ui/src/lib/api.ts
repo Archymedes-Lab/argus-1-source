@@ -1,13 +1,14 @@
-// The only way the interface reaches JARVIS: typed Tauri commands
+// The only way the interface reaches the daemon: typed Tauri commands
 // (desktop/src/api.rs). The page has no network permission of its own.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { brandDeep } from "./brand";
 
 export const inApp = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (inApp) return invoke<T>(cmd, args);
-  if (import.meta.env.DEV) return preview<T>(cmd);
+  if (inApp) return brandDeep(await invoke<T>(cmd, args));
+  if (import.meta.env.DEV) return brandDeep(await preview<T>(cmd));
   throw new Error("This interface runs inside the ARGUS-1 app.");
 }
 
@@ -36,7 +37,7 @@ export const api = {
 /** Pulses from the shell's stream thread; `down` when the daemon is unreachable. */
 export async function onDaemon(pulse: (p: unknown) => void, down: () => void): Promise<UnlistenFn> {
   if (!inApp) return () => {};
-  const a = await listen("pulse", (e) => pulse(e.payload));
+  const a = await listen("pulse", (e) => pulse(brandDeep(e.payload)));
   const b = await listen("daemon-down", () => down());
   return () => { a(); b(); };
 }
