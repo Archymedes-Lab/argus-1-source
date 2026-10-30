@@ -2,9 +2,9 @@
   import Shield from "@lucide/svelte/icons/shield";
   import { app, go, type View } from "../lib/store.svelte";
   import { NAV } from "../lib/nav";
-  import { collectorSummary, groupQuestions, severityCounts } from "../lib/model";
+  import { collectorSummary, groupQuestions, problemCounts } from "../lib/model";
 
-  const counts = $derived(app.data ? severityCounts(app.data.findings ?? []) : null);
+  const counts = $derived(app.data ? problemCounts(app.data.findings ?? []) : null);
   const coll = $derived(app.data ? collectorSummary(app.data.jobs ?? []) : null);
   const review = $derived(app.data ? groupQuestions(app.data.questions ?? []).length + (app.data.fix ?? []).length : 0);
 

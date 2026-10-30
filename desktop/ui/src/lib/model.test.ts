@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ago, collectorSummary, distinct, every, filterFindings, groupQuestions,
+  ago, collectorSummary, distinct, every, filterFindings, groupQuestions, isReminder, problemCounts,
   jobHealth, matches, scoreTone, sevRank, severityCounts, type Finding,
 } from "./model";
 
@@ -66,4 +66,22 @@ test("time and tone formatting", () => {
   expect(scoreTone(60)).toBe("amber");
   expect(scoreTone(10)).toBe("red");
   expect(scoreTone(null)).toBe("gray");
+});
+
+describe("reminders are not new problems", () => {
+  // The reminder engine (job "ledger") re-raises an unresolved or returning
+  // finding at the original's severity so its emails escalate; on screen it is
+  // the same problem again, not another one (2026-10-30: 39 critical, 14 real).
+  const list = [
+    F("critical", "driver loaded from a writable path", { job: "drivers" }),
+    F("critical", "unresolved for 6d: driver loaded from a writable path", { job: "ledger" }),
+    F("critical", "a resolved alert has come back: scheduled task", { job: "ledger" }),
+    F("high", "old browser", { job: "patches" }),
+  ];
+
+  test("problem counts leave reminders out; reminders are counted on their own", () => {
+    expect(problemCounts(list)).toEqual({ critical: 1, high: 1, medium: 0, low: 0 });
+    expect(list.filter(isReminder).length).toBe(2);
+    expect(severityCounts(list).critical).toBe(3);   // the full list is unchanged
+  });
 });

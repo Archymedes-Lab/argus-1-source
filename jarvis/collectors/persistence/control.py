@@ -433,12 +433,14 @@ def audit_windows():
         if OBFUSCATED.search(action):
             sev = "critical"
         # A declared JARVIS-managed task that fails verification is either
-        # modified or an impostor using the name: critical either way.
+        # modified or an impostor using the name: critical either way. The
+        # reason leads the detail: after the command line it was cut at 90
+        # characters and never read (2026-10-30).
+        detail = f"{t.get('name')} → {short(action, 90)}"
         if (t.get("name") or "").casefold() in managed_persistence.CRITICAL_ON_MISMATCH:
             sev = "critical"
-            action = f"{action} [verification failed: {trust_detail}]"
-        finding = _finding("persistence", sev, "scheduled task",
-                           f"{t.get('name')} → {short(action, 90)}",
+            detail = f"{t.get('name')}: verification failed: {trust_detail} — runs {short(action, 90)}"
+        finding = _finding("persistence", sev, "scheduled task", detail,
                            (t.get("path") or "") + str(t.get("name")))
         finding["response_target"] = {"kind": "task", "name": t.get("name") or "",
                                       "path": t.get("path") or "\\"}
