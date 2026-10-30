@@ -147,7 +147,7 @@ def watched_files(root="/"):
                 if len(out) >= MAX_FILES:
                     truncated += 1
                     continue
-                out.append((p, kind))
+                out.append((p, kind, pattern))
     return out, truncated
 
 
@@ -227,9 +227,14 @@ def boot_findings(state, now, root="/", owner=None):
         problems.append(f"{truncated} boot files over the {MAX_FILES}-file limit were not checked")
     learning = not state.get("learned_at")
     old = state.get("files") or {}
+    # A pattern a later release starts watching is learned, not "added": the
+    # snap udev rule from August read as new the day udev rules were added to
+    # WATCHED (2026-10-29). States from before this have no list: their known
+    # patterns are those of their files' kinds at the time, so assume all but udev.
+    known = set(state.get("patterns") or [p for p, k in WATCHED if k != "udev"])
     new, events, out = {}, [], []
     times = None
-    for path, kind in files:
+    for path, kind, pattern in files:
         sig, problem = signature(path)
         if sig is None:
             problems.append(f"{path}: {problem}")
@@ -254,7 +259,7 @@ def boot_findings(state, now, root="/", owner=None):
                 out.append(_finding("persistence", "high", f"boot hook no package installed: {os.path.basename(path)}",
                                     f"{path} runs when the initramfs or GRUB configuration is built; no package "
                                     "owns it. Confirm you added it.", path))
-        if learning:
+        if learning or pattern not in known:
             continue
         if (path not in old and not specific) or (path in old and changed(old[path], sig)):
             if times is None:
@@ -271,7 +276,8 @@ def boot_findings(state, now, root="/", owner=None):
                 sev = "low" if explained(now, times) else UNEXPLAINED.get(sig.get("kind"), "medium")
                 events.append({"ts": now, "path": path, "kind": sig.get("kind", "config"), "how": "removed",
                                "sev": sev, "ctime": int(now)})
-    state = {"learned_at": state.get("learned_at") or now, "files": new}
+    state = {"learned_at": state.get("learned_at") or now, "files": new,
+             "patterns": [p for p, _k in WATCHED]}
     return out, events, state, problems
 
 
@@ -398,7 +404,10 @@ def audit(store, hosts=None, now=None, root="/", owner=None):
                         "good run are not reported")
     out, events, new_state, p = boot_findings(state, now, root, owner)
     problems += p
-    kept = [e for e in state.get("events", []) if isinstance(e, dict) and now - e.get("ts", 0) <= KEEP_S]
+    kept = [e for e in state.get("events", []) if isinstance(e, dict) and now - e.get("ts", 0) <= KEEP_S
+            # Events a state from before the pattern list raised for a then
+            # newly watched class (udev) were the false "added" ones: drop them.
+            and (state.get("patterns") is not None or e.get("kind") != "udev")]
     kept = (kept + events)[-MAX_EVENTS:]
     new_state["events"] = kept
     t, new_state["taint"], p = taint_findings(state.get("taint") or {}, root)

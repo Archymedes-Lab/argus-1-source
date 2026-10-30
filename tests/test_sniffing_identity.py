@@ -60,6 +60,18 @@ class Identity(unittest.TestCase):
         exe = shutil.which("ls") or "/bin/ls"
         self.assertEqual(self.who(self.pid(12, exe), "avahi-daemon", owner=lambda p: False), "unexpected")
 
+    def test_sysmon_for_linux_is_proven_by_its_packaged_twin(self):
+        from unittest import mock
+        pid = self.pid(20, "/opt/sysmon/sysmon")
+        digests = {"/opt/sysmon/sysmon": "a" * 64, "/usr/bin/sysmon": "a" * 64}
+        with mock.patch.object(sniffing, "_sha256", lambda p: digests.get(p)):
+            self.assertEqual(self.who(pid, "sysmon"), "verified")
+            self.assertEqual(self.who(pid, "sysmon", owner=lambda p: False), "unexpected")
+            digests["/opt/sysmon/sysmon"] = "b" * 64                    # tampered copy
+            self.assertEqual(self.who(pid, "sysmon"), "unexpected")
+            digests["/opt/sysmon/sysmon"] = None                        # unreadable here
+            self.assertEqual(self.who(pid, "sysmon"), "unverified")
+
     def test_deleted_image_is_unexpected(self):
         self.assertEqual(self.who(self.pid(13, "/usr/sbin/NetworkManager (deleted)"), "NetworkManager"),
                          "unexpected")

@@ -150,15 +150,47 @@ def _proc_sockets(pid, table):
     return conns
 
 
+# Flags whose argument is inline code (or a module name), not a script file.
+INLINE_FLAGS = {"sh": "c", "bash": "c", "dash": "c", "zsh": "c", "ksh": "c",
+                "python": "cm", "perl": "eE", "ruby": "e", "node": "ep", "bun": "e",
+                "deno": "", "php": "r", "lua": "e", "Rscript": "e"}
+# A temp-directory file in command position inside inline code: run directly,
+# sourced, or handed to an interpreter. A redirection target (`>| /tmp/x`) or
+# an argument to cat/ls is not executed and does not match.
+INLINE_EXEC_TEMP = re.compile(
+    r"(?:^|(?<![<>])[;&|]\s*|[({]\s*|\b(?:sh|bash|dash|zsh|source|exec|python3?|perl|node|ruby)\s+"
+    r"|(?:^|\s)\.\s+)"
+    r"((?:/tmp|/var/tmp|/dev/shm)/[^\s;&|<>'\"]+)")
+
+
 def _script_target(argv, exe_base):
-    """For an interpreter, return the script path it is actually executing."""
+    """For an interpreter, return the script path it is actually executing.
+
+    Inline code (`bash -c ...`, `python3 -c ...`) is not a script file: before
+    2026-10-29 the whole -c string was returned as the "script", so any inline
+    command that merely mentioned /tmp (Claude Code's own shell wrapper writes
+    `pwd -P >| /tmp/...`) scored as a new binary run from temp, critical. For
+    inline code the target is a temp file it executes, or nothing."""
     if not INTERPRETERS.match(exe_base):
         return ""
-    for arg in argv[1:]:
-        if arg.startswith("-"):
+    family = re.sub(r"[\d.]+$", "", exe_base)
+    inline = INLINE_FLAGS.get(family, "")
+    args = argv[1:]
+    for i, arg in enumerate(args):
+        if arg.startswith("--"):
+            if arg in ("--eval", "--print", "--command"):
+                code = args[i + 1] if i + 1 < len(args) else ""
+                m = INLINE_EXEC_TEMP.search(code)
+                return m.group(1) if m else ""
             continue
-        if SCRIPT_EXT.search(arg) or "/" in arg:
-            return arg
+        if arg.startswith("-") and len(arg) > 1:
+            if inline and any(ch in inline for ch in arg[1:]):
+                code = args[i + 1] if i + 1 < len(args) else ""
+                if "m" in arg[1:] and family == "python":
+                    return ""                       # a module name, not a file
+                m = INLINE_EXEC_TEMP.search(code)
+                return m.group(1) if m else ""
+            continue
         return arg
     return ""
 

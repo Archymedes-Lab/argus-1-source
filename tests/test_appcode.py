@@ -688,6 +688,21 @@ class Registration(unittest.TestCase):
         keep = _write(tmp, "app/main.py", "x = 1\n")
         self.assertEqual(discover.walk([tmp])["sources"], [keep])
 
+    def test_module_caches_vendored_copies_and_sdks_are_not_codebases(self):
+        # 2026-10-29 on this machine: 276 of 367 "codebases" were ~/go/pkg/mod entries.
+        tmp = tempfile.mkdtemp()
+        for rel in ("home/u/go/pkg/mod/google.golang.org/grpc@v1.83.2/go.mod",
+                    "home/u/go/pkg/mod/cache/download/x/@v/list",
+                    "home/u/proj/third/aws-sdk-go-v2@v1.47.1/go.mod",
+                    "home/u/google-cloud-sdk/platform/gsutil/gslib/vendored/boto/setup.py",
+                    "home/u/Android/Sdk/ndk/27.0/python-packages/fetchartifact/setup.py",
+                    "home/u/app/lib/vendored/pkg/package.json"):
+            _write(tmp, rel, "{}\n")
+        mine = [_write(tmp, "home/u/proj/go.mod", "module x\n"), _write(tmp, "home/u/app/package.json", "{}\n"),
+                _write(tmp, "home/u/sdk-tools/package.json", "{}\n"), _write(tmp, "home/u/pkg/mod-tool/go.mod", "m\n")]
+        found = discover.walk([os.path.join(tmp, "home")])["codebases"]
+        self.assertEqual(sorted(found), sorted(os.path.dirname(p) for p in mine))
+
     def test_discover_skips_dependency_trees(self):
         self.assertIn("node_modules", discover.SKIP_DIRS)
         self.assertIn(".git", discover.SKIP_DIRS)

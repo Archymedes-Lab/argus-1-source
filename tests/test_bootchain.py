@@ -2,6 +2,7 @@
 each test names the invariant it holds. A synthetic root stands in for /boot,
 /etc, /proc/sys and the package logs; nothing reads this machine's boot files."""
 
+import json
 import os
 import shutil
 import tempfile
@@ -94,6 +95,38 @@ class Boot(Root):
         out = self.run_audit()
         self.assertIn("boot hook no package installed: zz-persist", {f["title"] for f in out})
         self.assertNotIn("boot hook no package installed: zz-ok", {f["title"] for f in out})
+
+    def test_a_newly_watched_pattern_is_learned_not_added(self):
+        # State from a release that did not watch udev rules yet.
+        self.run_audit()
+        st = json.loads(self.store.meta[bootchain.STATE_META])
+        st["patterns"] = [p for p, k in bootchain.WATCHED if k != "udev"]
+        self.store.meta[bootchain.STATE_META] = json.dumps(st)
+        self.write("etc/udev/rules.d/70-snap.rules", 'SUBSYSTEM=="net", RUN+="/usr/lib/snapd/snap-device-helper"\n')
+        self.assertFalse([f for f in self.run_audit() if "70-snap.rules" in f["title"]])
+        # Once learned, a change to it is reported.
+        self.write("etc/udev/rules.d/70-snap.rules", 'SUBSYSTEM=="net", NAME="x"\n')
+        self.assertTrue([f for f in self.run_audit() if "70-snap.rules" in f["title"]])
+
+    def test_false_added_events_from_an_old_state_are_dropped(self):
+        st = {"learned_at": time.time() - 100, "files": {}, "events": [
+            {"ts": time.time(), "path": "/etc/udev/rules.d/70-snap.snapd.rules", "kind": "udev", "how": "added",
+             "sev": "medium", "ctime": 1},
+            {"ts": time.time(), "path": "/etc/default/grub", "kind": "config", "how": "changed", "sev": "medium",
+             "ctime": 1}]}
+        self.store.meta[bootchain.STATE_META] = json.dumps(st)
+        titles = {f["title"] for f in self.run_audit()}
+        self.assertNotIn("boot file added: /etc/udev/rules.d/70-snap.snapd.rules", titles)
+        self.assertIn("boot file changed: /etc/default/grub", titles)
+
+    def test_a_newly_watched_risky_file_still_reports_at_once(self):
+        self.run_audit()
+        st = json.loads(self.store.meta[bootchain.STATE_META])
+        st["patterns"] = [p for p, k in bootchain.WATCHED if k != "udev"]
+        self.store.meta[bootchain.STATE_META] = json.dumps(st)
+        self.write("etc/udev/rules.d/99-x.rules", 'RUN+="/var/tmp/.x"\n')
+        self.assertIn("udev rule runs a program from outside the system: 99-x.rules",
+                      {f["title"] for f in self.run_audit()})
 
     def test_unowned_hook_added_later_is_one_finding(self):
         self.run_audit()
