@@ -393,6 +393,7 @@ class ContentIsNotAuthority(unittest.TestCase):
         action = mock.Mock(autonomy=base.AUTO, enable_flag="auto_x")
         action.match.return_value = {"pid": 4242}
         action.auto_eligible.return_value = True
+        action.permitted.return_value = (True, "")   # Action.permitted: no owner rule forbids it
         conf = {"autonomous_defense": True, "auto_x": True}
         f = {"severity": "high", "title": "t", "category": "technique"}
         with mock.patch.object(base, "registry", return_value={"x": action}):
