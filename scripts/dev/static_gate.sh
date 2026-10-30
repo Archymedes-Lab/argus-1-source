@@ -21,5 +21,7 @@ echo "[2/3] mypy on ${TYPED[*]}"
 uvx mypy --ignore-missing-imports --follow-imports=silent "${TYPED[@]}"
 
 if [[ "${1:-}" == "--quick" ]]; then exit 0; fi
-echo "[3/3] property checks and model checking"
-python3 -m unittest tests.test_verify_mc tests.test_verify_models tests.test_verify_props
+echo "[3/3] invariant registry, shipped rules, property checks and model checking"
+python3 -m unittest tests.test_verify_mc tests.test_verify_models tests.test_verify_props \
+    tests.test_verify_invariants tests.test_verify_static tests.test_verify_ladder_model tests.test_elevation \
+    tests.test_source_status tests.test_windows_launch_gate

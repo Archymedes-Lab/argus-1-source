@@ -249,10 +249,13 @@ def process(store, conf, job, findings, *, coverage="complete", now=None):
             existing = load(store).get(eid)
             if existing and existing.get("status") in ("applied", "attempting", "uncertain", "not_applied"):
                 entry = existing
-            elif existing and existing.get("status") == "undone":
-                # Undo is a human override. Do not immediately fight it on the
-                # next collector pass; turn the recurrence into a proposal.
-                existing.update(status="proposed", at=int(time.time()),
+            elif existing and (existing.get("status") == "undone"
+                               or (existing.get("status") == "proposed" and existing.get("override"))):
+                # Undo is a human override. Never fight it on a later collector
+                # pass: the recurrence becomes a proposal and stays one, marked,
+                # until a person approves it (V13; the second recurrence used to
+                # re-apply it, found by jarvis/verify/models/response_ladder.py).
+                existing.update(status="proposed", at=int(time.time()), override=True,
                                 detail="previous automatic action was undone; approval required")
                 ledger = load(store)
                 ledger[eid] = existing
@@ -331,6 +334,7 @@ def approve(store, eid, now=None, conf=None):
                  applied_at=int(now))
     if ok:
         _stamp(entry, action, entry["target"], entry.get("applications"), now)
+        entry.pop("override", None)          # the approval is the person's new decision
     _save(store, ledger)
     return ok, detail
 

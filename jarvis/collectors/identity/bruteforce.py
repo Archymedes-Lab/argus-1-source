@@ -161,16 +161,22 @@ _WIN_PS = load_win_script("bruteforce.ps1")
 
 
 def _windows():
-    out = []
     if not collect_windows.available():
-        return out
+        return []
     d = ps_json(_WIN_PS, timeout=120)
     if not d:
         return [_finding(
             "bruteforce", "low", "could not read the Windows Security log",
             "the 4625 query returned nothing — the log may be inaccessible "
             "from here", "Security log", host="win")]
+    return windows_findings(d)
 
+
+def windows_findings(d):
+    """Findings from the 4625/4740 summary bruteforce.ps1 returns. Pure, so the
+    verification catalogue can drive it (V15: a guessed user name never
+    chooses the source a containment action reads)."""
+    out = []
     auditing = int(d.get("auditing") or 0)
     if auditing == -1:
         out.append(_finding(

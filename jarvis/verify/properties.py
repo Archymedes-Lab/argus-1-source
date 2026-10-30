@@ -4,7 +4,9 @@ can re-run them (python -m jarvis.verify); tests/test_verify_props.py runs
 the same catalogue under unittest. Standard library only."""
 
 from jarvis.collectors.host.inputwatch import watchers
+from jarvis.collectors.identity import bruteforce
 from jarvis.core.reasoning import engine, vocab
+from jarvis.response.actions import ban_source
 from jarvis.response.reporting import score
 from jarvis.service.schedule import JOBS
 from jarvis.verify.props import PropertyFailure, forall
@@ -209,6 +211,36 @@ def failed_registrations_never_produce_a_finding(row):
         assert watchers.classify(dict(row, failed=True)) is None
 
 
+# --------------------------------------------------------- containment ----
+# V15: the observed party writes the user name of a failed logon; Windows
+# writes the source address. Only the address may become a ban target.
+SOURCES = ("45.155.205.7", "2a00:1450:4001::1", "198.51.100.4", "10.0.0.5", "-")
+NAME_TOKENS = ("admin", "x", "from", "in", "24h", "1h", "8.8.8.8", "1.1.1.1", "45.155.205.8",
+               "local", "|", "-", "2a00:1450:4001::2")
+# Whole clauses in the detector's own shape: an attack writes these, and four
+# exact words in order are too rare to arise from single tokens in 150 cases.
+NAME_CLAUSES = ("from 8.8.8.8 in 24h", "from 1.1.1.1 in 1h", "from 2a00:1450:4001::2 in 24h",
+                "x|8.8.8.8", "from local in 24h")
+
+
+def gen_guess(g):
+    words = [g.choice(NAME_CLAUSES if g.bool(0.4) else NAME_TOKENS) for _ in range(g.int(0, 6))]
+    name = "".join(w + g.choice((" ", "", "|")) for w in words).strip()
+    return {"user": name, "source": g.choice(SOURCES)}
+
+
+def a_guessed_name_never_chooses_the_target(case):
+    data = {"auditing": 1, "total": 30, "lockouts": 0,
+            "top": [{"key": f"{case['user']}|{case['source']}|0xc000006d|0xc0000064|", "n": 30}]}
+    action = ban_source.BanSource()
+    targets = [action.match(f, "bruteforce") for f in bruteforce.windows_findings(data)]
+    real = ban_source._public_ip(case["source"])
+    assert all(t is None or t["ip"] == real for t in targets), targets
+    # The defence still works: a public source is found whatever the name says.
+    if real:
+        assert {"ip": real} in targets, targets
+
+
 # (invariant id, name, generator, property). Ids follow VERIFICATION-LADDER.md.
 PROPERTIES = (
     ("V1", "score range", gen_snapshots, score_range),
@@ -222,6 +254,8 @@ PROPERTIES = (
     ("V5", "exit does not launder a watcher", gen_row, a_watcher_that_exited_keeps_its_severity),
     ("V5", "own hook never counts", gen_row, own_supervised_pid_is_always_ok_or_ignored),
     ("V5", "failed hooks are not watchers", gen_row, failed_registrations_never_produce_a_finding),
+    ("V15", "a guessed user name never chooses the banned address", gen_guess,
+     a_guessed_name_never_chooses_the_target),
 )
 
 
