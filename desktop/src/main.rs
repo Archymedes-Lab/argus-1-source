@@ -25,6 +25,7 @@ compile_error!("release builds need `--features custom-protocol` (see docs/archi
 
 mod api;
 mod brand;
+mod pairing;
 mod pulse;
 mod watch;
 

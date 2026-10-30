@@ -10,6 +10,7 @@ from jarvis.core.store import Store
 from jarvis.service.schedule import JOBS
 from jarvis.service.scheduler import Scheduler
 from jarvis.web.server import Handler, _performance_state
+from tests import _apiauth
 
 
 class PerformanceStateTests(unittest.TestCase):
@@ -206,7 +207,7 @@ class DefenderHTTPTests(unittest.TestCase):
         store.close()
         self.handler = Handler.__new__(Handler)
         self.handler.db_path = self.path
-        self.handler.headers = {"Host": "localhost:8787"}
+        self.handler.headers = {"Host": "localhost:8787", **_apiauth.grant(self)}
         self.handler._send = Mock()
 
     def request(self, path):

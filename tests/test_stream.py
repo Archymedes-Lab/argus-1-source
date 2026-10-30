@@ -13,6 +13,7 @@ from jarvis.response import acknowledge
 from jarvis.service.schedule import JOBS
 from jarvis.web import stream
 from jarvis.web.server import Handler
+from tests import _apiauth
 
 
 class Clock:
@@ -211,7 +212,7 @@ class HttpTests(unittest.TestCase):
 
     def _get(self, path, headers=None):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        conn.request("GET", path, headers=headers or {})
+        conn.request("GET", path, headers={**_apiauth.grant(self), **(headers or {})})
         return conn, conn.getresponse()
 
     def test_pulse_is_plain_json(self):

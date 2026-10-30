@@ -14,6 +14,7 @@ from jarvis.response import acknowledge
 from jarvis.service.scheduler import Scheduler
 from jarvis.web import metrics
 from jarvis.web.server import Handler
+from tests import _apiauth
 
 JOBS = {"alpha": (60, "Alpha"), "beta": (300, "Beta"), "never": (60, "Never ran")}
 SECRET = "203.0.113.77 /home/victim/.ssh/id_ed25519"
@@ -151,7 +152,8 @@ class MetricsRouteTests(unittest.TestCase):
         self.port = self.httpd.server_address[1]
 
     def get(self, host=None):
-        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/metrics")
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/metrics",
+                                     headers=_apiauth.grant(self))
         if host:
             req.add_header("Host", host)
         return urllib.request.urlopen(req, timeout=10)

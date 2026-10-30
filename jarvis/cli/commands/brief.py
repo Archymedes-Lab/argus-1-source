@@ -8,7 +8,6 @@
     jarvis brief email           mail yourself the full action plan, personalised
 """
 
-import json
 import time
 import urllib.error
 import urllib.request
@@ -42,14 +41,18 @@ def _check(store, item, port):
     started = time.time()          # compared with snapshot timestamps (wall clock)
     waited_from = time.monotonic()  # bounds the wait; the wall clock can step here
     for job in jobs:
-        from jarvis.web import token
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/run?job={job}", method="POST",
-                                     headers={token.HEADER: token.read()})
+        from urllib.parse import quote
+
+        from jarvis.web import apiclient
         try:
-            with urllib.request.urlopen(req, timeout=10) as response:
-                if not json.loads(response.read()).get("queued"):
-                    print(f"the daemon would not queue {job}")
-                    return 1
+            status, body = apiclient.request("POST", f"/api/run?job={quote(job)}", port=port,
+                                             body={})
+            if status != 200 or not (body or {}).get("queued"):
+                print(f"the daemon would not queue {job} (HTTP {status})")
+                return 1
+        except apiclient.Unpaired as exc:
+            print(str(exc))
+            return 1
         except (urllib.error.URLError, OSError, ValueError) as exc:
             print(f"could not reach jarvis serve on port {port} ({exc}); is the daemon running?")
             return 1

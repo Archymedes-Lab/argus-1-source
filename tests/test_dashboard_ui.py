@@ -11,7 +11,6 @@ import hashlib
 import re
 import shutil
 import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -19,6 +18,7 @@ from jarvis.web import server
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "jarvis" / "web" / "static" / "dashboard.html"
+SCRIPT = ROOT / "jarvis" / "web" / "static" / "dashboard.js"
 SOURCE = ROOT / "jarvis" / "web" / "styles" / "dashboard.css"
 VENDOR = ROOT / "jarvis" / "web" / "static" / "vendor"
 
@@ -67,18 +67,18 @@ class DashboardUITests(unittest.TestCase):
         self.assertIn('url("/static/vendor/InterVariable.woff2")', self.css.replace("url(/", 'url("/').replace('.woff2)', '.woff2")'))
 
     def test_markup_has_no_decorative_inline_styles(self):
-        body = self.html[self.html.index("</style>"):]
+        body = self.html[self.html.index("</style>"):] + SCRIPT.read_text(encoding="utf-8")
         data_driven = r'(?!width:|--sevc|flex:\$|height:\$|background:var\(--(?:crit|high|med|low)\)|color:\$\{scoreColor)'
         self.assertEqual(re.findall(r'style="' + data_driven + r'[^"]*"', body), [])
 
     @unittest.skipUnless(shutil.which("node"), "node is not installed")
     def test_page_scripts_parse(self):
-        for i, script in enumerate(re.findall(r"<script>(.*?)</script>", self.html, re.S)):
-            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
-                fh.write(script)
-            r = subprocess.run(["node", "--check", fh.name], capture_output=True, text=True)
-            Path(fh.name).unlink()
-            self.assertEqual(r.returncode, 0, f"script {i}: {r.stderr[:400]}")
+        # No inline script remains (tests/test_static_csp.py); the page's code
+        # lives in dashboard.js and session.js.
+        self.assertEqual(re.findall(r"<script>(.*?)</script>", self.html, re.S), [])
+        for script in (SCRIPT, PAGE.parent / "session.js"):
+            r = subprocess.run(["node", "--check", str(script)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, f"{script.name}: {r.stderr[:400]}")
 
 
 if __name__ == "__main__":

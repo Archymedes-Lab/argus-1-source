@@ -80,6 +80,19 @@ function Get-DegradedSources($h) {
     }
     return $out
 }
+function Get-JarvisClientToken {
+    # A paired client token (`jarvis desktop pair --name supervisor`, saved on its own
+    # line). Every API route but liveness needs one; without it this script sees
+    # liveness only. Keep the file readable by this account alone.
+    $path = if ($env:JARVIS_CLIENT_TOKEN_FILE) { $env:JARVIS_CLIENT_TOKEN_FILE } else { Join-Path $env:LOCALAPPDATA 'Jarvis\client.token' }
+    try { $t = ([IO.File]::ReadAllText($path)).Trim() } catch { return $null }
+    if ($t -cmatch '^jc1_[0-9a-f]{12}_[A-Za-z0-9_-]{43}$') { return $t }
+    return $null
+}
+function Add-JarvisToken($req) {
+    $tok = Get-JarvisClientToken
+    if ($tok) { $req.Headers.Add('X-JARVIS-Token', $tok) }
+}
 function Get-JarvisHealth {
     # Raw HttpWebRequest, not Invoke-RestMethod. Under Task Scheduler the
     # cmdlet consults the system proxy and Internet Explorer first-run state,
@@ -91,7 +104,7 @@ function Get-JarvisHealth {
     try {
         $req=[Net.HttpWebRequest]::Create('http://127.0.0.1:8787/api/health')
         $req.Proxy=$null; $req.Timeout=8000; $req.ReadWriteTimeout=8000
-        $req.Method='GET'; $req.KeepAlive=$false
+        $req.Method='GET'; $req.KeepAlive=$false; Add-JarvisToken $req
         $resp=$req.GetResponse()
         try {
             $reader=New-Object IO.StreamReader($resp.GetResponseStream())

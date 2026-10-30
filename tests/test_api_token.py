@@ -15,8 +15,11 @@ class TokenTests(unittest.TestCase):
     def tearDown(self):
         token._TOKEN = None
 
-    def test_no_token_in_force_accepts_everything(self):
-        self.assertTrue(token.accepts({}))
+    def test_no_token_in_force_refuses_everything(self):
+        # Fail closed: a Handler run without serve() issuing a token accepts
+        # no state-changing request at all.
+        self.assertFalse(token.accepts({}))
+        self.assertFalse(token.accepts({token.HEADER: ""}))
 
     def test_issue_writes_owner_only_file_and_gates_requests(self):
         with tempfile.TemporaryDirectory() as d:
@@ -30,6 +33,7 @@ class TokenTests(unittest.TestCase):
             self.assertTrue(token.accepts({"Cookie": f"a=b; {token.COOKIE}={value}"}))
             self.assertIn(value, token.cookie_header())
             self.assertIn("SameSite=Strict", token.cookie_header())
+            self.assertIn("HttpOnly", token.cookie_header())
 
     def test_reissue_changes_the_token(self):
         with tempfile.TemporaryDirectory() as d:

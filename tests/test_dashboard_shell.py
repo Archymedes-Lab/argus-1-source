@@ -29,7 +29,9 @@ from jarvis.web.server import build_state
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "jarvis" / "web" / "static" / "dashboard.html"
 SHELL_CSS = ROOT / "jarvis" / "web" / "styles" / "shell.css"
-HTML = PAGE.read_text(encoding="utf-8")
+# The page and its script (no inline script under the CSP): tests read both.
+SCRIPT = ROOT / "jarvis" / "web" / "static" / "dashboard.js"
+HTML = PAGE.read_text(encoding="utf-8") + "\n" + SCRIPT.read_text(encoding="utf-8")
 VIEWS = ("overview", "security", "accounts", "network", "monitoring", "assistant", "settings")
 NODE = shutil.which("node")
 
@@ -110,8 +112,8 @@ class SidebarMarkupTests(unittest.TestCase):
 
     def test_existing_controls_are_preserved(self):
         for needle in ('id="q"', 'id="notify"', 'id="pause"', 'id="theme"', 'data-t="light"', 'data-t="dark"',
-                       'data-t="auto"', 'id="alertbar"', 'id="beat"', 'id="livetxt"', 'onclick="toggleNotify()"',
-                       'onclick="togglePause()"'):
+                       'data-t="auto"', 'id="alertbar"', 'id="beat"', 'id="livetxt"', 'data-click="notify"',
+                       'data-click="pause"'):
             self.assertIn(needle, HTML, needle)
 
     def test_no_new_external_origins_or_telemetry(self):

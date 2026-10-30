@@ -181,11 +181,25 @@ every route. Invariants: labels only from fixed sets (severity, scheduled job na
 evidence leaves through a scrape and cardinality is bounded by JOBS (I5, I6); a collector that
 never reported has `observed 0` and no age or failing sample (I1); an unreadable store is a
 503, never zeros (I1); one rendering shared for 15 s, measured 14 ms on an empty store.
-No token, like `/api/health`: the listener is loopback-only and `/api/state` already serves
-more to the same callers. Alternatives: a token (rejected: Prometheus would need the per-start
-token file, which rotates on restart, and the endpoint reveals less than `/api/state`); a
-node_exporter textfile (rejected: needs node_exporter and a writer job). Reconsider when the
-daemon's read routes get authentication (PROTECTION-REVIEW F2/F3).
+Superseded 2026-10-30 (ARGUS-2026-001): every data route, `/metrics` included, now needs a
+credential; only `/api/health` and `/api/live` stay open, and anonymously they return
+liveness fields only. Prometheus uses a paired client token, which does not rotate on
+restart: pair it once (`sudo -u argus -H argus desktop pair --name prometheus --out
+/etc/prometheus/argus.token`, then make the file readable by the prometheus user only) and
+scrape with
+
+```yaml
+scrape_configs:
+  - job_name: argus
+    static_configs: [{targets: ["127.0.0.1:8787"]}]
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/argus.token
+```
+
+The daemon accepts `Authorization: Bearer <token>` as well as `X-JARVIS-Token`. Revoke with
+`desktop revoke ID`. The original reasoning for no token (the per-start file rotates) no
+longer applies, since client tokens are stable until revoked.
 
 ### W8. Packages and the desktop client (2026-10-25)
 

@@ -59,7 +59,13 @@ class Preview(http.server.BaseHTTPRequestHandler):
             if path == "/api/stream":
                 return self._send(204, b"", "text/plain")   # keep the check short
             try:
-                with urllib.request.urlopen(DAEMON + self.path, timeout=20) as r:
+                # Every data route needs a credential: this account's paired
+                # client token, or the daemon's token file when readable.
+                sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+                from jarvis.web import apiclient, token
+                req = urllib.request.Request(DAEMON + self.path,
+                                             headers={token.HEADER: apiclient.credential()})
+                with urllib.request.urlopen(req, timeout=20) as r:
                     body, ctype = r.read(), r.headers.get("Content-Type", "application/json")
             except Exception as exc:
                 return self._send(502, str(exc).encode(), "text/plain")

@@ -1,7 +1,9 @@
 """Argument parsing and process entry point."""
 
 import argparse
+import sys
 
+from jarvis.core import statedir
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.intel import feeds
 from jarvis.intel import research as intel
@@ -61,6 +63,7 @@ from .commands import (
     cmd_webshell,
 )
 from .commands import defend as defend_cli
+from .commands import desktop as desktop_cli
 from .commands import evidence as evidence_cli
 from .commands import fix as fix_cli
 from .commands import geo as geo_cli
@@ -113,6 +116,7 @@ def build_parser():
     mesh_cli.add_parser(sub)
     reason_cli.add_parser(sub)
     veil_cli.add_parser(sub)
+    desktop_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
     b.add_argument("--reset", action="store_true",
@@ -479,11 +483,18 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    if args.cmd == 'mesh' or getattr(args, 'no_store', False):
+    if (args.cmd == 'mesh' or getattr(args, 'no_store', False)
+            or (args.cmd == 'desktop' and args.action == 'save')):
         # Mesh owns its isolated store, and the server network sensors run as
         # their own account without access to it: never open the protected
-        # collector DB for them.
+        # collector DB for them. `desktop save` only writes the caller's token.
         return args.fn(args, None)
+    refusal = statedir.cli_refusal(args.db, DEFAULT_DB, argv if argv is not None else sys.argv[1:])
+    if refusal:
+        # The daemon runs as its own account: this account's ~/.jarvis is not
+        # the daemon's store, and opening it would show stale or empty state.
+        print(refusal, file=sys.stderr)
+        return 2
     store = Store(args.db)
     try:
         args.fn(args, store)

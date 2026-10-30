@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from jarvis.collectors.process import detect
-from jarvis.platform import signatures, windows
+from jarvis.platform import interop_gate, signatures, windows
 
 
 class _Capture:
@@ -50,6 +50,15 @@ class StdinBridgeTests(unittest.TestCase):
              mock.patch.object(windows.subprocess, "run", ran):
             windows.ps_json("$x")
         self.assertNotIn("input", ran.call_args.kwargs)
+
+    def setUp(self):
+        # ps_json skips its retry when the process-global interop gate is
+        # degraded. Other suites in a full run can leave it degraded, so pin a
+        # fresh, healthy gate here: this test is about the retry, not the gate.
+        gate = interop_gate.Gate()
+        patch = mock.patch.object(interop_gate, "GATE", gate)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def test_retry_resends_payload_and_unavailable_bridge_fails_closed(self):
         ran = mock.Mock(side_effect=[mock.Mock(stdout=b""),

@@ -37,7 +37,7 @@ function Test-Distro {
 function Wait-Dashboard {
     foreach ($i in 1..40) {
         try {
-            $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://127.0.0.1:$Port/api/state"
+            $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://127.0.0.1:$Port/api/live"
             return $true
         } catch { Start-Sleep -Seconds 1 }
     }
@@ -109,7 +109,7 @@ Write-Host "`n3/3  Dashboard" -ForegroundColor Cyan
 $ok = $false
 foreach ($i in 1..20) {
     try {
-        $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://127.0.0.1:$Port/api/state"
+        $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://127.0.0.1:$Port/api/live"
         $ok = $true; break
     } catch { Start-Sleep -Seconds 1 }
 }
