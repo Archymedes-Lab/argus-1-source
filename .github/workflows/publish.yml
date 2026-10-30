@@ -38,10 +38,15 @@ jobs:
         with:
           ref: ${{ env.TAG }}
           persist-credentials: false
+      # The assets go to their own folder outside the checkout: the checkout
+      # already has a release/ folder (this tooling), and downloading into it
+      # mixed the tooling into the files under check (run 41138145511 refused
+      # v2026.10.30-2 for exactly that). gh release download fetches only the
+      # uploaded assets, never GitHub's "Source code" archives (no --archive).
       - name: Download the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download "$TAG" -R "$GITHUB_REPOSITORY" -D release
+        run: gh release download "$TAG" -R "$GITHUB_REPOSITORY" -D "$RUNNER_TEMP/release-assets"
       # ases: push - release/publish.py commits the release to the site with this deploy key.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,6 +55,6 @@ jobs:
           path: site
           ssh-key: ${{ secrets.SITE_DEPLOY_KEY }}
       - name: Check and publish to the site
-        run: python3 release/publish.py --release release --site site --tag "$TAG" ${{ inputs.rollback && '--rollback' || '' }}
+        run: python3 release/publish.py --release "$RUNNER_TEMP/release-assets" --site site --tag "$TAG" ${{ inputs.rollback && '--rollback' || '' }}
       - name: Read the live site back
         run: python3 release/publish.py --readback --version "${TAG#v}" --timeout 1500
