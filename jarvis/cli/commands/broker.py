@@ -15,9 +15,10 @@ import base64
 import hashlib
 import subprocess
 import time
+from pathlib import Path
 
 from jarvis.core.paths import REPO_ROOT, WIN_SCRIPTS_DIR
-from jarvis.platform import broker, host
+from jarvis.platform import broker, elevation, host
 from jarvis.platform import windows as win
 
 
@@ -70,25 +71,28 @@ def _make_stage(prefix):
     return "", f"could not create a staging folder on Windows after {STAGE_TRIES} tries: {why}"
 
 
-def _elevated_files(files, entry, args, timeout=240):
-    """Copy `files` ({name: path}) to a fresh local folder and run `entry`
+def _elevated_files(files, entry, args, timeout=240, prefix="jarvis-elevated"):
+    """Stage `files` ({name: path}) in a fresh local folder and run `entry`
     elevated through one UAC prompt. Returns (exit code, output).
 
-    Never run from the \\\\wsl share: an elevated shell executing a file the
-    user can edit is the hole the broker is built to avoid.
+    Never run from the \\\\wsl share, and never from the stage either: the
+    elevated shell copies each file into Program Files and matches it against
+    the SHA-256 taken here before the prompt (platform/elevation.py), so a
+    file the user swaps in between runs nothing. "{trusted}" in `args` names
+    that checked folder.
     """
     if not win.available():
         return 1, "the Windows interop bridge is not available"
-    stage, why = _make_stage("jarvis-elevated")
+    hashes = {name: hashlib.sha256(Path(path).read_bytes()).hexdigest() for name, path in files.items()}
+    stage, why = _make_stage(prefix)
     if not stage:
         return 1, why
-    copy = ";".join(f"Copy-Item -LiteralPath '{_winpath(path)}' -Destination '{stage}\\{name}'"
+    copy = ";".join(f"Copy-Item -LiteralPath {elevation.literal(_winpath(path))} "
+                    f"-Destination {elevation.literal(stage + chr(92) + name)}"
                     for name, path in files.items())
-    argline = ",".join(f"'{a}'" for a in (["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                                          f"{stage}\\{entry}"] + [
-                                              a.replace("{stage}", stage) for a in args]))
-    script = (f"{copy}; $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
-              f"-ArgumentList {argline}; Remove-Item -LiteralPath '{stage}' -Recurse -Force; exit $p.ExitCode")
+    script = f"{copy}; " + elevation.launcher(
+        elevation.inline_command(stage, hashes, entry, args),
+        after=f"Remove-Item -LiteralPath {elevation.literal(stage)} -Recurse -Force;")
     try:
         r = subprocess.run(_ps_args(script),
                            capture_output=True, text=True, errors="replace", timeout=timeout, cwd="/")
@@ -106,7 +110,7 @@ def _sysmon_baseline():
     print("approve the UAC prompt on the Windows desktop…")
     code, out = _elevated_files(
         {"apply.ps1": installer, "baseline.xml": policy}, "apply.ps1",
-        ["-PolicyPath", "{stage}\\baseline.xml", "-ExpectedSha256", digest])
+        ["-PolicyPath", "{trusted}\\baseline.xml", "-ExpectedSha256", digest])
     if out:
         print(out)
     # Success is what the elevated broker next reads back, not the exit code.
@@ -118,29 +122,15 @@ def _sysmon_baseline():
 def _elevated(args, timeout=240):
     """Run jarvis-elevated-broker.ps1 with `args` through a UAC prompt, from a local copy.
 
-    The script must not be launched from the \\\\wsl share: an elevated shell
-    executing a file the user can edit is the hole the broker is built to
-    avoid, even for the instant of installation.
+    An elevated shell executing a file the user can edit is the hole the
+    broker is built to avoid, even for the instant of installation: the broker
+    and its job scripts run only from the checked copy (_elevated_files), and
+    the broker installs its jobs from that copy (-Source).
     """
-    if not win.available():
-        return 1, "the Windows interop bridge is not available"
-    stage, why = _make_stage("jarvis-broker")
-    if not stage:
-        return 1, why
     names = [broker.BROKER_SCRIPT] + list(broker.SCRIPTS.values())
-    copy = ";".join(
-        f"Copy-Item -LiteralPath '{_winpath((REPO_ROOT if n == broker.BROKER_SCRIPT else WIN_SCRIPTS_DIR) / n)}' "
-        f"-Destination '{stage}\\{n}'" for n in names)
-    argline = ",".join(f"'{a}'" for a in (["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                                          f"{stage}\\{broker.BROKER_SCRIPT}"] + args + ["-Source", stage]))
-    script = (f"{copy}; $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
-              f"-ArgumentList {argline}; Remove-Item -LiteralPath '{stage}' -Recurse -Force; exit $p.ExitCode")
-    try:
-        r = subprocess.run(_ps_args(script),
-                           capture_output=True, text=True, errors="replace", timeout=timeout, cwd="/")
-    except subprocess.TimeoutExpired:
-        return 1, "timed out waiting for the UAC prompt"
-    return r.returncode, _clean(r.stdout + "\n" + r.stderr)
+    files = {n: (REPO_ROOT if n == broker.BROKER_SCRIPT else WIN_SCRIPTS_DIR) / n for n in names}
+    return _elevated_files(files, broker.BROKER_SCRIPT, [*args, "-Source", "{trusted}"],
+                           timeout=timeout, prefix="jarvis-broker")
 
 
 def cmd_broker(args, store=None):

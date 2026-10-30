@@ -1,9 +1,12 @@
 """An elevated result is used only when it is fresh and from reviewed scripts."""
 
 import base64
+import hashlib
 import json
 import os
+import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -60,6 +63,37 @@ class BrokerResultTests(unittest.TestCase):
                 mock.patch.object(broker, "installed", return_value=True), \
                 mock.patch.object(broker, "drifted", return_value=[]):
             self.assertEqual(broker_cli.cmd_broker(args), 1)
+
+    def _launched_inner(self, call):
+        """The inline code the elevated shell would receive from `call`."""
+        scripts = []
+
+        def fake_run(argv, **kw):
+            scripts.append(base64.b64decode(argv[-1]).decode("utf-16le"))
+            return subprocess.CompletedProcess(argv, 0, "C:\\Users\\u\\Temp\\jarvis-x\n", "")
+
+        with mock.patch.object(broker_cli.win, "available", return_value=True), \
+                mock.patch.object(broker_cli, "_winpath", side_effect=lambda p: "C:\\src\\" + p.name), \
+                mock.patch.object(broker_cli.subprocess, "run", side_effect=fake_run):
+            call()
+        outer = scripts[-1]
+        self.assertNotIn("'-File'", outer)
+        encoded = re.search(r"'-EncodedCommand','([A-Za-z0-9+/=]+)'", outer).group(1)
+        return base64.b64decode(encoded).decode("utf-16le")
+
+    def test_elevated_broker_runs_only_its_checked_copy(self):
+        inner = self._launched_inner(lambda: broker_cli._elevated(["-Install"]))
+        names = [broker.BROKER_SCRIPT] + list(broker.SCRIPTS.values())
+        for n in names:
+            src = (broker_cli.REPO_ROOT if n == broker.BROKER_SCRIPT else broker_cli.WIN_SCRIPTS_DIR) / n
+            self.assertIn(hashlib.sha256(src.read_bytes()).hexdigest(), inner, n)
+        call = inner[inner.index(f"& (Join-Path $t '{broker.BROKER_SCRIPT}')"):]
+        self.assertIn("-Install", call)
+        self.assertIn("-Source $t", call)
+
+    def test_sysmon_baseline_points_at_the_checked_policy(self):
+        inner = self._launched_inner(broker_cli._sysmon_baseline)
+        self.assertIn("-PolicyPath (Join-Path $t 'baseline.xml')", inner)
 
     def test_powershell_commands_are_encoded_for_wsl_interop(self):
         with mock.patch.object(broker_cli.win, "_PS", "powershell.exe"):

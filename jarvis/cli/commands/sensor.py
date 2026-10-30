@@ -1,18 +1,20 @@
 """`jarvis sensor` — install and inspect the native Windows sensor service.
 
 Installation needs administrator: it registers a service, sets ACLs on
-protected folders and adds the service account to Event Log Readers. Like the
-broker, the elevated script is copied to a Windows temp folder and run from
-there, never launched off the \\\\wsl share — an elevated shell must not execute
-a file the unprivileged user can edit, even for the instant of installation.
+protected folders and adds the service account to Event Log Readers. The files
+are copied to a Windows temp folder, never run off the \\\\wsl share, and the
+elevated shell runs neither from there: it copies them into Program Files and
+checks their SHA-256, fixed from the checkout before the UAC prompt (_inner).
+An elevated shell must not execute a file the unprivileged user can edit.
 
 Status and health need no privilege: they read the spool the service writes.
 """
 
+import hashlib
 import subprocess
 
 from jarvis.core.paths import repo_file
-from jarvis.platform import host
+from jarvis.platform import elevation, host
 from jarvis.platform import windows as win
 from jarvis.platform.native import ingest
 
@@ -23,8 +25,23 @@ def _winpath(path):
     return host.windows_name(path)
 
 
+# The elevated shell's transcript: written under Program Files (administrators
+# write, users read), never into the user-writable stage, where a planted link
+# would turn an elevated write into one aimed wherever the link points.
+LOG = r"Jarvis\Logs\sensor-install.log"
+
+
+def _inner(stage, hashes, args):
+    """The command the elevated PowerShell runs (platform/elevation.py): the
+    staged files are copied into Program Files and matched against `hashes`,
+    fixed from the checkout before the UAC prompt, and install.ps1 runs from
+    that checked copy with the source hash it must compile."""
+    return elevation.inline_command(stage, hashes, "install.ps1",
+                                    [*args, "-SourceSha256", hashes["JarvisSensor.cs"]])
+
+
 def _elevated(args, timeout=300):
-    """Run windows-sensor/install.ps1 elevated from a staged copy. -> (code, output)."""
+    """Run windows-sensor/install.ps1 elevated from a checked copy. -> (code, output)."""
     if not win.available():
         return 1, "the Windows interop bridge is not available"
     stage = subprocess.run(
@@ -40,16 +57,15 @@ def _elevated(args, timeout=300):
         for n in SENSOR_FILES)
     # -Verb RunAs cannot redirect the child's streams (parameter-set conflict),
     # and the elevated window is separate, so the child records its own
-    # transcript into the staging folder and we read it back before deleting.
-    flags = " ".join(args)                       # fixed tokens only, no user text
-    inner = (f"Start-Transcript -LiteralPath '{stage}\\log.txt' | Out-Null; "
-             f"& '{stage}\\install.ps1' {flags}; Stop-Transcript | Out-Null")
-    script = (f"{copy}; "
-              f"$inner = @'\n{inner}\n'@; "
-              f"$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList "
-              f"'-NoProfile','-ExecutionPolicy','Bypass','-Command',$inner; "
-              f"Get-Content -LiteralPath '{stage}\\log.txt' -EA SilentlyContinue; "
-              f"Remove-Item -LiteralPath '{stage}' -Recurse -Force; exit $p.ExitCode")
+    # transcript (LOG) and we read it back.
+    hashes = {n: hashlib.sha256((src / n).read_bytes()).hexdigest() for n in SENSOR_FILES}
+    log = f"(Join-Path $env:ProgramFiles {elevation.literal(LOG)})"
+    inner = (f"New-Item -ItemType Directory -Force -Path (Split-Path -Parent {log}) | Out-Null;"
+             f"Start-Transcript -LiteralPath {log} -Force | Out-Null; "
+             f"try {{ {_inner(stage, hashes, args)} }} finally {{ Stop-Transcript | Out-Null }}")
+    script = (f"{copy}; " + elevation.launcher(inner, after=(
+        f"Get-Content -LiteralPath {log} -EA SilentlyContinue; "
+        f"Remove-Item -LiteralPath {elevation.literal(stage)} -Recurse -Force;")))
     try:
         r = subprocess.run([win._PS, "-NoProfile", "-Command", script],
                            capture_output=True, text=True, errors="replace",
