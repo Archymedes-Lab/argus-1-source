@@ -37,13 +37,13 @@ from jarvis.response import (
     remediation,
 )
 from jarvis.response.reporting import score, voice
-from jarvis.service import attackmap, detectorhealth, sdnotify
+from jarvis.service import attackmap, autopilot, detectorhealth, sdnotify
 from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS, NOT_APPLICABLE
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
-from jarvis.web import procview, stream
+from jarvis.web import billing, procview, stream
 from jarvis.web import token as api_token
 
 PAGE = str(STATIC_DIR / "dashboard.html")
@@ -665,6 +665,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(202, json.dumps({"accepted": True, "findings": len(findings)}))
             finally:
                 store.close()
+        if url.path == "/api/billing/webhook":
+            # Stripe calls this, not the browser: no cookie or origin, so it is
+            # authenticated by Stripe's HMAC signature alone (billing.handle_webhook).
+            try:
+                length = int(self.headers.get("Content-Length") or "0")
+            except ValueError:
+                length = 0
+            if length <= 0 or length > 262_144:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            body = self.rfile.read(length)
+            store = Store(self.db_path)
+            try:
+                code, result = billing.handle_webhook(
+                    store, body, self.headers.get("Stripe-Signature", ""))
+            finally:
+                store.close()
+            return self._send(code, json.dumps(result))
         if not self._same_origin():
             return self._send(403, json.dumps({"error": "cross-site request"}))
         # Every state-changing route needs the per-start token (header or the
@@ -672,6 +689,46 @@ class Handler(BaseHTTPRequestHandler):
         # does not close.
         if not api_token.accepts(self.headers):
             return self._send(403, json.dumps({"error": "missing or wrong API token"}))
+        if url.path in ("/api/autopilot/decide", "/api/autopilot/authorize"):
+            payload = self._json_body(8192)
+            if payload is None:
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                if url.path.endswith("authorize"):
+                    result = autopilot.authorize(store, str(payload.get("fid") or "")[:16])
+                else:
+                    fids = payload.get("fids")
+                    result = autopilot.decide(
+                        store, str(payload.get("key") or "")[:600], str(payload.get("choice") or ""),
+                        [str(x)[:16] for x in fids][:200] if isinstance(fids, list) else None,
+                        str(payload.get("note") or ""))
+            except ValueError as exc:
+                return self._send(400, json.dumps({"error": str(exc)}))
+            finally:
+                store.close()
+            return self._send(200, json.dumps(result))
+        if url.path == "/api/billing/checkout":
+            origin = "http://%s" % (self.headers.get("Host") or "localhost")
+            result = billing.checkout(origin)
+            return self._send(200 if "url" in result else 400, json.dumps(result))
+        if url.path == "/api/billing/confirm":
+            payload = self._json_body(2048) or {}
+            store = Store(self.db_path)
+            try:
+                result = billing.confirm(store, str(payload.get("session_id") or "")[:200])
+            finally:
+                store.close()
+            return self._send(200 if result.get("ok") else 400, json.dumps(result))
+        if url.path in ("/api/run", "/api/ask", "/api/assistant/action"):
+            store = Store(self.db_path)
+            try:
+                licensed = billing.allowed(store)
+            finally:
+                store.close()
+            if not licensed:
+                return self._send(402, json.dumps({"error": "An ARGUS-1 licence is required. "
+                                                            "Open the Pricing page."}))
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]
             ok = self.scheduler.force(job)
@@ -882,6 +939,24 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(500, "dashboard.html missing", "text/plain")
 
+        if url.path in ("/api/autopilot", "/api/autopilot/notices"):
+            store = Store(self.db_path)
+            try:
+                if url.path.endswith("notices"):
+                    return self._send(200, json.dumps({"notices": autopilot.take_notices(store)}))
+                snaps = store.get_snapshots()
+                rep = _detector_health(store, self.scheduler, snaps)
+                return self._send(200, json.dumps(autopilot.status(store, rep), default=str))
+            finally:
+                store.close()
+
+        if url.path == "/api/billing/status":
+            store = Store(self.db_path)
+            try:
+                return self._send(200, json.dumps(billing.status(store)))
+            finally:
+                store.close()
+
         if url.path == "/api/greeting":
             store = Store(self.db_path)
             try:
@@ -1061,6 +1136,13 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
     rel = threading.Thread(target=reliability_watchdog_loop, args=(scheduler,),
                            name="jarvis-reliability", daemon=True)
     rel.start()
+
+    # Security Autopilot: investigates new findings, groups them, retries failed
+    # collectors with backoff. Read-only; see service/autopilot.py.
+    threading.Thread(
+        target=autopilot.loop, name="jarvis-autopilot", daemon=True,
+        args=(db_path, scheduler,
+              lambda st: _detector_health(st, scheduler, st.get_snapshots()))).start()
 
     Handler.db_path = db_path
     Handler.scheduler = scheduler

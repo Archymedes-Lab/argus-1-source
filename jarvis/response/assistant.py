@@ -288,6 +288,24 @@ def _explain(store, query):
     return "\n".join(lines)
 
 
+def _smalltalk(q):
+    """Plain conversational turns that need no model: greetings, thanks, who/what is this."""
+    words = set(re.findall(r"[a-z']+", q))
+    if q in ("hi", "hello", "hey", "hiya", "yo") or q.startswith(("hello ", "hi ", "hey ", "good morning",
+                                                                   "good afternoon", "good evening")):
+        return ("Hello. I'm ARGUS-1's assistant. Ask me things like \"Is my computer okay?\" or "
+                "\"What needs my attention first?\", or press Investigate on any finding.")
+    if words & {"thanks", "thank", "cheers"} and len(words) <= 4:
+        return "You're welcome. Ask again whenever you like."
+    if any(p in q for p in ("who are you", "what are you", "what can you do", "what do you do",
+                            "help me", "how do you work", "what is argus")):
+        return ("I'm the ARGUS-1 assistant. I read what ARGUS-1 has observed on this computer and explain it "
+                "in plain language: whether your computer looks okay, what needs your attention, what a "
+                "finding means and what you can safely do next. I never change anything without your "
+                "approval, and everything stays on this computer.")
+    return ""
+
+
 def _ollama(store, question, conf, jobs=None):
     # Structured, bounded context: the score's areas (not just raw findings),
     # the protocol plan with projected gains, and the worst findings. Everything
@@ -413,6 +431,9 @@ def answer(store, question, conf=None, jobs=None, offer=None, runner=None):
         return {"answer": ("Confirmation changes JARVIS state. Use the exact command shown by "
                            "`jarvis answer` or `jarvis ack <id> --reason \"...\"` after you "
                            "verify the finding."), "source": "builtin"}
+    chat = _smalltalk(q)
+    if chat:
+        return _with_model({"answer": chat, "source": "builtin"}, conf)
     text, source = _ollama(store, question, conf, jobs=jobs)
     if source == "unavailable":
         # Layer 4: not understood and no model. Say so plainly and ask one
