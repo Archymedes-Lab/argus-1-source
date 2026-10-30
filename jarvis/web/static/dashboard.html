@@ -3143,7 +3143,12 @@ async function askJarvis(event) {
     const r = await postJSON("/api/ask", { question, offer: chatOffer });
     if (!r.ok) throw new Error(r.data.error || "request failed");
     input.value = ""; renderAssistant(r.data);
-  } catch (e) { output.textContent = "I couldn't get an answer just now. Please try again in a moment."; }
+  } catch (e) {
+    output.textContent = /token|licen[cs]e/i.test(String(e && e.message))
+      ? (/licen[cs]e/i.test(e.message) ? "An ARGUS-1 licence is needed to ask questions. Open the Pricing page."
+                                       : "ARGUS-1 was restarted since this page was opened. Reload the page (Ctrl+R) and ask again.")
+      : "I couldn't get an answer just now. Please try again in a moment.";
+  }
   finally { button.disabled = false; button.textContent = "Ask"; }
 }
 

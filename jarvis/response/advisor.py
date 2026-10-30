@@ -235,7 +235,13 @@ def classify_intent(q):
         return "score_meaning"
     if has("like i'm not technical", "like im not technical", "not technical", "plain english",
            "simple terms", "in simple", "eli5", "explain simply"):
-        return "plain"
+        # A general-knowledge question ("explain what ransomware is in simple words") is for the
+        # model; only a question about this computer or ARGUS gets the canned walkthrough.
+        about_us = has("argus", "my computer", "my pc", "this finding", "this warning", "this alert",
+                       "my score", "the score", "my system", "my security")
+        general = re.search(r"\b(what is|what are|what's|explain what|explain how|tell me about|how does|how do)\b", q)
+        if about_us or not general:
+            return "plain"
     if has("what can you do", "what are you able", "what do you do", "your capabilities",
            "can you help", "what can i ask") or q in ("help", "help me", "?"):
         return "capabilities"
