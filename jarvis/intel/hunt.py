@@ -101,6 +101,12 @@ PEER_SAMPLE = 5
 PEER_SINGLE_THRESHOLD = 5
 
 
+# Feeds that list addresses seen attacking or scanning others (reputation),
+# as opposed to malware command-and-control and payload infrastructure
+# (ThreatFox, Feodo, URLhaus), which stays critical.
+ATTACK_SOURCE_FEEDS = frozenset({"blocklist-de", "cins", "binarydefense", "ipsum"})
+
+
 def collapse_peer_hits(hits):
     groups = {}
     for h in hits:
@@ -160,8 +166,15 @@ def check_peers(store):
         if not vet.vet_ipv4(r["ip"])[0]:
             continue
         label = r["fam"] or r["ctx"] or "listed in threat intelligence"
-        severity = "critical" if r["confidence"] == "high" else "medium"
-        qualifier = "known attacker" if severity == "critical" else "threat-intelligence"
+        if r["feed"] in ATTACK_SOURCE_FEEDS:
+            # Reputation lists record hosts seen attacking or scanning others;
+            # shared and reassigned cloud addresses land there (Google and
+            # Microsoft addresses did, 2026-10-30). Reaching one is worth
+            # knowing, not proof of an attacker.
+            severity, qualifier = "medium", "reported attack source"
+        else:
+            severity = "critical" if r["confidence"] == "high" else "medium"
+            qualifier = "known attacker" if severity == "critical" else "threat-intelligence"
         peer_hits.append({"ip": r["ip"], "port": r["port"], "pname": r["pname"] or "unknown process",
                           "label": label, "feed": r["feed"], "src": r["src"], "host": r["host"],
                           "severity": severity, "qualifier": qualifier})

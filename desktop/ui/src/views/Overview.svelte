@@ -3,14 +3,16 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Pill from "../components/Pill.svelte";
   import { app, go } from "../lib/store.svelte";
-  import { collectorSummary, distinct, groupQuestions, jobHealth, scoreTone, severityCounts, type Finding } from "../lib/model";
+  import { collectorSummary, distinct, groupQuestions, isReminder, jobHealth, problemCounts, scoreTone, type Finding } from "../lib/model";
 
   const d = $derived(app.data);
   const sec = $derived(d?.security ?? null);
   const findings = $derived((d?.findings ?? []) as Finding[]);
-  const counts = $derived(severityCounts(findings));
-  const crit = $derived(distinct(findings.filter((f) => f.severity === "critical"), 4));
-  const high = $derived(distinct(findings.filter((f) => f.severity === "high"), 4));
+  const problems = $derived(findings.filter((f) => !isReminder(f)));
+  const counts = $derived(problemCounts(findings));
+  const reminders = $derived(findings.filter(isReminder).length);
+  const crit = $derived(distinct(problems.filter((f) => f.severity === "critical"), 4));
+  const high = $derived(distinct(problems.filter((f) => f.severity === "high"), 4));
   const questions = $derived(groupQuestions(d?.questions ?? []));
   const fixes = $derived((d?.fix ?? []) as any[]);
   const coll = $derived(collectorSummary(d?.jobs ?? []));
@@ -35,7 +37,7 @@
         <span class="grid size-9 place-items-center rounded-full bg-red-100 text-red-900"><TriangleAlert size={17} /></span>
         <div class="min-w-0 flex-1">
           <div class="text-label-14">{counts.critical} critical finding{counts.critical === 1 ? "" : "s"} need attention</div>
-          <div class="truncate text-copy-13 text-gray-900">Most urgent: {crit[0]?.title}</div>
+          <div class="truncate text-copy-13 text-gray-900">Most urgent: {crit[0]?.title}{reminders ? ` · plus ${reminders} reminder${reminders === 1 ? "" : "s"} about problems already listed` : ""}</div>
         </div>
         <span class="link">Review<ChevronRight size={13} class="ml-0.5 inline -translate-y-px" /></span>
       </button>

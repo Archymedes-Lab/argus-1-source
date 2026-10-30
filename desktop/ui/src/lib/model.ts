@@ -45,6 +45,16 @@ export function severityCounts(findings: Finding[]): Record<Severity, number> {
   return out;
 }
 
+/** A reminder re-raises an unresolved or returning finding at the original's
+ *  severity (job "ledger"), so its emails escalate. On screen it is the same
+ *  problem again: counted on its own, never as another problem. */
+export const isReminder = (f: Finding): boolean => f.job === "ledger";
+
+/** Severity counts of distinct problems: reminders left out. */
+export function problemCounts(findings: Finding[]): Record<Severity, number> {
+  return severityCounts(findings.filter((f) => !isReminder(f)));
+}
+
 /** One row per distinct (job, title), with how many places it occurs. */
 export function distinct(findings: Finding[], limit: number): (Finding & { count: number })[] {
   const by = new Map<string, Finding & { count: number }>();
