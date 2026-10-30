@@ -195,7 +195,9 @@ def _windows():
     guesses, refused = {}, {}
     for row in top:
         n = int(row.get("n") or 0)
-        user, ip, status, sub, proc = ((row.get("key") or "").split("|") + [""] * 5)[:5]
+        # Split from the right: the user name is the guesser's own text and may
+        # hold "|"; the address, status codes and process name are Windows'.
+        user, ip, status, sub, proc = ((row.get("key") or "").rsplit("|", 4) + [""] * 5)[:5]
         why = _refusal(status, sub)
         if why:
             r = refused.setdefault(why, [0, set()])

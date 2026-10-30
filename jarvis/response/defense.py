@@ -15,6 +15,11 @@ For every finding a collector produces, this places it on one rung:
 Everything AUTO does is reversible and logged in the defense ledger, and the
 whole autonomous layer is off until `autonomous_defense` is set: the default
 posture is PROPOSE, never act.
+
+An action may be time-bounded (Action.ttl): the applied entry then carries an
+`expires_at`, and expire() lifts it with the action's own undo. An expiry is not
+a human override, so a recurrence may apply it again, longer; a human undo still
+turns every recurrence into a proposal.
 """
 
 import hashlib
@@ -37,12 +42,14 @@ AUTO, PROPOSE, ASK, WATCH = "auto", "propose", "ask", "watch"
 AUTO_MIN_SEVERITY = ("critical", "high")
 
 
-def _entry_id(action_id, finding, job):
+def _entry_id(action_id, finding, job, target=None):
     # Response annotations are presentation state added after the first pass.
     # They must not make the same detector finding look like a new action.
     stable_finding = dict(finding or {})
     stable_finding.pop("defense", None)
-    key = f"{action_id}|{job}|{alert.finding_key(stable_finding)}"
+    action = base.get(action_id)
+    ident = action.identity(stable_finding, target) if action and target else None
+    key = f"{action_id}|{job}|{ident or alert.finding_key(stable_finding)}"
     return hashlib.sha1(key.encode("utf-8", "replace")).hexdigest()[:8]
 
 
@@ -83,7 +90,7 @@ def decide(finding, job, conf, acks):
         return WATCH, None, None
     for action in base.registry().values():
         target = action.match(f, job)
-        if not target:
+        if not target or not action.permitted(target, conf)[0]:
             continue
         strong = f.get("severity") in AUTO_MIN_SEVERITY
         if _enabled(conf, action) and strong and action.auto_eligible(f, job, target):
@@ -119,10 +126,21 @@ def _capture(finding, job, action, target):
         return "", [], False
 
 
-def _apply(store, conf, finding, job, action, target):
+def _stamp(entry, action, target, prior, now):
+    """Count one more application and set its expiry when the action has one."""
+    entry["applications"] = int(prior or 0) + 1
+    ttl = action.ttl(target, int(prior or 0))
+    if ttl:
+        entry["expires_at"] = int(now) + int(ttl)
+    entry.pop("expire_error", None)
+    return entry
+
+
+def _apply(store, conf, finding, job, action, target, now=None):
+    now = time.time() if now is None else now
     case_name, _, captured = _capture(finding, job, action, target)
     if not captured:
-        eid = _entry_id(action.id, finding, job)
+        eid = _entry_id(action.id, finding, job, target)
         entry = {"action": action.id, "title": action.title, "target": target,
                  "finding": {"title": finding.get("title"),
                              "severity": finding.get("severity"),
@@ -142,7 +160,7 @@ def _apply(store, conf, finding, job, action, target):
             case = Case(case_name, create=False)
     except Exception:
         case = None
-    eid, entry, _ = _propose(store, conf, finding, job, action, target)
+    eid, entry, _ = _propose(store, conf, finding, job, action, target, now)
     if entry["status"] in ("attempting", "uncertain"):
         return eid, entry, False
     entry.update(status="attempting", evidence=case_name,
@@ -156,7 +174,7 @@ def _apply(store, conf, finding, job, action, target):
         entry.update(status="uncertain", detail="Action interrupted; inspect evidence and target before recovery.")
         _save(store, ledger)
         return eid, entry, False
-    eid = _entry_id(action.id, finding, job)
+    eid = _entry_id(action.id, finding, job, target)
     ledger = load(store)
     prior = ledger.get(eid) or {}
     entry = {"action": action.id, "title": action.title, "target": target,
@@ -164,16 +182,19 @@ def _apply(store, conf, finding, job, action, target):
                          "category": finding.get("category"), "where": finding.get("where"),
                          "host": finding.get("host")},
              "job": job, "preview": action.preview(target), "evidence": case_name,
-             "at": int(time.time()), "detail": detail,
+             "at": int(now), "detail": detail,
              "status": "applied" if ok else "failed", "record": record,
-             "attempts": (prior.get("attempts") or [])[-9:] + [int(time.time())]}
+             "applications": int(prior.get("applications") or 0),
+             "attempts": (prior.get("attempts") or [])[-9:] + [int(now)]}
+    if ok:
+        _stamp(entry, action, target, prior.get("applications"), now)
     ledger[eid] = entry
     _save(store, ledger)
     return eid, entry, ok
 
 
-def _propose(store, conf, finding, job, action, target):
-    eid = _entry_id(action.id, finding, job)
+def _propose(store, conf, finding, job, action, target, now=None):
+    eid = _entry_id(action.id, finding, job, target)
     ledger = load(store)
     existing = ledger.get(eid)
     if existing and existing.get("status") in ("applied", "undone", "proposed", "attempting", "uncertain", "not_applied"):
@@ -183,13 +204,21 @@ def _propose(store, conf, finding, job, action, target):
                          "category": finding.get("category"), "where": finding.get("where"),
                          "host": finding.get("host")},
              "job": job, "preview": action.preview(target), "evidence": "",
-             "at": int(time.time()), "detail": "", "status": "proposed", "record": {}}
+             "at": int(time.time() if now is None else now), "detail": "",
+             "status": "proposed", "record": {},
+             # An expired action's history survives, so a repeat escalates.
+             "applications": int((existing or {}).get("applications") or 0)}
     ledger[eid] = entry
     _save(store, ledger)
     return eid, entry, True
 
 
-def process(store, conf, job, findings, *, coverage="complete"):
+def _active(ledger, action_id):
+    return sum(1 for e in ledger.values()
+               if e.get("action") == action_id and e.get("status") in ("applied", "attempting", "uncertain"))
+
+
+def process(store, conf, job, findings, *, coverage="complete", now=None):
     """Run the ladder over one job's findings. Returns the findings, annotated.
 
     Each finding that reaches AUTO or PROPOSE gets a `defense` key so the
@@ -208,8 +237,15 @@ def process(store, conf, job, findings, *, coverage="complete"):
             # A partial result can support a proposal, but it must not grant
             # unattended authority. The scheduler supplies the durable receipt.
             rung = PROPOSE
+        if rung == AUTO and action.max_active:
+            ledger = load(store)
+            current = ledger.get(_entry_id(action.id, finding, job, target)) or {}
+            if (current.get("status") not in ("applied", "attempting", "uncertain")
+                    and _active(ledger, action.id) >= action.max_active):
+                # Bounded blast radius: past the cap a person decides.
+                rung = PROPOSE
         if rung == AUTO:
-            eid = _entry_id(action.id, finding, job)
+            eid = _entry_id(action.id, finding, job, target)
             existing = load(store).get(eid)
             if existing and existing.get("status") in ("applied", "attempting", "uncertain", "not_applied"):
                 entry = existing
@@ -230,12 +266,12 @@ def process(store, conf, job, findings, *, coverage="complete"):
                   and time.time() - int(existing.get("at") or 0) < FAILED_RETRY_SECONDS):
                 entry = existing
             else:
-                eid, entry, _ok = _apply(store, conf, finding, job, action, target)
+                eid, entry, _ok = _apply(store, conf, finding, job, action, target, now)
             finding["defense"] = {"rung": AUTO, "id": eid, "action": action.id,
                                   "status": entry["status"], "detail": entry["detail"],
                                   "undo": f"jarvis defend undo {eid}"}
         elif rung == PROPOSE:
-            eid, entry, _new = _propose(store, conf, finding, job, action, target)
+            eid, entry, _new = _propose(store, conf, finding, job, action, target, now)
             if entry.get("status") in ("attempting", "uncertain"):
                 finding["defense"] = {
                     "rung": PROPOSE, "id": eid, "action": action.id,
@@ -252,7 +288,7 @@ def process(store, conf, job, findings, *, coverage="complete"):
 
 # ── acting on a proposal, and undoing ──────────────────────────────────────
 
-def approve(store, eid, now=None):
+def approve(store, eid, now=None, conf=None):
     """Apply a proposed action now. Returns (ok, detail)."""
     ledger = load(store, strict=True)
     entry = ledger.get(eid)
@@ -265,6 +301,10 @@ def approve(store, eid, now=None):
         return False, "that action no longer exists"
     if entry["status"] in ("attempting", "uncertain"):
         return False, "Prior action outcome is uncertain; inspect evidence and target before recovery."
+    allowed, why = action.permitted(entry["target"], alert.load_conf() if conf is None else conf)
+    if not allowed:
+        return False, why
+    now = time.time() if now is None else now
     finding = {**entry["finding"]}
     case_name, _, captured = _capture(finding, entry["job"], action, entry["target"])
     if not captured:
@@ -288,7 +328,9 @@ def approve(store, eid, now=None):
         return False, entry["detail"]
     entry.update(status="applied" if ok else "failed", record=record, detail=detail,
                  evidence=case_name or entry.get("evidence", ""),
-                 applied_at=int(time.time() if now is None else now))
+                 applied_at=int(now))
+    if ok:
+        _stamp(entry, action, entry["target"], entry.get("applications"), now)
     _save(store, ledger)
     return ok, detail
 
@@ -310,7 +352,7 @@ def undo(store, eid):
     return ok, detail
 
 
-def reconcile(store):
+def reconcile(store, now=None):
     """Resolve interrupted actions using read-only, action-specific probes.
 
     This never repeats or rolls back an action.  It promotes an interrupted
@@ -335,6 +377,10 @@ def reconcile(store):
         if state == "applied" and isinstance(record, dict) and record:
             entry.update(status="applied", record=record, detail=detail,
                          recovered_at=int(time.time()), recovery="verified")
+            # A recovered action is bounded like a fresh one: its clock
+            # starts at recovery, since the interrupted start was not recorded.
+            _stamp(entry, action, entry.get("target") or {}, entry.get("applications"),
+                   time.time() if now is None else now)
         elif state == "not_applied":
             entry.update(status="not_applied", detail=detail,
                          recovered_at=int(time.time()), recovery="verified")
@@ -346,6 +392,44 @@ def reconcile(store):
     if changed:
         _save(store, ledger)
     return results
+
+
+def expire(store, now=None):
+    """Lift every time-bounded action whose time is up. Returns [(eid, detail)].
+
+    Only a verified undo marks an entry expired; a failed lift stays applied
+    with the reason recorded and is retried on the next sweep. Each entry is
+    re-read just before its write so a concurrent apply is not overwritten.
+    """
+    now = time.time() if now is None else now
+    lifted = []
+    for eid, entry in load(store, strict=True).items():
+        if entry.get("status") != "applied" or not entry.get("expires_at"):
+            continue
+        if int(entry["expires_at"]) > now:
+            continue
+        action = base.get(entry.get("action"))
+        if action is None:
+            ok, detail = False, "action implementation is unavailable"
+        else:
+            try:
+                ok, detail = action.undo(entry.get("target") or {}, entry.get("record") or {})
+            except Exception as exc:
+                ok, detail = False, f"lift failed ({type(exc).__name__})"
+        ledger = load(store, strict=True)
+        current = ledger.get(eid)
+        if not current or current.get("status") != "applied":
+            continue
+        if ok:
+            current.update(status="expired", expired_at=int(now), undo_detail=detail)
+            current.pop("expire_error", None)
+            lifted.append((eid, detail))
+        else:
+            current.update(expire_error=f"could not lift: {detail}",
+                           expire_attempts=int(current.get("expire_attempts") or 0) + 1)
+        ledger[eid] = current
+        _save(store, ledger)
+    return lifted
 
 
 def pending(store):
