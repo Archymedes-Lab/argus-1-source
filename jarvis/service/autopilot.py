@@ -126,6 +126,10 @@ def locus_root(path, category=""):
     for i, seg in enumerate(parts):                  # a tool's folder inside the user temp dir
         if seg == "temp" and "appdata" in parts[:i] and i + 1 < len(parts) - 1:
             return "/".join(parts[:i + 2])
+    parts = p.split("/")
+    for i, seg in enumerate(parts):                  # a tool's folder inside the user temp dir
+        if seg == "temp" and "appdata" in parts[:i] and i + 1 < len(parts) - 1:
+            return "/".join(parts[:i + 2])
     for marker in ("/node_modules", "/scratchpad", "/.git/", "/site-packages"):
         if marker in p + "/":
             return p[:(p + "/").index(marker)] + (marker.rstrip("/") if marker == "/scratchpad" else "")
@@ -443,6 +447,53 @@ def decide(store, key, choice, fids=None, note="", now=None):
     return {"ok": True, "choice": choice, "scope": list(scope), "applies_to_future": False}
 
 
+AUTO_META = "autopilot.auto_handle"
+AUTO_SEVERITIES = frozenset({"high"})     # only "high" and "critical" ever reach the owner; critical never auto-handled
+AUTO_MIN_AGE_S = 3 * 86400                # unchanged and standing for three days
+AUTO_PER_CYCLE = 25                       # bounded: a burst of new items is cleared over several cycles
+
+
+def auto_handle_enabled(store):
+    return (store.get_meta(AUTO_META, "") or "") == "1"
+
+
+def set_auto_handle(store, on):
+    store.set_meta(AUTO_META, "1" if on else "0")
+    return bool(on)
+
+
+def auto_handle(store, now=None, limit=AUTO_PER_CYCLE):
+    """Opt-in: record "recognise" for waiting groups that are low-stakes to dismiss.
+
+    A group qualifies only when every waiting member is rated high (never
+    critical), is of the "you confirm" kind (the owner's own tools and
+    accounts, not "only you can fix this"), and has been unchanged for
+    AUTO_MIN_AGE_S. The record is the owner's own "recognise": this
+    observation at this evidence, so changed evidence re-opens it. It never
+    rejects, proposes or authorises anything, and each entry in
+    autopilot_decisions carries the "auto-handled" note. -> count handled.
+    """
+    if not auto_handle_enabled(store):
+        return 0
+    now = int(time.time() if now is None else now)
+    done = 0
+    for case in decision_queue(store):
+        if done >= limit:
+            break
+        if case["severity"] not in AUTO_SEVERITIES:
+            continue
+        waiting = [m for m in _members(store, case["key"], NEEDS_USER)]
+        if not waiting or len(waiting) > limit - done:
+            continue
+        if not all(_report(m).get("owner") == triage.YOU_CONFIRM
+                   and now - int(m["first_seen"]) >= AUTO_MIN_AGE_S for m in waiting):
+            continue
+        decide(store, case["key"], "recognise", [m["fid"] for m in waiting],
+               note="auto-handled: standing, owner-confirm, not critical", now=now)
+        done += len(waiting)
+    return done
+
+
 def authorize(store, fid, now=None):
     """The only door to ACTION_AUTHORIZED: one finding, one step. Does not perform it."""
     now = int(time.time() if now is None else now)
@@ -707,6 +758,7 @@ def status(store, report, now=None):
                   "states": states},
         "handled": {"groups": handled_groups, "investigated": states.get(INVESTIGATED, 0)},
         "needs_me": queue, "recovery": recoveries,
+        "policy": {"auto_handle": auto_handle_enabled(store), "min_age_days": AUTO_MIN_AGE_S // 86400},
         "summary": daily_summary(store, report, now),
     }
 
@@ -728,6 +780,7 @@ def cycle(store, report, runner=None, now=None, pressured=False, conf=None):
     now = int(time.time() if now is None else now)
     out = {"interrupted": recover_interrupted(store, now), "queued": sync(store, now)}
     out.update(run_queue(store, now, pressured=pressured, conf=conf))
+    out["auto_handled"] = auto_handle(store, now)
     plan = plan_recovery(store, report, now)
     out["retries"] = run_recovery(store, plan, runner, now, pressured=pressured)
     prune(store, now)

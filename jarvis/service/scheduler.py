@@ -287,6 +287,64 @@ class Scheduler(threading.Thread):
         return bool(self.cold_start_pending) and \
             now - self.started_at < COLD_START_HOLD_S
 
+    # --- owner pause -----------------------------------------------------
+    # A bounded break from collecting, for the owner who wants the computer
+    # quiet. It is never indefinite: it ends by itself (PAUSE_MAX_S at most),
+    # survives a restart only until that deadline, is recorded, and the lanes
+    # keep their heartbeats so the watchdogs do not mistake it for a hang.
+    PAUSE_META = "scheduler.paused_until"
+    PAUSE_LOG = "scheduler.pause_log"
+    PAUSE_MAX_S = 24 * 3600
+
+    def paused_until(self, now=None):
+        now = time.time() if now is None else now
+        until = getattr(self, "_paused_until", None)
+        if until is None:
+            until = self._paused_until = self._load_pause()
+        return until if until > now else 0
+
+    def is_paused(self, now=None):
+        return self.paused_until(now) > 0
+
+    def _load_pause(self):
+        try:
+            store = Store(self.db_path)
+            try:
+                return float(store.get_meta(self.PAUSE_META, "") or 0)
+            finally:
+                store.close()
+        except Exception:
+            return 0.0
+
+    def pause(self, seconds, now=None):
+        """-> epoch the pause ends. Clamped to (0, PAUSE_MAX_S]."""
+        now = time.time() if now is None else now
+        seconds = max(60, min(int(seconds), self.PAUSE_MAX_S))
+        self._paused_until = now + seconds
+        self._record_pause("pause", now, self._paused_until)
+        return self._paused_until
+
+    def resume(self, now=None):
+        now = time.time() if now is None else now
+        self._paused_until = 0.0
+        self._record_pause("resume", now, 0)
+
+    def _record_pause(self, kind, now, until):
+        try:
+            store = Store(self.db_path)
+            try:
+                store.set_meta(self.PAUSE_META, str(until))
+                try:
+                    log = json.loads(store.get_meta(self.PAUSE_LOG, "") or "[]")
+                except ValueError:
+                    log = []
+                log = (log if isinstance(log, list) else [])[-19:] + [{"ts": int(now), "event": kind, "until": int(until)}]
+                store.set_meta(self.PAUSE_LOG, json.dumps(log))
+            finally:
+                store.close()
+        except Exception:
+            pass
+
     def force(self, name):
         """Queue a job to run soon. Repeated requests collapse into one."""
         if name in JOBS:
@@ -531,6 +589,9 @@ class Scheduler(threading.Thread):
                 setattr(self, beat, time.time())
                 setattr(self, beat + "_mono", time.monotonic())
                 self._note_resume()
+                if self.is_paused():
+                    time.sleep(1)
+                    continue
                 name = self._due(lane)
                 if name is None:
                     time.sleep(1)

@@ -12,6 +12,17 @@
     "allow-answer-question",
     "allow-ask-jarvis",
     "allow-score-coach",
-    "allow-decide-fix"
+    "allow-decide-fix",
+    "allow-billing-status",
+    "allow-billing-checkout",
+    "allow-autopilot-status",
+    "allow-autopilot-decide",
+    "allow-autopilot-policy",
+    "allow-get-settings",
+    "allow-set-settings",
+    "allow-pause-monitoring",
+    "allow-resume-monitoring",
+    "allow-protection-status",
+    "allow-protection-scan"
   ]
 }

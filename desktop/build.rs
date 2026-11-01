@@ -11,6 +11,17 @@ fn main() {
             "ask_jarvis",
             "score_coach",
             "decide_fix",
+            "billing_status",
+            "billing_checkout",
+            "autopilot_status",
+            "autopilot_decide",
+            "autopilot_policy",
+            "get_settings",
+            "set_settings",
+            "pause_monitoring",
+            "resume_monitoring",
+            "protection_status",
+            "protection_scan",
         ]),
     ))
     .expect("tauri build");

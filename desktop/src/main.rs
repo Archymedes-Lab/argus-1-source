@@ -1,4 +1,4 @@
-//! JARVIS desktop: an always-open window, tray and notifications over the
+//! ARGUS-1 desktop: an always-open window, tray and notifications over the
 //! local daemon (docs/architecture/DESKTOP-APP.md).
 //!
 //! The app is a client, never the monitor. `jarvis serve` collects, scores
@@ -25,6 +25,7 @@ compile_error!("release builds need `--features custom-protocol` (see docs/archi
 
 mod api;
 mod pulse;
+mod settings;
 mod watch;
 
 use std::thread;
@@ -69,7 +70,7 @@ fn dot(level: Level) -> Image<'static> {
     let (r, g, b) = match level {
         Level::Good => (34, 197, 94),
         Level::Attention => (245, 158, 11),
-        Level::Alarm => (239, 68, 68),
+        Level::Alarm => (214, 112, 76),
         Level::Unknown => (100, 116, 139),
     };
     const N: usize = 32;
@@ -97,7 +98,8 @@ fn apply(app: &AppHandle, view: View, last: &mut Option<Level>) {
             *last = Some(view.level);
         }
     }
-    for t in view.toasts {
+    let prefs = settings::current();
+    for t in view.toasts.into_iter().filter(|t| prefs.allows(t.kind)) {
         let _ = app.notification().builder().title(&t.title).body(&t.body).show();
     }
 }
@@ -142,14 +144,14 @@ fn pulse_loop(app: AppHandle) {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let status = MenuItem::with_id(app, "status", "JARVIS — connecting", false, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", "Open JARVIS", true, None::<&str>)?;
+    let status = MenuItem::with_id(app, "status", "ARGUS-1 — connecting", false, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open ARGUS-1", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Close this app (monitoring continues)", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&status, &sep, &open, &quit])?;
     let icon = TrayIconBuilder::with_id("jarvis")
         .icon(dot(Level::Unknown))
-        .tooltip("JARVIS — connecting")
+        .tooltip("ARGUS-1 — connecting")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -186,11 +188,25 @@ fn main() {
             api::ask_jarvis,
             api::score_coach,
             api::decide_fix,
+            api::billing_status,
+            api::billing_checkout,
+            api::autopilot_status,
+            api::autopilot_decide,
+            api::autopilot_policy,
+            settings::get_settings,
+            settings::set_settings,
+            api::pause_monitoring,
+            api::resume_monitoring,
+            api::protection_status,
+            api::protection_scan,
         ])
         .setup(move |app| {
+            if let Ok(dir) = app.path().app_config_dir() {
+                settings::load(dir);
+            }
             build_tray(app)?;
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
-                .title("JARVIS")
+                .title("ARGUS-1")
                 .inner_size(1440.0, 920.0)
                 .min_inner_size(720.0, 480.0)
                 .visible(!hidden)
@@ -213,7 +229,7 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("JARVIS desktop failed to start");
+        .expect("ARGUS-1 desktop failed to start");
 }
 
 #[cfg(test)]

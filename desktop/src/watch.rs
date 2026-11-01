@@ -26,8 +26,18 @@ pub enum Level {
     Alarm,
 }
 
+/// What a notification is about, so the owner's preferences can mute a kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Finding,
+    Collector,
+    Score,
+    Outage,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Toast {
+    pub kind: Kind,
     pub title: String,
     pub body: String,
 }
@@ -58,7 +68,8 @@ impl Watch {
         let mut toasts = Vec::new();
         if self.outage_announced {
             toasts.push(Toast {
-                title: "JARVIS daemon reachable again".into(),
+                kind: Kind::Outage,
+                title: "ARGUS-1 daemon reachable again".into(),
                 body: "Live insight resumed.".into(),
             });
         }
@@ -68,7 +79,7 @@ impl Watch {
         if p.get("ok").and_then(Value::as_bool) != Some(true) {
             return View {
                 level: Level::Unknown,
-                line: format!("JARVIS could not build its summary ({})", s(p, "error")),
+                line: format!("ARGUS-1 could not build its summary ({})", s(p, "error")),
                 toasts,
             };
         }
@@ -94,8 +105,8 @@ impl Watch {
         };
 
         let mut line = match score {
-            Some(n) => format!("JARVIS {n} · {}", s(p, "grade")),
-            None => "JARVIS score unknown".to_string(),
+            Some(n) => format!("ARGUS-1 {n} · {}", s(p, "grade")),
+            None => "ARGUS-1 score unknown".to_string(),
         };
         if !open.is_empty() {
             line += &format!(" · {} need you", open.len());
@@ -121,14 +132,16 @@ impl Watch {
         }
         for u in fresh.iter().take(MAX_TOASTS) {
             toasts.push(Toast {
-                title: format!("JARVIS: {} finding", s(u, "severity")),
+                kind: Kind::Finding,
+                title: format!("ARGUS-1: {} finding", s(u, "severity")),
                 body: s(u, "title").chars().take(180).collect(),
             });
         }
         if fresh.len() > MAX_TOASTS {
             toasts.push(Toast {
-                title: "JARVIS: more findings".into(),
-                body: format!("{} more need you — open JARVIS.", fresh.len() - MAX_TOASTS),
+                kind: Kind::Finding,
+                title: "ARGUS-1: more findings".into(),
+                body: format!("{} more need you — open ARGUS-1.", fresh.len() - MAX_TOASTS),
             });
         }
 
@@ -140,7 +153,8 @@ impl Watch {
             if !gone.is_empty() {
                 let names: Vec<&str> = gone.iter().map(|b| s(b, "label")).collect();
                 toasts.push(Toast {
-                    title: "JARVIS: collector blind".into(),
+                kind: Kind::Collector,
+                    title: "ARGUS-1: collector blind".into(),
                     body: format!("Not reporting: {}. Unobserved is not clean.", names.join(", ")),
                 });
             }
@@ -152,8 +166,9 @@ impl Watch {
             let below = n < GATE;
             if self.seeded && below && !self.below_gate {
                 toasts.push(Toast {
-                    title: format!("JARVIS score fell to {n}"),
-                    body: format!("Below {GATE}. Open JARVIS to see what changed."),
+                kind: Kind::Score,
+                    title: format!("ARGUS-1 score fell to {n}"),
+                    body: format!("Below {GATE}. Open ARGUS-1 to see what changed."),
                 });
             }
             self.below_gate = below;
@@ -171,11 +186,12 @@ impl Watch {
         if !self.outage_announced && now.duration_since(since) >= OUTAGE_AFTER {
             self.outage_announced = true;
             toasts.push(Toast {
-                title: "JARVIS daemon unreachable".into(),
+                kind: Kind::Outage,
+                title: "ARGUS-1 daemon unreachable".into(),
                 body: "No live insight: monitoring may be down. Check `jarvis serve`.".into(),
             });
         }
-        View { level: Level::Unknown, line: "JARVIS daemon unreachable — retrying".into(), toasts }
+        View { level: Level::Unknown, line: "ARGUS-1 daemon unreachable — retrying".into(), toasts }
     }
 }
 
@@ -194,7 +210,7 @@ mod tests {
         let v = Watch::default().pulse(&pulse(91, json!([]), json!([])));
         assert_eq!(v.level, Level::Good);
         assert!(v.toasts.is_empty());
-        assert_eq!(v.line, "JARVIS 91 · secure");
+        assert_eq!(v.line, "ARGUS-1 91 · secure");
     }
 
     #[test]
@@ -293,6 +309,6 @@ mod tests {
         assert_eq!(w.unreachable(t0 + OUTAGE_AFTER).toasts.len(), 1);
         assert!(w.unreachable(t0 + OUTAGE_AFTER * 2).toasts.is_empty());
         let v = w.pulse(&pulse(91, json!([]), json!([])));
-        assert_eq!(v.toasts[0].title, "JARVIS daemon reachable again");
+        assert_eq!(v.toasts[0].title, "ARGUS-1 daemon reachable again");
     }
 }

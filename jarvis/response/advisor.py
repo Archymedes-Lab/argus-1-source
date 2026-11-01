@@ -673,7 +673,8 @@ def not_checked(store, jobs, now=None):
 def clarify(store, jobs, model_note=True, now=None):
     secs = [_section("say", "I'm not sure I understood that, and I don't want to guess about your "
                             "security. Are you asking about your overall status, a specific warning, "
-                            "or how to improve your score?")]
+                            "or how to improve your score? You can also ask about everyday safety, "
+                            "such as phishing, passwords, backups or updates.")]
     return reply(secs, suggestions=suggestions(store, jobs, now))
 
 

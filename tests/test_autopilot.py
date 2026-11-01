@@ -355,3 +355,69 @@ class HealthAndNoticeTests(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+DAY = 86400
+
+
+class AutoHandleTests(Base):
+    def waiting(self, sev="high", n=2, category="accounts"):
+        items = [f(sev=sev, title=f"c{i}", where=f"C:/s/a/f{i}.json", detail=f"d{i}", category=category)
+                 for i in range(n)]
+        self.put(items, job="accounts")
+        ap.sync(self.store, NOW)
+        ap.run_queue(self.store, NOW, use_ai=False)
+        return items
+
+    def test_off_by_default_decides_nothing(self):
+        self.waiting()
+        self.assertFalse(ap.auto_handle_enabled(self.store))
+        self.assertEqual(ap.auto_handle(self.store, NOW + 9 * DAY), 0)
+        self.assertEqual(len(ap.decision_queue(self.store)), 1)
+
+    def test_enabled_recognises_standing_confirm_items_and_audits_it(self):
+        items = self.waiting()
+        owners = {ap._report(m).get("owner") for m in ap._members(self.store, ap.decision_queue(self.store)[0]["key"])}
+        self.assertEqual(owners, {"you_confirm"}, "fixture must be an owner-confirm kind")
+        ap.set_auto_handle(self.store, True)
+        self.assertEqual(ap.auto_handle(self.store, NOW + 4 * DAY), 2)
+        self.assertEqual(ap.decision_queue(self.store), [])
+        self.assertEqual(self.state(acknowledge.finding_id(items[0], "accounts")), ap.INVESTIGATED)
+        note = self.store.db.execute("SELECT note FROM autopilot_decisions ORDER BY id DESC").fetchone()["note"]
+        self.assertIn("auto-handled", note)
+
+    def test_new_items_wait_until_they_have_stood_three_days(self):
+        self.waiting()
+        ap.set_auto_handle(self.store, True)
+        self.assertEqual(ap.auto_handle(self.store, NOW + 2 * DAY), 0)
+        self.assertEqual(len(ap.decision_queue(self.store)), 1)
+
+    def test_never_decides_for_critical(self):
+        self.waiting(sev="critical", n=1)
+        ap.set_auto_handle(self.store, True)
+        self.assertEqual(ap.auto_handle(self.store, NOW + 30 * DAY), 0)
+        self.assertEqual(len(ap.decision_queue(self.store)), 1)
+
+    def test_only_you_do_items_always_ask(self):
+        self.waiting(category="credentials", n=1)       # "rotate this credential": only the owner can act
+        ap.set_auto_handle(self.store, True)
+        key = ap.decision_queue(self.store)[0]["key"]
+        owner = ap._report(ap._members(self.store, key)[0]).get("owner")
+        if owner == "you_confirm":
+            self.skipTest("this category is owner-confirm in this build")
+        self.assertEqual(ap.auto_handle(self.store, NOW + 30 * DAY), 0)
+
+    def test_changed_evidence_reopens_an_auto_handled_item(self):
+        items = self.waiting(n=1)
+        ap.set_auto_handle(self.store, True)
+        self.assertEqual(ap.auto_handle(self.store, NOW + 4 * DAY), 1)
+        changed = dict(items[0], detail="something else now")
+        self.put([changed], job="accounts")
+        ap.sync(self.store, NOW + 5 * DAY)
+        ap.run_queue(self.store, NOW + 5 * DAY, use_ai=False)
+        self.assertEqual(self.state(acknowledge.finding_id(changed, "accounts")), ap.NEEDS_USER)
+
+    def test_per_cycle_bound(self):
+        self.waiting(n=3)
+        ap.set_auto_handle(self.store, True)
+        self.assertEqual(ap.auto_handle(self.store, NOW + 4 * DAY, limit=2), 0)   # group larger than budget waits

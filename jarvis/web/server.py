@@ -27,6 +27,8 @@ from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.platform import procfeed
+from jarvis.response import plainwords
+from jarvis.service import avguard
 from jarvis.response import (
     acknowledge,
     advisor,
@@ -331,6 +333,7 @@ def build_state(db_path, scheduler):
             "reliability": _reliability_state(scheduler, snaps),
             "detector_health": _detector_health(store, scheduler, snaps),
             "assistant": _assistant_state(store),
+            "paused_until": int(scheduler.paused_until()) if hasattr(scheduler, "paused_until") else 0,
             "performance": {**_performance_state(jobs, scheduler),
                             "subsystems": _meta_object(store, "resource_profile_v1"),
                             "accelerator": _meta_object(store, "accelerator_probe_v2")
@@ -689,6 +692,29 @@ class Handler(BaseHTTPRequestHandler):
         # does not close.
         if not api_token.accepts(self.headers):
             return self._send(403, json.dumps({"error": "missing or wrong API token"}))
+        if url.path in ("/api/pause", "/api/resume"):
+            if url.path.endswith("resume"):
+                self.scheduler.resume()
+                return self._send(200, json.dumps({"ok": True, "paused_until": 0}))
+            payload = self._json_body(1024)
+            minutes = payload.get("minutes") if isinstance(payload, dict) else None
+            if not isinstance(minutes, int) or isinstance(minutes, bool) or minutes not in (15, 60, 240, 1440):
+                return self._send(400, json.dumps({"error": "choose 15, 60, 240 or 1440 minutes"}))
+            until = self.scheduler.pause(minutes * 60)
+            return self._send(200, json.dumps({"ok": True, "paused_until": int(until)}))
+        if url.path == "/api/protection/scan":
+            result = avguard.scan()
+            return self._send(200 if result["started"] else 429, json.dumps(result))
+        if url.path == "/api/autopilot/policy":
+            payload = self._json_body(1024)
+            if payload is None or not isinstance(payload.get("auto_handle"), bool):
+                return self._send(400, json.dumps({"error": "invalid request"}))
+            store = Store(self.db_path)
+            try:
+                on = autopilot.set_auto_handle(store, payload["auto_handle"])
+            finally:
+                store.close()
+            return self._send(200, json.dumps({"ok": True, "auto_handle": on}))
         if url.path in ("/api/autopilot/decide", "/api/autopilot/authorize"):
             payload = self._json_body(8192)
             if payload is None:
@@ -742,7 +768,9 @@ class Handler(BaseHTTPRequestHandler):
             store = Store(self.db_path)
             try:
                 result = assistant.answer(store, question, jobs=JOBS, offer=offer,
-                                          runner=self._runner())
+                                          runner=self._runner(),
+                                          level=str(payload.get("level") or "expert"),
+                                          lang=str(payload.get("lang") or "en")[:5])
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
@@ -950,6 +978,9 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
 
+        if url.path == "/api/protection":
+            return self._send(200, json.dumps(avguard.status()))
+
         if url.path == "/api/billing/status":
             store = Store(self.db_path)
             try:
@@ -960,7 +991,9 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/greeting":
             store = Store(self.db_path)
             try:
-                return self._send(200, json.dumps(assistant.greeting(store, JOBS)))
+                level = plainwords.level_of((parse_qs(url.query).get("level") or [""])[0])
+                return self._send(200, json.dumps(plainwords.simplify_result(
+                    assistant.greeting(store, JOBS), level)))
             finally:
                 store.close()
 

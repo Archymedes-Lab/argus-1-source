@@ -9,7 +9,7 @@ import json
 import re
 import time
 
-from jarvis.response import acknowledge, advisor, alert, llm, protocols
+from jarvis.response import acknowledge, advisor, alert, knowledge, llm, plainwords, protocols
 from jarvis.response.reporting import diff, score, triage, voice
 
 
@@ -318,7 +318,7 @@ def _smalltalk(q):
     return ""
 
 
-def _ollama(store, question, conf, jobs=None):
+def _ollama(store, question, conf, jobs=None, level="expert", lang="en"):
     # Structured, bounded context: the score's areas (not just raw findings),
     # the protocol plan with projected gains, and the worst findings. Everything
     # the deterministic coach uses, in the order the model should see it.
@@ -366,6 +366,9 @@ def _ollama(store, question, conf, jobs=None):
     )
     from jarvis.response import guardrails as guardrails_mod
     system += guardrails_mod.PREAMBLE
+    if level == "simple":
+        system += plainwords.SIMPLE_MODEL_INSTRUCTION
+    system += plainwords.language_instruction(lang)
     user = "<DATA>" + json.dumps(context) + "</DATA>\nQUESTION: " + question[:2000]
     if _is_general(question):
         # A general-knowledge question needs none of this computer's data: leaving it out keeps
@@ -416,7 +419,13 @@ def _run_offer(store, jobs, route, runner, conf):
                                  runner=runner, conf=conf)
 
 
-def answer(store, question, conf=None, jobs=None, offer=None, runner=None):
+def answer(store, question, conf=None, jobs=None, offer=None, runner=None, level="expert", lang="en"):
+    """Same as _answer, re-worded in everyday language when `level` is "simple"."""
+    level = plainwords.level_of(level)
+    return plainwords.simplify_result(_answer(store, question, conf, jobs, offer, runner, level, lang), level)
+
+
+def _answer(store, question, conf=None, jobs=None, offer=None, runner=None, level="expert", lang="en"):
     """Return {answer, source, ...}. The only mutation path is advisor.handle_action,
     reached through an offer the user accepted, and it needs its own approval
     for anything that changes state. `runner` queues an audit (None: no service).
@@ -445,6 +454,9 @@ def answer(store, question, conf=None, jobs=None, offer=None, runner=None):
                             "move the bar", "how do i get to", "what gains the most",
                             "score coach", "where do i start")):
         return {"answer": score_coach(store, jobs), "source": "builtin"}
+    known = knowledge.lookup(q)
+    if known:
+        return {"answer": known, "source": "knowledge"}
     if "score" in q or "security health" in q:
         return {"answer": _score(store, jobs), "source": "builtin"}
     if "model status" in q or "is the model" in q or "ollama status" in q:
@@ -463,7 +475,7 @@ def answer(store, question, conf=None, jobs=None, offer=None, runner=None):
     chat = _smalltalk(q)
     if chat:
         return _with_model({"answer": chat, "source": "builtin"}, conf)
-    text, source = _ollama(store, question, conf, jobs=jobs)
+    text, source = _ollama(store, question, conf, jobs=jobs, level=level, lang=lang)
     if source == "unavailable":
         # Layer 4: not understood and no model. Say so plainly and ask one
         # question; never present this as an AI answer.

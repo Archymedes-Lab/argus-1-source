@@ -3,6 +3,7 @@ import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Activity from "@lucide/svelte/icons/activity";
 import CircleCheck from "@lucide/svelte/icons/circle-check";
 import MessageSquare from "@lucide/svelte/icons/message-square";
+import CreditCard from "@lucide/svelte/icons/credit-card";
 import Settings from "@lucide/svelte/icons/settings";
 import type { View } from "./store.svelte";
 
@@ -12,5 +13,6 @@ export const NAV: { view: View; label: string; icon: typeof LayoutGrid }[] = [
   { view: "collectors", label: "Collectors", icon: Activity },
   { view: "review", label: "Review", icon: CircleCheck },
   { view: "assistant", label: "Assistant", icon: MessageSquare },
+  { view: "pricing", label: "Pricing", icon: CreditCard },
   { view: "settings", label: "Settings", icon: Settings },
 ];
