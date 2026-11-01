@@ -112,7 +112,7 @@ fn read_bounded_line<R: BufRead>(r: &mut R, line: &mut String) -> io::Result<usi
 fn request(
     method: &str,
     path: &str,
-    token: Option<&str>,
+    token: Option<(&str, &str)>,
     body: Option<&[u8]>,
     timeout: Duration,
 ) -> io::Result<Response> {
@@ -124,7 +124,7 @@ fn request_to(
     port: u16,
     method: &str,
     path: &str,
-    token: Option<&str>,
+    token: Option<(&str, &str)>,
     body: Option<&[u8]>,
     timeout: Duration,
 ) -> io::Result<Response> {
@@ -135,8 +135,8 @@ fn request_to(
         "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUser-Agent: jarvis-desktop\r\n\
          Accept: application/json\r\nConnection: close\r\n"
     );
-    if let Some(t) = token {
-        head.push_str(&format!("X-JARVIS-Token: {t}\r\n"));
+    if let Some((header, t)) = token {
+        head.push_str(&format!("{header}: {t}\r\n"));
     }
     if let Some(b) = body {
         head.push_str(&format!("Content-Type: application/json\r\nContent-Length: {}\r\n", b.len()));
@@ -149,25 +149,35 @@ fn request_to(
     parse_response(&mut BufReader::new(sock))
 }
 
-/// `jarvis_token=<64 hex>` from the dashboard's Set-Cookie header.
+/// The daemon names its token cookie after the edition it was built as: the
+/// source tree says `jarvis_token` / `X-JARVIS-Token`, the packaged ARGUS
+/// edition `argus_token` / `X-ARGUS-Token`. Either is accepted, and the header
+/// sent back always matches the cookie that was read.
+const TOKEN_NAMES: [(&str, &str); 2] = [("argus_token=", "X-ARGUS-Token"), ("jarvis_token=", "X-JARVIS-Token")];
+
+/// `<name>_token=<64 hex>` from the dashboard's Set-Cookie header.
 pub fn token_from_cookie(set_cookie: &str) -> Option<String> {
-    let first = set_cookie.split(';').next()?.trim();
-    let value = first.strip_prefix("jarvis_token=")?;
-    (value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())).then(|| value.to_ascii_lowercase())
+    token_and_header(set_cookie).map(|(_, v)| v)
 }
 
-static TOKEN: Mutex<Option<String>> = Mutex::new(None);
+pub fn token_and_header(set_cookie: &str) -> Option<(&'static str, String)> {
+    let first = set_cookie.split(';').next()?.trim();
+    let (header, value) = TOKEN_NAMES.iter().find_map(|(c, h)| first.strip_prefix(c).map(|v| (*h, v)))?;
+    (value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())).then(|| (header, value.to_ascii_lowercase()))
+}
 
-fn fetch_token() -> Result<String, String> {
+static TOKEN: Mutex<Option<(&'static str, String)>> = Mutex::new(None);
+
+fn fetch_token() -> Result<(&'static str, String), String> {
     let r = request("GET", "/", None, None, ACTION_TIMEOUT).map_err(|e| unreachable(&e))?;
     r.headers
         .iter()
         .filter(|(k, _)| k.eq_ignore_ascii_case("set-cookie"))
-        .find_map(|(_, v)| token_from_cookie(v))
+        .find_map(|(_, v)| token_and_header(v))
         .ok_or_else(|| "the daemon did not issue an API token".to_string())
 }
 
-fn token(refresh: bool) -> Result<String, String> {
+fn token(refresh: bool) -> Result<(&'static str, String), String> {
     let mut slot = TOKEN.lock().map_err(|_| "token lock poisoned".to_string())?;
     if refresh || slot.is_none() {
         *slot = Some(fetch_token()?);
@@ -200,8 +210,8 @@ fn get_json(path: &str, timeout: Duration) -> Result<Value, String> {
 fn post_json(path: &str, body: &Value, timeout: Duration) -> Result<Value, String> {
     let bytes = serde_json::to_vec(body).map_err(|e| e.to_string())?;
     for attempt in 0..2 {
-        let t = token(attempt == 1)?;
-        let r = request("POST", path, Some(&t), Some(&bytes), timeout).map_err(|e| unreachable(&e))?;
+        let (header, t) = token(attempt == 1)?;
+        let r = request("POST", path, Some((header, &t)), Some(&bytes), timeout).map_err(|e| unreachable(&e))?;
         let v = json_of(&r).unwrap_or(Value::Null);
         let token_refused = r.status == 403
             && v.get("error").and_then(Value::as_str).is_some_and(|m| m.contains("token"));
@@ -453,6 +463,15 @@ mod tests {
     }
 
     #[test]
+    fn the_packaged_edition_cookie_is_read_and_answered_with_its_own_header() {
+        let hex = "cd".repeat(32);
+        assert_eq!(token_and_header(&format!("argus_token={hex}; Path=/")), Some(("X-ARGUS-Token", hex.clone())));
+        assert_eq!(token_and_header(&format!("jarvis_token={hex}")), Some(("X-JARVIS-Token", hex.clone())));
+        assert_eq!(token_and_header(&format!("argus_token={}", "x".repeat(64))), None);
+        assert_eq!(token_and_header(&format!("evil_token={hex}")), None);
+    }
+
+    #[test]
     fn token_cookie_is_exactly_the_daemons_format() {
         let hex = "ab".repeat(32);
         assert_eq!(token_from_cookie(&format!("jarvis_token={hex}; Path=/")), Some(hex.clone()));
@@ -488,7 +507,7 @@ mod tests {
     #[test]
     fn a_real_round_trip_sends_loopback_host_and_token_only_when_asked() {
         let (port, h) = fake_daemon(b"HTTP/1.0 200 OK\r\nContent-Length: 12\r\n\r\n{\"ok\": true}".to_vec(), Duration::ZERO);
-        let r = request_to(port, "POST", "/api/answer", Some(&"ab".repeat(32)), Some(b"{}"), Duration::from_secs(5)).unwrap();
+        let r = request_to(port, "POST", "/api/answer", Some(("X-JARVIS-Token", &"ab".repeat(32))), Some(b"{}"), Duration::from_secs(5)).unwrap();
         assert_eq!(json_of(&r).unwrap()["ok"], true);
         let sent = h.join().unwrap();
         assert!(sent.starts_with("POST /api/answer HTTP/1.1\r\n"));
