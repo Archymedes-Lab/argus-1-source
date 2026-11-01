@@ -282,6 +282,11 @@ COLLECTORS = (
     _c("sysmon_linux", 600, "Sysmon for Linux (eBPF)", AT, 2, 0, "critical", 45,
        command="sysmon-linux",
        domain="linux"),
+    # Positive control for it: one harmless labelled process start per run, looked
+    # for in the trusted journal. Proves the sensor sees, not just that a job ran.
+    _c("sensorprobe", 900, "Process sensor positive control", None, 0, 3, "high", 60,
+       command="sysmon-linux", domain="linux", cost_s=0.3,
+       unscored="a self-test of the process sensor; scored after it has soaked on real hosts"),
     # The interception layer: frequent, because its value is catching things
     # that start and exit between sampling passes. Incremental, 1.5 s.
     _c("sysmon", 600, "Sysmon telemetry", AT, 1, 0, "critical", 45,

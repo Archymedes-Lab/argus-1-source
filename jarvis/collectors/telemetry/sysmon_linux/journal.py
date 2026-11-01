@@ -31,11 +31,32 @@ def active():
     return installed and running
 
 
+# Only records journald itself attributes to the sysmon unit running as root.
+# `-t sysmon` alone matches SYSLOG_IDENTIFIER, which any account sets freely:
+# `logger -t sysmon ...` from uid 1000 was returned beside real events on
+# 2026-11-01. Trusted (underscore) fields are written by journald, not the
+# client, and journalctl ANDs matches on different fields.
+TRUSTED_MATCH = ("_SYSTEMD_UNIT=sysmon.service", "_UID=0", "-t", "sysmon")
+
+
+def trusted_text(since_ts, until_ts=None, timeout=40):
+    """Trusted sysmon journal text in [since, until]; '' if journalctl failed."""
+    args = ["journalctl", *TRUSTED_MATCH, "-o", "cat", "--no-pager", "--since", f"@{int(since_ts)}"]
+    if until_ts is not None:
+        args += ["--until", f"@{int(until_ts)}"]
+    out, rc = _run(args, timeout=timeout)
+    return out if rc == 0 else ""
+
+
 def _raw(since_ts):
-    """All sysmon journal text since `since_ts`, journal first then syslog."""
-    out, rc = _run(["journalctl", "-t", "sysmon", "-o", "cat", "--no-pager",
+    """All trusted sysmon journal text since `since_ts`.
+
+    /var/log/syslog is read only when journalctl itself cannot run: syslog lines
+    carry no trusted origin, so a quiet journal must not hand the window to them.
+    """
+    out, rc = _run(["journalctl", *TRUSTED_MATCH, "-o", "cat", "--no-pager",
                     "--since", f"@{int(since_ts)}"], timeout=40)
-    if rc == 0 and out.strip():
+    if rc == 0:
         return out
     try:
         with open("/var/log/syslog", encoding="utf-8", errors="replace") as fh:

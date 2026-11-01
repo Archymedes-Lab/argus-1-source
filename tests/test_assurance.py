@@ -68,11 +68,13 @@ class AssuranceTests(unittest.TestCase):
         # 2026-10-30: +2 unverified signed_detection_content and
         # self_tamper_evidence (selfguard job); neither is validated.
         # 2026-10-30: +1 unverified bruteforce_deterrence (bruteforce job).
-        self.assertEqual(gaps['implementation_unverified'], 29)
+        # 2026-11-01: +1 unverified sensor_positive_control (sensorprobe job);
+        # source-tested and measured by hand once, never run in the daemon.
+        self.assertEqual(gaps['implementation_unverified'], 30)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 22)
-        self.assertEqual(gaps['containment_not_validated'], 54)  # +3 2026-10-30
-        self.assertEqual(gaps['validation_date_missing'], 54)  # +3 2026-10-30
+        self.assertEqual(gaps['containment_not_validated'], 55)  # +1 2026-11-01
+        self.assertEqual(gaps['validation_date_missing'], 55)  # +1 2026-11-01
         self.assertFalse(result['complete'])
 
     def test_bruteforce_deterrence_claims_no_live_ban(self):
