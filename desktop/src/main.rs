@@ -199,6 +199,12 @@ fn main() {
             api::resume_monitoring,
             api::protection_status,
             api::protection_scan,
+            api::geo_state,
+            api::coverage_state,
+            api::world_state,
+            api::procs_baseline,
+            api::procs_snapshot,
+            api::open_page,
         ])
         .setup(move |app| {
             if let Ok(dir) = app.path().app_config_dir() {

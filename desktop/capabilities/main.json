@@ -23,6 +23,12 @@
     "allow-pause-monitoring",
     "allow-resume-monitoring",
     "allow-protection-status",
-    "allow-protection-scan"
+    "allow-protection-scan",
+    "allow-geo-state",
+    "allow-coverage-state",
+    "allow-world-state",
+    "allow-procs-baseline",
+    "allow-procs-snapshot",
+    "allow-open-page"
   ]
 }

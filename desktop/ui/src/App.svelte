@@ -8,13 +8,17 @@
   import Review from "./views/Review.svelte";
   import Assistant from "./views/Assistant.svelte";
   import Pricing from "./views/Pricing.svelte";
+  import Geo from "./views/Geo.svelte";
+  import CoverageView from "./views/Coverage.svelte";
+  import World from "./views/World.svelte";
+  import Procs from "./views/Procs.svelte";
   import Settings from "./views/Settings.svelte";
   import CommandPalette from "./components/CommandPalette.svelte";
   import { Tooltip } from "bits-ui";
   import { app } from "./lib/store.svelte";
   import { tr } from "./lib/i18n";
 
-  const views = { overview: Overview, findings: Findings, collectors: Collectors, review: Review, assistant: Assistant, pricing: Pricing, settings: Settings };
+  const views = { overview: Overview, findings: Findings, collectors: Collectors, review: Review, assistant: Assistant, geo: Geo, coverage: CoverageView, world: World, procs: Procs, pricing: Pricing, settings: Settings };
   const Current = $derived(app.view === "overview" && app.mode === "simple" ? SimpleOverview : views[app.view]);
 </script>
 

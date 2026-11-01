@@ -11,6 +11,10 @@ export const W = {
   "nav.collectors": ["Checks", "Collectors"],
   "nav.review": ["Needs you", "Review"],
   "nav.assistant": ["Ask ARGUS-1", "Assistant"],
+  "nav.geo": ["Where am I", "GeoSecurity"],
+  "nav.coverage": ["What ARGUS-1 can see", "Coverage"],
+  "nav.world": ["World events", "World"],
+  "nav.procs": ["Running programs", "Processes"],
   "nav.pricing": ["Plan", "Pricing"],
   "nav.settings": ["Settings", "Settings"],
   // findings

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import Segmented from "../components/Segmented.svelte";
   import Select from "../components/Select.svelte";
-  import { api, type AppSettings, type Autopilot, type Billing } from "../lib/api";
+  import { api, inApp, type AppSettings, type Autopilot, type Billing } from "../lib/api";
   import { t } from "../lib/words";
   import { LANGS, tr } from "../lib/i18n";
   import { app, go, setLang, setMode, setTheme, toast, type Mode, type Theme } from "../lib/store.svelte";
@@ -14,7 +14,7 @@
   onMount(async () => {
     try { ap = await api.autopilot(); } catch { ap = null; }
     try { bill = await api.billingStatus(); } catch { bill = null; }
-    try { prefs = await api.getSettings(); } catch { prefs = null; }
+    if (inApp) { try { prefs = await api.getSettings(); } catch { prefs = null; } }
   });
   async function flip(key: keyof AppSettings) {
     if (!prefs) return;
@@ -108,6 +108,7 @@
     </div>
   </section>
 
+  {#if inApp}
   <section>
     <h2 class="mb-2 px-1 text-label-13 text-gray-900">{tr("Notifications")}</h2>
     <div class="card divide">
@@ -125,6 +126,7 @@
     </div>
     <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("These only control pop-ups from this app. ARGUS-1 keeps watching either way.")}</p>
   </section>
+  {/if}
 
   {@render group(tr("Connection"), [
     [tr("Service"), app.daemon === "live" ? tr("Answering") : app.daemon === "down" ? tr("Not answering") : tr("Connecting")],

@@ -22,6 +22,12 @@ fn main() {
             "resume_monitoring",
             "protection_status",
             "protection_scan",
+            "geo_state",
+            "coverage_state",
+            "world_state",
+            "procs_baseline",
+            "procs_snapshot",
+            "open_page",
         ]),
     ))
     .expect("tauri build");

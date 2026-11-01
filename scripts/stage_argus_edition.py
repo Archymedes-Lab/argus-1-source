@@ -20,6 +20,8 @@ import sys
 
 TEXT = (".py", ".html", ".js", ".css", ".json", ".md", ".txt", ".toml", ".cfg", ".ps1", ".svg")
 SKIP_DIRS = {"__pycache__"}
+# Copied byte for byte: the built interface and the hash-pinned vendor files.
+VERBATIM = (("web", "ui"), ("web", "static", "vendor"))
 
 
 def rename(text):
@@ -37,7 +39,9 @@ def copy_package(src, dst):
             if name.endswith((".pyc", ".pyo")):
                 continue
             s, d = os.path.join(root, name), os.path.join(out_dir, name)
-            if name.lower().endswith(TEXT):
+            parts = tuple(os.path.normpath(rel).split(os.sep))
+            verbatim = any(parts[: len(v)] == v for v in VERBATIM)
+            if name.lower().endswith(TEXT) and not verbatim:
                 with open(s, encoding="utf-8", newline="") as fh:
                     body = fh.read()
                 with open(d, "w", encoding="utf-8", newline="") as fh:

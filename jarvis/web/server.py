@@ -49,6 +49,54 @@ from jarvis.web import billing, procview, stream
 from jarvis.web import token as api_token
 
 PAGE = str(STATIC_DIR / "dashboard.html")
+# The interface that ships in the desktop app, built to plain files and served
+# from here too, so the browser and the app are the same interface. Absent in a
+# bare source checkout: `/` then serves the classic dashboard as before.
+UI_DIR = STATIC_DIR.parent / "ui"
+UI_TYPES = {
+    ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".woff": "font/woff",
+    ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
+    ".json": "application/json", ".map": "application/json",
+}
+
+
+# A Windows supervisor (argus-native-service.ps1, .NET HttpWebRequest) can read at
+# most 64 KiB of a non-2xx body and treats a truncated one as "no answer". The
+# health document is a 503 whenever protection is not fully healthy, so it must
+# stay well below that. The long prose of each assurance capability (basis and
+# blind spot, ~68 KB together) is therefore sent only on request (?full=1).
+HEALTH_BODY_LIMIT = 48 * 1024
+_CAPABILITY_KEEP = ("implementation", "live_telemetry", "last_validation", "validated_containment")
+
+
+def compact_health(state):
+    assurance = state.get("assurance") if isinstance(state, dict) else None
+    caps = assurance.get("capabilities") if isinstance(assurance, dict) else None
+    if not isinstance(caps, dict):
+        return state
+    slim = {name: {k: c[k] for k in _CAPABILITY_KEEP if k in c}
+            | {k: c[k] for k in ("detection_latency_ms", "intervention_latency_ms") if c.get(k) is not None}
+            for name, c in caps.items() if isinstance(c, dict)}
+    return {**state, "assurance": {**assurance, "capabilities": slim, "capabilities_detail": "add ?full=1"}}
+
+
+def ui_file(rel):
+    """-> (bytes, content type) for a file inside UI_DIR, or None. Anything that
+    resolves outside the folder, or is not a plain file, is None."""
+    if not rel or "\\" in rel or "\x00" in rel or rel.startswith("/") or ".." in rel.split("/"):
+        return None
+    try:
+        root = UI_DIR.resolve()
+        target = (UI_DIR / rel).resolve()
+        if root != target and root not in target.parents or not target.is_file():
+            return None
+        ctype = UI_TYPES.get(target.suffix.lower())
+        if ctype is None:
+            return None
+        return target.read_bytes(), ctype
+    except OSError:
+        return None
 GEO_PAGE = str(STATIC_DIR / "geo.html")
 # The /coverage view and its two scripts, served from this origin only. The
 # vendored three.js build is pinned: a file that no longer matches is refused,
@@ -505,6 +553,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # The dashboard is self-contained and forbids anything external, except that
     # it may frame its own GeoSecurity page.
+    CSP_UI = ("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+              "img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; "
+              "form-action 'none'; frame-ancestors 'none'")
     CSP_STRICT = ("default-src 'none'; style-src 'unsafe-inline'; "
                   "script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; "
                   "font-src 'self'; img-src data:")
@@ -959,7 +1010,30 @@ class Handler(BaseHTTPRequestHandler):
                                    "reach this dashboard as http://localhost:PORT",
                               "text/plain")
         url = urlparse(self.path)
-        if url.path in ("/", "/index.html"):
+        if url.path in ("/", "/index.html") and (UI_DIR / "index.html").is_file():
+            # Same address as before for the Stripe return and for bookmarks:
+            # the query (for example ?session_id=...) carries over.
+            self.send_response(302)
+            self.send_header("Location", "/ui/" + ("?" + url.query if url.query else ""))
+            self.send_header("Set-Cookie", api_token.cookie_header())
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+        if url.path == "/ui":
+            self.send_response(302)
+            self.send_header("Location", "/ui/" + ("?" + url.query if url.query else ""))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if url.path == "/ui/" or url.path.startswith("/ui/"):
+            found = ui_file(url.path[4:] or "index.html")
+            if found is None:
+                return self._send(404, json.dumps({"error": "not found"}))
+            body, ctype = found
+            cookie = api_token.cookie_header() if url.path in ("/ui/", "/ui/index.html") else None
+            return self._send(200, body, ctype, csp=self.CSP_UI, cookie=cookie)
+        if url.path in ("/", "/index.html", "/classic"):
             try:
                 with open(PAGE, "r", encoding="utf-8", errors="replace") as fh:
                     return self._send(200, fh.read(), "text/html; charset=utf-8",
@@ -1133,6 +1207,8 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in ("/api/health", "/api/live"):
             state = health(self.db_path, self.scheduler)
             ok = state['live'] if url.path == '/api/live' else state['healthy']
+            if "full=1" not in (url.query or "").split("&"):
+                state = compact_health(state)
             return self._send(200 if ok else 503, json.dumps(state))
 
         # /api/run is a state-changing action, so it is POST-only: a cross-site

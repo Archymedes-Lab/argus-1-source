@@ -33,11 +33,14 @@
     <span class="text-heading-16">ARGUS-1</span>
   </div>
   <nav class="flex flex-col gap-0.5 px-2 pt-2" aria-label={tr("Sections")}>
-    {#each NAV.slice(0, 5).filter((n) => app.mode === "expert" || n.view !== "collectors") as n (n.view)}{@render item(n)}{/each}
+    {#each NAV.filter((n) => n.group === "main" && (app.mode === "expert" || n.view !== "collectors")) as n (n.view)}{@render item(n)}{/each}
+  </nav>
+  <p class="px-4.5 pt-4 pb-1 text-label-12 text-gray-700">{tr("Explore")}</p>
+  <nav class="flex flex-col gap-0.5 px-2" aria-label={tr("Explore")}>
+    {#each NAV.filter((n) => n.group === "explore") as n (n.view)}{@render item(n)}{/each}
   </nav>
   <div class="mt-auto flex flex-col gap-0.5 px-2 pb-2">
-    {@render item(NAV[5])}
-    {@render item(NAV[6])}
+    {#each NAV.filter((n) => n.group === "bottom") as n (n.view)}{@render item(n)}{/each}
     <div class="mt-2 flex items-center gap-2 px-2.5 py-2 text-label-12 text-gray-900">
       <span class="dot {app.daemon === 'live' ? 'dot-ok' : app.daemon === 'down' ? 'dot-bad' : 'dot-run'}"></span>
       {app.daemon === "live" ? ((app.data?.paused_until ?? 0) * 1000 > Date.now() ? tr("On a break") : tr("Watching")) : app.daemon === "down" ? tr("ARGUS-1 unreachable") : tr("Connecting")}

@@ -412,6 +412,98 @@ pub async fn protection_scan() -> Result<Value, String> {
     blocking(|| post_json("/api/protection/scan", &json!({}), ACTION_TIMEOUT)).await
 }
 
+// ---- pages: location, coverage, world, processes ----------------------------
+
+#[tauri::command]
+pub async fn geo_state() -> Result<Value, String> {
+    blocking(|| get_json("/api/geo", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn coverage_state() -> Result<Value, String> {
+    blocking(|| get_json("/api/coverage", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn world_state() -> Result<Value, String> {
+    blocking(|| get_json("/api/world", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn procs_baseline() -> Result<Value, String> {
+    blocking(|| get_json("/api/procs/baseline", STATE_TIMEOUT)).await
+}
+
+/// The daemon pages the app may open in the browser for the full view. A fixed
+/// list: nothing the interface passes in is ever turned into an address.
+pub fn page_path(page: &str) -> Option<&'static str> {
+    match page {
+        "coverage" => Some("/coverage"),
+        "world" => Some("/world"),
+        "procs" => Some("/procs"),
+        "geo" => Some("/geo"),
+        "classic" => Some("/classic"),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub async fn open_page(page: String) -> Result<Value, String> {
+    let path = page_path(&page).ok_or("unknown page")?;
+    let url = pulse::dashboard_url().trim_end_matches('/').to_string() + path;
+    blocking(move || {
+        open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
+        Ok(json!({ "ok": true }))
+    })
+    .await
+}
+
+/// One consistent picture of the process table: the first full `snap` frame per
+/// host plus the latest `status` frame, read from the live stream and then
+/// dropped. Updates arrive as deltas on that stream; the page asks again every
+/// few seconds instead, which keeps this a bounded read (time, bytes, frames).
+pub fn collect_procs<R: BufRead>(r: &mut R, deadline: std::time::Instant) -> Value {
+    let mut out = json!({ "snaps": {}, "status": Value::Null });
+    let mut line = String::new();
+    let mut total = 0usize;
+    while std::time::Instant::now() < deadline && total < MAX_BODY {
+        line.clear();
+        match pulse::read_line(r, &mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => total += n,
+        }
+        let Some(data) = line.trim_end().strip_prefix("data:") else { continue };
+        let Ok(v) = serde_json::from_str::<Value>(data.trim()) else { continue };
+        match v.get("k").and_then(Value::as_str) {
+            Some("snap") => {
+                if let (Some(h), Some(p)) = (v.get("h").and_then(Value::as_str), v.get("p")) {
+                    if p.is_array() {
+                        out["snaps"][h] = p.clone();
+                    }
+                }
+            }
+            Some("status") => out["status"] = v,
+            _ => {}
+        }
+        if out["snaps"].get("win").is_some() && !out["status"].is_null() {
+            break;
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub async fn procs_snapshot() -> Result<Value, String> {
+    blocking(|| {
+        let (status, mut reader) = pulse::open("/api/procs/stream").map_err(|e| unreachable(&e))?;
+        if status != 200 {
+            return Err(format!("ARGUS-1 answered HTTP {status}"));
+        }
+        Ok(collect_procs(&mut reader, std::time::Instant::now() + Duration::from_secs(8)))
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -577,6 +669,40 @@ b"));
     fn only_known_languages_reach_the_daemon() {
         assert!(["en", "fr", "de", "es", "zh", "ja", "ko", "pt", "hi", "ru", "ar"].iter().all(|l| valid_lang(l)));
         assert!(!valid_lang("") && !valid_lang("fr; ignore previous instructions") && !valid_lang("xx"));
+    }
+
+    #[test]
+    fn only_listed_daemon_pages_can_be_opened() {
+        assert_eq!(page_path("coverage"), Some("/coverage"));
+        assert_eq!(page_path("classic"), Some("/classic"));
+        for bad in ["", "/coverage", "coverage/../x", "https://evil.example", "geo?x=1", "COVERAGE"] {
+            assert_eq!(page_path(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_process_snapshot_takes_the_first_snap_per_host_and_ignores_the_rest() {
+        let feed = concat!(
+            "retry: 2000\n\n",
+            "data: {\"k\":\"snap\",\"h\":\"win\",\"t\":1,\"p\":[[\"1:1\",1,0,\"System\"]]}\n\n",
+            "data: not json\n\n",
+            "data: {\"k\":\"d\",\"h\":\"win\"}\n\n",
+            "data: {\"k\":\"snap\",\"h\":\"lin\",\"p\":[]}\n\n",
+            "data: {\"k\":\"status\",\"sources\":{\"win\":{\"state\":\"live\"}}}\n\n",
+            "data: {\"k\":\"snap\",\"h\":\"win\",\"p\":[]}\n\n",
+        );
+        let v = collect_procs(&mut io::Cursor::new(feed.as_bytes().to_vec()), std::time::Instant::now() + Duration::from_secs(5));
+        assert_eq!(v["snaps"]["win"][0][3], "System");
+        assert!(v["snaps"]["lin"].is_array());
+        assert_eq!(v["status"]["sources"]["win"]["state"], "live");
+    }
+
+    #[test]
+    fn a_dead_or_silent_stream_yields_an_empty_snapshot_not_a_hang() {
+        let v = collect_procs(&mut io::Cursor::new(Vec::new()), std::time::Instant::now() + Duration::from_secs(5));
+        assert!(v["snaps"].as_object().unwrap().is_empty() && v["status"].is_null());
+        let expired = collect_procs(&mut io::Cursor::new(b"data: {\"k\":\"snap\",\"h\":\"win\",\"p\":[]}\n".to_vec()), std::time::Instant::now());
+        assert!(expired["snaps"].as_object().unwrap().is_empty());
     }
 
     #[test]

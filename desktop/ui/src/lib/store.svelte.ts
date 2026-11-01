@@ -1,8 +1,9 @@
 // Application state. The daemon owns the truth; this holds the last copy the
 // shell fetched and refreshes it when the pulse stream says something changed.
 import { api, onDaemon } from "./api";
+import { tr } from "./i18n";
 
-export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "pricing" | "settings";
+export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "pricing" | "settings";
 export type Mode = "simple" | "expert";
 export type Theme = "auto" | "light" | "dark";
 
@@ -110,11 +111,22 @@ function schedule() {
   queued = setTimeout(refresh, wait);
 }
 
+/** Stripe sends the browser back to /?session_id=...; the daemon asks Stripe whether it was paid. */
+async function confirmReturnFromCheckout() {
+  const id = new URLSearchParams(location.search).get("session_id");
+  if (!id) return;
+  history.replaceState(null, "", location.pathname);
+  app.view = "pricing";
+  try { await api.billingConfirm(id); toast(tr("Payment confirmed. Thank you."), "ok"); }
+  catch (e) { toast(String((e as Error).message ?? e), "bad"); }
+}
+
 export async function start() {
   applyLang();
   applyTheme();
   applyMode();
   await refresh();
+  void confirmReturnFromCheckout();
   await onDaemon(() => schedule(), () => { app.daemon = "down"; });
   setInterval(() => { if (Date.now() - last > FALLBACK_MS) refresh(); }, 10000);
 }

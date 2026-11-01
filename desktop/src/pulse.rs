@@ -51,7 +51,7 @@ impl From<io::Error> for End {
     }
 }
 
-fn open(path: &str) -> io::Result<(u16, BufReader<TcpStream>)> {
+pub fn open(path: &str) -> io::Result<(u16, BufReader<TcpStream>)> {
     let (addr, port) = (SocketAddr::from(([127, 0, 0, 1], port())), port());
     let sock = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)?;
     sock.set_read_timeout(Some(READ_TIMEOUT))?;
@@ -86,7 +86,7 @@ pub fn read_status<R: BufRead>(r: &mut R) -> io::Result<u16> {
 }
 
 /// One line, at most MAX_LINE bytes; longer is an error, not a truncation.
-fn read_line<R: BufRead>(r: &mut R, line: &mut String) -> io::Result<usize> {
+pub fn read_line<R: BufRead>(r: &mut R, line: &mut String) -> io::Result<usize> {
     let n = r.by_ref().take(MAX_LINE).read_line(line)?;
     if n as u64 == MAX_LINE && !line.ends_with('\n') {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "line too long"));
