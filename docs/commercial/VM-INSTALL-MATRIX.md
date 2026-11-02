@@ -89,6 +89,40 @@ Jev (jev-1.14.0, advisory, `scripts/reviews/vm_matrix_advisory.py`): Debian http
 the label acceptable 0.83; top remaining gap "not yet run end to end" 0.35 (low confidence,
 Debian trust 0.32 close behind); smoke run before the hour-long runs 0.61.
 
+## Smoke runs, 2026-11-02 (Ubuntu 24.04, tarball, signed `v2026.10.30-2`, 2-minute idle)
+
+First installs of the signed native release on any VM. Measured, short windows only:
+
+| Run | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | Isolation |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 (09:19Z) | pass | pass | 2/16 | within budget | not in release | fail | not run | pass | pass | ok |
+| 2 (11:44Z) | pass | fail | **16/16** | over CPU | not in release | fail | not run | pass | pass | ok |
+| 3 | killed by a Windows host crash during S4 | | | | | | | | | orphans swept |
+
+What the failures were (all harness bugs, fixed after each run, none in the product so far):
+- Runs 1 and 2: the release requires a credential on every API route; the guest read
+  `/api/state` without one, saw no jobs, and so failed S3 (run 1) and could not see receipts
+  after the reboot (S6). The guest now sends the token on every request.
+- Run 2 S2: the health check then sent the token too; the authenticated body does not carry
+  the `"ARGUS"` service name the check looks for. The check is now anonymous, as an outside
+  probe (and `release/install_test.sh`) sees it.
+- Run 2 S6: `/api/state` still listed no jobs after the reboot, cause not yet known. S6 now
+  also reads the newest run receipt straight from the store (read-only) and records the API
+  shape and the journal for this boot.
+- Run 2 S4 "over CPU" (366 s/h) is a 2-minute window right after the planted scenario, not
+  idle. Only the 60-minute run decides S4.
+
+Measured so far: install 36.5 s (run 2), first API answer 37.6 s, RSS at most 120 MB,
+cgroup at most 194 MB, state 5 MB, no tracebacks, removal and purge clean, 16/16 planted
+checks, no secret value in findings.
+
+**Host stability (owner decision before more runs).** Windows restarted uncleanly three
+times on 2026-11-02 (Kernel-Power 41, no bug check recorded): before 12:15, at 12:14 and about
+13:54 local. The 13:54 one ended smoke run 3; the two earlier ones had no VM running. Nested
+KVM adds load to a host that already hard-resets, so the hour-long cells wait for the owner's
+go-ahead, or move to another machine or a real VPS. `vmtest.py` now sweeps run folders a
+killed run leaves behind (only run-id folders, older than an hour, with no container).
+
 ## Run order and host limits
 
 Run serially, one guest at a time, never while the host is loaded (memory

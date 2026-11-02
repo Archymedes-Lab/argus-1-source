@@ -9,7 +9,6 @@ import base64
 import hashlib
 import io
 import json
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -443,6 +442,33 @@ class RunCell(unittest.TestCase):
                 self.cell(tmp, rec)
             self.assertTrue(any(c[:3] == ["docker", "rm", "-f"] for c in rec.calls))
             self.assertFalse(list((Path(tmp) / "runs").iterdir()))
+
+
+class Sweep(unittest.TestCase):
+    def test_only_old_orphaned_run_folders_are_removed(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            for name in ("aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc", "not-a-run"):
+                (runs / name).mkdir(parents=True)
+            (Path(tmp) / "images").mkdir()
+            for name in ("aaaaaaaaaa", "bbbbbbbbbb", "not-a-run"):
+                os.utime(runs / name, (1000, 1000))           # old
+            def docker(argv, **kw):
+                live = any("bbbbbbbbbb" in a for a in argv)  # b's container still exists
+                return SimpleNamespace(returncode=0, stdout=b"id\n" if live else b"", stderr=b"")
+            removed = vmtest.sweep_stale(tmp, docker, now=1000 + 7200)
+            self.assertEqual(removed, ["aaaaaaaaaa"])
+            self.assertEqual(sorted(p.name for p in runs.iterdir()), ["bbbbbbbbbb", "cccccccccc", "not-a-run"])
+            self.assertTrue((Path(tmp) / "images").is_dir())
+
+    def test_unknown_docker_state_keeps_the_folder(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "runs" / "aaaaaaaaaa").mkdir(parents=True)
+            os.utime(Path(tmp) / "runs" / "aaaaaaaaaa", (1000, 1000))
+            broken = lambda argv, **kw: SimpleNamespace(returncode=1, stdout=b"", stderr=b"")  # noqa: E731
+            self.assertEqual(vmtest.sweep_stale(tmp, broken, now=99999), [])
 
 
 class Cli(unittest.TestCase):

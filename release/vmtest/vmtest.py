@@ -207,6 +207,31 @@ def summarize(guest, report, conf, budget=BUDGET):
     return out
 
 
+RUN_ID = __import__("re").compile(r"^[0-9a-f]{10}$")
+
+
+def sweep_stale(root, runner=subprocess.run, now=None, min_age_s=3600):
+    """Remove run folders a killed run left behind (host crash, power loss: no `finally`).
+
+    Only folders named like a run id, older than min_age_s, with no container of either
+    harness still present are removed. Returns the removed ids. Never touches images/."""
+    runs = Path(root) / "runs"
+    now = time.time() if now is None else now
+    removed = []
+    for d in sorted(runs.iterdir()) if runs.is_dir() else []:
+        if not d.is_dir() or d.is_symlink() or not RUN_ID.match(d.name):
+            continue
+        if now - d.stat().st_mtime < min_age_s:
+            continue
+        alive = runner(["docker", "ps", "-aq", "--filter", f"name=argus-vmtest-{d.name}",
+                        "--filter", f"name=jvlab-{d.name}"], capture_output=True, timeout=30)
+        if alive.returncode != 0 or alive.stdout.strip():
+            continue                     # unknown or still present: leave it
+        shutil.rmtree(d, ignore_errors=True)
+        removed.append(d.name)
+    return removed
+
+
 def run_cell(cfg, kind, candidate, old=None, idle_s=3600, settle_s=600, seeds=(), *, runner=subprocess.run,
              popen=subprocess.Popen, sleep=time.sleep, clock=time.monotonic, load=None,
              verify=vmlab.verify_base_image, echo=print):
@@ -227,6 +252,7 @@ def run_cell(cfg, kind, candidate, old=None, idle_s=3600, settle_s=600, seeds=()
     if stop:
         report["blocked"] = stop
         return None, report, None
+    report["stale_runs_removed"] = sweep_stale(cfg.root, runner)
     run_id = uuid.uuid4().hex[:10]
     run_dir = Path(cfg.root) / "runs" / run_id
     run_dir.mkdir(parents=True, mode=0o700)

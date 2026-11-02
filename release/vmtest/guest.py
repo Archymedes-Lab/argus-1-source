@@ -53,7 +53,11 @@ def sh(cmd, timeout=600):
         return None, f"timed out after {timeout}s"
 
 
-def http(path, method="GET", token=None, timeout=20):
+AUTH = {"token": None}     # the release requires a credential on every API route (read too)
+
+
+def http(path, method="GET", token=None, timeout=20, anonymous=False):
+    token = None if anonymous else (token or AUTH["token"])
     req = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", method=method,
                                  headers={"X-ARGUS-Token": token} if token else {})
     try:
@@ -322,6 +326,18 @@ def install(which):
     return {"code": code, "seconds": round(time.time() - t, 1), "tail": out[-3000:]}
 
 
+def last_receipt():
+    """Newest run receipt in the daemon store (read-only), or None."""
+    try:
+        conn = sqlite3.connect(f"file:{STATE}/argus.db?mode=ro", uri=True, timeout=5)
+        try:
+            return conn.execute("SELECT MAX(observed_at) FROM defender_runs").fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+
+
 def store_counts():
     """Row counts of the daemon store, read-only (S7 history kept)."""
     db = f"{STATE}/argus.db"
@@ -347,11 +363,14 @@ def accounts():
 
 def first_run():
     """S2: the installed copy runs as designed."""
+    AUTH["token"] = token()
     s2 = {"active": sh("systemctl is-active argus", 10)[1].strip(), "user": unit("User"),
           "api_first_answer_s": wait_live()}
-    status, body = http("/api/health")
+    # What an outside probe sees (no credential), as release/install_test.sh checks it.
+    status, body = http("/api/health", anonymous=True)
     s2["health_status"] = status
     s2["health_names_argus"] = '"ARGUS"' in body.replace(" ", "")
+    s2["health_head"] = body[:300]
     code, out = sh("/usr/local/bin/argus --help", 120)
     s2["cli_ok"] = code == 0
     code, out = sh("/usr/local/bin/argus welcome server", 120)
@@ -451,7 +470,9 @@ def phase1():
         shutil.copy(src, f"{STATE}/distrovuln/{os.path.basename(src)}")
     sh(f"chown -R argus:argus {STATE}/distrovuln 2>/dev/null; chmod 700 {STATE}/distrovuln 2>/dev/null", 20)
     tok = token()
+    AUTH["token"] = tok
     R["token_found"] = bool(tok)
+    R["state_status"] = http("/api/state")[0]
     R["forced"] = {j: http(f"/api/run?job={j}", "POST", tok)[0]
                    for j in ("patches", "heartbeat", "distrovuln", "firewall", "backdoor", "logins")}
     if CONF.get("scenario", True):
@@ -487,6 +508,7 @@ def phase2():
     R.clear()
     R.update(saved["R"])
     mark("S6: back after reboot")
+    AUTH["token"] = token()
     s6 = R["S6"]
     s6["boot_after"] = boot_id()
     s6["api_answer_s_after_boot"] = wait_live(300)
@@ -494,16 +516,26 @@ def phase2():
     s6["restarts"] = unit("NRestarts")
     s6["health_status"] = http("/api/health")[0]
     boot_t = time.time() - float(open("/proc/uptime").read().split()[0])
-    end, resumed = time.time() + 600, False
-    while time.time() < end and not resumed:
-        _, body = http("/api/state")
+    # Receipts resumed: the store's newest run receipt is from this boot (read-only), or the
+    # API reports a job newer than the boot. Both are recorded; either is evidence.
+    end, api_ok, db_ok = time.time() + 600, False, False
+    while time.time() < end and not (api_ok or db_ok):
+        status, body = http("/api/state")
         try:
-            resumed = any((j.get("ts") or 0) > boot_t for j in json.loads(body).get("jobs", []))
-        except ValueError:
-            pass
-        if not resumed:
+            state = json.loads(body)
+            api_ok = any((j.get("ts") or 0) > boot_t for j in state.get("jobs", []))
+            s6["state_probe"] = {"status": status, "keys": sorted(state)[:30], "jobs": len(state.get("jobs", []))}
+        except (ValueError, AttributeError):
+            s6["state_probe"] = {"status": status, "head": body[:200]}
+        last = last_receipt()
+        db_ok = last is not None and last > boot_t
+        s6["last_receipt_after_boot_s"] = round(last - boot_t, 1) if last else None
+        if not (api_ok or db_ok):
             time.sleep(10)
-    s6["receipts_resumed"] = resumed
+    s6["receipts_resumed"] = api_ok or db_ok
+    s6["receipts_via"] = {"api": api_ok, "store": db_ok}
+    s6["live"] = http("/api/live")[1][:300]
+    s6["journal_this_boot"] = sh("journalctl -b -u argus.service --no-pager -o cat | tail -n 25", 60)[1][-2500:]
     s6["tracebacks_this_boot"] = sh("journalctl -b -u argus.service --no-pager -o cat | grep -c Traceback", 60)[1].strip()
 
     status, body = http("/api/state")
