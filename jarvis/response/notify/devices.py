@@ -46,6 +46,15 @@ def add(device, path=None, now=None):
     save(doc, path)
 
 
+def mark_active(dev, path=None):
+    """The relay confirmed the activation: the device is no longer pending."""
+    doc = load(path)
+    for d in doc["devices"]:
+        if d.get("dev") == dev:
+            d.pop("relay_pending", None)
+    save(doc, path)
+
+
 def revoke(dev, path=None, now=None):
     doc = load(path)
     hit = False

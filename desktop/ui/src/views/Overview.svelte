@@ -28,7 +28,7 @@
 </script>
 
 {#if !d}
-  <div class="empty">{app.error || tr("Reading ARGUS-1…")}</div>
+  <div class="empty">{app.error || tr("Reading ARGUS-INSTINCT…")}</div>
 {:else}
   <div class="flex flex-col gap-8">
     {#if counts.critical}

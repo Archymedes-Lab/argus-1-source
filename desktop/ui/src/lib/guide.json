@@ -76,7 +76,7 @@
  ],
  "defense": [
   "A Windows Defender setting could not be read.",
-  "ARGUS-1 cannot confirm protection it cannot read.",
+  "ARGUS-INSTINCT cannot confirm protection it cannot read.",
   "Open the details to see which setting."
  ],
  "mitigations": [
@@ -95,17 +95,17 @@
   "Keep only extensions you recognise."
  ],
  "daemon": [
-  "ARGUS-1's own monitor or one of its services is not running as expected.",
-  "While it is not running, ARGUS-1 cannot watch that area.",
+  "ARGUS-INSTINCT's own monitor or one of its services is not running as expected.",
+  "While it is not running, ARGUS-INSTINCT cannot watch that area.",
   "Open Monitoring to see the reason and the steps to restore it."
  ],
  "collectors": [
-  "One of ARGUS-1's checks could not complete.",
-  "ARGUS-1 cannot currently confirm the security of that area.",
+  "One of ARGUS-INSTINCT's checks could not complete.",
+  "ARGUS-INSTINCT cannot currently confirm the security of that area.",
   "Open Monitoring to see the reason."
  ],
  "visibility": [
-  "ARGUS-1 has limited visibility into part of this computer.",
+  "ARGUS-INSTINCT has limited visibility into part of this computer.",
   "It cannot report on what it cannot see.",
   "Open Monitoring to see what is limited and why."
  ]

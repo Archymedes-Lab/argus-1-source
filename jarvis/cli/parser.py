@@ -79,6 +79,7 @@ from .commands import retention as retention_cli
 from .commands import sensor as sensor_cli
 from .commands import server as server_cli
 from .commands import timeline as timeline_cli
+from .commands import update as update_cli
 from .commands import veil as veil_cli
 
 
@@ -107,6 +108,7 @@ def build_parser():
     canary_cli.add_parser(sub)
     server_cli.add_parser(sub)
     notify_cli.add_parser(sub)
+    update_cli.add_parser(sub)
     privacy_cli.add_parser(sub)
     timeline_cli.add_parser(sub)
     history_cli.add_parser(sub)

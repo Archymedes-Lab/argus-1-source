@@ -11,7 +11,7 @@
 # exactly that through a narrow sudoers rule.
 
 [Unit]
-Description=JARVIS self-check — is the monitor actually monitoring?
+Description=ARGUS-INSTINCT self-check — is the monitor actually monitoring?
 # Do not run it while it is already running.
 RefuseManualStart=no
 

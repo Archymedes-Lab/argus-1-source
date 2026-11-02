@@ -1,6 +1,6 @@
 # Licence and Stripe payments
 
-ARGUS-1 is sold as a **$79 per year** subscription through Stripe Checkout.
+ARGUS-INSTINCT is sold as a **$79 per year** subscription through Stripe Checkout.
 The code is `jarvis/web/billing.py`; the page is **Pricing** in the dashboard.
 Standard library only, no Stripe SDK.
 
@@ -46,6 +46,6 @@ use, not a determined user. Server-side licence keys would be the next step.
 
 ## Notes
 
-- ARGUS-1 otherwise talks only to loopback. The only outbound calls added are
+- ARGUS-INSTINCT otherwise talks only to loopback. The only outbound calls added are
   HTTPS requests to `api.stripe.com`, made by the server, and only for billing.
 - The secret key is read server-side and never sent to the browser.

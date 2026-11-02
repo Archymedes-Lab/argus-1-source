@@ -2,6 +2,7 @@
 // non-extractable keys for each), decrypted messages and settings. Nothing here
 // leaves the phone.
 const DB = "argus-notify";
+const RANK = { critical: 0, high: 1, medium: 2, low: 3, ok: 4, info: 5 };
 const VERSION = 1;
 
 function open() {
@@ -38,7 +39,9 @@ export const servers = {
 };
 
 export const messages = {
-  all: async () => (await tx("messages", "readonly", (s) => s.getAll())).sort((a, b) => b.at - a.at),
+  // Newest first; within the same second the most severe first.
+  all: async () => (await tx("messages", "readonly", (s) => s.getAll()))
+    .sort((a, b) => b.at - a.at || (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9)),
   get: (id) => tx("messages", "readonly", (s) => s.get(id)),
   put: (m) => tx("messages", "readwrite", (s) => s.put(m)),
   remove: (id) => tx("messages", "readwrite", (s) => s.delete(id)),

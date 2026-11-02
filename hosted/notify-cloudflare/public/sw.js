@@ -1,10 +1,10 @@
 // Service worker: the shell offline, and on an (empty) push: fetch, verify, decrypt,
 // notify. What a lock screen shows is the owner's choice (Settings); by default only
 // the severity and the server, never the alert's text.
-import { syncAll } from "./lib/sync.js";
+import { CATEGORIES, syncAll } from "./lib/sync.js";
 import { settings } from "./lib/store.js";
 
-const SHELL = "argus-shell-v1";
+const SHELL = "argus-shell-v2";
 const FILES = ["/", "/index.html", "/app.js", "/style.css", "/lib/protocol.js", "/lib/store.js", "/lib/sync.js",
   "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/badge-72.png"];
 
@@ -29,7 +29,11 @@ self.addEventListener("push", (e) => {
   e.waitUntil((async () => {
     const { fresh } = await syncAll();
     const detail = await settings.get("lockscreenDetail", false);
-    const alerts = [...fresh].sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
+    // Muted categories still reach the inbox; they just do not buzz the phone.
+    // A security threat cannot be muted.
+    const muted = new Set((await settings.get("mutedCategories", [])).filter((c) => c !== "threat"));
+    const alerts = [...fresh].filter((m) => !muted.has(m.category))
+      .sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
     if (!alerts.length) {
       // Browsers require a visible notification for every push.
       return self.registration.showNotification("Argus", { body: "Checked in: nothing new.", tag: "argus-sync",
@@ -42,8 +46,9 @@ self.addEventListener("push", (e) => {
 
 function single(m, detail) {
   const where = m.label || m.host || "your server";
+  const kind = CATEGORIES[m.category] || CATEGORIES.system;
   return {
-    title: detail ? `${m.severity.toUpperCase()} · ${where}` : `Argus · ${where}`,
+    title: detail ? `${kind} · ${m.severity.toUpperCase()} · ${where}` : `${kind} · ${where}`,
     options: { body: detail ? m.title : `${article(m.severity)} ${m.severity} alert. Open to read it.`,
       tag: m.id, icon: "/icons/icon-192.png", badge: "/icons/badge-72.png",
       data: { url: `/#/m/${m.id}` }, requireInteraction: m.severity === "critical" },
@@ -52,7 +57,8 @@ function single(m, detail) {
 
 function summary(alerts) {
   const servers = new Set(alerts.map((m) => m.label || m.host));
-  return { title: "Argus", options: { body: `${alerts.length} new alerts from ${servers.size} server${servers.size > 1 ? "s" : ""}.`,
+  const kinds = [...new Set(alerts.map((m) => CATEGORIES[m.category] || CATEGORIES.system))].join(", ");
+  return { title: "Argus", options: { body: `${alerts.length} new alerts from ${servers.size} server${servers.size > 1 ? "s" : ""}: ${kinds}.`,
     tag: "argus-summary", icon: "/icons/icon-192.png", badge: "/icons/badge-72.png", data: { url: "/#/" } } };
 }
 

@@ -1,6 +1,6 @@
 """Built-in answers to the security questions people ask most.
 
-ARGUS-1 does not need an AI model to be useful. Questions about this
+ARGUS-INSTINCT does not need an AI model to be useful. Questions about this
 computer are answered from its own data (assistant.py); common questions about
 staying safe are answered here from a short, reviewed list. Every entry is
 plain language, says what to do next, and never advises weakening protection,
@@ -55,7 +55,7 @@ ENTRIES = (
     ("antivirus", ("do i need antivirus", "need an antivirus", "is windows defender enough", "defender enough",
                    "which antivirus", "best antivirus"),
      "For most people, the Windows Defender that comes with Windows is a solid antivirus, as long as it is on and "
-     "updated. ARGUS-1 does not replace it: ARGUS-1 watches for unusual things and explains them, "
+     "updated. ARGUS-INSTINCT does not replace it: ARGUS-INSTINCT watches for unusual things and explains them, "
      "while Defender blocks known viruses. Running two full antivirus programs together can cause problems."),
     ("malware", ("what is malware", "what is a virus", "what are viruses", "what is a trojan", "what is spyware",
                  "what is adware"),
@@ -74,7 +74,7 @@ ENTRIES = (
      "Stay calm and act in this order: 1) from a different, clean device, change the password of the "
      "affected account, starting with your email; 2) turn on two-factor sign-in; 3) check the account's "
      "recent activity and sign out of all devices; 4) tell your bank if money is involved. Do not wipe the "
-     "computer yet; ARGUS-1's findings can help show what happened."),
+     "computer yet; ARGUS-INSTINCT's findings can help show what happened."),
     ("attachments", ("email attachment", "open an attachment", "attachment safe", "zip file from email"),
      "Be wary of attachments you did not expect, even from people you know, because their account may be "
      "hacked. Be extra careful with .exe, .scr, .js, .zip and Office files that ask you to 'enable "
@@ -92,8 +92,8 @@ ENTRIES = (
      "you recognise and use, remove the rest, and install only from the official store."),
     ("keylogger", ("keylogger", "key logger", "someone watching my screen", "spying on me", "stalkerware", "am i being spied"),
      "Spyware and keyloggers record what you type or see. Signs include a webcam light that comes on by itself, "
-     "unknown programs that start with Windows, or unusual network use. ARGUS-1 looks for these. If you "
-     "suspect it, change your passwords from a different device and review the findings ARGUS-1 shows."),
+     "unknown programs that start with Windows, or unusual network use. ARGUS-INSTINCT looks for these. If you "
+     "suspect it, change your passwords from a different device and review the findings ARGUS-INSTINCT shows."),
     ("encryption", ("what is encryption", "encrypt my files", "bitlocker", "disk encryption", "device encryption"),
      "Encryption scrambles data so only someone with the key can read it. Turning on BitLocker or Device "
      "Encryption in Windows protects your files if your laptop is lost or stolen. Keep a copy of the "
@@ -109,19 +109,19 @@ ENTRIES = (
     ("slow", ("computer is slow", "pc is slow", "laptop is slow", "why is my computer slow", "computer running slow"),
      "Slowness has many ordinary causes: too many programs starting with Windows, low disk space, or pending "
      "updates. Malware is only one possible cause. Restart, check Task Manager for what is using the "
-     "most, and free up disk space. If ARGUS-1 shows no findings, an infection is less likely."),
+     "most, and free up disk space. If ARGUS-INSTINCT shows no findings, an infection is less likely."),
     ("safe-argus", ("is argus-1 safe", "is argus safe", "does argus-1 send", "does argus send", "is my data private",
                     "where does my data go", "does argus-1 collect", "what does argus-1 collect"),
-     "ARGUS-1 works on your computer. What it observes stays here, and it talks to the network only for "
+     "ARGUS-INSTINCT works on your computer. What it observes stays here, and it talks to the network only for "
      "things you turn on, such as payment through Stripe or optional email alerts. It reads and explains; "
      "it does not change your computer without your approval."),
     ("what-argus", ("what is argus-1", "what is argus", "what does argus-1 do", "what does argus do"),
-     "ARGUS-1 watches your computer for things that look wrong, such as programs that start by themselves, "
+     "ARGUS-INSTINCT watches your computer for things that look wrong, such as programs that start by themselves, "
      "passwords left in plain files, or risky settings, and explains them in plain language. It "
      "tells you what to do next and never changes anything without your approval. It works alongside "
      "Windows' own antivirus, not instead of it."),
     ("score", ("what does the score mean", "what is the score", "security score mean", "what is a good score"),
-     "The score is a quick summary of how many open issues ARGUS-1 sees and how serious they are. "
+     "The score is a quick summary of how many open issues ARGUS-INSTINCT sees and how serious they are. "
      "A lower score means more things worth a look; it is not proof that your computer is infected. "
      "Open 'What I found' to see what is lowering it and which fix helps most."),
 )

@@ -63,7 +63,7 @@ if $want_service && ! $want_priority; then
   mkdir -p "$UNIT"
   cat > "$UNIT/jarvis.service" <<EOF
 [Unit]
-Description=JARVIS — continuous process, network and control-surface monitoring
+Description=ARGUS-INSTINCT — continuous process, network and control-surface monitoring
 After=network.target
 
 [Service]
@@ -115,7 +115,7 @@ if $want_priority; then
   echo "This needs sudo once."
   sudo tee "$SYS" >/dev/null <<EOF
 [Unit]
-Description=JARVIS — continuous monitoring (top priority)
+Description=ARGUS-INSTINCT — continuous monitoring (top priority)
 After=network.target
 
 [Service]

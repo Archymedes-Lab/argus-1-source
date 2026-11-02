@@ -273,7 +273,7 @@ class OverviewStatusTests(unittest.TestCase):
         ok = self.m(model(healthy=4, score=96, grade="secure"))
         self.assertEqual(ok["level"], "ok")
         self.assertIn("No issues found in the checks performed", ok["headline"])
-        self.assertIn("only what ARGUS-1 can check", ok["detail"])
+        self.assertIn("only what ARGUS-INSTINCT can check", ok["detail"])
         for bad in ("never_ran", "stale", "failing", "malformed", "permission_restricted", "missing_dependency", "unsupported"):
             self.assertNotEqual(self.m(model(detectors=[det(bad)], healthy=9, score=99))["level"], "ok", bad)
 

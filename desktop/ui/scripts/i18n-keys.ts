@@ -24,13 +24,13 @@ export function collectKeys(root = "src"): string[] {
     "Automatic", "Light", "Dark", "15 minutes", "1 hour", "4 hours", "24 hours",
     "Critical", "High", "Medium", "Low", "Ok", "never",
     "Good morning", "Good afternoon", "Good evening", "Still up?",
-    "ARGUS-1 is still getting a look at your computer", "Check back in a minute.",
+    "ARGUS-INSTINCT is still getting a look at your computer", "Check back in a minute.",
     "1 thing needs your attention", "{n} things need your attention",
     "Start with the most urgent one below. This is not proof that something is wrong, only that it is worth a look.",
     "Nothing urgent, but a few things are worth a look",
     "1 item could use your attention when you have a minute.", "{n} items could use your attention when you have a minute.",
     "Your computer looks fine", "Nothing needs you right now.",
-    " Some of ARGUS-1's checks are not reporting right now, so this picture may be incomplete.",
+    " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.",
   ];
   for (const k of extra) keys.add(k);
   return [...keys].sort();

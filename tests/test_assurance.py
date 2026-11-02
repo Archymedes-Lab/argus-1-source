@@ -65,11 +65,13 @@ class AssuranceTests(unittest.TestCase):
         # plain_language_overview (browser- and daemon-exercised on one machine,
         # not validated, no observing job).
         # 2026-10-29: +2 partial in_app_notifications and investigation_reports.
-        self.assertEqual(gaps['implementation_unverified'], 26)
+        # 2026-11-02: +1 unverified link_plane (watchdogs job).
+        # 2026-11-02: +1 unverified software_updates (updates job).
+        self.assertEqual(gaps['implementation_unverified'], 28)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 22)
-        self.assertEqual(gaps['containment_not_validated'], 51)  # +1 friday_defender_reviews 2026-10-29
-        self.assertEqual(gaps['validation_date_missing'], 51)  # +1 friday_defender_reviews 2026-10-29
+        self.assertEqual(gaps['containment_not_validated'], 53)  # +1 friday_defender_reviews 2026-10-29, +1 link_plane, +1 software_updates 2026-11-02
+        self.assertEqual(gaps['validation_date_missing'], 53)  # +1 friday_defender_reviews 2026-10-29, +1 link_plane, +1 software_updates 2026-11-02
         self.assertFalse(result['complete'])
 
     def test_assistant_detector_health_and_overview_claim_no_more_than_was_measured(self):

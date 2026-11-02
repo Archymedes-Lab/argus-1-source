@@ -1,4 +1,4 @@
-// ARGUS-1 live process map: the page. It wires three modules together:
+// ARGUS-INSTINCT live process map: the page. It wires three modules together:
 //
 //   procs-state.js  the live table from /api/procs/stream (web/procview.py):
 //                   births, exits, short-lived starts, verdicts, missing
@@ -97,7 +97,7 @@ function renderLensState() {
   const parts = [];
   if (!b) parts.push('Loading the baseline…');
   else if (!b.ok) parts.push(`${b.reason || 'Baseline unavailable'}. Names are shown as unknown, never as new.`);
-  else parts.push('Compared with what ARGUS-1 has recorded: ' + HOSTS.map((h) => (hostReady(b, h)
+  else parts.push('Compared with what ARGUS-INSTINCT has recorded: ' + HOSTS.map((h) => (hostReady(b, h)
     ? `${label(h)} ${b.hosts[h].rows} names` : `${label(h)}: no baseline yet`)).join(' · ') + '.');
   const id = state.identity;
   if (!id || !id.on) parts.push('Image identity is not checked.');
@@ -244,7 +244,7 @@ function loop(now) {
   state.settleStarts(now);
   if (lastFrame && now - lastFrame > STALE_MS) {
     setSync(document.body.dataset.sync === 'connecting' ? 'connecting' : 'stale',
-      `No update from ARGUS-1 for ${Math.round((now - lastFrame) / 1000)} s; the map is frozen.`);
+      `No update from ARGUS-INSTINCT for ${Math.round((now - lastFrame) / 1000)} s; the map is frozen.`);
   }
   const live = document.body.dataset.sync === 'live';
   scene.pulses(now, live);

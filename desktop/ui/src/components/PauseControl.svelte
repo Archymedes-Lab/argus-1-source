@@ -13,13 +13,13 @@
 
   async function pause(m: number) {
     busy = true;
-    try { await api.pause(m); toast(tr("ARGUS-1 is taking a break. It starts again by itself."), "ok"); await refresh(); }
+    try { await api.pause(m); toast(tr("ARGUS-INSTINCT is taking a break. It starts again by itself."), "ok"); await refresh(); }
     catch (e) { toast(String((e as Error).message ?? e), "bad"); }
     finally { busy = false; }
   }
   async function resume() {
     busy = true;
-    try { await api.resume(); toast(tr("ARGUS-1 is watching again"), "ok"); await refresh(); }
+    try { await api.resume(); toast(tr("ARGUS-INSTINCT is watching again"), "ok"); await refresh(); }
     catch (e) { toast(String((e as Error).message ?? e), "bad"); }
     finally { busy = false; }
   }
@@ -34,7 +34,7 @@
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>
       <DropdownMenu.Content class="popover z-50 min-w-[220px] p-1.5" align="end" sideOffset={6}>
-        <p class="px-2.5 py-1.5 text-copy-13 text-gray-900">{tr("While paused, ARGUS-1 does not check your computer. It starts again by itself.")}</p>
+        <p class="px-2.5 py-1.5 text-copy-13 text-gray-900">{tr("While paused, ARGUS-INSTINCT does not check your computer. It starts again by itself.")}</p>
         {#each lengths as [m, label]}
           <DropdownMenu.Item class="nav-item" onSelect={() => pause(m)}>{tr(label)}</DropdownMenu.Item>
         {/each}

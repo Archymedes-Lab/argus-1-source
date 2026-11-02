@@ -33,7 +33,7 @@
 </script>
 
 {#if !d}
-  <div class="empty">{app.error || tr("Reading ARGUS-1…")}</div>
+  <div class="empty">{app.error || tr("Reading ARGUS-INSTINCT…")}</div>
 {:else}
   <div class="mx-auto flex max-w-[820px] flex-col gap-6">
     <!-- hero -->
@@ -105,7 +105,7 @@
       <span class="grid size-10 place-items-center rounded-xl bg-blue-100 text-blue-900"><Sparkles size={20} /></span>
       <span class="flex-1">
         <span class="block text-label-14">{tr("Not sure what something means?")}</span>
-        <span class="block text-copy-13 text-gray-900">{tr("Ask ARGUS-1 in your own words. It explains in plain language.")}</span>
+        <span class="block text-copy-13 text-gray-900">{tr("Ask ARGUS-INSTINCT in your own words. It explains in plain language.")}</span>
       </span>
       <ChevronRight size={16} class="text-gray-700" />
     </button>

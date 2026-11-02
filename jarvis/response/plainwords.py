@@ -49,8 +49,8 @@ _BRAND = re.compile(r"\b(?:JARVIS|Jarvis)\b")
 
 
 def brand(text):
-    """The product is called ARGUS-1. Command names in lower case (`jarvis ack`) are left alone."""
-    return _BRAND.sub("ARGUS-1", text) if isinstance(text, str) and text else text
+    """The product is called ARGUS-INSTINCT. Command names in lower case (`jarvis ack`) are left alone."""
+    return _BRAND.sub("ARGUS-INSTINCT", text) if isinstance(text, str) and text else text
 
 
 def simplify(text):
@@ -62,7 +62,7 @@ def level_of(value):
 
 
 def simplify_result(result, level):
-    """User-facing strings of an assistant result: always the ARGUS-1 name, and everyday
+    """User-facing strings of an assistant result: always the ARGUS-INSTINCT name, and everyday
     wording at the Simple level. Other fields stay as they are."""
     if not isinstance(result, dict):
         return result

@@ -1,14 +1,15 @@
-// The only way the interface reaches ARGUS-1: typed Tauri commands
+// The only way the interface reaches ARGUS-INSTINCT: typed Tauri commands
 // (desktop/src/api.rs). The page has no network permission of its own.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { brandDeep } from "./brand";
 
 export const inApp = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (inApp) return invoke<T>(cmd, args);
-  if (import.meta.env.DEV) return preview<T>(cmd);
-  throw new Error("This interface runs inside the ARGUS-1 app.");
+  if (inApp) return brandDeep(await invoke<T>(cmd, args));
+  if (import.meta.env.DEV) return brandDeep(await preview<T>(cmd));
+  throw new Error("This interface runs inside the ARGUS-INSTINCT app.");
 }
 
 // Development preview in a plain browser: read-only, from a saved state file.

@@ -8,12 +8,24 @@ the same observation receipt it would have produced in-process.
 
 import json
 import sys
+import time
 import traceback
 
 from jarvis.core import collection
 from jarvis.service.jobs import run_job
 
 ALLOWED = {"native"}
+
+
+def _own_cost():
+    """(CPU seconds, peak resident KiB) of this worker. `resource` is POSIX
+    only: the Windows edition reports CPU time and no peak."""
+    try:
+        import resource
+    except ImportError:
+        return time.process_time(), 0
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return usage.ru_utime + usage.ru_stime, int(usage.ru_maxrss)
 
 
 def main(argv=None):
@@ -28,8 +40,11 @@ def main(argv=None):
         error, status = observation.error, observation.status
     except Exception:
         error = traceback.format_exc()[-800:]
-    sys.stdout.write(json.dumps({"findings": findings, "error": error,
-                                 "status": status}, separators=(",", ":")))
+    # Its own cost, so the scheduler can report what each collector spends.
+    cpu_s, peak_kib = _own_cost()
+    sys.stdout.write(json.dumps({"findings": findings, "error": error, "status": status,
+                                 "cpu_s": round(cpu_s, 3), "max_rss_kib": peak_kib},
+                                separators=(",", ":")))
     return 0
 
 

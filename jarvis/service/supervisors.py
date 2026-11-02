@@ -59,15 +59,27 @@ def _finding(severity, title, detail, where=STATE):
             "detail": detail, "where": where, "host": "win"}
 
 
-def read_state(path=STATE):
-    try:
-        # errors="replace": a truncated or partially written state file must
-        # degrade to "unreadable", never take the collector down with it.
-        with open(path, "r", encoding="utf-8-sig", errors="replace") as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else None
-    except (OSError, ValueError):
-        return None
+def read_state(path=STATE, retries=2, delay=0.25, sleep=time.sleep):
+    """A supervisor's state file, or None when it cannot be read.
+
+    The Windows loops rewrite these every few seconds and the WSL view of the
+    drive can catch a write half done (seen 2026-11-02: the reviver's file
+    read as unparsable, valid 2 s later). A failed parse is retried briefly
+    before it counts as unreadable, so a torn read is not reported as a
+    broken supervisor."""
+    for attempt in range(retries + 1):
+        try:
+            # errors="replace": a truncated or partially written state file must
+            # degrade to "unreadable", never take the collector down with it.
+            with open(path, "r", encoding="utf-8-sig", errors="replace") as fh:
+                data = json.load(fh)
+            return data if isinstance(data, dict) else None
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            if attempt < retries:
+                sleep(delay)
+    return None
 
 
 _PAUSED = re.compile(r"^mail\.json\.paused-(\d{8}T\d{6}Z)\.bak$")

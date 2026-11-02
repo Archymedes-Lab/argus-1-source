@@ -69,6 +69,7 @@ class SupervisionTests(unittest.TestCase):
         with mock.patch.object(selfcheck, "timer_state", return_value=("", "")), \
                 mock.patch.object(selfcheck, "systemd_supervision", return_value=(900, "always")), \
                 mock.patch.object(jobs.alert, "channel_findings", return_value=[]), \
+                mock.patch.object(jobs, "_link_findings", return_value=[]), \
                 mock.patch.object(jobs.host, "has_windows", return_value=False), \
                 mock.patch.object(jobs.host, "native_windows", return_value=False):
             [f] = jobs._watchdogs((), ":memory:")
@@ -79,6 +80,7 @@ class SupervisionTests(unittest.TestCase):
             with mock.patch.object(selfcheck, "timer_state", return_value=("", "")), \
                     mock.patch.object(selfcheck, "systemd_supervision", return_value=supervision), \
                     mock.patch.object(jobs.alert, "channel_findings", return_value=[]), \
+                    mock.patch.object(jobs, "_link_findings", return_value=[]), \
                     mock.patch.object(jobs.host, "has_windows", return_value=False), \
                     mock.patch.object(jobs.host, "native_windows", return_value=False):
                 [f] = jobs._watchdogs((), ":memory:")

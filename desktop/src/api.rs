@@ -177,20 +177,20 @@ fn token(refresh: bool) -> Result<String, String> {
 
 fn unreachable(e: &io::Error) -> String {
     match e.kind() {
-        io::ErrorKind::ConnectionRefused => "ARGUS-1 is not running (nothing answers on the loopback port)".into(),
-        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => "ARGUS-1 did not answer in time".into(),
-        _ => format!("could not reach ARGUS-1: {e}"),
+        io::ErrorKind::ConnectionRefused => "ARGUS-INSTINCT is not running (nothing answers on the loopback port)".into(),
+        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => "ARGUS-INSTINCT did not answer in time".into(),
+        _ => format!("could not reach ARGUS-INSTINCT: {e}"),
     }
 }
 
 fn json_of(r: &Response) -> Result<Value, String> {
-    serde_json::from_slice(&r.body).map_err(|_| format!("ARGUS-1 answered HTTP {} with a body that is not JSON", r.status))
+    serde_json::from_slice(&r.body).map_err(|_| format!("ARGUS-INSTINCT answered HTTP {} with a body that is not JSON", r.status))
 }
 
 fn get_json(path: &str, timeout: Duration) -> Result<Value, String> {
     let r = request("GET", path, None, None, timeout).map_err(|e| unreachable(&e))?;
     if r.status != 200 {
-        return Err(format!("ARGUS-1 answered HTTP {}", r.status));
+        return Err(format!("ARGUS-INSTINCT answered HTTP {}", r.status));
     }
     json_of(&r)
 }
@@ -212,9 +212,9 @@ fn post_json(path: &str, body: &Value, timeout: Duration) -> Result<Value, Strin
             return Ok(v);
         }
         let msg = v.get("message").or_else(|| v.get("error")).and_then(Value::as_str).unwrap_or("refused");
-        return Err(format!("ARGUS-1 refused: {msg} (HTTP {})", r.status));
+        return Err(format!("ARGUS-INSTINCT refused: {msg} (HTTP {})", r.status));
     }
-    Err("ARGUS-1 refused the API token twice".into())
+    Err("ARGUS-INSTINCT refused the API token twice".into())
 }
 
 // ---- argument formats, mirrored from the daemon ---------------------------
@@ -322,7 +322,7 @@ pub async fn billing_checkout() -> Result<Value, String> {
         let v = post_json("/api/billing/checkout", &json!({}), ACTION_TIMEOUT)?;
         let url = v.get("url").and_then(Value::as_str).unwrap_or_default().to_string();
         if !is_checkout_url(&url) {
-            return Err("ARGUS-1 did not return a Stripe checkout address".into());
+            return Err("ARGUS-INSTINCT did not return a Stripe checkout address".into());
         }
         open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
         Ok(json!({ "ok": true, "message": "Checkout opened in your browser" }))

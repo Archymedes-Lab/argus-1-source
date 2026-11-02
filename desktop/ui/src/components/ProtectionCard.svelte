@@ -20,7 +20,7 @@
   const summary = $derived(!p ? tr("Checking…") : p.level === "on" ? tr("Windows' virus protection is on and up to date. It blocks known viruses as they arrive.")
     : p.level === "off" ? tr("Windows' real-time virus protection is off. Turn it on in Windows Security.")
     : p.level === "stale" ? tr("Windows' virus protection is on, but its virus list is {n} days old. Run Windows Update.", { n: p.signature_age_days ?? "?" })
-    : tr("ARGUS-1 cannot read Windows' antivirus right now, so it cannot say whether you are protected."));
+    : tr("ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected."));
 </script>
 
 <div class="card flex items-start gap-4 p-5">
@@ -30,8 +30,8 @@
     <p class="mt-0.5 text-copy-13 text-gray-900">{summary}</p>
     <p class="mt-2 text-copy-13 text-gray-900">
       {app.mode === "simple"
-        ? tr("ARGUS-1 watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.")
-        : tr("ARGUS-1 detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-1 reads its state and can start a quick scan.")}
+        ? tr("ARGUS-INSTINCT watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.")
+        : tr("ARGUS-INSTINCT detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-INSTINCT reads its state and can start a quick scan.")}
     </p>
   </div>
   {#if p?.available}

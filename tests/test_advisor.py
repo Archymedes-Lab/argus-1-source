@@ -241,7 +241,7 @@ class SuggestedQuestions(Base):
     """The seven questions the Assistant page offers must each get a real,
     plain answer from ARGUS data with the model offline."""
     QUESTIONS = ("Is my computer okay?", "What needs my attention first?",
-                 "Explain this finding in simple language.", "Why is ARGUS-1 showing this warning?",
+                 "Explain this finding in simple language.", "Why is ARGUS-INSTINCT showing this warning?",
                  "Which checks are not working?", "What can I safely do next?",
                  "What does my security score mean?")
 

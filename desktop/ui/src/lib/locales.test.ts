@@ -35,7 +35,7 @@ test("no translation is blank, and each keeps the same {placeholders}", () => {
 test("the product name is never translated", () => {
   for (const [lang, table] of Object.entries(LOCALES)) {
     for (const [en, local] of Object.entries(table)) {
-      if (en.includes("ARGUS-1")) expect(local, `${lang}: ${en}`).toContain("ARGUS-1");
+      if (en.includes("ARGUS-INSTINCT")) expect(local, `${lang}: ${en}`).toContain("ARGUS-INSTINCT");
     }
   }
 });

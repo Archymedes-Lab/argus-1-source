@@ -40,7 +40,7 @@
     <button class="btn btn-sm" disabled={busy} onclick={coach}>{tr("How do I raise my score?")}</button>
   </div>
   {#if needsLicence}
-    <div class="card flex items-center gap-3 p-5 text-copy-14">{tr("An ARGUS-1 licence is needed to ask questions.")}<button class="btn btn-sm ml-auto" onclick={() => go("pricing")}>{tr("See pricing")}</button></div>
+    <div class="card flex items-center gap-3 p-5 text-copy-14">{tr("An ARGUS-INSTINCT licence is needed to ask questions.")}<button class="btn btn-sm ml-auto" onclick={() => go("pricing")}>{tr("See pricing")}</button></div>
   {/if}
   {#if busy}
     <div class="card p-5 text-copy-14 text-gray-900"><span class="dot dot-run mr-2"></span>{tr("Thinking…")}</div>

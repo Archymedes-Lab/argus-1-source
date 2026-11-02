@@ -1,4 +1,4 @@
-"""ARGUS-1 yearly licence: Stripe Checkout, a local licence record, an optional gate.
+"""ARGUS-INSTINCT yearly licence: Stripe Checkout, a local licence record, an optional gate.
 
 Everything here is standard library. The Stripe secret key never reaches the
 browser; the dashboard only asks this module for a Checkout URL and for the
@@ -134,7 +134,7 @@ def checkout(origin):
             "line_items[0][price_data][currency]": "usd",
             "line_items[0][price_data][unit_amount]": str(PRICE_USD * 100),
             "line_items[0][price_data][recurring][interval]": "year",
-            "line_items[0][price_data][product_data][name]": "ARGUS-1 yearly licence",
+            "line_items[0][price_data][product_data][name]": "ARGUS-INSTINCT yearly licence",
         })
     session, error = _stripe("POST", "/checkout/sessions", form)
     if not session or not session.get("url"):

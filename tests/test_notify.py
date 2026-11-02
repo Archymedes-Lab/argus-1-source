@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from unittest import mock
+from unittest.mock import patch
 
 from jarvis.response import alert
 from jarvis.response.notify import channel, crypto, devices, relay
@@ -166,3 +167,36 @@ class PairCliTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ActivationTests(unittest.TestCase):
+    def test_activation_retries_then_reports_and_404_stops_early(self):
+        from jarvis.cli.commands import notify as cli
+        calls = []
+
+        def flaky(conf, ident, method, path, payload=None, **kw):
+            calls.append(path)
+            if len(calls) < 3:
+                raise relay.RelayError("URLError")
+            return {"ok": True}
+
+        ident = crypto.Identity.generate()
+        with patch.object(cli.relay, "call", flaky):
+            self.assertEqual(cli.activate({}, ident, "d" * 22, "ABCDEFGH23", sleep=lambda s: None), "")
+        self.assertEqual(len(calls), 3)
+        calls.clear()
+        with patch.object(cli.relay, "call", side_effect=relay.RelayError("HTTP 404: no pending claim")):
+            err = cli.activate({}, ident, "d" * 22, "ABCDEFGH23", sleep=lambda s: None)
+        self.assertIn("404", err)
+        with patch.object(cli.relay, "call", side_effect=relay.RelayError("URLError")) as call:
+            err = cli.activate({}, ident, "d" * 22, "ABCDEFGH23", sleep=lambda s: None)
+        self.assertEqual(err, "URLError")
+        self.assertEqual(call.call_count, cli.ACTIVATE_TRIES)
+
+    def test_pending_devices_are_active_locally_but_visible_until_marked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "devices.json")
+            devices.add({"dev": "x" * 22, "d_sig": "a", "d_enc": "b", "name": "p", "relay_pending": True}, path)
+            self.assertTrue(devices.active(path)[0]["relay_pending"])
+            devices.mark_active("x" * 22, path)
+            self.assertNotIn("relay_pending", devices.active(path)[0])

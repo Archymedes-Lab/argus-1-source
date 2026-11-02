@@ -1,4 +1,4 @@
-// ARGUS-1 defense coverage, drawn from /api/coverage and kept live by a stream.
+// ARGUS-INSTINCT defense coverage, drawn from /api/coverage and kept live by a stream.
 //
 // What in the scene carries meaning:
 //   glass shell   every ATT&CK technique, one pane per tactic it belongs to.
@@ -32,7 +32,7 @@
 // stars, the glass shading, the bloom, and the panes flying into place once on
 // first load.
 //
-// When the view stops hearing from ARGUS-1 every motion stops, the colour
+// When the view stops hearing from ARGUS-INSTINCT every motion stops, the colour
 // drains out of the scene and the banner says so: a monitor that has died
 // cannot be left looking busy.
 //
@@ -64,15 +64,15 @@ const RETRY_MS = 4000;         // how soon a failed first read of the summary is
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = (id) => document.getElementById(id);
 // brand:begin -- identical in every page; tests/test_ui_brand.py keeps the copies equal.
-// The product is ARGUS-1. Server text can still say JARVIS (finding titles keep their
+// The product is ARGUS-INSTINCT. Server text can still say JARVIS (finding titles keep their
 // identity for acknowledgements and history), so it is re-branded at display time.
 // Real Windows objects keep their spelling so they can be found in Task Scheduler
 // and Services; lowercase commands (jarvis ..., jarvis.service) are never touched.
 // Idempotent: a name already followed by -1 is left alone, so text that went
-// through the rule twice, or a build that renames JARVIS to ARGUS, never reads ARGUS-1-1.
-const BRAND = "ARGUS-1";
+// through the rule twice, or a build that renames JARVIS to ARGUS, never reads ARGUS-INSTINCT-1.
+const BRAND = "ARGUS-INSTINCT";
 const BRAND_KEEP = /^ (input hook|independent health monitor|connectivity guard|native sensor|Jarvis)/;
-const brand = (s) => String(s ?? "").replace(/\bJARVIS\b(?!-1)/g,
+const brand = (s) => String(s ?? "").replace(/\bJARVIS\b(?!-(?:1|INSTINCT)\b)/g,
   (m, i, all) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
 // brand:end
 const esc = (s) => brand(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1095,8 +1095,8 @@ prefersLight.addEventListener('change', applyTheme);
 let fullBusy = false, lastFull = 0, lastHeard = 0, source = null, pollTimer = null;
 let dead = false;
 function offline(message) {
-  // Never quiet: a view that cannot reach ARGUS-1 says so and stops implying liveness.
-  $('banner').textContent = `ARGUS-1 is not answering (${message}). This view is not live.`;
+  // Never quiet: a view that cannot reach ARGUS-INSTINCT says so and stops implying liveness.
+  $('banner').textContent = `ARGUS-INSTINCT is not answering (${message}). This view is not live.`;
   $('banner').style.display = 'block';
   setLink('down');
   dead = true;
@@ -1138,7 +1138,7 @@ function alive(how) {
   if (!data) return;          // the live state alone is not a picture: stay "not live" until the summary loads
   dead = false; setLink(how);
   delete document.body.dataset.dead;
-  if ($('banner').textContent.startsWith('ARGUS-1 is not')) $('banner').style.display = 'none';
+  if ($('banner').textContent.startsWith('ARGUS-INSTINCT is not')) $('banner').style.display = 'none';
 }
 function poll() {
   if (pollTimer) return;

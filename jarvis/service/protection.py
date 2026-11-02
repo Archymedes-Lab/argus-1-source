@@ -156,10 +156,13 @@ def health(db_path, scheduler, stamp=None):
     protected = bool(sources) and all(
         sources.get(name, {}).get('status') == 'complete' for name in required)
     reliability_state = None
+    links_state = None
     try:
         status_fn = getattr(scheduler, 'reliability_status', None)
         if callable(status_fn):
-            reliability_state = status_fn()['summary']
+            status = status_fn()
+            reliability_state = status['summary']
+            links_state = status.get('links')
     except Exception:
         reliability_state = None
     try:
@@ -180,4 +183,5 @@ def health(db_path, scheduler, stamp=None):
             'runtime': runtime_state,
             'mlworker': mlworker_state,
             'invariants': invariants_state,
-            'reliability': reliability_state}
+            'reliability': reliability_state,
+            'links': links_state}
