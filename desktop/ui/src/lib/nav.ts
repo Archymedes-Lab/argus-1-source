@@ -3,14 +3,26 @@ import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Activity from "@lucide/svelte/icons/activity";
 import CircleCheck from "@lucide/svelte/icons/circle-check";
 import MessageSquare from "@lucide/svelte/icons/message-square";
+import CreditCard from "@lucide/svelte/icons/credit-card";
 import Settings from "@lucide/svelte/icons/settings";
+import MapPin from "@lucide/svelte/icons/map-pin";
+import Grid3x3 from "@lucide/svelte/icons/grid-3x3";
+import Globe from "@lucide/svelte/icons/globe";
+import Cpu from "@lucide/svelte/icons/cpu";
 import type { View } from "./store.svelte";
 
-export const NAV: { view: View; label: string; icon: typeof LayoutGrid }[] = [
-  { view: "overview", label: "Overview", icon: LayoutGrid },
-  { view: "findings", label: "Findings", icon: TriangleAlert },
-  { view: "collectors", label: "Collectors", icon: Activity },
-  { view: "review", label: "Review", icon: CircleCheck },
-  { view: "assistant", label: "Assistant", icon: MessageSquare },
-  { view: "settings", label: "Settings", icon: Settings },
+export type NavGroup = "main" | "explore" | "bottom";
+
+export const NAV: { view: View; label: string; icon: typeof LayoutGrid; group: NavGroup }[] = [
+  { view: "overview", label: "Overview", icon: LayoutGrid, group: "main" },
+  { view: "findings", label: "Findings", icon: TriangleAlert, group: "main" },
+  { view: "collectors", label: "Collectors", icon: Activity, group: "main" },
+  { view: "review", label: "Review", icon: CircleCheck, group: "main" },
+  { view: "assistant", label: "Assistant", icon: MessageSquare, group: "main" },
+  { view: "geo", label: "GeoSecurity", icon: MapPin, group: "explore" },
+  { view: "coverage", label: "Coverage", icon: Grid3x3, group: "explore" },
+  { view: "world", label: "World", icon: Globe, group: "explore" },
+  { view: "procs", label: "Processes", icon: Cpu, group: "explore" },
+  { view: "pricing", label: "Pricing", icon: CreditCard, group: "bottom" },
+  { view: "settings", label: "Settings", icon: Settings, group: "bottom" },
 ];

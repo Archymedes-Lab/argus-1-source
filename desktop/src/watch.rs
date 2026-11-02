@@ -26,8 +26,18 @@ pub enum Level {
     Alarm,
 }
 
+/// What a notification is about, so the owner's preferences can mute a kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Finding,
+    Collector,
+    Score,
+    Outage,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Toast {
+    pub kind: Kind,
     pub title: String,
     pub body: String,
 }
@@ -58,6 +68,7 @@ impl Watch {
         let mut toasts = Vec::new();
         if self.outage_announced {
             toasts.push(Toast {
+                kind: Kind::Outage,
                 title: "ARGUS-1 daemon reachable again".into(),
                 body: "Live insight resumed.".into(),
             });
@@ -121,12 +132,14 @@ impl Watch {
         }
         for u in fresh.iter().take(MAX_TOASTS) {
             toasts.push(Toast {
+                kind: Kind::Finding,
                 title: format!("ARGUS-1: {} finding", s(u, "severity")),
                 body: crate::brand::brand(s(u, "title")).chars().take(180).collect(),
             });
         }
         if fresh.len() > MAX_TOASTS {
             toasts.push(Toast {
+                kind: Kind::Finding,
                 title: "ARGUS-1: more findings".into(),
                 body: format!("{} more need you — open ARGUS-1.", fresh.len() - MAX_TOASTS),
             });
@@ -140,6 +153,7 @@ impl Watch {
             if !gone.is_empty() {
                 let names: Vec<&str> = gone.iter().map(|b| s(b, "label")).collect();
                 toasts.push(Toast {
+                kind: Kind::Collector,
                     title: "ARGUS-1: collector blind".into(),
                     body: format!("Not reporting: {}. Unobserved is not clean.", names.join(", ")),
                 });
@@ -152,6 +166,7 @@ impl Watch {
             let below = n < GATE;
             if self.seeded && below && !self.below_gate {
                 toasts.push(Toast {
+                kind: Kind::Score,
                     title: format!("ARGUS-1 score fell to {n}"),
                     body: format!("Below {GATE}. Open ARGUS-1 to see what changed."),
                 });
@@ -171,6 +186,7 @@ impl Watch {
         if !self.outage_announced && now.duration_since(since) >= OUTAGE_AFTER {
             self.outage_announced = true;
             toasts.push(Toast {
+                kind: Kind::Outage,
                 title: "ARGUS-1 daemon unreachable".into(),
                 body: "No live insight: monitoring may be down. Check `jarvis serve`.".into(),
             });

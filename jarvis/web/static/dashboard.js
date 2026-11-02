@@ -457,7 +457,8 @@ function nextStep(s) {
   if (m.review.length) {
     const t = clip(m.review[0].sample.title, 80);
     return { text: `Start with "${t}". Open the details to see what ARGUS-1 observed, then decide whether you expect it.`,
-             label: "Investigate", go: "security", query: m.review[0].sample.title };
+             label: "Investigate", go: "security", act: "investigate", query: m.review[0].sample.title,
+             id: m.review[0].sample.id || "", job: m.review[0].sample.job || "" };
   }
   if (m.problems.length)
     return { text: "Some checks are not reporting correctly. Open Monitoring to see which checks need attention and why.",
@@ -714,7 +715,7 @@ function renderPriorities(s) {
                   })(),
                   ...fx.slice(0, 2).map(f => ({ title: f.title || f.id, sub: "Proposed fix · " + (f.status || "waiting") }))], "Nothing is waiting on you")}
       <div class="act"><button data-click="reviewqueue">Open review queue</button></div></div>
-    <div class="card ${blind.length ? "blind" : "clean"}"><div class="big ${blind.length ? "c-medium" : "c-ok"}">${live}/${(s.jobs || []).length}</div><div class="lbl">Collectors reporting</div>
+    <div class="card ${blind.length ? "blind" : "clean"}"><div class="big ${blind.length ? "c-medium" : "c-ok"}">${monitoringTotals(s).verified}/${monitoringTotals(s).total}</div><div class="lbl">Checks reporting</div>
       ${prioList(blind.slice(0, 4).map(j => ({ title: j.label || j.name, sub: j.error ? "Error" : "Not reporting" })), "All collectors are fresh")}
       <div class="act"><button data-click="jump" data-arg="monitoring">Open monitoring</button></div></div>`;
   const nav = document.getElementById("nav-prio"); if (nav) { nav.textContent = crit.length + high.length + youCount ? crit.length + high.length + youCount : ""; nav.className = "n " + (crit.length ? "c-critical" : high.length ? "c-high" : ""); }
@@ -1022,9 +1023,9 @@ function renderTiles(s) {
       <div class="n c-ok">${(s.checks || []).length}</div>
       <div class="k"><span class="ic">✓</span>Verified clean</div>
     </div>
-    <div class="tile ${live === s.jobs.length ? "good" : ""}" data-tip="Collectors that are fresh and error-free">
-      <div class="n ${live === s.jobs.length ? "c-ok" : "c-high"}">${live}/${s.jobs.length}</div>
-      <div class="k">Collectors OK</div>
+    <div class="tile ${monitoringTotals(s).verified === monitoringTotals(s).total ? "good" : ""}" data-tip="Checks that apply to this computer and returned a fresh, valid result">
+      <div class="n ${monitoringTotals(s).verified === monitoringTotals(s).total ? "c-ok" : "c-high"}">${monitoringTotals(s).verified}/${monitoringTotals(s).total}</div>
+      <div class="k">Checks reporting</div>
     </div>` +
     SEV.map(k => `
       <div class="tile ${sevFilter === k ? "on" : ""}" data-click="sev" data-arg="${k}" role="button" tabindex="0"
@@ -1953,7 +1954,7 @@ function loadNotice(message) {
    #monitoring ...) all still land somewhere sensible. Filters, search text and
    expanded rows live in page state, so they survive switching views. */
 const VIEWS = { overview: "Overview", security: "Security", accounts: "Accounts", network: "Network",
-                monitoring: "Monitoring", assistant: "Assistant", settings: "Settings" };
+                monitoring: "Monitoring", assistant: "Assistant", pricing: "Pricing", settings: "Settings" };
 const LEGACY = { priorities: "security", "findings-section": "security", findings: "security", reviewqueue: "security",
                  checks: "security", more: "network", geocard: "network", "score-details": "overview" };
 let currentView = "overview", assistantChecked = false;
@@ -2087,7 +2088,7 @@ function findingCardHTML(g, compact) {
     <div class="fxa">
       <button data-act="tech">View evidence and details</button>
       ${f.id ? `<button data-act="explain" data-id="${esc(f.id)}">Ask the assistant to explain</button>` : ""}
-      <button data-act="investigate" data-q="${esc(f.title)}">Investigate</button>
+      <button data-act="investigate" data-q="${esc(f.title)}" data-id="${esc(f.id || "")}" data-job="${esc(f.job || "")}">Investigate</button>
     </div>
     <details class="tech" ${adv ? "open" : ""}><summary>Technical details</summary><dl class="kv">
       ${row("severity", esc(f.severity))}${row("category", esc(f.category || "-"))}
@@ -2160,7 +2161,7 @@ function renderOverview(s) {
        <div class="ovactions"><button data-act="go" data-go="monitoring">View monitoring status</button>
          <a class="linkbtn" href="/coverage">Coverage map</a></div>`
     : `<p class="empty-good">No check results have arrived yet.</p>`;
-  $("ov-next").innerHTML = `<p>${esc(nx.text)}</p><button data-act="${nx.act || "go"}" data-go="${esc(nx.go)}" ${nx.query ? `data-q="${esc(nx.query)}"` : ""}>${esc(nx.label)}</button>`;
+  $("ov-next").innerHTML = `<p>${esc(nx.text)}</p><button data-act="${nx.act || "go"}" data-go="${esc(nx.go)}" ${nx.query ? `data-q="${esc(nx.query)}" data-id="${esc(nx.id || "")}" data-job="${esc(nx.job || "")}"` : ""}>${esc(nx.label)}</button>`;
   const mon = $("nav-mon");
   if (mon) { mon.textContent = m.problems.length || ""; mon.className = "n " + (m.problems.some(p => p.coverage === "blind") ? "bad" : "warn"); }
   $("side-foot").innerHTML = tot.total ? `<strong>${tot.verified} of ${tot.total} checks reporting</strong>${esc(m.headline)}` : "Waiting for results…";
@@ -2381,7 +2382,7 @@ document.addEventListener("click", ev => {
   if (!b) return;
   const act = b.dataset.act;
   if (act === "go") { go(viewOf(b.dataset.go) || b.dataset.go); if (!VIEWS[b.dataset.go]) jump(b.dataset.go); if (b.dataset.q) setSearch(b.dataset.q); }
-  else if (act === "investigate") { setSearch(b.dataset.q); go("security"); }
+  else if (act === "investigate") investigate(b.dataset);
   else if (act === "tech") { const d = b.closest("article").querySelector("details.tech"); d.open = true; d.querySelector("summary").focus(); }
   else if (act === "explain") assistantRun({ op: "run", action: "explain_finding", target: { id: b.dataset.id } });
   else if (act === "checkmon") assistantRun({ op: "run", action: "check_monitor", target: { job: b.dataset.job } });
@@ -2479,9 +2480,137 @@ async function askJarvis(event) {
     const r = await postJSON("/api/ask", { question, offer: chatOffer });
     if (!r.ok) throw new Error(r.data.error || "request failed");
     input.value = ""; renderAssistant(r.data);
-  } catch (e) { output.textContent = "I couldn't get an answer just now. Please try again in a moment."; }
+  } catch (e) {
+    output.textContent = /token|licen[cs]e/i.test(String(e && e.message))
+      ? (/licen[cs]e/i.test(e.message) ? "An ARGUS-1 licence is needed to ask questions. Open the Pricing page."
+                                       : "ARGUS-1 was restarted since this page was opened. Reload the page (Ctrl+R) and ask again.")
+      : "I couldn't get an answer just now. Please try again in a moment.";
+  }
   finally { button.disabled = false; button.textContent = "Ask"; }
 }
+
+/* Investigate: re-run the check that raised the finding, then have the assistant explain
+   the evidence. The re-run only reads; nothing on the computer is changed. */
+async function investigate(d) {
+  go("assistant");
+  const out = $("askanswer");
+  out.textContent = "Investigating… ARGUS-1 is re-checking this and reading the evidence.";
+  if (d.job) {
+    try { await postJSON("/api/run?job=" + encodeURIComponent(d.job), {}); } catch (e) { /* the explanation still works from stored evidence */ }
+  }
+  if (d.id) return assistantRun({ op: "run", action: "explain_finding", target: { id: d.id } });
+  askText("Explain this finding in simple language: " + (d.q || ""));
+}
+
+/* Security Autopilot: ARGUS-1 investigates on its own; this shows the result and asks only what it must */
+let apData = null;
+const AP_CHOICE = { recognise: "I recognise this", not_recognise: "I don't recognise this",
+                    investigate_further: "Investigate further", review_individually: "Review individually" };
+async function loadAutopilot() {
+  try { apData = await (await fetch("/api/autopilot", { cache: "no-store" })).json(); } catch (e) { return; }
+  renderAutopilot(apData);
+  try {
+    const n = (await (await fetch("/api/autopilot/notices", { cache: "no-store" })).json()).notices || [];
+    for (const x of n) {
+      toast(x.text, x.severity === "critical" || x.severity === "high" ? "warn" : "");
+      try { if (window.Notification && Notification.permission === "granted") new Notification("ARGUS-1", { body: x.text }); } catch (e) { /* optional */ }
+    }
+  } catch (e) { /* notices are optional */ }
+}
+function apCase(c) {
+  const li = a => a.map(x => `<li>${esc(x)}</li>`).join("");
+  const obs = c.observations.map(o => `<li><b>${esc(o.title)}</b> <span class="faint">(${esc(o.severity)}, ${esc(o.job)})</span><br>
+      <code>${esc(clip(o.where || "no location recorded", 200))}</code></li>`).join("");
+  const btns = c.options.map(o => `<button data-apd="${esc(c.key)}" data-choice="${esc(o.choice)}" title="${esc(o.consequence)}">${esc(AP_CHOICE[o.choice])}</button>`).join("");
+  return `<article class="apcase sev-${esc(c.severity)}">
+    <h4>${esc(c.title)}</h4>
+    <p><b>What happened.</b> ${esc(c.what_happened)}</p>
+    <p><b>Why it matters.</b> ${esc(c.why_it_matters)}</p>
+    <p><b>What ARGUS-1 established.</b></p><ul>${li(c.established)}</ul>
+    <p><b>What is still uncertain.</b></p><ul>${li(c.uncertain)}</ul>
+    <p><b>Recommended next step.</b> ${esc(c.recommended || "Check whether you recognise it.")}</p>
+    ${c.ai_note ? `<p class="faint"><b>Plain-language note (local AI):</b> ${esc(c.ai_note)}</p>` : ""}
+    <details><summary>The ${plural(c.count, "observation")} in this case</summary><ul>${obs}</ul></details>
+    <div class="apbtns">${btns}</div>
+    <p class="cons">Hover a button to see what it does. None of these change anything on your computer.</p>
+  </article>`;
+}
+function renderAutopilot(a) {
+  const h = a.health, m = h.monitoring, s = a.summary, q = a.queue;
+  const working = q.queued + q.investigating;
+  $("ap-body").innerHTML = `
+    <div class="ap3">
+      <div><b>Is my computer okay?</b>${esc(h.headline)}. ARGUS-1 reports what it has observed; it cannot prove a computer is clean.</div>
+      <div><b>What needs my attention?</b>${esc(h.okay)}</div>
+      <div><b>Is ARGUS-1 monitoring?</b>${esc(h.monitoring_line)}${m.not_reporting ? ` ${plural(m.not_reporting, "check")} not reporting.` : ""}</div>
+    </div>
+    <h3>What needs me</h3>
+    ${a.needs_me.length ? a.needs_me.slice(0, 5).map(apCase).join("") + (a.needs_me.length > 5
+      ? `<details><summary>${a.needs_me.length - 5} more case(s), less serious first</summary>${a.needs_me.slice(5).map(apCase).join("")}</details>` : "")
+      : "<p>Nothing right now. ARGUS-1 will tell you if that changes.</p>"}
+    <h3>What ARGUS-1 handled</h3>
+    ${a.handled.groups.length || working ? `<ul class="aplist">${a.handled.groups.map(g => `<li>${esc(g.title)} <span class="faint">· investigated</span></li>`).join("")}
+      ${working ? `<li>${plural(working, "investigation")} in progress or queued</li>` : ""}
+      ${q.failed ? `<li>${plural(q.failed, "investigation")} failed and will be retried; failures are never shown as done</li>` : ""}</ul>` : "<p>No investigations yet.</p>"}
+    <h3>Monitoring health</h3>
+    <p>${esc(m.definition)} <b>${m.reporting} of ${m.total}</b> reporting${m.partial ? `, ${m.partial} partly` : ""}. A monitoring problem is a gap in what ARGUS-1 can see, not a security finding.</p>
+    ${a.recovery.length ? `<ul class="aplist">${a.recovery.map(r => `<li><b>${esc(r.job)}</b>: ${esc(r.note)} <span class="faint">(${esc(r.status)}${r.status === "retrying" ? `, attempt ${r.retries}` : ""})</span></li>`).join("")}</ul>` : ""}
+    <h3>Daily summary <span class="faint">(last ${s.window_hours} hours)</span></h3>
+    <ul class="aplist">
+      <li>${plural(s.new_findings, "new finding")}; ${plural(s.investigations_completed, "investigation")} completed</li>
+      <li>${plural(s.needs_attention, "case")} need your attention</li>
+      <li>Actions you authorised: ${s.actions_authorized}; performed: ${s.actions_performed}</li>
+      ${s.limitations.map(x => `<li class="faint">Limit: ${esc(x)}</li>`).join("")}
+    </ul>`;
+}
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-apd]");
+  if (!b) return;
+  b.disabled = true;
+  const r = await postJSON("/api/autopilot/decide", { key: b.dataset.apd, choice: b.dataset.choice });
+  if (!r.ok) toast((r.data && r.data.error) || "That did not work.", "warn");
+  else if (b.dataset.choice === "review_individually") toast("Open the case's observation list to review each one.", "");
+  loadAutopilot();
+});
+loadAutopilot(); setInterval(loadAutopilot, 15000);
+
+/* licence: state, checkout, and the return from Stripe */
+let licence = null;
+async function loadLicence() {
+  try {
+    const r = await fetch("/api/billing/status", { cache: "no-store" });
+    licence = await r.json();
+  } catch (e) { return; }
+  const on = licence.licensed, until = on && licence.expires ? new Date(licence.expires * 1000).toLocaleDateString() : "";
+  $("lic-state").textContent = on ? `active until ${until}` : "not active";
+  $("lic-state").className = "lic" + (on ? " on" : "");
+  $("nav-lic").textContent = on ? "" : "!";
+  $("lic-buy").hidden = on;
+  $("lic-buy").disabled = !licence.can_purchase;
+  if (!on && !licence.can_purchase) $("lic-msg").textContent = "Payments are not set up on this computer yet (see docs/BILLING.md).";
+  const bar = $("licbar");
+  bar.hidden = on;
+  $("licbar-text").textContent = licence.required
+    ? "ARGUS-1 needs an active licence ($79/year). The assistant and checks are locked until you subscribe."
+    : "No active licence. ARGUS-1 is $79/year.";
+}
+async function subscribe() {
+  const msg = $("lic-msg"); msg.textContent = "Opening secure checkout…";
+  try {
+    const r = await postJSON("/api/billing/checkout", {});
+    if (r.ok && r.data.url) { location.href = r.data.url; return; }
+    msg.textContent = (r.data && r.data.error) || "Could not start checkout.";
+  } catch (e) { msg.textContent = "Could not start checkout. Please try again."; }
+}
+async function finishCheckout() {
+  const sid = new URLSearchParams(location.search).get("session_id");
+  if (!sid) return;
+  history.replaceState(null, "", location.pathname + "#pricing");
+  const r = await postJSON("/api/billing/confirm", { session_id: sid });
+  $("lic-msg").textContent = r.ok ? "Thank you. Your licence is active." : ((r.data && r.data.error) || "Could not confirm the payment.");
+  loadLicence();
+}
+loadLicence(); finishCheckout();
 
 routeFromHash(true);
 
@@ -2572,6 +2701,8 @@ const UI_CALLS = {
   toggle: el => toggle(el.dataset.arg),
   morefindings: () => showMoreFindings(),
   protocol: el => answerProtocol(el),
+  go: el => go(el.dataset.arg),
+  subscribe: () => subscribe(),
 };
 function uiDispatch(attr, ev) {
   // Every matching ancestor, innermost first: the order inline handlers ran in.

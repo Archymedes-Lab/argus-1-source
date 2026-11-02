@@ -450,4 +450,62 @@ CREATE TABLE IF NOT EXISTS file_hashes (
     mtime   INTEGER NOT NULL,
     hashed_at INTEGER NOT NULL
 );
+
+-- Security Autopilot (service/autopilot.py). One row per finding identity; the
+-- state machine below is persistent so a restart resumes rather than repeats.
+CREATE TABLE IF NOT EXISTS investigations (
+    fid        TEXT PRIMARY KEY,         -- acknowledge.finding_id
+    job        TEXT NOT NULL,
+    severity   TEXT NOT NULL,
+    category   TEXT DEFAULT '',
+    title      TEXT NOT NULL,
+    locus      TEXT DEFAULT '',
+    group_key  TEXT DEFAULT '',
+    state      TEXT NOT NULL,
+    evidence   TEXT DEFAULT '',          -- hash of what was observed; a change re-opens
+    report     TEXT DEFAULT '',          -- JSON: known / suspected / unknown / next step
+    error      TEXT DEFAULT '',
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    first_seen INTEGER NOT NULL,
+    last_seen  INTEGER NOT NULL,
+    updated    INTEGER NOT NULL,
+    next_run   INTEGER NOT NULL DEFAULT 0,
+    resolved_at INTEGER NOT NULL DEFAULT 0,
+    notified   TEXT DEFAULT ''           -- evidence hash last notified about
+);
+CREATE INDEX IF NOT EXISTS idx_inv_state ON investigations(state, next_run);
+CREATE INDEX IF NOT EXISTS idx_inv_group ON investigations(group_key);
+
+-- Append-only audit of every state transition (bounded by autopilot.prune).
+CREATE TABLE IF NOT EXISTS investigation_events (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts     INTEGER NOT NULL,
+    fid    TEXT NOT NULL,
+    from_state TEXT DEFAULT '',
+    to_state   TEXT NOT NULL,
+    reason TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_invev_fid ON investigation_events(fid, id DESC);
+
+-- What the owner decided, for exactly which findings (never future ones).
+CREATE TABLE IF NOT EXISTS autopilot_decisions (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts        INTEGER NOT NULL,
+    group_key TEXT NOT NULL,
+    choice    TEXT NOT NULL,
+    scope     TEXT NOT NULL,             -- JSON {fid: evidence hash} at decision time
+    note      TEXT DEFAULT ''
+);
+
+-- Collector recovery bookkeeping: backoff, retry budget, cooldown.
+CREATE TABLE IF NOT EXISTS recovery (
+    job        TEXT PRIMARY KEY,
+    klass      TEXT NOT NULL,
+    retries    INTEGER NOT NULL DEFAULT 0,
+    next_try   INTEGER NOT NULL DEFAULT 0,
+    last_try   INTEGER NOT NULL DEFAULT 0,
+    status     TEXT NOT NULL,
+    note       TEXT DEFAULT '',
+    updated    INTEGER NOT NULL
+);
 """

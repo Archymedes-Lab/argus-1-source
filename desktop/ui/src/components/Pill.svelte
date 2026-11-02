@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { sentence } from "../lib/model";
+  import { sev } from "../lib/i18n";
   let { severity }: { severity: string } = $props();
   const known = ["critical", "high", "medium", "low", "ok"];
 </script>
-<span class="pill pill-{known.includes(severity) ? severity : 'low'}">{sentence(severity)}</span>
+<span class="pill pill-{known.includes(severity) ? severity : 'low'}">{sev(severity)}</span>

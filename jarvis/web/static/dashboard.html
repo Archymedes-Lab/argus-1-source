@@ -79,6 +79,7 @@ body[data-view="accounts"] [data-views]:not([data-views~="accounts"]),
 body[data-view="network"] [data-views]:not([data-views~="network"]),
 body[data-view="monitoring"] [data-views]:not([data-views~="monitoring"]),
 body[data-view="assistant"] [data-views]:not([data-views~="assistant"]),
+body[data-view="pricing"] [data-views]:not([data-views~="pricing"]),
 body[data-view="settings"] [data-views]:not([data-views~="settings"]) { display: none !important; }
 body[data-view="network"] #tab-ops, body[data-view="network"] #tab-intel, body[data-view="network"] #tab-events,
 body[data-view="settings"] #tab-peers, body[data-view="settings"] #tab-internet { display: none; }
@@ -296,6 +297,7 @@ body[data-detail="simple"] .adv { display: none; }
     <a href="#network" data-view="network" title="Connections, traffic and location"><svg class="ico" aria-hidden="true"><use href="#i-network"/></svg><span>Network</span></a>
     <a href="#monitoring" data-view="monitoring" title="Is ARGUS-1's own checking working"><svg class="ico" aria-hidden="true"><use href="#i-monitoring"/></svg><span>Monitoring</span><span class="n" id="nav-mon"></span></a>
     <a href="#assistant" data-view="assistant" title="Ask questions in plain language"><svg class="ico" aria-hidden="true"><use href="#i-assistant"/></svg><span>Assistant</span></a>
+    <a href="#pricing" data-view="pricing" title="ARGUS-1 yearly licence, $79 a year"><svg class="ico" aria-hidden="true"><use href="#i-security"/></svg><span>Pricing</span><span class="n" id="nav-lic"></span></a>
     <a href="#settings" data-view="settings" title="Setup, privacy and data on this computer"><svg class="ico" aria-hidden="true"><use href="#i-settings"/></svg><span>Settings</span></a>
   </nav>
   <div class="side-group">Also</div>
@@ -357,6 +359,9 @@ body[data-detail="simple"] .adv { display: none; }
 <main id="main" tabindex="-1">
   <div class="pagehead" data-views="overview"><h1 id="h-overview" tabindex="-1">Overview</h1>
     <p>Is my computer okay, what needs my attention, what has ARGUS-1 checked, and what should I do next.</p></div>
+  <div class="licbar" id="licbar" hidden><span id="licbar-text"></span><button data-click="go" data-arg="pricing">See pricing</button></div>
+  <section class="card ap" id="ap" data-views="overview" aria-labelledby="ap-h"><h2 id="ap-h">Your computer at a glance</h2>
+    <div id="ap-body"><p>ARGUS-1 is reading its investigations…</p></div></section>
   <section class="ovstatus" id="ov-status" data-views="overview" role="status" aria-live="polite" aria-label="Overall status"><p>Reading the current state…</p></section>
   <div id="ov-pending" data-views="overview"></div>
   <div class="ovgrid" data-views="overview">
@@ -551,6 +556,26 @@ body[data-detail="simple"] .adv { display: none; }
 
     </div>
   </details>
+
+  <div class="pagehead" data-views="pricing"><h1 id="h-pricing" tabindex="-1">Pricing</h1>
+    <p>One plan. Your data stays on this computer; the licence only unlocks ARGUS-1.</p></div>
+  <section class="card" data-views="pricing" aria-labelledby="pr-h"><h2 id="pr-h">ARGUS-1 licence <span class="lic" id="lic-state">checking…</span></h2>
+    <div class="plans">
+      <div class="plan feat"><h3>ARGUS-1 Yearly</h3>
+        <div class="price">$79 <small>per year</small></div>
+        <ul>
+          <li>Continuous monitoring of this computer</li>
+          <li>Plain-language assistant, with local AI</li>
+          <li>Investigate any finding with one click</li>
+          <li>Approvals, reports and daily briefing</li>
+          <li>Cancel any time; renews yearly</li>
+        </ul>
+        <button id="lic-buy" data-click="subscribe">Subscribe — $79/year</button>
+        <p id="lic-msg" role="status" aria-live="polite"></p>
+      </div>
+    </div>
+    <p class="faint">Payment is handled by Stripe. ARGUS-1 never sees or stores your card details.</p>
+  </section>
 
   <div class="pagehead" data-views="settings"><h1 id="h-settings" tabindex="-1">Settings</h1>
     <p>Setup, alerts and what stays on this computer. Appearance and notifications are in the top bar.</p></div>

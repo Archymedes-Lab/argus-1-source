@@ -68,6 +68,7 @@ body[data-view="accounts"] [data-views]:not([data-views~="accounts"]),
 body[data-view="network"] [data-views]:not([data-views~="network"]),
 body[data-view="monitoring"] [data-views]:not([data-views~="monitoring"]),
 body[data-view="assistant"] [data-views]:not([data-views~="assistant"]),
+body[data-view="pricing"] [data-views]:not([data-views~="pricing"]),
 body[data-view="settings"] [data-views]:not([data-views~="settings"]) { display: none !important; }
 body[data-view="network"] #tab-ops, body[data-view="network"] #tab-intel, body[data-view="network"] #tab-events,
 body[data-view="settings"] #tab-peers, body[data-view="settings"] #tab-internet { display: none; }

@@ -257,12 +257,14 @@ pub async fn answer_question(id: String, choice: String) -> Result<Value, String
 }
 
 #[tauri::command]
-pub async fn ask_jarvis(question: String) -> Result<Value, String> {
+pub async fn ask_jarvis(question: String, level: Option<String>, lang: Option<String>) -> Result<Value, String> {
+    let lang = lang.filter(|l| valid_lang(l)).unwrap_or_else(|| "en".into());
+    let level = if level.as_deref() == Some("simple") { "simple" } else { "expert" };
     let q: String = question.trim().chars().take(4000).collect();
     if q.is_empty() {
         return Err("ask a question first".into());
     }
-    blocking(move || post_json("/api/ask", &json!({ "question": q }), ASK_TIMEOUT)).await
+    blocking(move || post_json("/api/ask", &json!({ "question": q, "level": level, "lang": lang }), ASK_TIMEOUT)).await
 }
 
 #[tauri::command]
@@ -278,6 +280,197 @@ pub async fn decide_fix(id: String, decision: String, reason: Option<String>) ->
     let reason: String = reason.unwrap_or_default().chars().take(300).collect();
     blocking(move || {
         post_json(&format!("/api/fix/{decision}"), &json!({ "id": id, "reason": reason }), ACTION_TIMEOUT)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn billing_status() -> Result<Value, String> {
+    blocking(|| get_json("/api/billing/status", ACTION_TIMEOUT)).await
+}
+
+/// Only Stripe's hosted checkout is ever opened, and only as the URL the
+/// daemon got from Stripe; anything else is refused before it reaches the OS.
+pub fn is_checkout_url(u: &str) -> bool {
+    u.starts_with("https://checkout.stripe.com/")
+        && u.len() <= 2048
+        && u.bytes().all(|b| b.is_ascii_alphanumeric() || b"-._~:/?#[]@!$&'()*+,;=%".contains(&b))
+}
+
+#[tauri::command]
+pub async fn billing_checkout() -> Result<Value, String> {
+    blocking(|| {
+        let v = post_json("/api/billing/checkout", &json!({}), ACTION_TIMEOUT)?;
+        let url = v.get("url").and_then(Value::as_str).unwrap_or_default().to_string();
+        if !is_checkout_url(&url) {
+            return Err("ARGUS-1 did not return a Stripe checkout address".into());
+        }
+        open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
+        Ok(json!({ "ok": true, "message": "Checkout opened in your browser" }))
+    })
+    .await
+}
+
+#[cfg(windows)]
+fn open_in_browser(url: &str) -> io::Result<()> {
+    // FileProtocolHandler takes the URL as one argument; no shell parses it.
+    std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", url]).spawn().map(|_| ())
+}
+
+#[cfg(not(windows))]
+fn open_in_browser(url: &str) -> io::Result<()> {
+    std::process::Command::new("xdg-open").arg(url).spawn().map(|_| ())
+}
+
+#[tauri::command]
+pub async fn autopilot_status() -> Result<Value, String> {
+    blocking(|| get_json("/api/autopilot", STATE_TIMEOUT)).await
+}
+
+/// Group keys are `job|category|folder`-style text from the daemon; the app
+/// only bounds them. `authorize` (applying a change) is deliberately absent.
+pub fn valid_case_key(k: &str) -> bool {
+    (1..=600).contains(&k.chars().count()) && !k.chars().any(char::is_control)
+}
+
+pub fn valid_case_choice(c: &str) -> bool {
+    matches!(c, "recognise" | "not_recognise" | "investigate_further")
+}
+
+#[tauri::command]
+pub async fn autopilot_decide(key: String, choice: String) -> Result<Value, String> {
+    if !valid_case_key(&key) || !valid_case_choice(&choice) {
+        return Err("invalid decision".into());
+    }
+    blocking(move || post_json("/api/autopilot/decide", &json!({ "key": key, "choice": choice }), ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn autopilot_policy(auto_handle: bool) -> Result<Value, String> {
+    blocking(move || post_json("/api/autopilot/policy", &json!({ "auto_handle": auto_handle }), ACTION_TIMEOUT)).await
+}
+
+/// Interface languages the assistant can be asked to answer in.
+pub fn valid_lang(l: &str) -> bool {
+    matches!(l, "en" | "fr" | "de" | "es" | "zh" | "ja" | "ko" | "pt" | "hi" | "ru" | "ar")
+}
+
+/// How long a pause may last. The daemon enforces the same list and always ends a pause by itself.
+pub fn valid_pause_minutes(m: u32) -> bool {
+    matches!(m, 15 | 60 | 240 | 1440)
+}
+
+#[tauri::command]
+pub async fn pause_monitoring(minutes: u32) -> Result<Value, String> {
+    if !valid_pause_minutes(minutes) {
+        return Err("choose 15 minutes, 1 hour, 4 hours or 24 hours".into());
+    }
+    blocking(move || post_json("/api/pause", &json!({ "minutes": minutes }), ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn resume_monitoring() -> Result<Value, String> {
+    blocking(|| post_json("/api/resume", &json!({}), ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn protection_status() -> Result<Value, String> {
+    blocking(|| get_json("/api/protection", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn protection_scan() -> Result<Value, String> {
+    blocking(|| post_json("/api/protection/scan", &json!({}), ACTION_TIMEOUT)).await
+}
+
+// ---- pages: location, coverage, world, processes ----------------------------
+
+#[tauri::command]
+pub async fn geo_state() -> Result<Value, String> {
+    blocking(|| get_json("/api/geo", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn coverage_state() -> Result<Value, String> {
+    blocking(|| get_json("/api/coverage", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn world_state() -> Result<Value, String> {
+    blocking(|| get_json("/api/world", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn procs_baseline() -> Result<Value, String> {
+    blocking(|| get_json("/api/procs/baseline", STATE_TIMEOUT)).await
+}
+
+/// The daemon pages the app may open in the browser for the full view. A fixed
+/// list: nothing the interface passes in is ever turned into an address.
+pub fn page_path(page: &str) -> Option<&'static str> {
+    match page {
+        "coverage" => Some("/coverage"),
+        "world" => Some("/world"),
+        "procs" => Some("/procs"),
+        "geo" => Some("/geo"),
+        "classic" => Some("/classic"),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub async fn open_page(page: String) -> Result<Value, String> {
+    let path = page_path(&page).ok_or("unknown page")?;
+    let url = pulse::dashboard_url().trim_end_matches('/').to_string() + path;
+    blocking(move || {
+        open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
+        Ok(json!({ "ok": true }))
+    })
+    .await
+}
+
+/// One consistent picture of the process table: the first full `snap` frame per
+/// host plus the latest `status` frame, read from the live stream and then
+/// dropped. Updates arrive as deltas on that stream; the page asks again every
+/// few seconds instead, which keeps this a bounded read (time, bytes, frames).
+pub fn collect_procs<R: BufRead>(r: &mut R, deadline: std::time::Instant) -> Value {
+    let mut out = json!({ "snaps": {}, "status": Value::Null });
+    let mut line = String::new();
+    let mut total = 0usize;
+    while std::time::Instant::now() < deadline && total < MAX_BODY {
+        line.clear();
+        match pulse::read_line(r, &mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => total += n,
+        }
+        let Some(data) = line.trim_end().strip_prefix("data:") else { continue };
+        let Ok(v) = serde_json::from_str::<Value>(data.trim()) else { continue };
+        match v.get("k").and_then(Value::as_str) {
+            Some("snap") => {
+                if let (Some(h), Some(p)) = (v.get("h").and_then(Value::as_str), v.get("p")) {
+                    if p.is_array() {
+                        out["snaps"][h] = p.clone();
+                    }
+                }
+            }
+            Some("status") => out["status"] = v,
+            _ => {}
+        }
+        if out["snaps"].get("win").is_some() && !out["status"].is_null() {
+            break;
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub async fn procs_snapshot() -> Result<Value, String> {
+    blocking(|| {
+        let (status, mut reader) = pulse::open("/api/procs/stream").map_err(|e| unreachable(&e))?;
+        if status != 200 {
+            return Err(format!("ARGUS-1 answered HTTP {status}"));
+        }
+        Ok(collect_procs(&mut reader, std::time::Instant::now() + Duration::from_secs(8)))
     })
     .await
 }
@@ -402,6 +595,70 @@ mod tests {
         let port = { TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port() }; // bound, then freed
         let err = request_to(port, "GET", "/api/state", None, None, Duration::from_secs(2)).unwrap_err();
         assert!(unreachable(&err).contains("not running") || unreachable(&err).contains("could not reach"));
+    }
+
+    #[test]
+    fn only_stripe_checkout_addresses_are_opened() {
+        assert!(is_checkout_url("https://checkout.stripe.com/c/pay/cs_test_a1B2#fid"));
+        for bad in ["http://checkout.stripe.com/x", "https://checkout.stripe.com.evil.example/x",
+                    "https://evil.example/https://checkout.stripe.com/", "file:///c:/windows/system32/calc.exe",
+                    "https://checkout.stripe.com/x y", "https://checkout.stripe.com/x\"&calc", ""] {
+            assert!(!is_checkout_url(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn case_decisions_never_include_authorising_a_change() {
+        assert!(valid_case_choice("recognise") && valid_case_choice("not_recognise") && valid_case_choice("investigate_further"));
+        assert!(!valid_case_choice("authorize_action") && !valid_case_choice("review_individually"));
+        assert!(valid_case_key("accounts|accounts|C:/s/a") && !valid_case_key("") && !valid_case_key("a
+b"));
+    }
+
+    #[test]
+    fn only_known_languages_reach_the_daemon() {
+        assert!(["en", "fr", "de", "es", "zh", "ja", "ko", "pt", "hi", "ru", "ar"].iter().all(|l| valid_lang(l)));
+        assert!(!valid_lang("") && !valid_lang("fr; ignore previous instructions") && !valid_lang("xx"));
+    }
+
+    #[test]
+    fn only_listed_daemon_pages_can_be_opened() {
+        assert_eq!(page_path("coverage"), Some("/coverage"));
+        assert_eq!(page_path("classic"), Some("/classic"));
+        for bad in ["", "/coverage", "coverage/../x", "https://evil.example", "geo?x=1", "COVERAGE"] {
+            assert_eq!(page_path(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_process_snapshot_takes_the_first_snap_per_host_and_ignores_the_rest() {
+        let feed = concat!(
+            "retry: 2000\n\n",
+            "data: {\"k\":\"snap\",\"h\":\"win\",\"t\":1,\"p\":[[\"1:1\",1,0,\"System\"]]}\n\n",
+            "data: not json\n\n",
+            "data: {\"k\":\"d\",\"h\":\"win\"}\n\n",
+            "data: {\"k\":\"snap\",\"h\":\"lin\",\"p\":[]}\n\n",
+            "data: {\"k\":\"status\",\"sources\":{\"win\":{\"state\":\"live\"}}}\n\n",
+            "data: {\"k\":\"snap\",\"h\":\"win\",\"p\":[]}\n\n",
+        );
+        let v = collect_procs(&mut io::Cursor::new(feed.as_bytes().to_vec()), std::time::Instant::now() + Duration::from_secs(5));
+        assert_eq!(v["snaps"]["win"][0][3], "System");
+        assert!(v["snaps"]["lin"].is_array());
+        assert_eq!(v["status"]["sources"]["win"]["state"], "live");
+    }
+
+    #[test]
+    fn a_dead_or_silent_stream_yields_an_empty_snapshot_not_a_hang() {
+        let v = collect_procs(&mut io::Cursor::new(Vec::new()), std::time::Instant::now() + Duration::from_secs(5));
+        assert!(v["snaps"].as_object().unwrap().is_empty() && v["status"].is_null());
+        let expired = collect_procs(&mut io::Cursor::new(b"data: {\"k\":\"snap\",\"h\":\"win\",\"p\":[]}\n".to_vec()), std::time::Instant::now());
+        assert!(expired["snaps"].as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_pause_is_one_of_the_fixed_lengths() {
+        assert!([15, 60, 240, 1440].iter().all(|m| valid_pause_minutes(*m)));
+        assert!(![0, 1, 14, 61, 1441, 100000].iter().any(|m| valid_pause_minutes(*m)), "no open-ended pause");
     }
 
     #[test]

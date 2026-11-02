@@ -27,6 +27,7 @@ mod api;
 mod brand;
 mod pairing;
 mod pulse;
+mod settings;
 mod startmenu;
 mod watch;
 
@@ -72,7 +73,7 @@ fn dot(level: Level) -> Image<'static> {
     let (r, g, b) = match level {
         Level::Good => (34, 197, 94),
         Level::Attention => (245, 158, 11),
-        Level::Alarm => (239, 68, 68),
+        Level::Alarm => (214, 112, 76),
         Level::Unknown => (100, 116, 139),
     };
     const N: usize = 32;
@@ -100,7 +101,8 @@ fn apply(app: &AppHandle, view: View, last: &mut Option<Level>) {
             *last = Some(view.level);
         }
     }
-    for t in view.toasts {
+    let prefs = settings::current();
+    for t in view.toasts.into_iter().filter(|t| prefs.allows(t.kind)) {
         let _ = app.notification().builder().title(&brand::brand(&t.title)).body(&brand::brand(&t.body)).show();
     }
 }
@@ -198,8 +200,28 @@ fn main() {
             api::ask_jarvis,
             api::score_coach,
             api::decide_fix,
+            api::billing_status,
+            api::billing_checkout,
+            api::autopilot_status,
+            api::autopilot_decide,
+            api::autopilot_policy,
+            settings::get_settings,
+            settings::set_settings,
+            api::pause_monitoring,
+            api::resume_monitoring,
+            api::protection_status,
+            api::protection_scan,
+            api::geo_state,
+            api::coverage_state,
+            api::world_state,
+            api::procs_baseline,
+            api::procs_snapshot,
+            api::open_page,
         ])
         .setup(move |app| {
+            if let Ok(dir) = app.path().app_config_dir() {
+                settings::load(dir);
+            }
             build_tray(app)?;
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
                 .title("ARGUS-1")

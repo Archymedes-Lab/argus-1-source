@@ -47,7 +47,7 @@ impl From<io::Error> for End {
     }
 }
 
-fn open(path: &str) -> io::Result<(u16, BufReader<TcpStream>)> {
+pub fn open(path: &str) -> io::Result<(u16, BufReader<TcpStream>)> {
     // Every data route needs the paired client token (pairing.rs). Unpaired,
     // the stream is not attempted: the caller's poll reports the steps.
     let token = crate::pairing::client_token()
@@ -87,7 +87,7 @@ pub fn read_status<R: BufRead>(r: &mut R) -> io::Result<u16> {
 }
 
 /// One line, at most MAX_LINE bytes; longer is an error, not a truncation.
-fn read_line<R: BufRead>(r: &mut R, line: &mut String) -> io::Result<usize> {
+pub fn read_line<R: BufRead>(r: &mut R, line: &mut String) -> io::Result<usize> {
     let n = r.by_ref().take(MAX_LINE).read_line(line)?;
     if n as u64 == MAX_LINE && !line.ends_with('\n') {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "line too long"));

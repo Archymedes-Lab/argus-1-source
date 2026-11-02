@@ -34,8 +34,13 @@ ROOT = Path(__file__).resolve().parent.parent
 #   asset    open static file
 #   session  POST, same-origin, validates a paired client token itself
 #   veil     POST, the extension's own pairing token
+#   stripe   POST from Stripe, authenticated by its HMAC signature (billing.handle_webhook)
+#   redirect 302 to the interface; the token cookie only for an identified peer
 ROUTES = {
-    "/": "page", "/index.html": "page", "/geo": "page", "/pair": "page",
+    "/": "redirect", "/index.html": "redirect", "/ui": "redirect",
+    "/ui/": "page", "/ui/index.html": "page", "/classic": "page",
+    "/geo": "page", "/pair": "page",
+    "/api/billing/webhook": "stripe",
     "/api/health": "live", "/api/live": "live",
     "/api/session": "session", "/api/veil/events": "veil",
     "/metrics": "token",
@@ -46,12 +51,20 @@ ROUTES = {
         "/api/geo", "/api/geo/here", "/api/geo/zone", "/api/greeting", "/api/posture",
         "/api/posture/path-to-100", "/api/procs/baseline", "/api/procs/stream",
         "/api/pulse", "/api/run", "/api/score-coach", "/api/state", "/api/stream",
-        "/api/voice", "/api/world")},
+        "/api/voice", "/api/world",
+        # added by the interface, autopilot, billing and pause work (2026-10-30..11-02)
+        "/api/autopilot", "/api/autopilot/authorize", "/api/autopilot/decide",
+        "/api/autopilot/notices", "/api/autopilot/policy", "/api/billing/checkout",
+        "/api/billing/confirm", "/api/billing/status", "/api/pause", "/api/protection",
+        "/api/protection/scan", "/api/resume")},
 }
 POST_ONLY = {"/api/answer", "/api/ask", "/api/assistant/action", "/api/brief",
              "/api/fix/approve", "/api/fix/authorize", "/api/fix/reject", "/api/fix/retry",
              "/api/geo/here", "/api/geo/zone", "/api/score-coach", "/api/voice",
-             "/api/session", "/api/veil/events"}
+             "/api/session", "/api/veil/events",
+             "/api/autopilot/authorize", "/api/autopilot/decide", "/api/autopilot/policy",
+             "/api/billing/checkout", "/api/billing/confirm", "/api/pause", "/api/resume",
+             "/api/protection/scan"}
 
 
 def served_routes():
@@ -172,8 +185,12 @@ class PairedClientTests(_ServerBase):
 
     def test_an_unidentified_browser_pairs_through_the_session_route(self):
         status, headers, _ = self.srv.request("GET", "/")
-        self.assertEqual(status, 200)
+        self.assertIn(status, (200, 302))                       # 302 to /ui/ when it is built
         self.assertNotIn("Set-Cookie", headers)                 # fail closed
+        if status == 302:
+            status, headers, _ = self.srv.request("GET", "/ui/")
+            self.assertEqual(status, 200)
+            self.assertNotIn("Set-Cookie", headers)             # the interface fails closed too
         self.assertEqual(self.srv.request("GET", "/api/state")[0], 403)
         status, headers, body = self.srv.request(
             "POST", "/api/session", {"token": self.client}, {"Sec-Fetch-Site": "same-origin"})
@@ -235,6 +252,10 @@ class RouteTableTests(_ServerBase):
 
     def test_pages_and_assets_stay_open(self):
         for path, kind in ROUTES.items():
+            if kind == "redirect":
+                with self.subTest(path=path):
+                    self.assertIn(self.srv.request("GET", path)[0], (200, 302))
+                continue
             if kind != "page":
                 continue
             with self.subTest(path=path):
