@@ -47,7 +47,10 @@ HERE = Path(__file__).resolve().parent
 POLICY = HERE / "policy.json"
 # Release metadata that sits next to the artifacts; checked, not unpacked.
 META = {"manifest.json", "SHA256SUMS", "SHA256SUMS.txt", "SHA256SUMS.sig", "allowed_signers",
-        "release-report.json", "release-report.md", "sbom.cdx.json"}
+        "release-report.json", "release-report.md", "sbom.cdx.json",
+        # The licence and third-party notices travel beside every artifact, including
+        # the Windows .exe, which cannot carry files of its own.
+        "LICENSE.txt", "THIRD-PARTY-NOTICES.txt"}
 SIGS = re.compile(r"^SHA256SUMS\.[A-Za-z0-9_-]+\.sig$")  # one signature per releaser
 MAX_MEMBER = 512 * 1024 * 1024
 CHUNK = 8 * 1024 * 1024
@@ -387,6 +390,8 @@ def denied_path(path, policy):
     parts = path.split("/")
     if any(p in policy["deny_path_parts"] for p in parts[:-1]):
         return "denied folder"
+    if any(fnmatch.fnmatchcase(parts[-1], pat) for pat in policy.get("deny_copyleft_names", [])):
+        return "copyleft library in a proprietary release"
     return None
 
 

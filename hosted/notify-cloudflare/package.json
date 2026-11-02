@@ -1,6 +1,7 @@
 {
   "name": "argus-notify-relay",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "test": "bun test",

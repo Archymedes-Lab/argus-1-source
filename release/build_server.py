@@ -37,6 +37,7 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+REPO_ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 import gate  # noqa: E402
 import rename  # noqa: E402
@@ -100,6 +101,11 @@ def nuitka(tree, work, jobs):
     cmd = [sys.executable, "-m", "nuitka", "--standalone", "--assume-yes-for-downloads",
            f"--output-dir={work}", "--output-filename=argus-server",
            "--include-package=argus", "--nofollow-import-to=argus.platform.win",
+           # GNU Readline is GPL-3.0: a proprietary program must not ship linked to it
+           # (found bundled in v2026.10.30-2). The daemon never edits lines interactively;
+           # the content gate refuses any release that still carries it.
+           "--nofollow-import-to=readline", "--nofollow-import-to=rlcompleter",
+           "--noinclude-dlls=libreadline.so*",
            "--include-package=cryptography",
            "--python-flag=isolated", "--python-flag=safe_path",
            "--file-reference-choice=runtime", "--lto=no", f"--jobs={jobs}",
@@ -160,6 +166,8 @@ def entries(dist, version, commit):
     out.append(("install.sh", (server / "install.sh").read_bytes(), 0o755))
     out.append(("uninstall.sh", (server / "uninstall.sh").read_bytes(), 0o755))
     out.append(("README.txt", (server / "README.txt").read_bytes(), 0o644))
+    out.append(("LICENSE.txt", (REPO_ROOT / "LICENSE.txt").read_bytes(), 0o644))
+    out.append(("THIRD-PARTY-NOTICES.txt", (REPO_ROOT / "THIRD-PARTY-NOTICES.txt").read_bytes(), 0o644))
     out.append(("VERSION", f"{version} ({commit})\n".encode(), 0o644))
     return out
 

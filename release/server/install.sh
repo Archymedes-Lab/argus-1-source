@@ -78,6 +78,10 @@ install -d -m 0755 -o root -g root "$PREFIX"
 rm -rf "$PREFIX/bin.new"
 cp -a "$HERE/bin" "$PREFIX/bin.new"
 cp "$HERE/VERSION" "$PREFIX/VERSION" 2>/dev/null || true
+# The licence and third-party notices stay with the installed program.
+for f in LICENSE.txt THIRD-PARTY-NOTICES.txt; do
+  [ -f "$HERE/$f" ] && install -m 644 -o root -g root "$HERE/$f" "$PREFIX/$f"
+done
 chown -R root:root "$PREFIX/bin.new"
 chmod -R u=rwX,go=rX "$PREFIX/bin.new"
 rm -rf "$PREFIX/bin.old"
@@ -241,5 +245,7 @@ cat <<EOF
   alerts:      argus alert --help        (email, webhook, ntfy or syslog)
   services:    edit /etc/argus/services.conf, then: argus services
   uninstall:   sudo /opt/argus/uninstall.sh
+  licence:     proprietary; terms in /opt/argus/LICENSE.txt, third-party
+               components in /opt/argus/THIRD-PARTY-NOTICES.txt
 
 EOF

@@ -4,6 +4,8 @@ version = "2.0.0"
 edition = "2021"
 description = "JARVIS desktop: native window, tray and notifications over the local daemon"
 publish = false
+# Proprietary: the ARGUS-1 EULA in ../LICENSE.txt.
+license = "LicenseRef-Archymedes-Proprietary"
 
 # Exact pins: the shell is part of a security tool, so a dependency changes
 # only when someone reviews the bump (Cargo.lock records the full tree).

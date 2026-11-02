@@ -87,7 +87,10 @@ def linux_deb(src, exe, out, version):
              ("usr/share/icons/hicolor/32x32/apps/argus-desktop.png", (src / "icons/32x32.png").read_bytes(), 0o644),
              ("usr/share/icons/hicolor/128x128/apps/argus-desktop.png", (src / "icons/128x128.png").read_bytes(), 0o644),
              ("usr/share/icons/hicolor/256x256/apps/argus-desktop.png",
-              (src / "icons/128x128@2x.png").read_bytes(), 0o644)]
+              (src / "icons/128x128@2x.png").read_bytes(), 0o644),
+             ("usr/share/doc/argus-desktop/LICENSE.txt", (HERE.parent / "LICENSE.txt").read_bytes(), 0o644),
+             ("usr/share/doc/argus-desktop/THIRD-PARTY-NOTICES.txt",
+              (HERE.parent / "THIRD-PARTY-NOTICES.txt").read_bytes(), 0o644)]
     size = sum(len(d) for _, d, _ in files)
     control = (
         f"Package: argus-desktop\nVersion: {ver}\nArchitecture: amd64\n"

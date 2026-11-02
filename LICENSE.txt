@@ -1,0 +1,156 @@
+DRAFT — have counsel review before publishing. Archymedes, Inc. is being
+incorporated; until it exists and counsel has reviewed this text, it states
+the terms Archymedes intends to offer, and releases carrying it say DRAFT.
+
+ARGUS-1 END USER LICENCE AGREEMENT
+
+Copyright (c) 2026 Archymedes, Inc. All rights reserved.
+
+SPDX-License-Identifier: LicenseRef-Archymedes-Proprietary
+
+This End User Licence Agreement ("Agreement") is between Archymedes, Inc.
+("Archymedes", "we", "us") and the individual or organisation that installs,
+copies or uses the software ("you"). It covers the ARGUS-1 (also "Argus")
+security software as Archymedes distributes it, in object-code form: its
+programs and packages, detection rules, rule packs, documentation and
+interfaces to Archymedes's hosted services (together, the "Software"). The
+third-party components listed in THIRD-PARTY-NOTICES.txt are not part of the
+Software for the purposes of this Agreement; they remain under their own
+licences.
+
+By installing, copying or using the Software you agree to this Agreement. If
+you do not agree, do not install or use the Software.
+
+1. OWNERSHIP
+
+The Software is licensed, not sold. Archymedes and its licensors own all
+right, title and interest in the Software, including all intellectual property
+rights. All rights not expressly granted in this Agreement are reserved. ARGUS-1 is proprietary,
+commercial software. It is not open-source software, and no source code is
+licensed to you under this Agreement.
+
+2. LICENCE GRANT
+
+2.1 Free tier. Subject to this Agreement, Archymedes grants you a personal,
+non-exclusive, non-transferable, non-sublicensable, revocable licence to
+install and use the Software, without charge, on devices you own or control,
+for your own personal or internal business security purposes. The free tier
+includes the Software's core protection (detection, response, alerts and the
+rules shipped with the Software). It does not include paid features such as
+rule-pack updates.
+
+2.2 Paid licence. If you hold a valid, unexpired licence key issued by
+Archymedes (a "Licence Key") for a paid plan (for example "Pro" or "Team"),
+Archymedes additionally grants you, for the term of that plan and up to the
+number of seats it states, a non-exclusive, non-transferable,
+non-sublicensable licence to use the paid features that plan includes, for
+personal or commercial purposes. A seat is one device or one named user, as
+the plan describes.
+
+2.3 Term and expiry. A paid licence lasts for the term you paid for. After it
+expires, a grace period of fourteen (14) days applies; after that, paid
+features stop and the free tier in section 2.1 continues to apply. Expiry or
+termination of a paid licence does not disable the Software's core protection.
+
+3. RESTRICTIONS
+
+Except as this Agreement expressly allows, or to the extent applicable law
+gives you a right that cannot be limited by contract, you must not:
+
+  (a) copy, distribute, publish, sublicense, rent, lease, lend, sell or resell
+      the Software, a Licence Key or rule packs, or make them available to any
+      third party, including as a hosted or managed service;
+  (b) reverse engineer, decompile or disassemble the Software, except to the
+      extent applicable law expressly permits it notwithstanding this
+      limitation (for example, for interoperability);
+  (c) remove, alter, bypass or disable licence checks, signature
+      verification, Licence Keys or other technical measures, or create,
+      share or use forged or unauthorised Licence Keys;
+  (d) share a Licence Key beyond the seats it grants;
+  (e) modify the Software or create derivative works of it, except for your
+      own internal configuration and for changes that you do not distribute;
+  (f) remove or alter any copyright, trademark or proprietary notice; or
+  (g) use the Software to violate any law or anyone's rights, or to attack
+      systems you are not authorised to test.
+
+4. RULE PACKS AND UPDATES
+
+Rule packs and updates are part of the Software and are licensed under this
+Agreement. Archymedes may change, add or withdraw rules, rule packs and
+features at any time. Rule packs you received during a paid term may remain
+installed after it ends, but you are not entitled to further updates.
+
+5. THIRD-PARTY COMPONENTS AND DATA
+
+The Software includes and uses third-party components and public
+threat-intelligence feeds that are subject to their own licences and terms;
+THIRD-PARTY-NOTICES.txt, shipped with every release, lists them. Those terms govern
+your use of those components and data. Nothing in this Agreement restricts
+rights you have under those licences.
+
+6. PRIVACY
+
+The Software is designed to run locally. Where it contacts Archymedes services
+(for example, to fetch rule packs), it sends your Licence Key and the minimum
+technical information needed to provide the service. [PRIVACY POLICY LINK:
+founders to provide.]
+
+7. FEES AND REFUNDS
+
+Fees for paid plans are set at purchase and are payable in advance through
+our payment provider. [REFUND POLICY: founders to choose.] Taxes are your
+responsibility unless the payment provider collects them.
+
+8. TERMINATION
+
+This Agreement continues until terminated. Archymedes may terminate or
+suspend your licence, including by revoking a Licence Key, if you materially
+breach this Agreement and (where the breach can be cured) do not cure it
+within thirty (30) days of notice. You may terminate at any time by
+uninstalling the Software. On termination you must stop using and delete the
+Software. Sections 1, 3, 9, 10, 11 and 12 survive termination.
+
+9. DISCLAIMER OF WARRANTIES
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SOFTWARE IS PROVIDED "AS IS" AND
+"AS AVAILABLE", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND
+NON-INFRINGEMENT. NO SECURITY PRODUCT DETECTS OR PREVENTS EVERY THREAT;
+ARCHYMEDES DOES NOT WARRANT THAT THE SOFTWARE WILL DETECT OR PREVENT ANY
+PARTICULAR ATTACK, THAT IT WILL BE ERROR-FREE OR UNINTERRUPTED, OR THAT ANY
+FINDING IS COMPLETE OR CORRECT. You remain responsible for your own backups,
+security practices and decisions.
+
+10. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW: (a) ARCHYMEDES WILL NOT BE LIABLE FOR
+ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY OR PUNITIVE
+DAMAGES, OR FOR LOSS OF PROFITS, REVENUE, DATA, GOODWILL OR BUSINESS
+INTERRUPTION, HOWEVER CAUSED, EVEN IF ADVISED OF THEIR POSSIBILITY; AND (b)
+ARCHYMEDES'S TOTAL LIABILITY ARISING OUT OF OR RELATING TO THE SOFTWARE OR
+THIS AGREEMENT WILL NOT EXCEED THE GREATER OF THE AMOUNT YOU PAID ARCHYMEDES
+FOR THE SOFTWARE IN THE TWELVE (12) MONTHS BEFORE THE CLAIM AND ONE HUNDRED
+US DOLLARS (USD 100). Some jurisdictions do not allow certain exclusions or
+limitations; in those jurisdictions they apply only to the extent permitted,
+and nothing here limits liability that cannot be limited by law.
+
+11. GOVERNING LAW AND DISPUTES
+
+[GOVERNING LAW: founders to choose.] This Agreement is governed by the laws of
+[JURISDICTION], without regard to its conflict-of-laws rules. [VENUE /
+ARBITRATION: founders to choose.] The United Nations Convention on Contracts
+for the International Sale of Goods does not apply.
+
+12. GENERAL
+
+Export: you will comply with applicable export-control and sanctions laws.
+Assignment: you may not assign this Agreement without our written consent; we
+may assign it to an affiliate or successor. Entire agreement: this Agreement
+(with the terms of any paid plan you purchase) is the entire agreement about
+the Software and supersedes prior statements about it. Severability: if a
+provision is unenforceable, it is limited to the minimum extent necessary and
+the rest remains in effect. Waiver: failing to enforce a provision is not a
+waiver. Changes: we may update this Agreement for future versions of the
+Software; the version accompanying a release governs that release.
+
+Contact: Archymedes, Inc. [ADDRESS AND CONTACT EMAIL: founders to provide.]
