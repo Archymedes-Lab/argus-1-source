@@ -233,6 +233,12 @@ COLLECTORS = (
        command="hidden --deep", boot_scoped=True),
     _c("hidden", 300, "Hidden processes", AT, 4, 2, "high", 60, cost_s=24.0,
        command="hidden", boot_scoped=True, lane="frequent"),
+    # osquery, when the operator installed it, as a second reader of processes,
+    # listeners and kernel modules; disagreement with Argus's own view is tamper
+    # evidence. Never installs osquery.
+    _c("osquery", 3600, "Independent view (osquery)", None, 0, 3, "medium", 120,
+       command="hidden", domain="linux",
+       unscored="optional second view; source-tested against recorded answers, never run on a host with osquery"),
     _c("firewall", 2400, "Firewall & inbound", OS, 1, 3, "high", 240,
        command="firewall",
        depends_on=("windows-bridge",), cost_s=18.0, boot_scoped=True),
