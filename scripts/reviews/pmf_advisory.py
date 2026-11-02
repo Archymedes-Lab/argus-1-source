@@ -85,10 +85,48 @@ REVIEW_QUESTIONS = {
                      'noise': 'Alert noise on a fresh host inflates the findings',
                      'wording': 'Engineer-written register limits read oddly to clients'}},
 }
+# Licensing strategy (CDM 2026-11-02: commit keep_both, explore service_first;
+# local_gate vetoed on core_gate 0.885 and evidence 0.715). Metadata only.
+LICENSING_STATE = {
+    'goal': 'a licensing strategy and payment pipeline for the first paying users',
+    'facts': {
+        'bet': 'free server edition plus a paid one-week observed server review for small agencies',
+        'cdm': 'explore: software stays free and unlicensed, reviews paid by invoice or payment link, '
+               'tokens later; a design that locks on-demand checks until paid was vetoed',
+        'built': 'a local yearly checkout with a lock flag on one branch; offline-checked signed '
+                 'tokens for rule-pack updates with a hosted worker on another, both undeployed',
+        'constraints': 'no legal entity yet; core protection never depends on licence state',
+    },
+}
+LICENSING_QUESTIONS = {
+    'invoice_ok': {'type': 'noul', 'instructions':
+        'Will a small agency accept paying for the review by invoice or payment link, with no '
+        'software licence involved?',
+        'criteria': {'true': 'Yes', 'false': 'No, they expect a product licence'}},
+    'first_piece': {'type': 'choice', 'instructions':
+        'Which piece of the payment pipeline should be built first?',
+        'criteria': {'engagement_ledger': 'A founder tool that tracks each review from quote to '
+                     'deposit, install, report and payment, enforcing the gates',
+                     'payment_links': 'Hosted payment links per review',
+                     'token_delivery': 'Delivery of signed licence tokens to customers',
+                     'nothing_yet': 'Nothing until a first deposit is paid'}},
+    'lock_flag': {'type': 'noul', 'instructions':
+        'Should the flag that locks the assistant and on-demand checks until a licence is bought '
+        'be kept out of release builds permanently?',
+        'criteria': {'true': 'Yes, never in releases', 'false': 'No, it is acceptable'}},
+    'tokens_when': {'type': 'choice', 'instructions':
+        'When should signed licence tokens be put in front of customers?',
+        'criteria': {'now': 'Now, alongside the reviews',
+                     'after_three_reviews': 'After three paid reviews',
+                     'paid_feature_buyer': 'Only when a buyer asks to pay for a software feature',
+                     'never': 'Never; services only'}},
+}
 if __name__ == '__main__':
     import sys
     if sys.argv[1:] == ['review']:
         STATE, QUESTIONS = REVIEW_STATE, REVIEW_QUESTIONS
+    elif sys.argv[1:] == ['licensing']:
+        STATE, QUESTIONS = LICENSING_STATE, LICENSING_QUESTIONS
     try:
         result = jev._call(STATE, QUESTIONS, timeout=20)
         print(json.dumps({'model': result.get('model'), 'answers': result['answers']}))
