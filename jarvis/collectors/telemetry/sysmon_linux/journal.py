@@ -31,17 +31,58 @@ def active():
     return installed and running
 
 
-def _raw(since_ts):
-    """All sysmon journal text since `since_ts`, journal first then syslog."""
-    out, rc = _run(["journalctl", "-t", "sysmon", "-o", "cat", "--no-pager",
-                    "--since", f"@{int(since_ts)}"], timeout=40)
-    if rc == 0 and out.strip():
-        return out
+JOURNAL_TIMEOUT_S = 40
+SYSLOG = "/var/log/syslog"
+# Syslog is read only when the journal returned nothing for the window, as a
+# duplicate source; it is not time-filtered, so only its tail can hold events the
+# journal does not. Reading all of it each pass (rsyslog copies reached 9 GB on
+# one host) is unbounded; the tail is enough.
+SYSLOG_CAP = 8 * 1024 * 1024     # bytes read from the end of syslog, at most
+
+
+def _syslog(path=SYSLOG, cap=SYSLOG_CAP):
+    """(sysmon lines from the last `cap` bytes of syslog, capped?) or (None, False) without one."""
     try:
-        with open("/var/log/syslog", encoding="utf-8", errors="replace") as fh:
-            return "\n".join(ln for ln in fh if "sysmon" in ln.lower())
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - cap))
+            data = fh.read(cap)
     except OSError:
-        return ""
+        return None, False
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if size > cap and lines:
+        lines = lines[1:]            # the first line is cut mid-way
+    return "\n".join(ln for ln in lines if "sysmon" in ln.lower()), size > cap
+
+
+def read_since(since_ts, run=subprocess.run, syslog=_syslog):
+    """(text, ok, why): the sysmon journal text since `since_ts`, journal first then syslog.
+
+    ok is False when nothing could be read for that window (journalctl timed out
+    or failed and there is no syslog): the caller must not move its cursor past
+    it (evidence continuity). why says what happened, or names a capped read."""
+    try:
+        r = run(["journalctl", "-t", "sysmon", "-o", "cat", "--no-pager", "--since", f"@{int(since_ts)}"],
+                capture_output=True, text=True, errors="replace", timeout=JOURNAL_TIMEOUT_S)
+        out, rc, failure = r.stdout, r.returncode, f"journalctl failed (exit {r.returncode})"
+    except subprocess.TimeoutExpired:
+        return None, False, f"journalctl did not answer within {JOURNAL_TIMEOUT_S} s"
+    except OSError:
+        out, rc, failure = "", None, "journalctl is not available"
+    except subprocess.SubprocessError as exc:
+        return None, False, f"journalctl could not run ({type(exc).__name__})"
+    if rc == 0 and out.strip():
+        return out, True, ""
+    text, capped = syslog()
+    if text is None:
+        return ("", True, "") if rc == 0 else (None, False, failure)
+    return text, True, (f"syslog read limited to its last {SYSLOG_CAP // (1024 * 1024)} MB" if capped else "")
+
+
+def _raw(since_ts):
+    """All sysmon journal text since `since_ts` ("" when nothing could be read)."""
+    return read_since(since_ts)[0] or ""
 
 
 _TYPE_ID = {

@@ -64,6 +64,13 @@ class Collector:
     elevated: the broker script that runs this collector's elevated half, if any.
     servers: False for workstation features (a news globe, a local model) that a
     plain Linux server neither has nor wants; there they are not applicable.
+    requires: names from REQUIREMENTS that the host must satisfy for this
+    collector to have anything to observe (platform/facts.py measures them).
+    A requirement names the thing observed (a package database, a boot chain
+    of its own, a container engine), never the sensor: an absent audit sensor
+    is a visibility gap the collector must still report, not a reason to skip
+    it. Unmet means "not applicable on this host" with the reason, never
+    failing and never healthy (docs/architecture/AGNOSTIC-DEPLOYMENT.md).
     boot_scoped: its evidence describes state a reboot activates or resets
     (startup entries, services, drivers, boot chain, live processes, firewall),
     so a result taken before the current boot does not describe this machine
@@ -92,6 +99,39 @@ class Collector:
     elevated: str = ""
     servers: bool = True
     boot_scoped: bool = False
+    requires: tuple = ()
+
+
+# Host requirements a collector may declare (Collector.requires). Each is
+# (what it means, predicate over platform/facts.py facts). A predicate returns
+# False when the fact is unknown: unknown is unmet, so the collector is listed
+# not applicable with the reason, never run blind and never counted healthy.
+REQUIREMENTS = {
+    "package-db": ("a dpkg or rpm package database to verify against",
+                   lambda f: bool({"dpkg", "rpm"} & set(f.get("package_dbs") or ()))),
+    "systemd": ("systemd as the init system",
+                lambda f: f.get("init") == "systemd"),
+    "own-kernel": ("a boot chain and kernel of its own (not a container)",
+                   lambda f: f.get("os") == "linux" and f.get("container") is None and f.get("kernel") is not None),
+    "container-engine": ("a container engine (Docker or Podman) installed",
+                         lambda f: bool(f.get("container_engines"))),
+    "oval-source": ("a distribution with published OVAL security data (Ubuntu or Debian)",
+                    lambda f: f.get("distro") in ("ubuntu", "debian")),
+}
+
+
+def unmet(collector, facts):
+    """Reasons `collector` has nothing to observe on a host with `facts` ([] = applicable)."""
+    out = []
+    for name in collector.requires:
+        meaning, test = REQUIREMENTS[name]
+        try:
+            ok = bool(test(facts))
+        except (TypeError, AttributeError):
+            ok = False
+        if not ok:
+            out.append(f"needs {meaning}")
+    return out
 
 
 def _c(name, interval, label, area, rank, tier, crit, timeout, **kw):
@@ -306,7 +346,7 @@ COLLECTORS = (
        unscored="news about conflicts elsewhere says nothing about this machine"),
     # `docker inspect` per container, read-only.
     _c("containers", 900, "Container privilege and exposure inventory", None, 0, 3, "medium", 90,
-       command="containers",
+       command="containers", requires=("container-engine",),
        domain="linux", unscored="inventory pending its own scoring decision", boot_scoped=True),
     # Linux servers (ARGUS-SERVER.md, 2026-10-24). Unscored until soaked on a
     # real internet-facing server: their thresholds are unmeasured there.
@@ -326,18 +366,18 @@ COLLECTORS = (
     # The daily checks operators most want automated (Exa research 2026-10-28):
     # failed units, TLS certificate expiry, kernel OOM kills, unclean reboots.
     _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
-       command="opshealth", domain="linux", cost_s=0.6,
+       command="opshealth", domain="linux", cost_s=0.6, requires=("systemd",),
        unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),
     # Boot-chain persistence (GRUB, grub.d, initramfs hooks, dracut modules,
     # kernel and initramfs images) and kernel attack surface (Exa threat
     # research 2026-10-29). Stat signatures for images keep a run cheap.
     _c("bootchain", 1800, "Boot chain & kernel attack surface", None, 0, 3, "medium", 90,
-       command="bootchain", domain="linux", cost_s=0.1, boot_scoped=True,
+       command="bootchain", domain="linux", cost_s=0.1, boot_scoped=True, requires=("own-kernel",),
        unscored="source-tested only; package-update attribution not yet soaked on real servers"),
     # Processes reading the keyboard, raw HID or uinput, judged by their image;
     # hidden staging in /var/log, /run, /dev/shm and /tmp (spyware research 2026-10-29).
     _c("keyreaders", 900, "Keyboard readers & hidden staging", None, 0, 3, "medium", 60,
-       command="keyreaders", domain="linux", cost_s=0.1, boot_scoped=True,
+       command="keyreaders", domain="linux", cost_s=0.1, boot_scoped=True, requires=("own-kernel",),
        unscored="source-tested only; expected-reader list not yet soaked on desktops and servers"),
     # Friday Defender reviews of the codebases appcode found, with the owner's
     # consent (`jarvis defender enable`). Each pass collects finished reviews and
@@ -348,7 +388,7 @@ COLLECTORS = (
     # dpkg --verify / rpm -V over the packages intruders replace; IO-heavy, so
     # daily, deferrable and in the bulk lane.
     _c("pkgverify", 86400, "Package file integrity", None, 0, 4, "medium", 300,
-       command="pkgverify", domain="linux", lane="bulk", governed=True,
+       command="pkgverify", domain="linux", lane="bulk", governed=True, requires=("package-db",),
        unscored="source-tested only; a rewritten package database defeats it"),
     # ARGUS-SERVER.md W10: one bounded GET to the owner's dead-man service, so a
     # silent host or daemon pages someone. Fast lane: the ping proves it runs.
@@ -357,7 +397,7 @@ COLLECTORS = (
        unscored="delivery of liveness to an outside service, not a state of this machine"),
     # ARGUS-SERVER.md W11: fixable CVEs, pending updates, pending reboots.
     _c("patches", 3600, "Security fixes not installed", None, 0, 3, "medium", 180,
-       command="status", domain="linux", governed=True, cost_s=8.0,
+       command="status", domain="linux", governed=True, cost_s=8.0, requires=("package-db",),
        unscored="source-tested; scored after it has run on a real server"),
     # Daily download of the release's own OVAL security data. Debian 12 parses at
     # ~85 MB above baseline and returns to +6 MB once freed (measured 2026-10-25).
@@ -365,7 +405,7 @@ COLLECTORS = (
     # entirely on a busy host; a child process gets a deadline it can be killed at.
     _c("distrovuln", 86400, "Distribution security data", None, 0, 4, "medium", 300,
        command="status", domain="linux", lane="bulk", governed=True, isolated=True,
-       cost_s=25.0, unscored=_KNOWLEDGE),
+       cost_s=25.0, unscored=_KNOWLEDGE, requires=("oval-source",)),
     # ARGUS-SERVER.md W12: every codebase on the server, its dependencies
     # against OSV, risky code, credentials, writable code and web-root leaks.
     # One bounded audit (200 000 files; 180 s for walk, rules and tools, so a

@@ -171,7 +171,7 @@
     "target",
     "src"
   ],
-  "_markers_comment": "Searched in every file's bytes, binaries included. Home-folder markers refuse any user's home path except a short list of placeholder names (u, x, alice, Public, ...) that Argus's own detection rules and self-tests use as examples; build-path markers name our CI environments. A private-key header counts only with key material after it, with real or escaped (\\\\n) newlines, so a scanner's own rules may name the header. Third-party libraries get no exemption: their maintainers' paths (/github/home/, /opt/_internal/) are not home folders and are not ours.",
+  "_markers_comment": "Searched in every file's bytes, binaries included. Home-folder markers refuse any user's home path except a short list of placeholder names (u, x, alice, Public, ...) that Argus's own detection rules and self-tests use as examples; build-path markers name our CI environments. A private-key header counts only with key material after it, with real or escaped (\\\\n) newlines, so a scanner's own rules may name the header. Third-party libraries get no exemption: their maintainers' paths (/github/home/, /opt/_internal/) are not home folders and are not ours. A Windows home seen through a WSL mount (/mnt/c/Users/<name>/) is a home folder too: the macOS and Windows markers missed it because of the drive letter before /Users, and the 2026.10.30-2 server release shipped one (2026-11-02).",
   "deny_markers": [
     {
       "id": "home-path",
@@ -188,6 +188,10 @@
     {
       "id": "windows-home-path",
       "regex": "(?i)[A-Z]:\\\\Users\\\\(?!(?:u|x|a|b|user|you|alice|bob|example|Public|Default|All Users)\\\\)[A-Za-z_][A-Za-z0-9_.-]*\\\\"
+    },
+    {
+      "id": "wsl-windows-home-path",
+      "regex": "(?i)(?<![A-Za-z0-9_])/mnt/[a-z]/Users/(?!(?:u|x|a|b|user|you|alice|bob|example|Public|Default|All Users)/)[A-Za-z_][A-Za-z0-9_.-]*/"
     },
     {
       "id": "windows-build-path",

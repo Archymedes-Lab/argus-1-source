@@ -1,6 +1,7 @@
 """Subcommands that drive the daemon and its notifications."""
 
 import json
+import sys
 import time
 
 from jarvis.collectors.persistence import control
@@ -86,6 +87,11 @@ def cmd_control(args, store):
 
 def cmd_serve(args, store):
     # Lazy: the daemon's full job graph is not needed by any other subcommand.
+    from jarvis.platform import host as _host
+    reason = _host.unsupported_reason()
+    if reason:
+        print(reason, file=sys.stderr)
+        return 2
     from jarvis.web import server
     store.close()  # the daemon opens its own handles per thread
     server.serve(db_path=args.db, port=args.port, hosts=selected_hosts(args))

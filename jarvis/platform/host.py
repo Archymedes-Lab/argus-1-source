@@ -7,6 +7,11 @@ through interop and the /mnt/c mount. That is one topology of three:
     windows  native Windows Python; there is no Linux domain on this machine
     linux    Linux with no Windows host behind it
 
+Any other operating system (macOS today) is "unsupported": it has neither
+domain, so nothing Linux- or Windows-only is scheduled there, and the daemon
+refuses to start (unsupported_reason) instead of running half blind. It used
+to fall through to "linux" because /proc was simply unreadable.
+
 Everything that used to assume the first asks here instead: which domains
 exist, how a Windows path is named from this process, where the per-user and
 machine-wide Windows state lives. Collectors keep their `hosts` tuple and their
@@ -21,6 +26,7 @@ finding nor a failure: absent is "not applicable", never "healthy" and never
 import os
 import re
 import subprocess
+import sys
 
 LINUX = "wsl"       # label of the Linux execution domain in findings
 WINDOWS = "win"     # label of the Windows execution domain in findings
@@ -47,9 +53,11 @@ def _override(path=KIND_OVERRIDE):
         return ""
 
 
-def _detect(os_name=None, osrelease=None, override=None):
+def _detect(os_name=None, osrelease=None, override=None, platform=None):
     if (os.name if os_name is None else os_name) == "nt":
         return "windows"
+    if not (sys.platform if platform is None else platform).startswith("linux"):
+        return "unsupported"
     if osrelease is None:
         try:
             with open("/proc/sys/kernel/osrelease", errors="replace") as fh:
@@ -67,6 +75,14 @@ KIND = _detect()
 
 def kind():
     return KIND
+
+
+def unsupported_reason(kind_=None):
+    """Why this daemon must not run here, or "" when the host is supported."""
+    if (KIND if kind_ is None else kind_) == "unsupported":
+        return (f"ARGUS-1 does not support {sys.platform} yet: only Linux, WSL and Windows are "
+                "observable. Nothing was started.")
+    return ""
 
 
 def native_windows():

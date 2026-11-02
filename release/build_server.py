@@ -48,7 +48,9 @@ DEB_SUGGESTS = "nftables, curl"
 # PowerShell payloads, notes) stays out. Patterns are relative to argus/.
 DATA_KEEP = ("web/static/**", "web/styles/*.css", "intel/data/*.json", "lab/scenarios/*.json")
 # Repository-level files the code reads through REPO_ROOT on a server.
-REPO_DATA = ("systemd/capabilities.conf", "systemd/hardening.conf", "systemd/service-user.conf",
+# systemd/service-user.conf is the developer workstation's WSL drop-in (its paths name one
+# Windows account); no server reads it, and the content gate refuses its path, so it stays out.
+REPO_DATA = ("systemd/capabilities.conf", "systemd/hardening.conf",
              "systemd/journald-sysmon.conf", "systemd/rsyslog-sysmon.conf",
              "systemd/argus-selfcheck.service", "systemd/argus-selfcheck.timer", "sysmon/config.xml")
 
