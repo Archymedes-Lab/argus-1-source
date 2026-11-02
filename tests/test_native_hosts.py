@@ -321,6 +321,7 @@ class NativeServiceTests(unittest.TestCase):
                "host": "win"}]
         with as_kind("windows"), \
                 mock.patch.object(jobs.alert, "channel_findings", return_value=[]), \
+                mock.patch.object(jobs, "_link_findings", return_value=[]), \
                 mock.patch.object(jobs.supervisors, "audit_health_monitor", return_value=[]), \
                 mock.patch.object(jobs.supervisors, "audit_native_service", return_value=ok) as native, \
                 mock.patch.object(jobs.supervisors, "audit_reviver") as reviver, \

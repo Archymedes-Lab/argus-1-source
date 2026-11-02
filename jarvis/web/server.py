@@ -27,19 +27,18 @@ from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
 from jarvis.platform import procfeed
-from jarvis.response import plainwords
-from jarvis.service import avguard
 from jarvis.response import (
     acknowledge,
     advisor,
     alert,
     assistant,
+    plainwords,
     protocols,
     questions,
     remediation,
 )
 from jarvis.response.reporting import score, voice
-from jarvis.service import attackmap, autopilot, detectorhealth, sdnotify
+from jarvis.service import attackmap, autopilot, avguard, detectorhealth, sdnotify
 from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
@@ -168,16 +167,24 @@ _PERF_SAMPLE = {"at": 0.0, "ticks": 0, "write_bytes": 0}
 def _performance_state(jobs, scheduler):
     """Cheap live daemon cost plus the schedule's measured duty cycle."""
     contributors = []
+    cost = dict(getattr(scheduler, "job_cost", None) or {})
     for job in jobs:
         interval = max(1.0, float(job.get("interval") or 0))
         duration = max(0.0, float(job.get("duration") or 0))
         share = duration / interval * 100.0
         if duration:
-            contributors.append({"name": job.get("name", ""),
-                                 "label": job.get("label", ""),
-                                 "duration": round(duration, 1),
-                                 "duty_pct": round(share, 1)})
-    contributors.sort(key=lambda row: row["duty_pct"], reverse=True)
+            row = {"name": job.get("name", ""), "label": job.get("label", ""),
+                   "duration": round(duration, 1), "duty_pct": round(share, 1)}
+            spent = cost.get(job.get("name", ""))
+            if spent:
+                # CPU actually used, as a share of one core averaged over the
+                # job's cadence; wall time includes waiting on Windows and disks.
+                row.update(cpu_s=spent["cpu_s"], cpu_pct=round(spent["cpu_s"] / interval * 100.0, 2),
+                           rss_growth_mib=round(spent["rss_growth_kib"] / 1024, 1),
+                           child_peak_mib=round(spent["child_peak_kib"] / 1024, 1))
+            contributors.append(row)
+    contributors.sort(key=lambda row: (row.get("cpu_pct", -1), row["duty_pct"]), reverse=True)
+    measured = [r for r in contributors if "cpu_pct" in r]
 
     cpu_pct = None
     write_mib_s = None
@@ -220,7 +227,8 @@ def _performance_state(jobs, scheduler):
             "rss_mib": round(rss_bytes / 1024 / 1024, 1),
             "service_memory_mib": round((service_bytes or rss_bytes) / 1024 / 1024, 1),
             "scheduled_duty_pct": round(sum(x["duty_pct"] for x in contributors), 1),
-            "top": contributors[:6],
+            "collector_cpu_pct": round(sum(x["cpu_pct"] for x in measured), 1) if measured else None,
+            "top": contributors[:8],
             "running": [n for n in (getattr(scheduler, "current", None),
                                       getattr(scheduler, "fast_current", None),
                                       getattr(scheduler, "bulk_current", None)) if n]}
@@ -434,7 +442,7 @@ def _wake_phase(scheduler):
 
 
 def _assistant_state(store):
-    """Recent assistant activity, open proposals and what ARGUS-1 has changed. Never raises."""
+    """Recent assistant activity, open proposals and what ARGUS-INSTINCT has changed. Never raises."""
     try:
         return {"audit": advisor.audit_log(store)[-25:],
                 "pending": advisor.pending_proposals(store, JOBS),
@@ -463,7 +471,8 @@ def _reliability_state(scheduler, snaps):
         if callable(status_fn):
             status = status_fn(snapshots=snaps)
             return {**status["summary"], "resume": status.get("resume") or {},
-                    "outages": status.get("outages") or {}}
+                    "outages": status.get("outages") or {},
+                    "links": status.get("links") or {}}
     except Exception:
         pass
     return {"levels": {}, "stale_collectors": [], "recovering": [],
@@ -908,7 +917,7 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
             if not licensed:
-                return self._send(402, json.dumps({"error": "An ARGUS-1 licence is required. "
+                return self._send(402, json.dumps({"error": "An ARGUS-INSTINCT licence is required. "
                                                             "Open the Pricing page."}))
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]

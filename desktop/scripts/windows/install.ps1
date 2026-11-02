@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Install (or remove) the ARGUS-1 desktop app for the current Windows user.
+  Install (or remove) the ARGUS-INSTINCT desktop app for the current Windows user.
 
 .DESCRIPTION
   No administrator rights, no network, no installer framework: every change is listed here
@@ -19,7 +19,7 @@
   its tasks are untouched). WebView2 keeps its own profile in
   %LOCALAPPDATA%\local.jarvis.desktop; -Uninstall leaves it unless -Purge is given.
 
-  ARGUS-1's own control audit will list the "ARGUS-1 desktop" task (an undeclared scheduled
+  ARGUS-INSTINCT's own control audit will list the "ARGUS-1 desktop" task (an undeclared scheduled
   task, low) and the new unsigned binary. That is the correct report for a binary built
   here; it is not suppressed.
 
@@ -75,7 +75,7 @@ if ($Uninstall) {
     if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { $left += "task $TaskName" }
     if (Test-Path -LiteralPath $AumidKey) { $left += $AumidKey }
     if ($left.Count) { throw "Not fully removed: $($left -join ', ')" }
-    Write-Host 'ARGUS-1 desktop removed. Monitoring is unaffected.' -ForegroundColor Green
+    Write-Host 'ARGUS-INSTINCT desktop removed. Monitoring is unaffected.' -ForegroundColor Green
     exit 0
 }
 
@@ -100,7 +100,7 @@ Copy-Item -LiteralPath (Join-Path $BuildRoot 'jarvis.png') -Destination $Icon -F
 
 # Toasts from an unpackaged app show only for a registered AppUserModelID.
 New-Item -Path $AumidKey -Force | Out-Null
-New-ItemProperty -Path $AumidKey -Name 'DisplayName' -Value 'ARGUS-1' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $AumidKey -Name 'DisplayName' -Value 'ARGUS-INSTINCT' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $AumidKey -Name 'IconUri' -Value $Icon -PropertyType String -Force | Out-Null
 
 $shell = New-Object -ComObject WScript.Shell
@@ -119,7 +119,7 @@ if ($NoAutostart) {
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-        -Principal $taskPrincipal -Settings $settings -Description 'ARGUS-1 desktop window and tray (a client; monitoring runs without it).' -Force | Out-Null
+        -Principal $taskPrincipal -Settings $settings -Description 'ARGUS-INSTINCT desktop window and tray (a client; monitoring runs without it).' -Force | Out-Null
 }
 
 # Read back what was installed rather than trusting the calls above.
@@ -136,7 +136,7 @@ if ($NoAutostart) {
 }
 $check = [ordered]@{
     binary_matches_build = ((Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash.ToLowerInvariant() -eq $hash)
-    aumid_registered     = ((Get-ItemProperty -LiteralPath $AumidKey -ErrorAction SilentlyContinue).DisplayName -eq 'ARGUS-1')
+    aumid_registered     = ((Get-ItemProperty -LiteralPath $AumidKey -ErrorAction SilentlyContinue).DisplayName -eq 'ARGUS-INSTINCT')
     shortcut             = (Test-Path -LiteralPath $Shortcut)
     autostart            = $autostart
 }
@@ -168,4 +168,4 @@ if (-not $NoLaunch) {
         throw "Installed, but $Exe is not running 5 s after launch."
     }
 }
-Write-Host "ARGUS-1 desktop installed ($hash)." -ForegroundColor Green
+Write-Host "ARGUS-INSTINCT desktop installed ($hash)." -ForegroundColor Green

@@ -25,7 +25,7 @@ class SimplifyTests(unittest.TestCase):
 
     def test_the_product_name_is_argus_1_at_every_level_but_commands_stay(self):
         out = pw.simplify_result({"answer": "JARVIS is watching. Run `jarvis ack 1`."}, "expert")
-        self.assertEqual(out["answer"], "ARGUS-1 is watching. Run `jarvis ack 1`.")
+        self.assertEqual(out["answer"], "ARGUS-INSTINCT is watching. Run `jarvis ack 1`.")
 
     def test_expert_and_unknown_levels_change_no_jargon(self):
         result = {"answer": "collector failed", "sections": [{"text": "persistence"}]}

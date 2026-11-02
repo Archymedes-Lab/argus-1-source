@@ -273,21 +273,21 @@ def investigate(store, f, job, related, now):
     if not (f.get("where") or f.get("detail")):
         return {"assessment": "unknown", "kind": kind, "known": known, "suspected": [],
                 "unknown": unknown + ["The detector gave no detail or location."],
-                "recommendation": "Re-run the check; ARGUS-1 has too little to explain this.",
+                "recommendation": "Re-run the check; ARGUS-INSTINCT has too little to explain this.",
                 "insufficient": True}
     if kind == "monitoring":
         assessment = "confirmed"
-        known.append("This is about ARGUS-1's own visibility, not about an attack.")
-        rec = "ARGUS-1 handles this itself where it can; see Monitoring."
+        known.append("This is about ARGUS-INSTINCT's own visibility, not about an attack.")
+        rec = "ARGUS-INSTINCT handles this itself where it can; see Monitoring."
     elif cls["owner"] == triage.JARVIS:
-        assessment, rec = "strongly_supported", "ARGUS-1 is handling this. No action needed unless it keeps coming back."
-        known.append("The finding is of a kind ARGUS-1 repairs or retries on its own.")
+        assessment, rec = "strongly_supported", "ARGUS-INSTINCT is handling this. No action needed unless it keeps coming back."
+        known.append("The finding is of a kind ARGUS-INSTINCT repairs or retries on its own.")
     elif f.get("severity") in ("critical", "high"):
         assessment = "suspicious"
         suspected.append(f"Its detector rated it {f.get('severity')}. That is a signal worth a look, not proof of a break-in.")
         rec = cls.get("action") or "Check whether you recognise it."
     else:
-        assessment, rec = "unknown", cls.get("action") or "Nothing is needed now; ARGUS-1 will keep watching."
+        assessment, rec = "unknown", cls.get("action") or "Nothing is needed now; ARGUS-INSTINCT will keep watching."
     unknown.append("Whether you caused it. Only you can say.")
     return {"assessment": assessment, "kind": kind, "known": known, "suspected": suspected,
             "unknown": unknown, "recommendation": rec, "command": cls.get("command") or "",
@@ -374,8 +374,8 @@ def _members(store, key, state=None):
 _CONSEQUENCE = {
     "recognise": "Records that you know about these exact observations. They stop asking for a decision "
                  "unless something about them changes. Nothing is whitelisted and similar future items are still checked.",
-    "not_recognise": "ARGUS-1 prepares a suggested response. Nothing is changed until you separately authorise it.",
-    "investigate_further": "ARGUS-1 re-checks and gathers fresh read-only evidence. Nothing is changed.",
+    "not_recognise": "ARGUS-INSTINCT prepares a suggested response. Nothing is changed until you separately authorise it.",
+    "investigate_further": "ARGUS-INSTINCT re-checks and gathers fresh read-only evidence. Nothing is changed.",
     "review_individually": "Opens each observation on its own so you can judge them one at a time.",
 }
 
@@ -401,7 +401,7 @@ def decision_queue(store):
         unc = list(dict.fromkeys(k for rep in reps for k in rep.get("unknown", [])))[:5]
         cases.append({
             "key": key, "title": title, "severity": worst["severity"], "count": count,
-            "what_happened": f"ARGUS-1 observed {count} thing(s) that look related. Its checks rated the worst one {worst['severity']}.",
+            "what_happened": f"ARGUS-INSTINCT observed {count} thing(s) that look related. Its checks rated the worst one {worst['severity']}.",
             "why_it_matters": "Only you can tell whether you or a program you use created these. "
                               "Unexplained items of this kind are worth a quick look; they are not proof of a break-in.",
             "established": est, "uncertain": unc,
@@ -535,12 +535,12 @@ def _klass(det):
 
 
 _KLASS_TEXT = {
-    "missing_dependency": "A program this check needs is not installed. ARGUS-1 will not install it for you; "
+    "missing_dependency": "A program this check needs is not installed. ARGUS-INSTINCT will not install it for you; "
                           "install it or accept the gap.",
     "permission": "This check is not allowed to read something it needs. Grant that access, or accept the gap.",
     "unsupported": "This check does not work on this computer. Nothing to fix.",
-    "source_unavailable": "The outside data source this check uses is gone or expired. ARGUS-1 has stopped retrying it.",
-    "transient": "The check failed or went quiet. ARGUS-1 is retrying with increasing delays.",
+    "source_unavailable": "The outside data source this check uses is gone or expired. ARGUS-INSTINCT has stopped retrying it.",
+    "transient": "The check failed or went quiet. ARGUS-INSTINCT is retrying with increasing delays.",
 }
 
 
@@ -581,7 +581,7 @@ def plan_recovery(store, report, now=None, rng=random.random):
             store.db.execute("UPDATE recovery SET status='exhausted', retries=?, next_try=CASE WHEN status<>'exhausted'"
                              " THEN ? ELSE next_try END, note=?, updated=? WHERE job=?",
                              (row["retries"], now + RECOVERY_COOLDOWN_S,
-                              "Retries are used up; ARGUS-1 will try again after a long pause.", now, job))
+                              "Retries are used up; ARGUS-INSTINCT will try again after a long pause.", now, job))
             plan.append({"job": job, "action": "none", "klass": klass})
         elif now >= row["next_try"]:
             plan.append({"job": job, "action": "retry", "klass": klass})
@@ -682,7 +682,7 @@ def take_notices(store, now=None):
     decisions = sum(1 for _k, n in fresh if n["kind"] == "decision")
     parts = ([f"{decisions} decisions are waiting for you"] if decisions else []) + \
             ([f"{len(fresh) - decisions} other update(s)"] if len(fresh) > decisions else [])
-    return [{"kind": "digest", "severity": worst, "text": "; ".join(parts) + ". Open ARGUS-1 to review."}]
+    return [{"kind": "digest", "severity": worst, "text": "; ".join(parts) + ". Open ARGUS-INSTINCT to review."}]
 
 
 # --- the overview ----------------------------------------------------------
@@ -715,7 +715,7 @@ def daily_summary(store, report, now=None, window=86400):
         "monitoring": nums,
         "actions_authorized": count("SELECT COUNT(*) FROM investigation_events WHERE ts>=? AND to_state=?", since, AUTHORIZED),
         "actions_performed": count("SELECT COUNT(*) FROM investigation_events WHERE ts>=? AND to_state=?", since, APPLIED),
-        "limitations": limits or ["None beyond what ARGUS-1 can see on this computer."],
+        "limitations": limits or ["None beyond what ARGUS-INSTINCT can see on this computer."],
     }
 
 
@@ -741,7 +741,7 @@ def status(store, report, now=None):
     if queue:
         level, headline = "attention", "A decision is waiting for you"
     elif nums["total"] and nums["not_reporting"] > nums["total"] // 2:
-        level, headline = "incomplete", "ARGUS-1 cannot see much right now"
+        level, headline = "incomplete", "ARGUS-INSTINCT cannot see much right now"
     elif nums["not_reporting"]:
         level, headline = "partial", "Nothing needs you, but some checks are not reporting"
     else:

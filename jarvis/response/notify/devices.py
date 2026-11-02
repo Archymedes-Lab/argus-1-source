@@ -49,6 +49,15 @@ def add(device, path=None, now=None):
 MIN_PREFIX = 4
 
 
+def mark_active(dev, path=None):
+    """The relay confirmed the activation: the device is no longer pending."""
+    doc = load(path)
+    for d in doc["devices"]:
+        if d.get("dev") == dev:
+            d.pop("relay_pending", None)
+    save(doc, path)
+
+
 def revoke(dev, path=None, now=None):
     """Revoke the one active device whose id is `dev` or starts with it.
 

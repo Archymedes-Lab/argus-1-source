@@ -55,6 +55,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from jarvis.core import brand
+from jarvis.response import categories
+
 CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
 API_URL = "https://api.resend.com/emails"
 
@@ -264,7 +267,7 @@ def status(store):
 
 # ── transport ───────────────────────────────────────────────────────────────
 
-def send_email(conf, subject, text, html=None):
+def send_email(conf, subject, text, html=None, category=None):
     """POST one email to Resend. Returns "" on success, else an error string.
 
     The API key goes only in the Authorization header of this one request to
@@ -274,9 +277,12 @@ def send_email(conf, subject, text, html=None):
     message = {
         "from": branded_sender(conf),
         "to": recipients(conf),
-        "subject": subject[:200],
+        "subject": _filed(subject, category)[:200],
         "text": text,
     }
+    if category:
+        # A header mail filters can sort on without parsing the subject.
+        message["headers"] = {"X-Argus-Category": category}
     if html:
         message["html"] = html
     payload = json.dumps(message).encode()
@@ -353,10 +359,11 @@ def _priority(subject):
     return "critical" if "critical" in low or "down" in low or "not watching" in low else "high"
 
 
-def send_webhook(conf, subject, text, now=None):
+def send_webhook(conf, subject, text, now=None, category=None, severity=None):
     ts = int(time.time() if now is None else now)
     payload = {"source": "argus", "host": socket.gethostname(), "ts": ts, "subject": subject[:200],
-               "priority": _priority(subject), "text": f"*{subject[:200]}*\n{text[:3500]}",
+               "category": category or "system", "category_label": categories.label(category or "system"),
+               "priority": severity or _priority(subject), "text": f"*{subject[:200]}*\n{text[:3500]}",
                "content": f"**{subject[:200]}**\n{text[:1800]}", "body": text[:60000]}
     body = json.dumps(payload).encode()
     headers = {"Content-Type": "application/json", "User-Agent": "argus-monitor/1.0",
@@ -372,10 +379,11 @@ def _ascii(text, limit):
     return (text or "").encode("ascii", "replace").decode()[:limit]
 
 
-def send_ntfy(conf, subject, text):
-    prio = _priority(subject)
-    headers = {"Title": _ascii(subject, 200), "Priority": "5" if prio == "critical" else "4",
-               "Tags": "rotating_light" if prio == "critical" else "warning",
+def send_ntfy(conf, subject, text, category=None, severity=None):
+    prio = severity or _priority(subject)
+    headers = {"Title": _ascii(_filed(subject, category), 200),
+               "Priority": "5" if prio == "critical" else "4" if prio == "high" else "3",
+               "Tags": ("rotating_light" if prio == "critical" else "warning") + f",{category or 'system'}",
                "User-Agent": "argus-monitor/1.0", "Content-Type": "text/plain; charset=utf-8"}
     token = (conf.get("ntfy_token") or "").strip()
     if token:
@@ -387,11 +395,11 @@ def send_ntfy(conf, subject, text):
 SYSLOG_SOCKET = "/dev/log"
 
 
-def send_syslog(subject, text, path=SYSLOG_SOCKET):
+def send_syslog(subject, text, path=SYSLOG_SOCKET, category=None, severity=None):
     """One RFC 3164-style line to the local syslog socket (journald reads it)."""
-    prio = _priority(subject)
+    prio = severity or _priority(subject)
     pri = 3 * 8 + (2 if prio == "critical" else 3)          # daemon.crit / daemon.err
-    line = " ".join((subject + " | " + text).split())[:1800]
+    line = " ".join((f"[{category or 'system'}] " + subject + " | " + text).split())[:1800]
     msg = f"<{pri}>argus[{os.getpid()}]: {line}".encode("utf-8", "replace")
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
@@ -402,20 +410,30 @@ def send_syslog(subject, text, path=SYSLOG_SOCKET):
         return f"syslog socket: {exc.strerror or type(exc).__name__}"
 
 
-def deliver(conf, subject, text, html=None, only=None, senders=None):
+def deliver(conf, subject, text, html=None, only=None, senders=None, category=None,
+            severity=None, counts=None):
     """Send one alert on every configured channel, each independently (I8).
 
+    `category` (response/categories.py) files the message on every channel:
+    email subject and header, webhook field, ntfy tag, syslog prefix, phone
+    payload. A caller that names none is the monitor talking about itself.
     Returns "" when at least one channel delivered, else every channel's error.
     A failing channel never stops another. `senders` exists for tests."""
     names = [c for c in channels(conf) if only is None or c in only]
     if not names:
         return "no alert channel is configured"
+    category = category if category in categories.LABELS else "system"
+    # Everything that leaves the machine says ARGUS-INSTINCT (core/brand.py); the
+    # findings behind it keep their identity.
+    subject, text = brand.brand(subject), brand.brand(text)
+    html = brand.brand(html) if html else html
     senders = senders or {
-        "email": lambda: send_email(conf, subject, text, html=html),
-        "webhook": lambda: send_webhook(conf, subject, text),
-        "ntfy": lambda: send_ntfy(conf, subject, text),
-        "syslog": lambda: send_syslog(subject, text),
-        "notify": lambda: _send_notify(conf, subject, text),
+        "email": lambda: send_email(conf, subject, text, html=html, category=category),
+        "webhook": lambda: send_webhook(conf, subject, text, category=category, severity=severity),
+        "ntfy": lambda: send_ntfy(conf, subject, text, category=category, severity=severity),
+        "syslog": lambda: send_syslog(subject, text, category=category, severity=severity),
+        "notify": lambda: _send_notify(conf, subject, text, category=category, severity=severity,
+                                       counts=counts),
     }
     errors, delivered = [], 0
     for name in names:
@@ -435,9 +453,18 @@ def deliver(conf, subject, text, html=None, only=None, senders=None):
 LAST_DELIVERY: dict = {}
 
 
-def _send_notify(conf, subject, text):
+def _send_notify(conf, subject, text, category=None, severity=None, counts=None):
     from jarvis.response.notify import channel as notify_channel
-    return notify_channel.send(conf, subject, text, severity=_priority(subject))
+    return notify_channel.send(conf, subject, text, severity=severity or _priority(subject),
+                               category=category, counts=counts)
+
+
+def _filed(subject, category):
+    """The subject with its category in front, once."""
+    if not category:
+        return subject
+    tag = f"[{categories.label(category)}]"
+    return subject if subject.startswith(tag) else f"{tag} {subject}"
 
 
 def test(store):
@@ -446,8 +473,8 @@ def test(store):
         return "alerts are not configured — set an email (resend_api_key, alert_from, " \
                "alert_to), webhook_url or ntfy_url in " + CONFIG_PATH
     err = deliver(conf, "[JARVIS] test alert",
-                     "This is a test from JARVIS (`jarvis alert --test`).\n"
-                     "If you got this, outage alerts will reach you too.\n")
+                  "This is a test from JARVIS (`jarvis alert --test`).\n"
+                  "If you got this, outage alerts will reach you too.\n", category="test")
     if not err:
         record_send(store)
     return err

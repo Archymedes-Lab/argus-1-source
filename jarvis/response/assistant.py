@@ -12,7 +12,6 @@ import time
 from jarvis.response import acknowledge, advisor, alert, knowledge, llm, plainwords, protocols
 from jarvis.response.reporting import diff, score, triage, voice
 
-
 PREFERRED_ASK_MODEL = "llama3.2:3b"
 _ABOUT_THIS_COMPUTER = re.compile(
     r"\b(my|mine|this|that|these|those|argus|jarvis|finding|findings|alert|alerts|warning|warnings|"
@@ -305,13 +304,13 @@ def _smalltalk(q):
     words = set(re.findall(r"[a-z']+", q))
     if q in ("hi", "hello", "hey", "hiya", "yo") or q.startswith(("hello ", "hi ", "hey ", "good morning",
                                                                    "good afternoon", "good evening")):
-        return ("Hello. I'm ARGUS-1's assistant. Ask me things like \"Is my computer okay?\" or "
+        return ("Hello. I'm ARGUS-INSTINCT's assistant. Ask me things like \"Is my computer okay?\" or "
                 "\"What needs my attention first?\", or press Investigate on any finding.")
     if words & {"thanks", "thank", "cheers"} and len(words) <= 4:
         return "You're welcome. Ask again whenever you like."
     if any(p in q for p in ("who are you", "what are you", "what can you do", "what do you do",
                             "help me", "how do you work", "what is argus")):
-        return ("I'm the ARGUS-1 assistant. I read what ARGUS-1 has observed on this computer and explain it "
+        return ("I'm the ARGUS-INSTINCT assistant. I read what ARGUS-INSTINCT has observed on this computer and explain it "
                 "in plain language: whether your computer looks okay, what needs your attention, what a "
                 "finding means and what you can safely do next. I never change anything without your "
                 "approval, and everything stays on this computer.")
@@ -373,7 +372,7 @@ def _ollama(store, question, conf, jobs=None, level="expert", lang="en"):
     if _is_general(question):
         # A general-knowledge question needs none of this computer's data: leaving it out keeps
         # the answer on topic, and the shorter prompt answers faster on a CPU.
-        system = ("You are ARGUS-1, a friendly computer-security assistant for people who are not "
+        system = ("You are ARGUS-INSTINCT, a friendly computer-security assistant for people who are not "
                   "technical. Answer the question in plain language from general knowledge, in at "
                   "most 90 words, and finish the last sentence. Do not mention scan results; you have "
                   "not been given any. Never claim a computer is safe or clean, and never advise "

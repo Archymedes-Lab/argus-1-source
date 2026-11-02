@@ -88,14 +88,41 @@ def cmd_pair(args, store):
         except relay.RelayError:
             pass
         sys.exit("notify: not paired. If the codes differed, someone may be interfering; pair again.")
-    devices.add({"dev": claim["dev"], "d_sig": claim["d_sig"], "d_enc": claim["d_enc"], "name": name})
-    try:
-        relay.call(conf, ident, "POST", path + "/activate", {"code": code})
-    except relay.RelayError as exc:
-        print(f"  warning: paired here, but the relay did not confirm ({exc}); `notify test` will tell", flush=True)
+    devices.add({"dev": claim["dev"], "d_sig": claim["d_sig"], "d_enc": claim["d_enc"], "name": name,
+                 "relay_pending": True})
+    err = activate(conf, ident, claim["dev"], code)
+    if err:
+        print(f"  warning: paired here, but the relay did not activate the phone ({err}).\n"
+              f"  The phone will not receive alerts until it is activated: run `notify pair` again.", flush=True)
+    else:
+        devices.mark_active(claim["dev"])
     err = channel.send(conf, f"{label} is paired", "Alerts from this server will arrive here.",
                        severity="ok", kind="test", store=store)
     print(f"\n  Paired “{name}”." + (" A test notification is on its way." if not err else f" Test failed: {err}"))
+
+
+ACTIVATE_TRIES = 5
+ACTIVATE_WAIT_S = 6
+
+
+def activate(conf, ident, dev, code, tries=ACTIVATE_TRIES, wait=ACTIVATE_WAIT_S, sleep=time.sleep):
+    """Tell the relay the owner confirmed this phone; '' when it agreed.
+
+    Retried: a relay hiccup here used to leave a device recorded locally but
+    pending on the relay, so every later send failed with "unknown or inactive
+    device" and nothing said why."""
+    err = ""
+    for attempt in range(tries):
+        try:
+            relay.call(conf, ident, "POST", f"/v1/mailbox/{ident.mailbox}/devices/{dev}/activate", {"code": code})
+            return ""
+        except relay.RelayError as exc:
+            err = str(exc)
+            if err.startswith("HTTP 404"):
+                return err      # no pending claim any more: retrying cannot help
+        if attempt + 1 < tries:
+            sleep(wait)
+    return err
 
 
 def cmd_devices(args, store):
@@ -107,7 +134,8 @@ def cmd_devices(args, store):
         print("no paired devices; run `notify pair`")
     for d in doc["devices"]:
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(d.get("paired_at", 0)))
-        state = "revoked " + time.strftime("%Y-%m-%d", time.localtime(d["revoked_at"])) if d.get("revoked_at") else "active"
+        state = ("revoked " + time.strftime("%Y-%m-%d", time.localtime(d["revoked_at"])) if d.get("revoked_at")
+                 else "NOT ACTIVATED on the relay (pair again)" if d.get("relay_pending") else "active")
         print(f"  {_printable(d.get('dev', '?'), 10)}  {_printable(d.get('name', '?'), 40):<24} paired {when}  {state}")
 
 
@@ -152,7 +180,24 @@ def cmd_status(args, store):
     print(f"relay      {conf.get('notify_url') or relay.DEFAULT_URL}")
     print(f"crypto     {lib}")
     print(f"mailbox    {ident.mailbox if ident else 'not created (run notify pair)'}")
-    print(f"devices    {len(devices.active())} active")
+    active = devices.active()
+    pending = [d for d in active if d.get("relay_pending")]
+    print(f"devices    {len(active)} active" + (f", {len(pending)} not activated on the relay" if pending else ""))
+    if ident is not None and active:
+        try:
+            listed = relay.call(conf, ident, "GET", f"/v1/mailbox/{ident.mailbox}/devices") or []
+        except relay.RelayError as exc:
+            listed = None
+            print(f"relay side {exc}")
+        if isinstance(listed, list):
+            known = {d["dev"]: d for d in active}
+            for row in listed:
+                if not isinstance(row, dict) or row.get("dev") not in known:
+                    continue
+                seen = row.get("last_seen")
+                when = time.strftime("%Y-%m-%d %H:%M", time.localtime(seen)) if seen else "never"
+                print(f"  {str(row['dev'])[:10]}  {str(row.get('name') or '?'):<24} {row.get('state')}  "
+                      f"push {'yes' if row.get('push') else 'no'}  last fetched inbox {when}")
     if state:
         fmt = lambda t: time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "never"  # noqa: E731
         print(f"last ok    {fmt(state.get('last_ok'))}")

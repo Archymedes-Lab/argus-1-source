@@ -149,8 +149,12 @@ def _remember(store, findings, hours):
     for r in store.db.execute(
             "SELECT * FROM sysmon_hits WHERE ts >= ? AND category='sysmon-linux' "
             "ORDER BY ts DESC", (since,)):
-        keep.append(_finding(r["category"], r["severity"], r["title"],
-                             r["detail"], r["where_"]))
+        # seen_at: when this pass's rule last matched. A remembered hit stays
+        # on view for the memory window, but consumers that judge the stream
+        # right now (the Link Plane's rotation check) need to tell a fresh
+        # match from yesterday's.
+        keep.append({**_finding(r["category"], r["severity"], r["title"],
+                                r["detail"], r["where_"]), "seen_at": r["ts"]})
     return keep
 
 

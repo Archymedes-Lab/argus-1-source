@@ -1,11 +1,11 @@
 """What Windows' own antivirus is doing, and a bounded way to ask it to scan.
 
-ARGUS-1 is a monitor: it notices and explains, it does not replace an
+ARGUS-INSTINCT is a monitor: it notices and explains, it does not replace an
 antivirus. Blocking and removing malware as it arrives is what Microsoft
 Defender does, so this module reads Defender's state (read-only) and, when
 the owner asks, starts one Defender *quick scan* with fixed arguments. No
 text from the caller reaches the command, a scan is allowed at most once
-every SCAN_COOLDOWN_S, and ARGUS-1 never claims the computer is clean
+every SCAN_COOLDOWN_S, and ARGUS-INSTINCT never claims the computer is clean
 because a scan was started.
 """
 
@@ -40,7 +40,7 @@ def summarize(raw):
     """-> the dict the app shows, from Defender's raw fields (None when unreadable)."""
     if not isinstance(raw, dict):
         return {"available": False, "level": "unknown",
-                "summary": "ARGUS-1 cannot read Windows' antivirus right now, so it cannot say whether you are protected."}
+                "summary": "ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected."}
     rt, av = bool(raw.get("rt")), bool(raw.get("av"))
     age = raw.get("age") if isinstance(raw.get("age"), int) else None
     if not (rt and av):

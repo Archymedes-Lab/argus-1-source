@@ -31,14 +31,14 @@
       {#if (app.data?.paused_until ?? 0) * 1000 > Date.now()}
         <div class="mx-auto mt-6 max-w-[1200px] px-8">
           <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900">
-            <span class="dot dot-warn"></span>{tr("ARGUS-1 is taking a break and is not checking your computer. It starts again by itself at {time}.", { time: new Date(app.data.paused_until * 1000).toLocaleTimeString(app.lang, { hour: "2-digit", minute: "2-digit" }) })}
+            <span class="dot dot-warn"></span>{tr("ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.", { time: new Date(app.data.paused_until * 1000).toLocaleTimeString(app.lang, { hour: "2-digit", minute: "2-digit" }) })}
           </div>
         </div>
       {/if}
       {#if app.daemon === "down" && app.data}
         <div class="mx-auto mt-6 max-w-[1200px] px-8">
           <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900">
-            <span class="dot dot-warn"></span>{tr("ARGUS-1 is not answering right now. Showing the last state it reported; monitoring may still be running.")}
+            <span class="dot dot-warn"></span>{tr("ARGUS-INSTINCT is not answering right now. Showing the last state it reported; monitoring may still be running.")}
           </div>
         </div>
       {/if}

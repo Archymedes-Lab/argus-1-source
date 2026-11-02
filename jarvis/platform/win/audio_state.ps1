@@ -350,4 +350,18 @@ try {
 } catch {
   $state.errors += ('Core Audio metadata probe unavailable: ' + $_.Exception.GetType().Name)
 }
+# Presence at the moment of a beep (collectors/host/beepcheck.py): the Windows
+# sessions and the names of running programs, read in this same process so the
+# check costs no extra PowerShell start. Names only; nothing about their content.
+$presence = [ordered]@{ sessions = @(); procs = @(); error = '' }
+try {
+  $q = (& "$env:SystemRoot\System32\qwinsta.exe" 2>$null) | Select-Object -Skip 1
+  foreach ($line in $q) {
+    $t = ($line -replace '^[ >]', '').Trim() -split '\s+'
+    if ($t.Count -ge 3) { $presence.sessions += [ordered]@{ name = $t[0]; user = $(if ($t.Count -ge 4) { $t[1] } else { '' }); state = $t[-1] } }
+  }
+} catch { $presence.error = 'sessions: ' + $_.Exception.GetType().Name }
+try { $presence.procs = @(Get-Process | ForEach-Object { $_.ProcessName.ToLower() } | Sort-Object -Unique) } catch { }
+if ($state -is [System.Collections.IDictionary]) { $state['presence'] = $presence }
+else { $state | Add-Member -NotePropertyName presence -NotePropertyValue $presence -Force }
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($state | ConvertTo-Json -Depth 6 -Compress)))

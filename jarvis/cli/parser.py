@@ -61,6 +61,7 @@ from .commands import (
     cmd_toolchain,
     cmd_watch,
     cmd_webshell,
+    cmd_wslmanifest,
 )
 from .commands import defend as defend_cli
 from .commands import desktop as desktop_cli
@@ -82,6 +83,7 @@ from .commands import retention as retention_cli
 from .commands import sensor as sensor_cli
 from .commands import server as server_cli
 from .commands import timeline as timeline_cli
+from .commands import update as update_cli
 from .commands import veil as veil_cli
 
 
@@ -110,6 +112,7 @@ def build_parser():
     canary_cli.add_parser(sub)
     server_cli.add_parser(sub)
     notify_cli.add_parser(sub)
+    update_cli.add_parser(sub)
     privacy_cli.add_parser(sub)
     timeline_cli.add_parser(sub)
     history_cli.add_parser(sub)
@@ -303,6 +306,17 @@ def build_parser():
     iw.add_argument("-v", "--verbose", action="store_true")
     iw.add_argument("--json", action="store_true")
     iw.set_defaults(fn=cmd_inputwatch)
+
+    wm = sub.add_parser("wslmanifest",
+                        help="what WSL runs, by owner, against the approved manifest")
+    wm.add_argument("--approve", action="store_true",
+                    help="approve everything running now as the expected set")
+    wm.add_argument("--partial", action="store_true",
+                    help="with --approve: accept a view that cannot read every process")
+    wm.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    wm.add_argument("-v", "--verbose", action="store_true")
+    wm.add_argument("--json", action="store_true")
+    wm.set_defaults(fn=cmd_wslmanifest)
 
     bd = sub.add_parser("backdoor",
                         help="SSH keys, sudo grants, autostart units, accounts")

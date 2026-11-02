@@ -92,6 +92,14 @@ The relay checks the id, the window (±300 s) and that the signature was not see
    `POST /v1/mailbox/{mb}/devices/{dev}/activate` (signed). The phone polls the slot until
    active, then stores `{mb, label, s_sig, s_enc}`.
 
+Robustness (2026-11-02): the server retries the activation 5 times over 30 s; if the relay
+still does not confirm, the device stays recorded with `relay_pending: true`, `notify devices`
+and `notify status` say so, and the Link Plane reports it (pair again to fix). The phone
+stores the pending pairing (server, code, its keys, the 10-minute deadline) in IndexedDB
+*before* claiming, so a reload or an app switch mid-pairing resumes the "compare this code"
+screen with the same keys instead of losing them; Servers shows "pairing in progress" with a
+cancel, and the entry is cleared on success, expiry or cancel.
+
 ## Envelopes
 
 Per message and device, the server makes an ephemeral X25519 key `E`:
@@ -110,6 +118,11 @@ envelope = {v: 1, id, mb, dev, sent, expires, epk, iv, ct, sig}
 Payload (JSON, ≤ 4 KiB): `{kind: "alert"|"test", title, body, severity, finding?, host, at}`.
 
 Server → relay: `POST /v1/mailbox/{mb}/envelopes` (signed) with `[envelope, ...]`.
+Server ← relay: `GET /v1/mailbox/{mb}/devices` (signed) returns
+`[{dev, name, state, added, last_seen, push}]`: liveness metadata only (`last_seen` is the
+device's last inbox fetch, `push` whether a subscription is stored). The server's Link Plane
+(`jarvis/service/links.py`) uses it to say "this phone has not checked in for 48 h" or
+"this phone has no push subscription"; nothing it returns can read or forge an alert (N2, N3).
 Phone ← relay: `GET /v1/device/{dev}/inbox` (signed by `D_sig`), then
 `POST /v1/device/{dev}/ack` with the ids it stored. The relay deletes acked and expired ones.
 

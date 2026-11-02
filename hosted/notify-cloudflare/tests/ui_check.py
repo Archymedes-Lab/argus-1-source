@@ -23,6 +23,14 @@ CONF = {"notify_url": BASE, "notify_label": "web-1"}
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/argus-ui"
 
 
+def wait_rows(page, n, timeout_s=10):
+    """Poll the row count (string evaluation is blocked by the app's CSP)."""
+    for _ in range(int(timeout_s * 10)):
+        if page.locator(".row").count() == n:
+            return
+        page.wait_for_timeout(100)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     srv = subprocess.Popen(["./node_modules/.bin/wrangler", "dev", "--ip", "127.0.0.1", "--port", str(PORT), "--local",
@@ -74,12 +82,12 @@ def main():
             relay.call(CONF, ident, "POST", f"/v1/mailbox/{ident.mailbox}/devices/{c['dev']}/activate", {"code": code})
             page.wait_for_selector("text=Paired", timeout=20000)
             page.screenshot(path=f"{OUT}/4-paired.png")
-            for sev, title in (("critical", "web-1: known-exploited vulnerability fixed but not installed: openssh"),
-                               ("medium", "web-1: 22 packages have security fixes not installed"),
-                               ("low", "web-1: no off-box heartbeat")):
+            for sev, title, cat in (("critical", "web-1: known-exploited vulnerability fixed but not installed: openssh", "threat"),
+                                    ("medium", "web-1: 18 important update(s) not installed", "updates"),
+                                    ("low", "web-1: no off-box heartbeat", "monitoring")):
                 err = channel.send(CONF, title, "CVE-2024-6387 (CISA KEV) affect openssh 1:9.6p1-3ubuntu13.4; "
                                    "USN-6859-1 fixed it in 1:9.6p1-3ubuntu13.5. Install the update and restart sshd.\n"
-                                   "<img src=x onerror=alert(1)> stays text.", severity=sev)
+                                   "<img src=x onerror=alert(1)> stays text.", severity=sev, category=cat)
                 if err:
                     problems.append(f"send: {err}")
             page.goto(BASE + "/#/")
@@ -103,6 +111,17 @@ def main():
             page.wait_for_timeout(500)
             page.screenshot(path=f"{OUT}/5-inbox.png")
             rows = page.locator(".row").count()
+            # Categories: one chip per kind present plus All; a chip filters the inbox.
+            chips = page.locator(".chips .chip").count()
+            if chips != 4:
+                problems.append(f"expected 4 category chips (All + 3), saw {chips}")
+            page.click(".chips .chip >> text=Updates")
+            wait_rows(page, 1)
+            if page.locator(".row").count() != 1:
+                problems.append(f"Updates filter shows {page.locator('.row').count()} rows, expected 1")
+            page.screenshot(path=f"{OUT}/5b-filter-updates.png")
+            page.click(".chips .chip >> text=All")
+            wait_rows(page, 3)
             page.locator(".row").first.click()
             page.wait_for_selector(".detail")
             if page.locator(".detail img").count():
@@ -110,7 +129,19 @@ def main():
             page.screenshot(path=f"{OUT}/6-detail.png", full_page=True)
             page.click("text=Settings")
             page.wait_for_selector("text=Show alert titles on the lock screen")
-            page.screenshot(path=f"{OUT}/7-settings.png")
+            page.wait_for_selector("text=Notify me about")
+            if not page.locator("#cat-threat").is_disabled():
+                problems.append("security threats can be muted")
+            page.uncheck("#cat-updates")
+            muted = []
+            for _ in range(50):          # the switch writes IndexedDB asynchronously
+                muted = page.evaluate("import('/lib/store.js').then(m => m.settings.get('mutedCategories', []))")
+                if muted:
+                    break
+                page.wait_for_timeout(100)
+            if muted != ["updates"]:
+                problems.append(f"muting updates stored {muted}")
+            page.screenshot(path=f"{OUT}/7-settings.png", full_page=True)
             ctx_light = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, color_scheme="light")
             lp = ctx_light.new_page()
             lp.goto(BASE + "/#/")

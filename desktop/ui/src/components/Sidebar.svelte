@@ -30,7 +30,7 @@
 <aside class="flex w-[232px] shrink-0 flex-col border-r border-gray-300 bg-bg-200">
   <div class="flex h-13 items-center gap-2.5 px-4">
     <span class="grid size-6 place-items-center rounded-md bg-gray-1000 text-bg-100"><Shield size={14} strokeWidth={2} /></span>
-    <span class="text-heading-16">ARGUS-1</span>
+    <span class="text-heading-16">ARGUS-INSTINCT</span>
   </div>
   <nav class="flex flex-col gap-0.5 px-2 pt-2" aria-label={tr("Sections")}>
     {#each NAV.filter((n) => n.group === "main" && (app.mode === "expert" || n.view !== "collectors")) as n (n.view)}{@render item(n)}{/each}
@@ -43,7 +43,7 @@
     {#each NAV.filter((n) => n.group === "bottom") as n (n.view)}{@render item(n)}{/each}
     <div class="mt-2 flex items-center gap-2 px-2.5 py-2 text-label-12 text-gray-900">
       <span class="dot {app.daemon === 'live' ? 'dot-ok' : app.daemon === 'down' ? 'dot-bad' : 'dot-run'}"></span>
-      {app.daemon === "live" ? ((app.data?.paused_until ?? 0) * 1000 > Date.now() ? tr("On a break") : tr("Watching")) : app.daemon === "down" ? tr("ARGUS-1 unreachable") : tr("Connecting")}
+      {app.daemon === "live" ? ((app.data?.paused_until ?? 0) * 1000 > Date.now() ? tr("On a break") : tr("Watching")) : app.daemon === "down" ? tr("ARGUS-INSTINCT unreachable") : tr("Connecting")}
     </div>
   </div>
 </aside>

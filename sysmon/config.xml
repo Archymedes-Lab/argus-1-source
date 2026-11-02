@@ -25,12 +25,18 @@
 
   <EventFiltering>
 
-    <!-- Every exec and exit — unfiltered, as before. -->
+    <!-- Every exec, unfiltered. Every exit except the ones Sysmon cannot name:
+         an exit whose image is "<unknown process>" carries no identity (no
+         image, no command line), and those were 17,800 of 60,942 events in
+         30 minutes on 2026-11-02 (29% of the stream). Exits of named
+         processes stay. -->
     <RuleGroup name="proc-create" groupRelation="or">
       <ProcessCreate onmatch="exclude"></ProcessCreate>
     </RuleGroup>
     <RuleGroup name="proc-terminate" groupRelation="or">
-      <ProcessTerminate onmatch="exclude"></ProcessTerminate>
+      <ProcessTerminate onmatch="exclude">
+        <Image condition="is">&lt;unknown process&gt;</Image>
+      </ProcessTerminate>
     </RuleGroup>
 
     <!-- Outbound connections, minus anything that stays on the local network. -->

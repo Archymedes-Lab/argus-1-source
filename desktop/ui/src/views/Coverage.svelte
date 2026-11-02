@@ -37,8 +37,8 @@
 <div class="flex flex-col gap-6">
   <div class="flex items-start gap-4">
     <div class="max-w-[760px]">
-      <h2 class="text-heading-24">{tr("What ARGUS-1 can and cannot see")}</h2>
-      <p class="mt-1 text-copy-14 text-gray-900">{tr("Each row is a way attackers work. Proven means ARGUS-1 has shown it can see it, Expected means it should but has not been proven, a Blind spot means it cannot see it yet, and Got worse means it used to see it.")}</p>
+      <h2 class="text-heading-24">{tr("What ARGUS-INSTINCT can and cannot see")}</h2>
+      <p class="mt-1 text-copy-14 text-gray-900">{tr("Each row is a way attackers work. Proven means ARGUS-INSTINCT has shown it can see it, Expected means it should but has not been proven, a Blind spot means it cannot see it yet, and Got worse means it used to see it.")}</p>
     </div>
     <button class="btn btn-sm ml-auto shrink-0" onclick={full}>{tr("Open full map")}</button>
   </div>
@@ -46,7 +46,7 @@
   {#if err && !data}
     <div class="empty">{err}</div>
   {:else if !data}
-    <div class="empty">{tr("Reading ARGUS-1…")}</div>
+    <div class="empty">{tr("Reading ARGUS-INSTINCT…")}</div>
   {:else}
     <section class="grid grid-cols-4 gap-3 max-md:grid-cols-2">
       {#each LEVELS as l}

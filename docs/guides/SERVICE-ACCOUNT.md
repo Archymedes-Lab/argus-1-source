@@ -1,4 +1,4 @@
-# Running ARGUS-1 under its own account (the default)
+# Running ARGUS-INSTINCT under its own account (the default)
 
 The daemon should run as the system account `jarvis`, not as you. Run as you,
 anything running under your account can stop it, rewrite its store, change its

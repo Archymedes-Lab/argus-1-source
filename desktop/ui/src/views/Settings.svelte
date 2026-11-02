@@ -47,7 +47,7 @@
     <div class="card row justify-between gap-4">
       <div>
         <p class="text-label-13">{tr("Interface language")}</p>
-        <p class="mt-0.5 text-copy-13 text-gray-900">{tr("The assistant also answers in this language. Findings and evidence from your computer are shown as ARGUS-1 recorded them.")}</p>
+        <p class="mt-0.5 text-copy-13 text-gray-900">{tr("The assistant also answers in this language. Findings and evidence from your computer are shown as ARGUS-INSTINCT recorded them.")}</p>
       </div>
       <Select items={LANGS.map((l) => ({ value: l.code, label: l.name }))} label={tr("Interface language")} width="w-44"
               bind:value={() => app.lang, (v) => setLang(v || app.lang)} />
@@ -82,12 +82,12 @@
         <div>
           <p class="text-label-13">{t("review.auto")}</p>
           <p class="mt-0.5 text-copy-13 text-gray-900">{app.mode === "simple"
-            ? tr("If something has been the same for {n} days and only needs your OK, ARGUS-1 notes it as expected so you are not asked. It never does this for the most serious items, and asks again if anything changes.", { n: days })
+            ? tr("If something has been the same for {n} days and only needs your OK, ARGUS-INSTINCT notes it as expected so you are not asked. It never does this for the most serious items, and asks again if anything changes.", { n: days })
             : tr("Recognise groups rated high (never critical) that only need your confirmation and have been unchanged for {n} days. Each one is logged; changed evidence asks again.", { n: days })}</p>
         </div>
         {#if ap?.policy}
           <input type="checkbox" checked={ap.policy.auto_handle} onchange={toggleAuto} aria-label={t("review.auto")} />
-        {:else}<span class="text-copy-13 text-gray-900">{tr("Needs the newer ARGUS-1 service")}</span>{/if}
+        {:else}<span class="text-copy-13 text-gray-900">{tr("Needs the newer ARGUS-INSTINCT service")}</span>{/if}
       </div>
       <div class="row justify-between"><span class="text-label-13">{tr("Critical findings")}</span><span class="text-copy-13 text-gray-900">{tr("Always ask")}</span></div>
       <div class="row justify-between"><span class="text-label-13">{tr("Applying a fix")}</span><span class="text-copy-13 text-gray-900">{tr("Never from this app")}</span></div>
@@ -95,7 +95,7 @@
   </section>
 
   {@render group(tr("Assistant"), [
-    [tr("Where answers come from"), tr("ARGUS-1's own data and a built-in safety guide; no extra software needed")],
+    [tr("Where answers come from"), tr("ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed")],
     [tr("Where it runs"), tr("This computer only; nothing is sent to other addresses")],
     [tr("What it can do"), tr("Reads and explains; it cannot act on what it says")],
   ])}
@@ -124,7 +124,7 @@
       {/each}
       <div class="row justify-between gap-4"><span class="text-label-13">{tr("Tray icon")}</span><span class="text-right text-copy-13 text-gray-900">{app.mode === "simple" ? tr("A coloured dot shows how things are going") : tr("Green, amber, orange; grey when unreachable")}</span></div>
     </div>
-    <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("These only control pop-ups from this app. ARGUS-1 keeps watching either way.")}</p>
+    <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("These only control pop-ups from this app. ARGUS-INSTINCT keeps watching either way.")}</p>
   </section>
   {/if}
 

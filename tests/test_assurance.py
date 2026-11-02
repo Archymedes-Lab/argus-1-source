@@ -68,11 +68,15 @@ class AssuranceTests(unittest.TestCase):
         # 2026-10-30: +2 unverified signed_detection_content and
         # self_tamper_evidence (selfguard job); neither is validated.
         # 2026-10-30: +1 unverified bruteforce_deterrence (bruteforce job).
-        self.assertEqual(gaps['implementation_unverified'], 29)
+        # 2026-10-31: +1 unverified wsl_process_manifest (wslmanifest job).
+        # 2026-11-02: +1 unverified link_plane (watchdogs job).
+        # 2026-11-02: +1 unverified software_updates (updates job).
+        # Recomputed on the integrated tree (ARGUS-INSTINCT integration, 2026-11-02).
+        self.assertEqual(gaps['implementation_unverified'], 32)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 22)
-        self.assertEqual(gaps['containment_not_validated'], 54)  # +3 2026-10-30
-        self.assertEqual(gaps['validation_date_missing'], 54)  # +3 2026-10-30
+        self.assertEqual(gaps['containment_not_validated'], 57)  # +3 2026-10-30, +1 2026-10-31, +2 2026-11-02
+        self.assertEqual(gaps['validation_date_missing'], 57)  # +3 2026-10-30, +1 2026-10-31, +2 2026-11-02
         self.assertFalse(result['complete'])
 
     def test_bruteforce_deterrence_claims_no_live_ban(self):

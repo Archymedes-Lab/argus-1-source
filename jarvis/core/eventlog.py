@@ -44,6 +44,7 @@ import json
 import os
 import shutil
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
@@ -145,18 +146,60 @@ def _fsync_dir(path):
 
 def _jsonl(path):
     """Complete lines of an append-only JSON-lines file; a torn tail is ignored."""
-    out = []
+    return [obj for obj, _n in _parsed_lines(path)]
+
+
+# Parsed prefixes of the append-only files, shared by every EventLog opened in
+# this process. Several jobs open the log every minute; each open used to
+# re-parse the whole chain file (8 MB, 0.4 s CPU, 23 MiB, measured 2026-11-02)
+# and the active segment. The cache never trusts file metadata: each call
+# reads the bytes and reuses the parse only when the SHA-256 of the previously
+# parsed prefix still matches, so a rewritten file is parsed afresh and the
+# result is always what a fresh parse would return. Entries are (object,
+# line length); callers must not mutate the objects.
+_PARSE_CACHE = {}
+_PARSE_LOCK = threading.Lock()
+_PARSE_CACHE_FILES = 8         # chain + active of the live log, plus a few others
+_SEALED_CACHE = {}
+
+
+def _parsed_lines(path):
+    """[(object, line_length)] for the complete, valid lines at the start of
+    `path`, stopping at a torn or invalid line exactly like a fresh parse."""
     try:
         with open(path, "rb") as fh:
-            for line in fh:
-                if not line.endswith(b"\n"):
-                    break
-                try:
-                    out.append(json.loads(line))
-                except ValueError:
-                    break
+            data = fh.read()
     except FileNotFoundError:
-        pass
+        return []
+    key = os.fspath(path)
+    with _PARSE_LOCK:
+        hit = _PARSE_CACHE.get(key)
+    start, out = 0, []
+    if hit and len(data) >= hit["size"] and \
+            hashlib.sha256(memoryview(data)[:hit["size"]]).digest() == hit["digest"]:
+        start, out = hit["size"], list(hit["items"])
+        if hit["stopped"] and len(data) == hit["size"]:
+            return out
+    pos = start
+    stopped = False
+    while pos < len(data):
+        end = data.find(b"\n", pos)
+        if end < 0:
+            stopped = True
+            break
+        try:
+            obj = json.loads(data[pos:end + 1])
+        except ValueError:
+            stopped = True
+            break
+        out.append((obj, end + 1 - pos))
+        pos = end + 1
+    with _PARSE_LOCK:
+        _PARSE_CACHE.pop(key, None)
+        while len(_PARSE_CACHE) >= _PARSE_CACHE_FILES:
+            _PARSE_CACHE.pop(next(iter(_PARSE_CACHE)))
+        _PARSE_CACHE[key] = {"size": pos, "digest": hashlib.sha256(memoryview(data)[:pos]).digest(),
+                             "items": tuple(out), "stopped": stopped}
     return out
 
 
@@ -165,6 +208,11 @@ def _append_line(path, obj):
         fh.write((_canonical(obj) + "\n").encode())
         fh.flush()
         os.fsync(fh.fileno())
+
+
+def _copy_cursors(head):
+    """The head's cursors as this instance's own dicts (headers are shared)."""
+    return {k: dict(v) for k, v in (head["cursors"] if head else {}).items()}
 
 
 def _cursor_key(sensor, channel):
@@ -209,9 +257,36 @@ class EventLog:
                 self.db.execute("PRAGMA journal_mode=WAL")
                 self.db.executescript(INDEX_SCHEMA)
         self._load()
-        self.sealed_bytes = sum(p.stat().st_size for p in self.segdir.glob("*.jseg"))
+        self.sealed_bytes = self._sealed_total()
         if writer:
             self._reindex()
+
+    def _sealed_total(self):
+        """Bytes in sealed segments. Sealed files never change size, so the sum
+        is reused while the chain head and the prune record are unchanged
+        (stat of 3007 files on every open, measured 2026-11-02)."""
+        try:
+            pruned = self.pruned_path.stat().st_size
+        except OSError:
+            pruned = -1
+        key = (os.fspath(self.segdir), len(self.chain), self.head_hash, pruned)
+        with _PARSE_LOCK:
+            hit = _SEALED_CACHE.get(os.fspath(self.segdir))
+        if hit and hit[0] == key:
+            return hit[1]
+        total = 0
+        try:
+            with os.scandir(self.segdir) as it:
+                for entry in it:
+                    if entry.name.endswith(".jseg"):
+                        total += entry.stat().st_size
+        except FileNotFoundError:
+            total = 0
+        with _PARSE_LOCK:
+            if len(_SEALED_CACHE) >= _PARSE_CACHE_FILES:
+                _SEALED_CACHE.pop(next(iter(_SEALED_CACHE)))
+            _SEALED_CACHE[os.fspath(self.segdir)] = (key, total)
+        return total
 
     def close(self):
         if self.db is not None:
@@ -231,51 +306,44 @@ class EventLog:
 
     def _load(self):
         """Rebuild in-memory state from the files, finishing an interrupted seal."""
-        self.chain = _jsonl(self.chain_path)
+        self.chain = _jsonl(self.chain_path)        # a new list; headers are shared, read-only
         if self.writer:
             self._adopt_orphan_segment()
         head = self.chain[-1] if self.chain else None
         self.head_hash = head["hash"] if head else GENESIS
         self.sealed_seq = head["last_seq"] if head else 0
-        self.cursors = dict(head["cursors"]) if head else {}
+        self.cursors = _copy_cursors(head)
         self.last_seq = self.sealed_seq
         self.active_events = 0
         self.active_bytes = 0
         self.active_started = None
         committed, stale = 0, False
         try:
-            with open(self.active, "rb") as fh:
-                pending_seq = self.last_seq
-                pending_count = 0
-                offset = 0
-                for line in fh:
-                    if not line.endswith(b"\n"):
+            pending_seq = self.last_seq
+            pending_count = 0
+            offset = 0
+            for obj, length in _parsed_lines(self.active):
+                offset += length
+                if "cursor" in obj:
+                    c = dict(obj["cursor"])
+                    self.cursors[_cursor_key(c["sensor"], c["channel"])] = c
+                    self.last_seq = pending_seq
+                    self.active_events += pending_count
+                    pending_count = 0
+                    if self.active_started is None:
+                        self.active_started = c.get("at")
+                    committed = offset
+                else:
+                    if obj.get("seq", 0) <= self.sealed_seq:
+                        stale = True      # sealed already; the reset was interrupted
                         break
-                    try:
-                        obj = json.loads(line)
-                    except ValueError:
-                        break
-                    offset += len(line)
-                    if "cursor" in obj:
-                        c = obj["cursor"]
-                        self.cursors[_cursor_key(c["sensor"], c["channel"])] = c
-                        self.last_seq = pending_seq
-                        self.active_events += pending_count
-                        pending_count = 0
-                        if self.active_started is None:
-                            self.active_started = c.get("at")
-                        committed = offset
-                    else:
-                        if obj.get("seq", 0) <= self.sealed_seq:
-                            stale = True      # sealed already; the reset was interrupted
-                            break
-                        pending_seq = obj["seq"]
-                        pending_count += 1
+                    pending_seq = obj["seq"]
+                    pending_count += 1
         except FileNotFoundError:
             pass
         if stale:
             self.last_seq, self.active_events, self.active_started = self.sealed_seq, 0, None
-            self.cursors = dict(head["cursors"]) if head else {}
+            self.cursors = _copy_cursors(head)
             committed = 0
         self.active_bytes = committed
         self._active_age_base = max(0, time.time() - self.active_started) if self.active_started else 0

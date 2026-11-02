@@ -18,21 +18,21 @@ export function plainFinding(f: Finding): Plain {
   const g = G[f.category ?? ""];
   if (g) return { means: g[0], why: g[1], next: g[2] };
   return {
-    means: "ARGUS-1 noticed something it wants you to know about.",
-    why: SEVERITY_WHY[f.severity] ?? "ARGUS-1 has not rated this.",
+    means: "ARGUS-INSTINCT noticed something it wants you to know about.",
+    why: SEVERITY_WHY[f.severity] ?? "ARGUS-INSTINCT has not rated this.",
     next: "Open it and decide whether you expect this on your computer.",
   };
 }
 
 export interface Headline { tone: "ok" | "warn" | "bad" | "unknown"; title: string; body: string; vars: Record<string, number> }
 
-const PARTIAL = " Some of ARGUS-1's checks are not reporting right now, so this picture may be incomplete.";
+const PARTIAL = " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.";
 
 /** One calm sentence about the whole computer, from the numbers the daemon reports.
  *  `title` and `body` are English keys with {n} placeholders; the view translates them. */
 export function headline(score: number | null | undefined, critical: number, high: number, notReporting: number): Headline {
   if (score === null || score === undefined) {
-    return { tone: "unknown", title: "ARGUS-1 is still getting a look at your computer", body: "Check back in a minute.", vars: {} };
+    return { tone: "unknown", title: "ARGUS-INSTINCT is still getting a look at your computer", body: "Check back in a minute.", vars: {} };
   }
   const watch = notReporting ? PARTIAL : "";
   if (critical) {

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ARGUS-1 application shell: sidebar, views, beginner-facing Overview.
+   ARGUS-INSTINCT application shell: sidebar, views, beginner-facing Overview.
 
    Plain CSS (no Tailwind directives). scripts/dev/build_ui.sh appends this
    file to the compiled design system in the page's inline stylesheet, so the page

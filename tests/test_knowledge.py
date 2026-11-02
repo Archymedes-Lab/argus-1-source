@@ -1,11 +1,10 @@
-import re
-import unittest
-
-from jarvis.response import knowledge as kb
-from jarvis.response import assistant
-from jarvis.core.store import Store
 import os
 import tempfile
+import unittest
+
+from jarvis.core.store import Store
+from jarvis.response import assistant
+from jarvis.response import knowledge as kb
 
 
 class KnowledgeTests(unittest.TestCase):

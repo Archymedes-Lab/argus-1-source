@@ -1,4 +1,4 @@
-//! ARGUS-1 desktop: an always-open window, tray and notifications over the
+//! ARGUS-INSTINCT desktop: an always-open window, tray and notifications over the
 //! local daemon (docs/architecture/DESKTOP-APP.md).
 //!
 //! The app is a client, never the monitor. `jarvis serve` collects, scores
@@ -147,14 +147,14 @@ fn pulse_loop(app: AppHandle) {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let status = MenuItem::with_id(app, "status", "ARGUS-1 — connecting", false, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", "Open ARGUS-1", true, None::<&str>)?;
+    let status = MenuItem::with_id(app, "status", "ARGUS-INSTINCT — connecting", false, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open ARGUS-INSTINCT", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Close this app (monitoring continues)", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&status, &sep, &open, &quit])?;
     let icon = TrayIconBuilder::with_id("jarvis")
         .icon(dot(Level::Unknown))
-        .tooltip("ARGUS-1 — connecting")
+        .tooltip("ARGUS-INSTINCT — connecting")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -224,7 +224,7 @@ fn main() {
             }
             build_tray(app)?;
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
-                .title("ARGUS-1")
+                .title("ARGUS-INSTINCT")
                 .inner_size(1440.0, 920.0)
                 .min_inner_size(720.0, 480.0)
                 .visible(!hidden)
@@ -255,7 +255,7 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("ARGUS-1 desktop failed to start");
+        .expect("ARGUS-INSTINCT desktop failed to start");
 }
 
 #[cfg(test)]

@@ -325,6 +325,11 @@ COLLECTORS = (
        unscored="source-tested only; never run against a real internet-facing sshd"),
     # The daily checks operators most want automated (Exa research 2026-10-28):
     # failed units, TLS certificate expiry, kernel OOM kills, unclean reboots.
+    # What WSL (or any systemd host) runs against the owner-approved manifest:
+    # owners from cgroups, drift per owner (owner request 2026-10-31).
+    _c("wslmanifest", 300, "WSL process manifest", None, 0, 2, "medium", 60,
+       command="wslmanifest", domain="linux", cost_s=0.3,
+       unscored="new; reports drift only after the owner approves a manifest, not yet soaked"),
     _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
        command="opshealth", domain="linux", cost_s=0.6,
        unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),
@@ -359,6 +364,13 @@ COLLECTORS = (
     _c("patches", 3600, "Security fixes not installed", None, 0, 3, "medium", 180,
        command="status", domain="linux", governed=True, cost_s=8.0,
        unscored="source-tested; scored after it has run on a real server"),
+    # Outdated software on every package manager (apt, snap, Homebrew, winget,
+    # Chocolatey), important first; with auto_update opted in, hands user-scope
+    # items to the bounded updater (response/updater.py). Listing measured
+    # 2026-11-02 at ~75 s (winget 2 x 24 s, Chocolatey 25 s, Homebrew 19 s).
+    _c("updates", 21600, "Outdated software", None, 0, 4, "medium", 300,
+       command="update plan", lane="bulk", governed=True, cost_s=75.0,
+       unscored="source-tested; scored after its listings are measured across machines"),
     # Daily download of the release's own OVAL security data. Debian 12 parses at
     # ~85 MB above baseline and returns to +6 MB once freed (measured 2026-10-25).
     # Isolated (2026-10-29): parsing a large dump inside the daemon stalled it

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ARGUS-1",
+  "productName": "ARGUS-INSTINCT",
   "mainBinaryName": "jarvis-desktop",
   "version": "2.0.0",
   "identifier": "local.jarvis.desktop",
@@ -35,8 +35,8 @@
       "nsis"
     ],
     "publisher": "Archymedes",
-    "shortDescription": "ARGUS-1 desktop",
-    "longDescription": "Native window, tray and notifications for the local ARGUS-1 daemon. The daemon does the monitoring; this app only shows it and passes on your explicit decisions.",
+    "shortDescription": "ARGUS-INSTINCT desktop",
+    "longDescription": "Native window, tray and notifications for the local ARGUS-INSTINCT daemon. The daemon does the monitoring; this app only shows it and passes on your explicit decisions.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 pub const SHORTCUT: &str = "ARGUS-1.lnk";
-pub const DESCRIPTION: &str = "ARGUS-1 security monitor (window, tray and notifications)";
+pub const DESCRIPTION: &str = "ARGUS-INSTINCT security monitor (window, tray and notifications)";
 
 /// What `ensure` should do, given where the exe is and what the shortcut holds now.
 #[derive(Debug, PartialEq, Eq)]

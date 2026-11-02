@@ -1,6 +1,6 @@
-"""The interface says ARGUS-1, and real object names keep their spelling.
+"""The interface says ARGUS-INSTINCT, and real object names keep their spelling.
 
-The product was renamed ARGUS-1 on 2026-10-27. Daemon text still says JARVIS in
+The product was renamed ARGUS-1 on 2026-10-27 and ARGUS-INSTINCT on 2026-11-02. Daemon text still says JARVIS in
 places on purpose: finding titles are part of incident identity, acknowledgements
 and history. The pages, the desktop UI and the desktop shell therefore re-brand
 at display time with one rule, implemented three times (web JS, TypeScript,
@@ -23,8 +23,8 @@ BRANDED_PAGES = ("dashboard.js", "geo.js", "coverage.js")
 KEEP = ["input hook", "independent health monitor", "connectivity guard", "native sensor",
         "Jarvis"]
 CASES = {
-    "JARVIS is up": "ARGUS-1 is up",
-    "JARVIS's view of JARVIS": "ARGUS-1's view of ARGUS-1",
+    "JARVIS is up": "ARGUS-INSTINCT is up",
+    "JARVIS's view of JARVIS": "ARGUS-INSTINCT's view of ARGUS-INSTINCT",
     "JARVIS input hook": "JARVIS input hook",
     "JARVIS independent health monitor stalled": "JARVIS independent health monitor stalled",
     "JARVIS connectivity guard": "JARVIS connectivity guard",
@@ -115,10 +115,10 @@ class BrandRuleTests(unittest.TestCase):
         # matches inside "ARGUS-1"; page text already says ARGUS-1.
         renamed = block(STATIC / "dashboard.js").replace("JARVIS", "ARGUS") \
             .replace("Jarvis", "Argus").replace("jarvis", "argus")
-        got = self.run_rule(renamed, ["ARGUS-1 is waking up", "ARGUS is up",
-                                      "ARGUS input hook", "ARGUS-1's view"])
-        self.assertEqual(got, ["ARGUS-1 is waking up", "ARGUS-1 is up",
-                               "ARGUS input hook", "ARGUS-1's view"])
+        got = self.run_rule(renamed, ["ARGUS-INSTINCT is waking up", "ARGUS is up",
+                                      "ARGUS input hook", "ARGUS-INSTINCT's view"])
+        self.assertEqual(got, ["ARGUS-INSTINCT is waking up", "ARGUS-INSTINCT is up",
+                               "ARGUS input hook", "ARGUS-INSTINCT's view"])
 
     def test_null_never_renders_as_text(self):
         # brand() feeds esc(); a missing field must stay empty, not "null".
@@ -126,7 +126,7 @@ class BrandRuleTests(unittest.TestCase):
 
 
 class StaticTextTests(unittest.TestCase):
-    # `(?!-1)`: the Argus build renames JARVIS to ARGUS, and "ARGUS-1" is the
+    # `(?!-1)`: the Argus build renames JARVIS to ARGUS, and "ARGUS-INSTINCT" is the
     # correct product name there, not a leftover (2026-10-27 renamed suite).
     def test_no_page_shows_the_old_name(self):
         for page in sorted(STATIC.glob("*.html")):
@@ -134,7 +134,7 @@ class StaticTextTests(unittest.TestCase):
             parser.feed(page.read_text(encoding="utf-8"))
             visible = " ".join(parser.out)
             self.assertNotRegex(visible, r"\bJARVIS\b(?!-1)", page.name)
-            self.assertIn("ARGUS-1", visible, page.name)
+            self.assertIn("ARGUS-INSTINCT", visible, page.name)
 
     def test_scripts_use_the_old_name_only_in_the_rule(self):
         # Uppercase JARVIS in page code would be visible text sooner or later;
@@ -150,7 +150,7 @@ class StaticTextTests(unittest.TestCase):
         for path in [ui / "index.html", *(ui / "src").rglob("*.svelte")]:
             self.assertNotRegex(path.read_text(encoding="utf-8"), r"\bJARVIS\b(?!-1)", path.name)
         conf = json.loads((ROOT / "desktop/tauri.conf.json").read_text(encoding="utf-8"))
-        self.assertEqual(conf["productName"], "ARGUS-1")
+        self.assertEqual(conf["productName"], "ARGUS-INSTINCT")
         # The identifier names the app's data folder: renaming it would orphan
         # the settings of anyone who already ran the app.
         self.assertEqual(conf["identifier"], "local.jarvis.desktop")
@@ -165,3 +165,39 @@ class StaticTextTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PythonRuleTests(unittest.TestCase):
+    """jarvis/core/brand.py is the copy for text that leaves the daemon
+    (email, webhook, ntfy, syslog, phone, toasts): same cases, same keep list."""
+
+    def test_python_rule_matches_every_case(self):
+        from jarvis.core.brand import brand
+        for before, after in CASES.items():
+            self.assertEqual(brand(before), after, before)
+        self.assertEqual(brand("[JARVIS] test alert"), "[ARGUS-INSTINCT] test alert")
+        self.assertEqual(brand(brand("JARVIS is up")), "ARGUS-INSTINCT is up")      # idempotent
+
+    def test_python_keep_list_is_the_web_keep_list(self):
+        from jarvis.core import brand
+        for name in KEEP:
+            self.assertIn(name, brand._KEEP.pattern)
+
+    def test_outgoing_alerts_are_branded(self):
+        from unittest import mock
+
+        from jarvis.response import alert
+        sent = {}
+        with mock.patch.object(alert, "channels", return_value=["webhook"]):
+            alert.deliver({"webhook_url": "https://x.example"}, "[JARVIS] monitor back", "JARVIS input hook ok",
+                          senders={"webhook": lambda: sent.setdefault("ok", True) and ""})
+        # senders closes over the arguments, so check the transform directly too
+        with mock.patch.object(alert, "channels", return_value=["webhook"]), \
+             mock.patch.object(alert, "send_webhook", side_effect=lambda conf, s, t, **kw: sent.update(s=s, t=t) or ""):
+            alert.deliver({"webhook_url": "https://x.example"}, "[JARVIS] monitor back", "JARVIS input hook ok")
+        self.assertEqual((sent["s"], sent["t"]), ("[ARGUS-INSTINCT] monitor back", "JARVIS input hook ok"))
+
+    def test_the_windows_monitor_carries_the_same_rule(self):
+        text = (ROOT / "jarvis-health-monitor.ps1").read_text(encoding="utf-8")
+        self.assertIn("(?!-(?:1|INSTINCT)\\b)(?! (input hook|independent health monitor|connectivity guard|native sensor|Jarvis))", text)
+        self.assertIn("-Value 'ARGUS-INSTINCT'", text)

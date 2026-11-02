@@ -1,4 +1,4 @@
-// The one place the interface reaches ARGUS-1.
+// The one place the interface reaches ARGUS-INSTINCT.
 //
 // Inside the desktop app every call is a typed Tauri command (desktop/src/api.rs):
 // the page has no network permission of its own and never sees the API token.
@@ -45,7 +45,7 @@ async function http<T>(cmd: string, args: Args = {}): Promise<T> {
   if (cmd === "open_page") { window.open(PAGES[args.page] ?? "/", "_blank", "noopener"); return { ok: true } as T; }
   if (cmd === "procs_snapshot") return procsSnapshotHttp() as Promise<T>;
   const route = ROUTES[cmd]?.(args);
-  if (!route) throw new Error("This action is only available in the ARGUS-1 app.");
+  if (!route) throw new Error("This action is only available in the ARGUS-INSTINCT app.");
   const res = await fetch(route.path, {
     method: route.method,
     credentials: "same-origin",

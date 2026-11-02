@@ -151,14 +151,14 @@ fn request_to(
 
 fn unreachable(e: &io::Error) -> String {
     match e.kind() {
-        io::ErrorKind::ConnectionRefused => "ARGUS-1 is not running (nothing answers on the loopback port)".into(),
-        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => "ARGUS-1 did not answer in time".into(),
-        _ => format!("could not reach ARGUS-1: {e}"),
+        io::ErrorKind::ConnectionRefused => "ARGUS-INSTINCT is not running (nothing answers on the loopback port)".into(),
+        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => "ARGUS-INSTINCT did not answer in time".into(),
+        _ => format!("could not reach ARGUS-INSTINCT: {e}"),
     }
 }
 
 fn json_of(r: &Response) -> Result<Value, String> {
-    serde_json::from_slice(&r.body).map_err(|_| format!("ARGUS-1 answered HTTP {} with a body that is not JSON", r.status))
+    serde_json::from_slice(&r.body).map_err(|_| format!("ARGUS-INSTINCT answered HTTP {} with a body that is not JSON", r.status))
 }
 
 /// A 403 that names the token: the pairing was revoked or never made.
@@ -174,12 +174,12 @@ fn get_json(path: &str, timeout: Duration) -> Result<Value, String> {
         if refused_token(&r, &v) {
             return Err(REVOKED.into());
         }
-        return Err(format!("ARGUS-1 answered HTTP {}", r.status));
+        return Err(format!("ARGUS-INSTINCT answered HTTP {}", r.status));
     }
     json_of(&r)
 }
 
-const REVOKED: &str = "ARGUS-1 refused this app's pairing (revoked, or from another install). \
+const REVOKED: &str = "ARGUS-INSTINCT refused this app's pairing (revoked, or from another install). \
                        Pair again: `jarvis desktop pair --name desktop`, then replace client.token.";
 
 /// A state-changing call with the paired client token.
@@ -195,7 +195,7 @@ fn post_json(path: &str, body: &Value, timeout: Duration) -> Result<Value, Strin
         return Ok(v);
     }
     let msg = v.get("message").or_else(|| v.get("error")).and_then(Value::as_str).unwrap_or("refused");
-    Err(format!("ARGUS-1 refused: {msg} (HTTP {})", r.status))
+    Err(format!("ARGUS-INSTINCT refused: {msg} (HTTP {})", r.status))
 }
 
 // ---- argument formats, mirrored from the daemon ---------------------------
@@ -303,7 +303,7 @@ pub async fn billing_checkout() -> Result<Value, String> {
         let v = post_json("/api/billing/checkout", &json!({}), ACTION_TIMEOUT)?;
         let url = v.get("url").and_then(Value::as_str).unwrap_or_default().to_string();
         if !is_checkout_url(&url) {
-            return Err("ARGUS-1 did not return a Stripe checkout address".into());
+            return Err("ARGUS-INSTINCT did not return a Stripe checkout address".into());
         }
         open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
         Ok(json!({ "ok": true, "message": "Checkout opened in your browser" }))
@@ -468,7 +468,7 @@ pub async fn procs_snapshot() -> Result<Value, String> {
     blocking(|| {
         let (status, mut reader) = pulse::open("/api/procs/stream").map_err(|e| unreachable(&e))?;
         if status != 200 {
-            return Err(format!("ARGUS-1 answered HTTP {status}"));
+            return Err(format!("ARGUS-INSTINCT answered HTTP {status}"));
         }
         Ok(collect_procs(&mut reader, std::time::Instant::now() + Duration::from_secs(8)))
     })

@@ -36,7 +36,7 @@
   <Dialog.Portal>
     <Dialog.Overlay class="overlay" />
     <Dialog.Content class="popover fixed top-[14vh] left-1/2 z-50 w-[640px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden p-0 anim-rise">
-      <Dialog.Title class="sr-only">{tr("Search ARGUS-1")}</Dialog.Title>
+      <Dialog.Title class="sr-only">{tr("Search ARGUS-INSTINCT")}</Dialog.Title>
       <!-- The daemon's findings are filtered here by our own matcher, so the
            palette's built-in fuzzy filter is off. -->
       <Command.Root shouldFilter={false} loop>

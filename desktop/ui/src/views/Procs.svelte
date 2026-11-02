@@ -49,7 +49,7 @@
   <div class="flex items-start gap-4">
     <div class="max-w-[760px]">
       <h2 class="text-heading-24">{tr("Running programs")}</h2>
-      <p class="mt-1 text-copy-14 text-gray-900">{tr("Every program running right now. A New name is one ARGUS-1 has never seen on this computer before. That is a reason to look, not proof of harm.")}</p>
+      <p class="mt-1 text-copy-14 text-gray-900">{tr("Every program running right now. A New name is one ARGUS-INSTINCT has never seen on this computer before. That is a reason to look, not proof of harm.")}</p>
     </div>
     <button class="btn btn-sm ml-auto shrink-0" onclick={full}>{tr("Open full view")}</button>
   </div>
@@ -57,10 +57,10 @@
   {#if err && !snap}
     <div class="empty">{err}</div>
   {:else if !snap}
-    <div class="empty">{tr("Reading ARGUS-1…")}</div>
+    <div class="empty">{tr("Reading ARGUS-INSTINCT…")}</div>
   {:else}
     {#if !baselineReady}
-      <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900"><span class="dot dot-warn"></span>{tr("ARGUS-1 has not learned what is normal here yet, so nothing can be marked new.")}</div>
+      <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900"><span class="dot dot-warn"></span>{tr("ARGUS-INSTINCT has not learned what is normal here yet, so nothing can be marked new.")}</div>
     {/if}
     {#each Object.entries(sources) as [h, s]}
       {#if (s as any).state && !["live", "ok", "fresh"].includes((s as any).state) && (s as any).state !== "absent"}

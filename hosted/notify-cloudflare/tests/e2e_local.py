@@ -99,15 +99,31 @@ def main():
                 relay.call(CONF, ident, "POST", f"/v1/mailbox/{ident.mailbox}/devices/{c['dev']}/activate", {"code": code})
             elif step == "active":
                 err = channel.send(CONF, "e2e-server: known-exploited vulnerability fixed but not installed: openssh",
-                                   "CVE-2024-6387 — install the update.", severity="critical")
+                                   "CVE-2024-6387 — install the update.", severity="critical",
+                                   category="updates")
                 check("server sends a sealed alert", err == "", err)
             elif step == "message":
                 p = msg["payload"]
                 check("phone decrypts and verifies the alert", p["severity"] == "critical" and "openssh" in p["title"])
+                check("the alert carries its category", p.get("category") == "updates"
+                      and p.get("category_label") == "Updates", str(p.get("category")))
                 check("relay saw only the envelope fields",
                       msg["relay_saw"] == sorted(["v", "id", "mb", "dev", "sent", "expires", "epk", "iv", "ct", "sig"]))
             elif step == "ack":
                 check("ack accepted", msg["status"] == 200)
+                try:
+                    listed = relay.call(CONF, ident, "GET", f"/v1/mailbox/{ident.mailbox}/devices")
+                except relay.RelayError as e:
+                    listed = None
+                    if LOCAL or "404" not in str(e):
+                        check("relay lists devices with liveness", False, str(e))
+                    else:
+                        print("SKIP  relay lists devices with liveness (route not deployed yet)", flush=True)
+                if listed is not None:
+                    ours = [d for d in listed if d.get("dev") == devices.active()[0]["dev"]]
+                    check("relay lists devices with liveness", len(ours) == 1 and ours[0]["state"] == "active"
+                          and ours[0]["push"] is False and (ours[0]["last_seen"] or 0) >= int(time.time()) - 60
+                          and set(ours[0]) == {"dev", "name", "state", "added", "last_seen", "push"}, str(ours))
             elif step == "replay":
                 check("phone request replay refused", msg["status"] == 409, str(msg["status"]))
             elif step == "same_second":

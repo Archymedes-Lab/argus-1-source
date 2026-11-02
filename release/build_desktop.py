@@ -71,7 +71,7 @@ def linux_deb(src, exe, out, version):
     name = f"argus-desktop_{ver}_amd64.deb"
     # The application menu entry: the same name as the window, tray and the
     # Windows Start menu shortcut (desktop/src/startmenu.rs).
-    entry = ("[Desktop Entry]\nType=Application\nName=ARGUS-1\nGenericName=Security monitor\n"
+    entry = ("[Desktop Entry]\nType=Application\nName=ARGUS-INSTINCT\nGenericName=Security monitor\n"
              "Comment=Argus security monitor: window, tray and notifications for the local daemon\n"
              "Exec=argus-desktop\nIcon=argus-desktop\nCategories=System;Monitor;Security;\n"
              "StartupWMClass=argus-desktop\nTerminal=false\n").encode()

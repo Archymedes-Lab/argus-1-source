@@ -47,7 +47,7 @@ pub fn token_path(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
 pub fn unpaired_message(path: Option<&Path>) -> String {
     let where_ = path.map(|p| p.display().to_string()).unwrap_or_else(|| "the app's config folder".into());
     format!(
-        "ARGUS-1 is not paired with this app. On the machine running ARGUS-1, run \
+        "ARGUS-INSTINCT is not paired with this app. On the machine running ARGUS-INSTINCT, run \
          `jarvis desktop pair --name desktop` (under the service account: \
          `sudo jarvis-svc desktop pair --name desktop`) and save the token \
          it prints, on its own line, to {where_}. Only you should be able to read that file."

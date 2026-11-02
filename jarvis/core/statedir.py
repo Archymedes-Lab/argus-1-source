@@ -99,7 +99,7 @@ def cli_refusal(db, default_db, argv, marker_path=MARKER):
     user = str(marker.get("user") or "jarvis")
     cli = str(marker.get("cli") or f"sudo -u {user} -H jarvis")
     args = " ".join(shlex.quote(a) for a in argv)
-    return (f"ARGUS-1 runs as its own account ({user}); its store is {state_dir}, not this "
+    return (f"ARGUS-INSTINCT runs as its own account ({user}); its store is {state_dir}, not this "
             f"account's ~/.jarvis, so this command would show the wrong state.\n"
             f"  run it as the daemon's account:  {cli} {args}\n"
             f"  or use the dashboard or the desktop app (pair them with "

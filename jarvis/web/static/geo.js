@@ -1,14 +1,14 @@
 const $ = s => document.querySelector(s);
 // brand:begin -- identical in every page; tests/test_ui_brand.py keeps the copies equal.
-// The product is ARGUS-1. Server text can still say JARVIS (finding titles keep their
+// The product is ARGUS-INSTINCT. Server text can still say JARVIS (finding titles keep their
 // identity for acknowledgements and history), so it is re-branded at display time.
 // Real Windows objects keep their spelling so they can be found in Task Scheduler
 // and Services; lowercase commands (jarvis ..., jarvis.service) are never touched.
 // Idempotent: a name already followed by -1 is left alone, so text that went
-// through the rule twice, or a build that renames JARVIS to ARGUS, never reads ARGUS-1-1.
-const BRAND = "ARGUS-1";
+// through the rule twice, or a build that renames JARVIS to ARGUS, never reads ARGUS-INSTINCT-1.
+const BRAND = "ARGUS-INSTINCT";
 const BRAND_KEEP = /^ (input hook|independent health monitor|connectivity guard|native sensor|Jarvis)/;
-const brand = (s) => String(s ?? "").replace(/\bJARVIS\b(?!-1)/g,
+const brand = (s) => String(s ?? "").replace(/\bJARVIS\b(?!-(?:1|INSTINCT)\b)/g,
   (m, i, all) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
 // brand:end
 const esc = s => brand(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -345,7 +345,7 @@ function render(p){
       `<div class="row"><span class="k">accuracy</span><span class="v">${loc.accuracy_m==null?"n/a — set manually":"~"+Math.round(loc.accuracy_m)+" m"}</span></div>`+
       `<div class="row"><span class="k">source</span><span class="v">${esc(loc.source||"")}</span></div>`;
   else locHtml = `<div class="row"><span class="k">status</span><span class="v ${loc.status==="denied"?"low":"dim"}">${esc(loc.status||"unknown")}</span></div>`+
-      `<div class="sig">${esc(loc.reason||"ARGUS-1 never guesses a position from your IP.")}</div>`;
+      `<div class="sig">${esc(loc.reason||"ARGUS-INSTINCT never guesses a position from your IP.")}</div>`;
   $("#loc").innerHTML = locHtml +
     `<div class="row" style="margin-top:6px"><span class="k">confidence</span><span class="v">${Math.round(conf.score*100)}%</span></div>`;
   const v=p.view||{};

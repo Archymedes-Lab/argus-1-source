@@ -53,7 +53,7 @@
   {#if err && !data}
     <div class="empty">{err}</div>
   {:else if !data}
-    <div class="empty">{tr("Reading ARGUS-1…")}</div>
+    <div class="empty">{tr("Reading ARGUS-INSTINCT…")}</div>
   {:else}
     {#if data.stale}
       <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900"><span class="dot dot-warn"></span>{tr("The news feed is out of date.")}</div>
