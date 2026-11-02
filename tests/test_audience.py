@@ -182,6 +182,23 @@ class Profiles(unittest.TestCase):
         args = cli.build_parser().parse_args(['welcome', 'server'])
         self.assertEqual(args.profile, 'server')
 
+    def test_every_next_step_is_a_command_that_parses(self):
+        # A first-run hint the user cannot run is a dead end (gstack devex: every hint
+        # runnable). Found 2026-11-02: `jarvis server sshwatch` did not parse.
+        p = cli.build_parser()
+        for name, spec in audience.PROFILES.items():
+            for step in spec['next_steps']:
+                words = step.split('  ')[0].split()
+                with redirect_stdout(io.StringIO()), mock.patch('sys.stderr', io.StringIO()):
+                    try:
+                        p.parse_args(words[1:])
+                    except SystemExit:
+                        self.fail(f'{name}: hint does not parse: {step!r}')
+
+    def test_server_hints_use_the_installed_program_name(self):
+        for step in audience.PROFILES['server']['next_steps']:
+            self.assertTrue(step.startswith('argus '), step)
+
 
 if __name__ == '__main__':
     unittest.main()

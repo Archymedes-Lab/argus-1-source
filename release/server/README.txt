@@ -15,6 +15,7 @@ Uninstall:          sudo /opt/argus/uninstall.sh [--purge]
 Status and logs:    systemctl status argus ; journalctl -u argus -f
 First run:          argus welcome server   (what it looks at, and its limits)
 First report:       argus investigate
+Weekly review:      sudo -u argus -H argus review --days 7   (read-only; states blind spots)
 Dashboard:          loopback only; ssh -L 8787:127.0.0.1:8787 your-server
 
 Documentation: https://www.archymedes.xyz/en/docs/argus/

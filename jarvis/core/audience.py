@@ -85,9 +85,10 @@ PROFILES = {
             'Alerts go only to channels you configure or to a phone you pair.',
         ),
         'next_steps': (
-            'jarvis server sshwatch      SSH policy, keys and tunnels',
-            'jarvis server opshealth     failed services, certificates, OOM kills',
-            'jarvis status               what ARGUS-1 knows so far',
+            'argus sshwatch              SSH policy, keys and tunnels',
+            'argus opshealth             failed services, certificates, OOM kills',
+            'argus status                what ARGUS-1 knows so far',
+            'argus review                one report of the last 7 days and its blind spots',
         ),
         'removal': ('.deb: sudo apt remove argus-server; tarball install: sudo '
                     '/opt/argus/uninstall.sh. Removal on a clean machine has not been '

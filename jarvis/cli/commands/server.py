@@ -10,6 +10,7 @@
     pkgverify   packaged-file integrity of intruder targets
     appcode     every codebase: vulnerable dependencies, risky code, secrets  [PATH ...]
     services    the declared services file, and what listens now
+    review      one report of a window of stored observation, with its blind spots  [--days N]
     netstate    write the firewall snapshot      (argus-netstate unit; no store)
     netsensor   run the packet sensor            (argus-netsensor unit; no store)
 """
@@ -176,6 +177,36 @@ def cmd_netsensor(args, store):
     sys.exit(capture.main())
 
 
+def cmd_review(args, store):
+    """Read-only report over the daemon's stored observation (jarvis/response/review.py)."""
+    from jarvis.core import statedir
+    from jarvis.core.store import DEFAULT_DB
+    from jarvis.response import review
+    refusal = statedir.cli_refusal(args.db, DEFAULT_DB, sys.argv[1:])
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 2
+    try:
+        report = review.build(args.db, days=args.days)
+    except review.ReviewError as exc:
+        print(f"no review: {exc}", file=sys.stderr)
+        return 2
+    text = (json.dumps(report, indent=2) + "\n") if args.json else review.render(report)
+    if not args.out:
+        sys.stdout.write(text)
+        return 0
+    try:
+        review.write_private(args.out, text)
+    except FileExistsError:
+        print(f"not written: {args.out} already exists (choose a new name)", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"not written: {exc.strerror or type(exc).__name__}", file=sys.stderr)
+        return 2
+    print(f"review written to {args.out} (readable by this account only)")
+    return 0
+
+
 def add_parser(sub):
     for name, fn, text in (("netflow", cmd_netflow, "incoming packets the sensor saw, judged"),
                            ("logins", cmd_logins, "successful SSH logins: new networks, new keys, guesses that worked"),
@@ -206,6 +237,12 @@ def add_parser(sub):
     p.add_argument("--suggest", action="store_true",
                    help="print a services.conf starting point from current listeners")
     p.set_defaults(fn=cmd_services, no_store=True)
+    p = sub.add_parser("review", help="observed server review: one report of the last days of "
+                       "stored observation, with what it could not see (read-only)")
+    p.add_argument("--days", type=int, default=7, help="window in days, 1 to 31 (default 7)")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--out", help="write the report to this new file, owner-only")
+    p.set_defaults(fn=cmd_review, no_store=True)
     p = sub.add_parser("netstate", help="write the firewall snapshot (run by argus-netstate)")
     p.set_defaults(fn=cmd_netstate, no_store=True)
     p = sub.add_parser("netsensor", help="run the packet sensor (run by argus-netsensor)")
