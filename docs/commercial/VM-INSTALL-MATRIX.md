@@ -1,6 +1,6 @@
 # Clean-machine install matrix: ARGUS-1 server edition
 
-Status: **prepared, not run** (2026-11-02). This is the first blocker to the paid observed server
+Status: **harness built; runs in progress** (2026-11-02). This is the first blocker to the paid observed server
 review (PMF-2026-11.md, Phase 5) and QC blocker 2 (`docs/security/QC-ARGUS-1-2026-10-27.md`).
 Nothing in `jarvis/core/assurance.py` moves until a row below has a measured result.
 
@@ -61,20 +61,33 @@ Footprint budget to accept (owner may change): idle RSS under 150 MB, idle cgrou
 300 MB, idle CPU under 60 s per hour on 1 vCPU, state under 50 MB after an hour. A miss is
 recorded, not hidden; the review offer then states the measured figure.
 
-## Harness changes needed (not made yet)
+## Harness (built 2026-11-02, owner-approved)
 
-1. `jarvis/lab/vmlab.py`: make the image a parameter (`name`, checksum file, hash algorithm)
-   instead of the `IMAGE_NAME` constant; keep `verify_base_image` fail-closed per image.
-2. `vmtest.py`: accept the signed release directory (tarball and native `.deb`), verify
-   `SHA256SUMS.sig` before building the payload, and take `--distro` and `--package`.
-3. `vmtest_guest.py`: call `/usr/local/bin/argus` (native) instead of Python entry points; add
-   S4 (60-minute idle sampling), S5, S6 (reboot through the serial console), S7.
-4. Move the harness from `archymedes-site` into Argus-1 (`release/vmtest/`) so the release and
-   its validation are versioned together.
+Lives in this repository, versioned with the release it checks:
 
-Each change is non-trivial (lab isolation, release verification): it needs invariant tests
-(image hash mismatch refused, unsigned release refused, interrupted run leaves no overlay) and a
-Jev review before it is used for evidence.
+| File | Role |
+|---|---|
+| `jarvis/lab/vmlab.py` | `IMAGES` registry (file, checksum list, sha256/sha512) and `Config.image`; unknown or mismatched image fails closed; `Config.allow_reboot` (off by default) drops `-no-reboot` without touching isolation |
+| `release/vmtest/fetch_image.py` | Downloads an image to a `.part` file, checks it, then renames. Ubuntu lists must carry a gpg signature by the pinned Canonical cloud-image key (lab-only keyring); Debian signs nothing, so its image comes from the fixed dated build `20261026-2643` and is recorded **https-only** |
+| `release/vmtest/vmtest.py` | One cell per run: verifies the release signature (pinned releaser) and package digest before any guest starts, builds the payload, boots the guest, checks the result hash and the harness hash, writes `vmtest-<distro>-<package>-<time>.json` with a per-scenario summary against the budget |
+| `release/vmtest/guest.py` | Phase 1: S1, S7 (if `--upgrade-from`), S2, S3 (16 planted checks, neutral `vmuser`), S4, S5, then one reboot. Phase 2 (one-shot unit that marks itself started first): S6, S8, S9 |
+| `tests/test_vmtest.py` | 35 tests: refusals (unsigned, unpinned, mismatched, unlisted, unknown image), fail-closed fetch, cleanup on helper failure, timeout and Ctrl-C, verdict rules. Mutation checks: 5 of 6 deliberate breaks caught; the sixth (S1) is covered by a duplicate comparison |
+
+Image trust, measured 2026-11-02: Ubuntu 24.04 list signature verified (signer
+`D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`; it had only been hash-checked before); Debian 12
+hash verified, **https-only**.
+
+Run a cell (serially, never two at once):
+
+    python3 release/vmtest/fetch_image.py debian-12            # once per image
+    python3 release/vmtest/vmtest.py --release DIR --distro ubuntu-24.04 --package tarball
+
+`v2026.10.30-2` is the only signed release, so S7 (upgrade) reports "not run" until a newer
+signed release exists. That release has no `argus review`, so S5 also reports "not run".
+
+Jev (jev-1.14.0, advisory, `scripts/reviews/vm_matrix_advisory.py`): Debian https-only with
+the label acceptable 0.83; top remaining gap "not yet run end to end" 0.35 (low confidence,
+Debian trust 0.32 close behind); smoke run before the hour-long runs 0.61.
 
 ## Run order and host limits
 

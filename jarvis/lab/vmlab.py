@@ -13,6 +13,10 @@ Design and invariants (each has a test):
               the lab must never degrade the machine it protects
   data only   guest output is size-capped, hash-checked and parsed as JSON, never run
   cleanup     the container is removed by name on every path, disposal is verified
+  images      each guest image is named in IMAGES with its checksum list and hash;
+              an unknown name, a missing list or a mismatch is refused (fail closed)
+  reboot      the guest may reboot only when Config.allow_reboot is set; QEMU stays in
+              the same locked-down container and the run timeout still bounds it
 
 Absent evidence stays absent: a run that cannot start reports why and returns no results.
 """
@@ -34,6 +38,27 @@ from jarvis.core.paths import PACKAGE_DIR
 
 ROOT = Path(os.path.expanduser("~/.cache/jarvis-vmlab"))
 IMAGE_NAME = "noble-server-cloudimg-amd64.img"
+
+
+@dataclass(frozen=True)
+class Image:
+    """A guest base image under ROOT/images: its file, its checksum list and hash."""
+    key: str
+    file: str            # relative to ROOT/images
+    sums: str            # checksum list, relative to ROOT/images
+    algo: str            # "sha256" or "sha512"
+    os_name: str
+
+
+# The default stays first and at the path older runs used (images/<noble file>).
+IMAGES = {
+    "ubuntu-24.04": Image("ubuntu-24.04", IMAGE_NAME, "SHA256SUMS", "sha256", "Ubuntu 24.04 LTS"),
+    "debian-12": Image("debian-12", "debian-12/debian-12-genericcloud-amd64-20261026-2643.qcow2",
+                       "debian-12/SHA512SUMS", "sha512", "Debian 12"),
+    "ubuntu-22.04": Image("ubuntu-22.04", "ubuntu-22.04/jammy-server-cloudimg-amd64.img",
+                          "ubuntu-22.04/SHA256SUMS", "sha256", "Ubuntu 22.04 LTS"),
+}
+DEFAULT_IMAGE = "ubuntu-24.04"
 CONTAINER_IMAGE = "jarvis-vmlab:1"
 MAX_SERIAL_BYTES = 8 * 1024 * 1024
 MAX_RESULT_BYTES = 1024 * 1024
@@ -63,6 +88,8 @@ class Config:
     cpu_shares: int = 128               # low weight next to the user's own work
     container_image: str = CONTAINER_IMAGE
     kvm_gid: int | None = None
+    image: str = DEFAULT_IMAGE
+    allow_reboot: bool = False          # a guest reboot ends QEMU unless this is set
     extra: dict = field(default_factory=dict)
 
 
@@ -72,8 +99,8 @@ class LabError(RuntimeError):
 
 # -- pure builders -------------------------------------------------------------
 
-def _hex(path, chunk=1 << 20):
-    h = hashlib.sha256()
+def _hex(path, chunk=1 << 20, algo="sha256"):
+    h = hashlib.new(algo)
     with open(path, "rb") as fh:
         for block in iter(lambda: fh.read(chunk), b""):
             h.update(block)
@@ -100,8 +127,8 @@ def docker_command(cfg, run_dir, name, gid):
         "-drive", "id=payload,if=none,file=/work/payload.tar,format=raw,readonly=on",
         "-device", "virtio-blk-pci,drive=payload,serial=jvpayload",
         "-device", "virtio-keyboard-pci", "-audiodev", "none,id=snd0",
-        "-device", "intel-hda", "-device", "hda-duplex,audiodev=snd0", "-no-reboot",
-    ]
+        "-device", "intel-hda", "-device", "hda-duplex,audiodev=snd0",
+    ] + ([] if cfg.allow_reboot else ["-no-reboot"])
 
 
 def helper_command(cfg, run_dir, *argv):
@@ -225,17 +252,39 @@ def blockers(cfg, load, *, docker_ok=True, image_ok=True, kvm=True, container_ok
     return out
 
 
+def image_of(cfg):
+    """The Image the config names, or LabError for an unknown name."""
+    img = IMAGES.get(getattr(cfg, "image", DEFAULT_IMAGE))
+    if img is None:
+        raise LabError(f"unknown guest image {cfg.image!r}; known: {', '.join(IMAGES)}")
+    return img
+
+
 def verify_base_image(cfg):
-    """True when the base image matches the signed checksum list (verified at download)."""
-    images = Path(cfg.root) / "images"
+    """True when the base image matches its signed checksum list (verified at download).
+
+    Fail closed: an unknown image, a missing list, a missing entry or a mismatch is False."""
     try:
-        for line in (images / "SHA256SUMS").read_text().splitlines():
+        img = image_of(cfg)
+    except LabError:
+        return False
+    images = Path(cfg.root) / "images"
+    want = Path(img.file).name
+    try:
+        for line in (images / img.sums).read_text().splitlines():
             digest, _, name = line.partition(" ")
-            if name.strip().lstrip("*") == IMAGE_NAME:
-                return _hex(images / IMAGE_NAME) == digest
-    except OSError:
+            if name.strip().lstrip("*") == want:
+                return _hex(images / img.file, algo=img.algo) == digest.strip().lower()
+    except (OSError, ValueError):
         return False
     return False
+
+
+def overlay_argv(cfg, size=None):
+    """qemu-img argv for the run's copy-on-write overlay over the configured image. Pure."""
+    argv = ["qemu-img", "create", "-q", "-f", "qcow2", "-b", f"/img/{image_of(cfg).file}",
+            "-F", "qcow2", "/work/overlay.qcow2"]
+    return tuple(argv + ([size] if size else []))
 
 
 # -- orchestration -------------------------------------------------------------
@@ -270,8 +319,7 @@ def run_linux(controls, cfg=None, *, runner=subprocess.run, popen=subprocess.Pop
         (run_dir / "user-data").write_text(USER_DATA)
         (run_dir / "meta-data").write_text(f"instance-id: jvlab-{run_id}\nlocal-hostname: jvlab\n")
         for argv in (("sh", "-c", "cd /work && xorriso -as mkisofs -quiet -o seed.iso -V cidata -J -r user-data meta-data"),
-                     ("qemu-img", "create", "-q", "-f", "qcow2", "-b", f"/img/{IMAGE_NAME}",
-                      "-F", "qcow2", "/work/overlay.qcow2")):
+                     overlay_argv(cfg)):
             r = runner(helper_command(cfg, run_dir, *argv), capture_output=True, timeout=120)
             if r.returncode != 0:
                 raise LabError("helper container failed: " + r.stderr.decode("utf-8", "replace")[-200:])
