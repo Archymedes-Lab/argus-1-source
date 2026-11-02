@@ -186,11 +186,17 @@ def cmd_review(args, store):
     if refusal:
         print(refusal, file=sys.stderr)
         return 2
+    from jarvis.licensing import polar
     try:
         report = review.build(args.db, days=args.days)
     except review.ReviewError as exc:
         print(f"no review: {exc}", file=sys.stderr)
         return 2
+    lic = polar.status(polar.path_for(args.db))
+    if not lic["licensed"]:
+        report = review.preview(report, polar.REVIEW_CHECKOUT)
+        print(f"preview only: {lic['reason']}. Full report: an Argus Server Review key "
+              f"({polar.REVIEW_CHECKOUT}).", file=sys.stderr)
     text = (json.dumps(report, indent=2) + "\n") if args.json else review.render(report)
     if not args.out:
         sys.stdout.write(text)
@@ -204,6 +210,36 @@ def cmd_review(args, store):
         print(f"not written: {exc.strerror or type(exc).__name__}", file=sys.stderr)
         return 2
     print(f"review written to {args.out} (readable by this account only)")
+    return 0
+
+
+def cmd_licence(args, store):
+    """Argus licence keys from Polar: unlock the full review report (never protection)."""
+    from jarvis.core.store import DEFAULT_DB
+    from jarvis.licensing import polar
+    path = polar.path_for(args.db or DEFAULT_DB)
+    try:
+        if args.action == "activate":
+            rec = polar.activate(path, args.key)
+            print(f"{rec['product']} key activated for this server; checked with Polar "
+                  f"(expires {rec.get('expires_at') or 'with the subscription'}).")
+        elif args.action == "refresh":
+            rec = polar.refresh(path)
+            print(f"{rec['product']}: still granted by Polar.")
+        elif args.action == "remove":
+            if os.path.exists(path):
+                os.unlink(path)
+            print("licence removed from this server (deactivate it in your Polar customer portal "
+                  "to use it elsewhere).")
+        else:
+            st = polar.status(path)
+            state = "licensed" if st["licensed"] else "not licensed"
+            print(f"{state}: {st['reason']}" + (f" (key …{st['key_hint']})" if st.get("key_hint") else ""))
+            if not st["licensed"]:
+                print(f"Argus Server Review: {polar.REVIEW_CHECKOUT}")
+    except polar.LicenceError as exc:
+        print(f"licence: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -243,6 +279,11 @@ def add_parser(sub):
     p.add_argument("--json", action="store_true")
     p.add_argument("--out", help="write the report to this new file, owner-only")
     p.set_defaults(fn=cmd_review, no_store=True)
+    p = sub.add_parser("licence", help="Argus licence key from Polar: unlocks the full review report "
+                       "(protection never needs one)")
+    p.add_argument("action", nargs="?", default="status", choices=("status", "activate", "refresh", "remove"))
+    p.add_argument("key", nargs="?", help="activate: the ARGUS-REVIEW-... key from your Polar receipt")
+    p.set_defaults(fn=cmd_licence, no_store=True)
     p = sub.add_parser("netstate", help="write the firewall snapshot (run by argus-netstate)")
     p.set_defaults(fn=cmd_netstate, no_store=True)
     p = sub.add_parser("netsensor", help="run the packet sensor (run by argus-netsensor)")

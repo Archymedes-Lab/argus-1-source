@@ -37,8 +37,15 @@ MAX_TITLE = 160
 MAX_DETAIL = 300
 MAX_LINES = 900
 SEVERITIES = ('critical', 'high', 'medium', 'low')
-# A finding whose text names one of these is about a secret: its detail can quote it.
+# A finding is about a secret *value* (and its detail may quote it) when its kind or
+# category is a secrets one, or its title names a secret together with where it was
+# found. A setting that merely mentions one ("PasswordAuthentication is enabled") is
+# configuration, not a secret: its detail is shown, still subject to the redactor check.
 SECRET_WORDS = ('secret', 'credential', 'password', 'private key', 'token', 'api key')
+SECRET_KINDS = ('secret', 'secrets', 'credential', 'credentials', 'leak', 'leaks')
+VALUE_WORDS = ('found', 'in repository', 'in repo', 'in file', 'in history', 'exposed', 'leaked',
+               'committed', 'hard-coded', 'hardcoded', 'plain text', 'plaintext', 'readable by',
+               'world-readable', 'in environment', 'in logs', 'in log', 'in config', 'stored in')
 
 WITHHELD = ('detail withheld from this report: it may contain a secret; see it on the server '
             'itself')
@@ -82,8 +89,11 @@ def open_readonly(db_path):
 
 
 def _is_secret(finding):
-    text = ' '.join(str(finding.get(k) or '') for k in ('title', 'kind', 'category')).lower()
-    return any(w in text for w in SECRET_WORDS)
+    kinds = {str(finding.get(k) or '').strip().lower() for k in ('kind', 'category')}
+    if kinds & set(SECRET_KINDS):
+        return True
+    title = str(finding.get('title') or '').lower()
+    return any(w in title for w in SECRET_WORDS) and any(v in title for v in VALUE_WORDS)
 
 
 def _clip(text, limit):
@@ -190,6 +200,21 @@ def _when(ts):
     return 'never' if ts is None else time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(ts))
 
 
+def _last_run(sec):
+    """'never' only when nothing was ever stored; a stale area says when its result is from."""
+    if sec['last_run'] is not None:
+        return _when(sec['last_run'])
+    if sec['findings_at'] is not None:
+        return f'no run in this window (stored result from {_when(sec["findings_at"])})'
+    return 'none recorded'
+
+
+def common_status(review):
+    """The capability status most areas share: stated once at the top of the report."""
+    seen = [s['register'] for s in review['sections']]
+    return max(sorted(set(seen)), key=seen.count) if seen else ''
+
+
 def render(review):
     """Plain text. Bounded; refuses hand-written text that overclaims."""
     handwritten = [NOT_AN_AUDIT] + list(STATE_WORDS.values())
@@ -198,10 +223,13 @@ def render(review):
         raise ValueError(f'review text would overclaim: {sorted(set(bad))}')
     c = review['severity_counts_in_window']
     st = review['states']
-    lines = [f'ARGUS-1 observed server review: {review["host"]}',
+    common = common_status(review)
+    lines = [f'ARGUS-1 observed server review: {review["host"]}'
+             + (' (preview)' if review.get('preview') else ''),
              f'Window: {_when(review["window_start"])} to {_when(review["generated_at"])} '
              f'({review["window_days"]} days)', '', review['not_an_audit'], '',
              review['register_line'], '',
+             f'Capability status: {common} for every area below unless noted.',
              f'Areas: {st["observed"]} observed, {st["partial"]} partial, {st["stale"]} stale, '
              f'{st["not_observed"]} not observed.',
              f'Findings from areas observed in this window: {c["critical"]} critical, '
@@ -212,14 +240,18 @@ def render(review):
         lines.append(f'## {sec["label"]} [{sec["job"]}]')
         lines.append(f'   State: {sec["state_text"]}. Runs in window: {sec["runs"]["complete"]} '
                      f'complete, {sec["runs"]["partial"]} partial, {sec["runs"]["unavailable"]} '
-                     f'unavailable. Last run: {_when(sec["last_run"])}.')
-        lines.append(f'   Capability status: {sec["register"]}.')
+                     f'unavailable. Last run: {_last_run(sec)}.')
+        if sec['register'] != common:
+            lines.append(f'   Capability status: {sec["register"]}.')
         if sec['error']:
             lines.append(f'   Last error: {sec["error"]}')
         if sec['state'] == 'not_observed':
             lines.append('   Nothing can be said about this area for this window.')
         elif sec['findings_at'] is None:
             lines.append('   No stored result for this area: its findings cannot be shown.')
+        elif sec.get('preview_note') and sec['finding_count']:
+            lines.append(f'   {sec["finding_count"]} findings in the stored result of '
+                         f'{_when(sec["findings_at"])}: listed in the full report.')
         elif not sec['findings']:
             lines.append(f'   No findings in the stored result of {_when(sec["findings_at"])}.')
         else:
@@ -229,7 +261,7 @@ def render(review):
                 lines.append(f'   - {f["severity"]:<8} {f["title"]}')
                 if f.get('detail'):
                     lines.append(f'              {f["detail"]}')
-            if sec['truncated']:
+            if sec['truncated'] and not sec.get('preview_note'):
                 lines.append(f'   ... {sec["truncated"]} more not shown (see `argus '
                              f'{sec["job"]}` on the server).')
         lines.append('')
@@ -243,9 +275,26 @@ def render(review):
     lines += ['', review['scores_note'], '', 'Good to know:']
     lines += [f'  - {f}' for f in review['facts']]
     lines += ['', f'To remove ARGUS-1: {review["removal"]}']
+    if review.get('preview'):
+        lines += ['', 'This is a preview. The full report lists every finding with its detail. '
+                  'It needs an Argus Server Review key for this server:',
+                  f'  buy: {review.get("buy_url")}',
+                  '  then: argus licence activate ARGUS-REVIEW-...']
     if len(lines) > MAX_LINES:
         lines = lines[:MAX_LINES - 1] + ['(truncated: use --json for the full bounded report)']
     return '\n'.join(lines) + '\n'
+
+
+def preview(review, buy_url):
+    """The unlicensed form of the report: every area's state, the counts and the blind spots,
+    without the individual findings. Premium content only: nothing here gates protection,
+    and `argus <job>` on the server still shows every finding."""
+    out = dict(review)
+    out['preview'] = True
+    out['buy_url'] = buy_url
+    out['sections'] = [{**sec, 'findings': [], 'truncated': sec['finding_count'],
+                        'preview_note': True} for sec in review['sections']]
+    return out
 
 
 def write_private(path, text):

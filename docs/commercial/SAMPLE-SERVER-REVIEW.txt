@@ -7,41 +7,37 @@ This is an observed review of what ARGUS-1 recorded on this server. It is not a 
 
 None of the 54 capabilities in the coverage register has been live-tested yet.
 
+Capability status: built and tested in source only; not yet verified on a real machine for every area below unless noted.
 Areas: 12 observed, 1 partial, 1 stale, 1 not observed.
 Findings from areas observed in this window: 0 critical, 6 high, 5 medium, 4 low.
 Findings are operational observations to review with the server owner, not verdicts.
 
 ## SSH configuration, authorised keys and tunnels [sshwatch]
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - high     new ssh key for deploy
               a key was added to /home/deploy/.ssh/authorized_keys on 2026-10-29; confirm who added it
    - medium   PasswordAuthentication is enabled
-              detail withheld from this report: it may contain a secret; see it on the server itself
+              sshd accepts passwords; keys only is the usual choice for a web server
    - low      PermitRootLogin prohibit-password
-              detail withheld from this report: it may contain a secret; see it on the server itself
+              root may log in with a key
 
 ## Successful SSH logins from new networks or keys [logins]
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - medium   login for deploy from a network not seen before
               first login from this network in the window, using the key added on 2026-10-29
 
 ## Firewall and exposed services [firewall]
    State: observed in this window. Runs in window: 168 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:30 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - high     MySQL (3306) listens on all addresses
               mysqld is bound to 0.0.0.0 and no firewall rule limits it
    - low      no host firewall rules are loaded
 
 ## Inbound packet headers (no payloads) [netflow]
-   State: not observed in this window. Runs in window: 0 complete, 0 partial, 0 unavailable. Last run: never.
-   Capability status: built and tested in source only; not yet verified on a real machine.
+   State: not observed in this window. Runs in window: 0 complete, 0 partial, 0 unavailable. Last run: none recorded.
    Nothing can be said about this area for this window.
 
 ## Failed services, expiring certificates, OOM kills [opshealth]
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - high     certificate for shop.example expires in 9 days
               certbot.timer is inactive, so it will not renew on its own
    - medium   php8.3-fpm was killed by the OOM killer 3 times
@@ -49,34 +45,28 @@ Findings are operational observations to review with the server owner, not verdi
    - low      failed unit: logrotate.service
 
 ## Boot chain and kernel images [bootchain]
-   State: no run in this window; last findings are older and shown for reference only. Runs in window: 0 complete, 0 partial, 0 unavailable. Last run: never.
-   Capability status: built and tested in source only; not yet verified on a real machine.
+   State: no run in this window; last findings are older and shown for reference only. Runs in window: 0 complete, 0 partial, 0 unavailable. Last run: no run in this window (stored result from 2026-10-21 00:00 UTC).
    No findings in the stored result of 2026-10-21 00:00 UTC.
 
 ## Processes reading the keyboard [keyreaders]
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    No findings in the stored result of 2026-11-01 23:57 UTC.
 
 ## Integrity of commonly replaced packages [pkgverify]
    State: observed in this window. Runs in window: 7 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 12:00 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    No findings in the stored result of 2026-11-01 12:00 UTC.
 
 ## Pending security updates and known CVEs [patches]
    State: observed in this window. Runs in window: 7 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 12:00 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - high     14 security updates pending, 1 on the CISA KEV list
               oldest pending for 23 days; a reboot is also pending for a new kernel
 
 ## Pending security updates and known CVEs [distrovuln]
    State: observed in this window. Runs in window: 7 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 12:00 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - medium   3 known CVEs in installed packages have a fix available
 
 ## Vulnerable dependencies and secrets in codebases [appcode]
    State: observed in this window. Runs in window: 7 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 12:00 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - high     credential in /srv/shop/.env
               detail withheld from this report: it may contain a secret; see it on the server itself
    - high     lodash 4.17.15 in /srv/shop (prototype pollution)
@@ -85,22 +75,18 @@ Findings are operational observations to review with the server owner, not verdi
 
 ## Vulnerable dependencies and secrets in codebases [osv]
    State: observed in this window. Runs in window: 7 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 12:00 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    No findings in the stored result of 2026-11-01 12:00 UTC.
 
 ## Docker privilege and published ports [containers]
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    No findings in the stored result of 2026-11-01 23:57 UTC.
 
 ## Changes to ARGUS-1 itself [selfguard]
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    No findings in the stored result of 2026-11-01 23:57 UTC.
 
 ## Off-box "host went silent" heartbeat [heartbeat]
    State: ran in this window, but no run was complete. Runs in window: 0 complete, 1840 partial, 176 unavailable. Last run: 2026-11-01 23:57 UTC.
-   Capability status: built and tested in source only; not yet verified on a real machine.
    - low      no off-box heartbeat: nothing outside this machine notices if it goes silent
               set a heartbeat URL to a dead-man service to be told when this server stops
 

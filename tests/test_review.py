@@ -340,3 +340,52 @@ class Cli(Fixture):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OwnerDecisions20261103(Fixture):
+    """The three sample-review fixes decided on 2026-11-03 (Scout decisions renderer_*)."""
+
+    def test_a_setting_that_names_a_password_keeps_its_detail(self):
+        self.run_receipt('sshwatch')
+        self.snapshot('sshwatch', [{'severity': 'medium', 'title': 'PasswordAuthentication is enabled',
+                                    'detail': 'sshd_config allows password logins for every user'}])
+        f = self.section(self.build(), 'sshwatch')['findings'][0]
+        self.assertEqual(f['detail'], 'sshd_config allows password logins for every user')
+
+    def test_a_secret_value_is_still_withheld(self):
+        for title, kind in (('API key found in config file', ''), ('token exposed in logs', ''),
+                            ('Possible leak', 'secrets')):
+            with self.subTest(title=title):
+                self.assertEqual(review._finding({'title': title, 'kind': kind, 'detail': 'x=1'})['detail'],
+                                 review.WITHHELD)
+
+    def test_the_redactor_still_withholds_a_setting_detail_that_quotes_a_value(self):
+        f = review._finding({'title': 'PasswordAuthentication is enabled', 'detail': 'password=hunter2'})
+        self.assertEqual(f['detail'], review.WITHHELD)
+
+    def test_capability_status_is_stated_once_and_only_where_it_differs(self):
+        for job in _jobs():
+            self.run_receipt(job)
+            self.snapshot(job, [])
+        rv = self.build()
+        text = review.render(rv)
+        common = review.common_status(rv)
+        self.assertEqual(text.count(f'Capability status: {common}'), 1)
+        differing = sum(1 for s in rv['sections'] if s['register'] != common)
+        self.assertEqual(text.count('   Capability status:'), differing)
+
+    def test_a_stale_area_says_when_its_result_is_from_not_never(self):
+        self.snapshot('opshealth', [], ts=NOW - 20 * DAY)
+        rv = self.build()
+        sec = self.section(rv, 'opshealth')
+        self.assertEqual(sec['state'], 'stale')
+        text = review.render(rv)
+        line = next(l for l in text.splitlines() if 'Last run:' in l and
+                    text.splitlines()[text.splitlines().index(l) - 1].endswith('[opshealth]'))
+        self.assertIn('no run in this window (stored result from', line)
+        self.assertNotIn('Last run: never', line)
+
+    def test_an_area_with_nothing_stored_says_none_recorded(self):
+        text = review.render(self.build())
+        self.assertNotIn('Last run: never', text)
+        self.assertIn('Last run: none recorded', text)
