@@ -49,6 +49,22 @@ self-hoster results (`~/sales/data/scout.db`, read-only).
 - What it could not see: each capability's register status and the first clause of its limit.
 - That scores are not verdicts, and how to remove ARGUS-1.
 
+**Sample to show a prospect:** `docs/commercial/SAMPLE-SERVER-REVIEW.txt`. It is produced by the
+real renderer over a fictional server's week (`scripts/reviews/sample_review.py`, deterministic)
+and opens with a line saying nothing in it was observed. It shows the honest states a real week
+usually has: one area not observed (packet sensor off), one stale (boot chain), one partial
+(heartbeat with no URL). Regenerate it whenever the renderer or the register changes.
+
+Jev on the sample (jev-1.14.0, advisory, metadata only; `scripts/reviews/pmf_advisory.py sample`):
+helps a lead without misleading 0.43 (uncertain); most off-putting property: the not-verified
+status repeated on every area (0.67), then invented findings read as real (0.21), configuration
+details withheld as secrets (0.11). Two renderer issues the sample exposed, **not changed** (they
+touch the claim and privacy rules and need the owner's call plus tests): the status line repeats
+per area and again in the blind-spots list; details of `PasswordAuthentication`/`PermitRootLogin`
+findings are withheld because the title contains "password". Also, a stale area prints
+"Last run: never" although it has an older stored result. Test the sample on a real lead before
+relying on it (PMF Phase 5).
+
 ## Where your data stays
 
 On your server. The report is a local file. If you choose to share it with us for the
@@ -65,6 +81,7 @@ before install tests willingness to pay, which Jev rated the riskiest assumption
 
 1. Clean install, upgrade and removal of the native build measured on fresh Ubuntu 24.04 and
    Debian 12 VMs, with idle CPU and memory (Jev: installing on a customer server first, 0.20).
+   Plan: `docs/commercial/VM-INSTALL-MATRIX.md`.
 2. A signed release that contains `argus review` (needs GitHub Actions billing fixed).
 3. Engagement terms and an invoicing entity (the EULA draft names "Archymedes, Inc.").
 4. `security.txt` and a contact address on the site.

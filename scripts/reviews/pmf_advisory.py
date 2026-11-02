@@ -121,10 +121,48 @@ LICENSING_QUESTIONS = {
                      'paid_feature_buyer': 'Only when a buyer asks to pay for a software feature',
                      'never': 'Never; services only'}},
 }
+# Sales sample and clean-VM matrix (2026-11-02). Metadata only: the sample is fictional.
+SAMPLE_STATE = {
+    'goal': 'show a prospect what the observed server review looks like before they pay',
+    'facts': {
+        'sample': 'rendered by the real report code over a fictional server week; first line says '
+                  'nothing in it was observed; 15 areas: 12 observed, 1 partial, 1 stale, '
+                  '1 not observed; 6 high, 5 medium, 4 low findings',
+        'withholding': 'details of findings whose title names a password, token or credential are '
+                       'withheld, including configuration facts such as password login enabled',
+        'register_lines': 'every area repeats that the capability is tested in source only and '
+                          'not yet verified on a real machine',
+        'matrix': 'clean installs planned on Ubuntu 24.04 and Debian 12 VMs, tarball and deb, '
+                  'install, idle hour, review, reboot, upgrade, remove, purge; the signed native '
+                  'release has never been installed on a VM; the newer release with the report '
+                  'cannot be built until CI billing is fixed',
+    },
+}
+SAMPLE_QUESTIONS = {
+    'sample_helps': {'type': 'noul', 'instructions':
+        'Will a fictional sample, labelled as invented in its first line, help an agency lead '
+        'understand the review without misleading them about what ARGUS-1 found?',
+        'criteria': {'true': 'Yes', 'false': 'No, it misleads or confuses'}},
+    'sample_risk': {'type': 'choice', 'instructions':
+        'Which property of this sample is most likely to put off a paying agency lead?',
+        'criteria': {'withheld_config': 'Configuration details withheld as if they were secrets',
+                     'register_repeat': 'The not-verified status repeated on every area',
+                     'invented_read_as_real': 'Invented findings read as real ones',
+                     'length': 'Too long to read in a few minutes',
+                     'none': 'None of these'}},
+    'matrix_first': {'type': 'choice', 'instructions':
+        'Which clean-VM run should happen first?',
+        'criteria': {'old_release_now': 'Install the existing signed native release on Ubuntu '
+                     '24.04 and Debian 12 now, without the report',
+                     'wait_candidate': 'Wait for the newer signed release with the report',
+                     'real_vps_first': 'Install on one real owner VPS first'}},
+}
 if __name__ == '__main__':
     import sys
     if sys.argv[1:] == ['review']:
         STATE, QUESTIONS = REVIEW_STATE, REVIEW_QUESTIONS
+    elif sys.argv[1:] == ['sample']:
+        STATE, QUESTIONS = SAMPLE_STATE, SAMPLE_QUESTIONS
     elif sys.argv[1:] == ['licensing']:
         STATE, QUESTIONS = LICENSING_STATE, LICENSING_QUESTIONS
     try:
