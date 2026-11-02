@@ -81,7 +81,32 @@ REVIEW_QUESTIONS = {
         'safe to merge before any real other-distribution run?',
         'criteria': {'true': 'Yes', 'false': 'No, run on real hosts first'}},
 }
+FOOTPRINT_STATE = {
+    'goal': 'a light security monitor for small servers and laptops',
+    'measured': {
+        'fixed': 'two collectors whose cost grew with stored history now stay flat: one walked the whole '
+                 'database every five minutes (6.8 s CPU, 367 MB peak, now 0.2 s and 34 MB); one loaded every '
+                 'process fingerprint ever seen each minute (1.8 s, 180 MB, now 0.5 s and 38 MB)',
+        'baseline': 'fresh install: 42 jobs cost 5.4 percent of one core at steady state',
+        'open': 'event log re-parses an 8 MB hash chain on each open, four opens a minute, growing linearly; '
+                'SQLite allows 64 MB cache plus 256 MB memory map per connection; the optional Linux Sysmon '
+                'daemon took 29 percent of a core with the current configuration',
+    },
+}
+FOOTPRINT_QUESTIONS = {
+    'next': {'type': 'choice', 'instructions': 'Which open cost should be addressed next for a light product?',
+             'criteria': {'chain_cache': 'Event log hash-chain parsing on every open',
+                          'sqlite_budget': 'Per-connection SQLite cache and memory map',
+                          'sysmon_config': 'The Linux Sysmon configuration that the product recommends',
+                          'none': 'None; the remaining costs are acceptable'}},
+    'evidence_risk': {'type': 'noul', 'instructions':
+        'Is caching the parsed hash chain keyed on file size and modification time a risk to tamper evidence '
+        'unless the integrity walk still reads the file itself?',
+        'criteria': {'true': 'Yes, a risk without that rule', 'false': 'No'}},
+}
 if __name__ == '__main__':
+    if sys.argv[1:] == ['footprint']:
+        STATE, QUESTIONS = FOOTPRINT_STATE, FOOTPRINT_QUESTIONS
     if sys.argv[1:] == ['review']:
         STATE, QUESTIONS = REVIEW_STATE, REVIEW_QUESTIONS
     try:

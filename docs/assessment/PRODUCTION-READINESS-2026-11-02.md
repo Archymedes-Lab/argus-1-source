@@ -126,6 +126,42 @@ Target architecture and phases: `docs/architecture/AGNOSTIC-DEPLOYMENT.md`. Phas
   before real-host runs 0.38. The container probes answer part of that; real VM and VPS runs
   remain before promotion.
 
+## Footprint: why JARVIS is heavy and what ships
+
+Measured on the development host, 2026-11-02 (`scripts/dev/job_cost.py`: each collector in its
+own child, throwaway HOME and store, Linux domain only, network jobs skipped; CPU is user+sys).
+
+| | JARVIS (owner, WSL + Windows) | ARGUS-1 server edition |
+|---|---|---|
+| Same 60 s window | 129% of one core | 1% |
+| Main process RSS | 542 MB + 105 MB Rust mirror child | 175 MB (Python build of 2026.10.31) |
+| Jobs scheduled here | 72 | 49 (21 Windows-domain and 2 workstation jobs not applicable) |
+| State | 4.3 GB (882 MB store, 2.4 GB event log) | new install |
+| Unit limits | none ("top priority") | CPUWeight 50, IOWeight 50, MemoryMax 1G |
+
+Server edition, fresh store: **5.4% of one core** at steady state for 42 measured jobs; every
+job's process peaks at 33-90 MB. Heaviest per run: appcode 59 s (daily), deep_hidden 40 s
+(daily), implant 24 s (hourly), verify 19 s (daily).
+
+The shipping risk was cost that grows with history. Against a copy of the real 882 MB store:
+
+| Job (cadence) | Before | After (`feat/host-facts`) | Cause |
+|---|---|---|---|
+| resources (5 min) | 6.8 s CPU, 367 MB peak | 0.2 s, 34 MB | a `dbstat` walk of the whole database every run for an 8-row table breakdown; now daily or on a 10% size change |
+| scan (1 min) | 1.8 s CPU, 180 MB peak | 0.48 s, 38 MB | every fingerprint ever seen and every approved row loaded each minute; now only the fingerprints running now |
+
+Still open, measured: opening the event log costs 0.13 s each (8 MB hash chain, 3,013
+segments, re-parsed per open, 4 opens per scan pass; grows linearly; evidence-critical, so
+not changed without its own review); per-connection SQLite budget (64 MiB cache + 256 MiB
+mmap) shaved scan only 0.48 → 0.39 s in a child, and its daemon-level effect on RSS and
+dashboard latency needs a soak on a running service before changing; the Linux Sysmon daemon
+itself took 29% of a core here under this config; implant and netflow are the next per-cadence
+costs (0.3-0.7% each).
+
+Jev (advisory, `agnostic_architecture_advisory.py footprint`): next is the hash-chain parse
+(0.62; Sysmon configuration 0.36); a stat-keyed chain cache is a tamper-evidence risk unless the
+integrity walk still reads the file itself (0.90), so that rule is a precondition of the change.
+
 ## Road to production
 
 | Step | Closes | Size |
