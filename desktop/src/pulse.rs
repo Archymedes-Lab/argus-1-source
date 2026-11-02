@@ -30,6 +30,10 @@ pub fn port() -> u16 {
     })
 }
 
+pub fn dashboard_url() -> String {
+    format!("http://127.0.0.1:{}/", port())
+}
+
 /// Why a stream ended. `Refused` (403/503) means the daemon is up but will
 /// not stream to us right now, so the caller should poll `/api/pulse`.
 /// `Io` covers timeouts, resets and malformed or oversized input alike: the
