@@ -41,6 +41,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    _stream.reconfigure(errors="replace")  # a refusal must print, not crash on a cp1252 console
+
 PORT = 8787
 TASK = "argus native service"
 LOCAL = Path(os.environ["LOCALAPPDATA"])

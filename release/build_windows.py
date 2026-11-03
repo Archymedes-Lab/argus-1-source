@@ -34,6 +34,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    _stream.reconfigure(errors="replace")  # a refusal must print, not crash on a cp1252 console
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import build_server  # noqa: E402  (DATA_KEEP, REPO_DATA)

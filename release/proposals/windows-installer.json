@@ -22,7 +22,9 @@
         "argus/intel/data/*.json",
         "argus/lab/scenarios/*.json",
         "$PLUGINSDIR/*.dll",
-        "[NSIS].nsi"
+        "[NSIS].nsi",
+        "$PLUGINSDIR/*.bmp",
+        "$PLUGINSDIR/*.ico"
       ],
       "executables": []
     }

@@ -26,6 +26,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    _stream.reconfigure(errors="replace")  # a refusal must print, not crash on a cp1252 console
+
 NOT_ARTIFACTS = {"manifest.json", "SHA256SUMS", "SHA256SUMS.txt", "SHA256SUMS.sig", "allowed_signers",
                  "release-report.md", "sbom.cdx.json"}
 REQUIRED = ("Argus-Setup.exe", "argus-server-linux-x86_64.tar.gz")
