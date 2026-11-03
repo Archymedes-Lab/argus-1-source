@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from unittest import mock
 
 from jarvis.collectors.telemetry import sysmon_linux
 from jarvis.core.store import Store
@@ -517,3 +518,80 @@ class DmesgUnitWindowFallbackTests(unittest.TestCase):
                      "InactiveExitTimestamp=@1000\nInactiveEnterTimestamp=@9000\n",
                      "InactiveExitTimestamp=@1015\nInactiveEnterTimestamp=@1000\n"):
             self.assertEqual(self._windows("", unit), [], unit)
+
+
+class CursorContinuity(unittest.TestCase):
+    """The incremental cursor moves only after a successful read (evidence continuity)."""
+
+    def _store(self):
+        import tempfile
+
+        from jarvis.core.store import Store
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        return Store(os.path.join(self.tmp.name, "j.db"))
+
+    def _audit(self, store, read):
+        from jarvis.collectors.telemetry.sysmon_linux import run as runmod
+        with mock.patch.object(runmod, "state", return_value=(True, True)), \
+                mock.patch.object(runmod, "read_since", side_effect=read), \
+                mock.patch.object(runmod, "now", return_value=10_000):
+            return runmod.audit(store=store, incremental=True)
+
+    def test_a_failed_read_keeps_the_cursor_and_says_so(self):
+        store = self._store()
+        store.set_meta("sysmon_linux_last", 5_000)
+        out = self._audit(store, lambda since: (None, False, "journalctl did not answer within 40 s"))
+        self.assertEqual(int(store.get_meta("sysmon_linux_last", 0)), 5_000)
+        titles = [f["title"] for f in out]
+        self.assertIn("Linux Sysmon events not read this pass", titles)
+
+    def test_the_next_pass_reads_the_same_window_again(self):
+        store = self._store()
+        store.set_meta("sysmon_linux_last", 5_000)
+        seen = []
+        self._audit(store, lambda since: (seen.append(since), (None, False, "timeout"))[1])
+        self._audit(store, lambda since: (seen.append(since), ("", True, ""))[1])
+        self.assertEqual(seen, [5_000, 5_000])
+        self.assertEqual(int(store.get_meta("sysmon_linux_last", 0)), 10_000)
+
+    def test_a_good_read_advances_to_the_read_start(self):
+        store = self._store()
+        out = self._audit(store, lambda since: ("", True, ""))
+        self.assertEqual(int(store.get_meta("sysmon_linux_last", 0)), 10_000)
+        self.assertNotIn("Linux Sysmon events not read this pass", [f["title"] for f in out])
+
+
+class JournalRead(unittest.TestCase):
+    def _run(self, stdout="", rc=0, exc=None):
+        def run(*a, **kw):
+            if exc:
+                raise exc
+            return mock.Mock(stdout=stdout, returncode=rc)
+        return run
+
+    def test_timeout_is_a_failed_read_not_an_empty_one(self):
+        import subprocess
+
+        from jarvis.collectors.telemetry.sysmon_linux import journal
+        text, ok, why = journal.read_since(0, run=self._run(exc=subprocess.TimeoutExpired("journalctl", 40)),
+                                           syslog=lambda: ("old", False))
+        self.assertEqual((text, ok), (None, False))
+        self.assertIn("40 s", why)
+
+    def test_failed_journal_without_syslog_is_failed_but_empty_journal_is_fine(self):
+        from jarvis.collectors.telemetry.sysmon_linux import journal
+        self.assertFalse(journal.read_since(0, run=self._run(rc=1), syslog=lambda: (None, False))[1])
+        self.assertEqual(journal.read_since(0, run=self._run(rc=0), syslog=lambda: (None, False))[:2], ("", True))
+
+    def test_syslog_read_is_capped_to_its_tail(self):
+        import tempfile
+
+        from jarvis.collectors.telemetry.sysmon_linux import journal
+        with tempfile.NamedTemporaryFile("w", delete=False) as fh:
+            fh.write("sysmon old\n" * 1000 + "sysmon newest\n")
+        self.addCleanup(os.unlink, fh.name)
+        text, capped = journal._syslog(fh.name, cap=200)
+        self.assertTrue(capped)
+        self.assertLessEqual(len(text), 200)
+        self.assertTrue(text.endswith("sysmon newest"))

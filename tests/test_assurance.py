@@ -72,6 +72,8 @@ class AssuranceTests(unittest.TestCase):
         # 2026-11-02: +1 unverified link_plane (watchdogs job).
         # 2026-11-02: +1 unverified software_updates (updates job).
         # Recomputed on the integrated tree (ARGUS-INSTINCT integration, 2026-11-02).
+        # 2026-11-02: +1 unverified host_applicability (scheduler applicability, no
+        # observing job of its own, not validated).
         self.assertEqual(gaps['implementation_unverified'], 32)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 22)

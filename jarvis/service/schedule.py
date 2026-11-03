@@ -13,6 +13,7 @@ NOT_APPLICABLE with the reason, so the absence is stated rather than silent.
 import os
 
 from jarvis.core import mechanisms
+from jarvis.platform import facts as hostfacts
 from jarvis.platform import host
 
 # name -> (interval seconds, label, callable(hosts) -> list[finding])
@@ -56,10 +57,12 @@ _RUST_RUNTIME = os.path.isdir(os.path.join(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))), "rust-runtime"))
 
 
-def applicable(windows, linux, jobs=None, server=None):
+def applicable(windows, linux, jobs=None, server=None, facts=None):
     """(schedule, {job: reason}) for a machine with these execution domains.
     `server`: a plain Linux host (no Windows, not WSL), where workstation
-    features are not applicable."""
+    features are not applicable. `facts` (platform/facts.py): the measured host;
+    a collector whose Collector.requires it does not satisfy is not applicable,
+    with the missing fact as the reason. None keeps the domain rules only."""
     jobs = ALL_JOBS if jobs is None else jobs
     server = (linux and not windows) if server is None else server
     keep, absent = {}, {}
@@ -72,9 +75,12 @@ def applicable(windows, linux, jobs=None, server=None):
             absent[name] = "this machine has no Linux domain to observe"
         elif name == "rust_mirror" and not _RUST_RUNTIME:
             absent[name] = "the Rust evidence mirror is not included in this edition"
+        elif facts is not None and name in mechanisms.BY_NAME and mechanisms.unmet(mechanisms.BY_NAME[name], facts):
+            absent[name] = "not on this host: " + "; ".join(mechanisms.unmet(mechanisms.BY_NAME[name], facts))
         else:
             keep[name] = spec
     return keep, absent
 
 
-JOBS, NOT_APPLICABLE = applicable(host.has_windows(), host.has_linux())
+JOBS, NOT_APPLICABLE = applicable(host.has_windows(), host.has_linux(),
+                                  facts=hostfacts.current() if host.has_linux() else None)

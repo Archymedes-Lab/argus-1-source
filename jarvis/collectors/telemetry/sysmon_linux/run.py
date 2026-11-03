@@ -2,13 +2,14 @@
 
 import re
 import sqlite3
+from datetime import datetime, timezone
 
 from jarvis.core import egress as egress_baseline
 from jarvis.core.finding import finding as _finding
 from jarvis.core.util import now
 
 from . import history
-from .journal import CHANNEL, _event_utc, _parse, _raw, state
+from .journal import CHANNEL, _event_utc, _parse, read_since, state
 from .rules import (
     DOWNLOAD_RUN,
     LOG_DELETE_SUFFIX,
@@ -158,6 +159,10 @@ def _remember(store, findings, hours):
     return keep
 
 
+def _iso(ts):
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
 def _health(events, since, incremental):
     """Two things that make the stream itself untrustworthy: journald throwing
     events away before they are read, and a config that records process events
@@ -210,14 +215,25 @@ def audit(store=None, hours=24, hosts=("wsl", "win"), incremental=False):
     if incremental and store is not None:
         last = int(store.get_meta("sysmon_linux_last", 0) or 0)
         since = last or (now() - 1800)
-        store.set_meta("sysmon_linux_last", now())
+        read_at = now()
     else:
         since = now() - hours * 3600
 
-    events = _parse(_raw(since))
+    # The cursor moves only after a successful read: a window that could not be
+    # read is read again next pass, never skipped (evidence continuity).
+    text, read_ok, why = read_since(since)
+    events = _parse(text or "")
     out = _rules(events, store=store) + _health(events, since, incremental)
     if store is not None:
         out = _remember(store, out, hours)
+    if incremental and store is not None:
+        if read_ok:
+            store.set_meta("sysmon_linux_last", read_at)
+        else:
+            out.append(_finding(
+                "telemetry", "medium", "Linux Sysmon events not read this pass",
+                f"{why}; the events since {_iso(since)} were not read and are read again next pass, "
+                "so nothing in that window is judged until then", CHANNEL))
     if incremental and store is not None:
         try:
             history.record(store, events, _event_utc)
