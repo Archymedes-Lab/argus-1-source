@@ -65,13 +65,32 @@ Check ($p.ExitCode -eq 0) "Setup /S exit code 0 (was $($p.ExitCode))"
 Check (Test-Path -LiteralPath $engine) 'engine installed per user'
 Check (Test-Path -LiteralPath (Join-Path $install 'argus-desktop.exe')) 'desktop app installed'
 Check (Test-Path -LiteralPath $uninstKey) 'uninstall entry for the current user'
-$scripts = @(Get-ChildItem -LiteralPath $install -Recurse -File -Include *.py, *.pyc, *.ps1, *.cs -ErrorAction SilentlyContinue)
+# -Include is ignored with -LiteralPath: filter on the extension itself.
+$scripts = @(Get-ChildItem -LiteralPath $install -Recurse -File -ErrorAction SilentlyContinue |
+             Where-Object { $_.Extension -in '.py', '.pyc', '.ps1', '.cs' })
 Check ($scripts.Count -eq 0) "no source or script files in the program folder ($($scripts.Count))"
+$scripts | Select-Object -First 10 | ForEach-Object { Write-Host "      $($_.FullName)" }
 $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$product.lnk"
 Check (Test-Path -LiteralPath $lnk) 'Start menu entry'
 
+$setupLog = Join-Path $install 'install.log'
+if (Test-Path -LiteralPath $setupLog) { Write-Host "-- the Setup's install step:"; Get-Content -LiteralPath $setupLog | Out-Host }
 Write-Host "== service"
 $t = Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+$state = Join-Path $env:LOCALAPPDATA 'Argus\NativeService'
+if (-not $t) {
+    # Diagnose before judging: what the Setup's own step would have printed.
+    Write-Host "-- no task after Setup: running the install step by hand"
+    $out = & $engine native install 2>&1 | Out-String
+    Write-Host $out
+    Write-Host "-- native install exit code: $LASTEXITCODE"
+    foreach ($f in 'service.log', 'daemon.err.log', 'daemon.out.log') {
+        $pth = Join-Path $state $f
+        if (Test-Path -LiteralPath $pth) { Write-Host "-- $f"; Get-Content -LiteralPath $pth -Tail 40 | Out-Host }
+    }
+    Check $false 'the Setup registered the service by itself'
+    $t = Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+}
 Check ([bool]$t) "scheduled task '$task' registered"
 if ($t) { Check ($t.Principal.RunLevel -eq 'Limited') 'task runs without elevation' }
 $port = 8787
@@ -87,9 +106,13 @@ $status = & $engine native status --all 2>&1 | Out-String
 Write-Host $status
 Check ($status -match 'not here\s+auditd\b') 'Linux-only audit listed as not applicable here'
 Check ($status -match 'daemon process: pid') 'supervisor sees the daemon it started'
-& $engine welcome desktop | Out-Host
+$welcome = & $engine welcome 2>&1 | Out-String
+Write-Host $welcome
+Check ($welcome -match 'for Windows') "first-run statement chosen for native Windows"
 
 Write-Host "== positive control: a planted autostart entry"
+# A brand-new profile can lack the Run key itself.
+if (-not (Test-Path -LiteralPath $runKey)) { New-Item -Path $runKey -Force | Out-Null }
 Remove-ItemProperty -Path $runKey -Name $probeName -ErrorAction SilentlyContinue
 Check (-not (Probe-Seen)) 'absent before planting (negative control)'
 New-ItemProperty -Path $runKey -Name $probeName -Value 'cmd.exe /c exit' -PropertyType String -Force | Out-Null

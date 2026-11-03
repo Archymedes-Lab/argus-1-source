@@ -65,6 +65,7 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "Archymedes"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Archymedes"
 
 Var Result
+Var Output
 
 Section "Install"
   ; One install per computer. The 2026.10 Argus builds installed themselves in
@@ -105,8 +106,14 @@ Section "Install"
   Pop $Result
 
   DetailPrint "Starting the ${PRODUCT} service (this can take a minute) ..."
-  nsExec::ExecToLog '"${ENGINE}" native install'
+  ; Output kept in install.log too: a silent install shows no details window.
+  nsExec::ExecToStack '"${ENGINE}" native install'
   Pop $Result
+  Pop $Output
+  DetailPrint $Output
+  FileOpen $0 "$INSTDIR\install.log" w
+  FileWrite $0 "native install exit code: $Result$\r$\n$Output"
+  FileClose $0
   ${If} $Result == "3"
     MessageBox MB_ICONSTOP|MB_OK "${PRODUCT} already runs on this PC (for example inside WSL). One install per PC: remove that one first." /SD IDOK
     SetErrorLevel 3
