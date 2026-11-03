@@ -1,0 +1,16 @@
+# The Windows build (release/build_windows.py), installed with
+#   pip install --require-hashes --no-build-isolation -r release/requirements-windows.txt
+# after build-tools.txt, on Python 3.12 / win_amd64.
+#
+# The same versions as requirements-build.txt and requirements-runtime.txt (a test
+# keeps them equal); only the hashes differ, because compiled wheels are per platform.
+# Hashes are the SHA-256 of the files PyPI serves for each version, read from
+# https://pypi.org/pypi/<name>/<version>/json on 2026-11-03; every file was
+# published more than two weeks before that date.
+nuitka==4.3 --hash=sha256:8b102c6bf30d9504e82e69674d396972729092b25cefa680e8fd05678fdfa30b
+# cryptography-50.0.2-cp311-abi3-win_amd64.whl (abi3: the Python 3.12 build uses it)
+cryptography==50.0.2 --hash=sha256:7afa5a6602a9f29af1f3a2965f831bae7c9d5d597b7cbb716d41ab3b7d89879c
+# cffi-2.1.1-cp312-cp312-win_amd64.whl
+cffi==2.1.1 --hash=sha256:f53e442b08449d42821fa4a4fba000095af9f62742a500f978a9f557ec44339a
+# pycparser-3.11-py3-none-any.whl
+pycparser==3.11 --hash=sha256:51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80

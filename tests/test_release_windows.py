@@ -115,3 +115,26 @@ def gate_suffixes():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WindowsRequirementsTest(unittest.TestCase):
+    @staticmethod
+    def pins(*names):
+        import re
+        out = {}
+        for name in names:
+            for line in (ROOT / "release" / name).read_text().splitlines():
+                m = re.match(r"^([A-Za-z0-9_.-]+)==([0-9][0-9A-Za-z.]*)", line)
+                if m:
+                    out[m[1].lower()] = m[2]
+        return out
+
+    def test_windows_pins_match_the_linux_pins_version_for_version(self):
+        self.assertEqual(self.pins("requirements-windows.txt"),
+                         self.pins("requirements-build.txt", "requirements-runtime.txt"))
+
+    def test_every_windows_pin_carries_a_hash(self):
+        text = (ROOT / "release" / "requirements-windows.txt").read_text()
+        lines = [ln for ln in text.splitlines() if ln and not ln.startswith("#")]
+        self.assertTrue(lines)
+        self.assertTrue(all("--hash=sha256:" in ln for ln in lines), lines)
