@@ -106,6 +106,26 @@ $port = 8787
 $portFile = Join-Path $appDir 'port'
 if (Test-Path -LiteralPath $portFile) { $port = [int](Get-Content -LiteralPath $portFile -TotalCount 1) }
 $h = Health $port
+if (-not ($h -and $h.live -eq $true)) {
+    # Diagnose before judging: the service's own logs, then the engine in the
+    # foreground on a spare port so a start-up failure prints its reason.
+    Write-Host "-- health on port $port`: $(if ($h) { $h | ConvertTo-Json -Compress -Depth 3 } else { 'no answer' })"
+    foreach ($f in 'install.log', 'service.log', 'daemon.err.log', 'daemon.out.log', 'service.json') {
+        $pth = Join-Path $state $f
+        if (Test-Path -LiteralPath $pth) { Write-Host "-- $f"; Get-Content -LiteralPath $pth -Tail 60 | Out-Host }
+        else { Write-Host "-- $f (missing)" }
+    }
+    Get-CimInstance Win32_Process -Filter "Name = 'argus-instinct.exe'" -ErrorAction SilentlyContinue |
+        ForEach-Object { Write-Host "-- running: $($_.ProcessId) $($_.ExecutablePath) :: $($_.CommandLine)" }
+    $fgOut = Join-Path $env:TEMP 'argus-fg.out.log'; $fgErr = Join-Path $env:TEMP 'argus-fg.err.log'
+    $fg = Start-Process -FilePath $engine -ArgumentList 'serve', '--port', '8799' -PassThru -WindowStyle Hidden `
+        -RedirectStandardOutput $fgOut -RedirectStandardError $fgErr
+    $fgh = $null
+    for ($i = 0; $i -lt 30 -and -not $fg.HasExited; $i++) { Start-Sleep -Seconds 3; $fgh = Health 8799; if ($fgh -and $fgh.live -eq $true) { break } }
+    Write-Host "-- foreground serve: exited=$($fg.HasExited) code=$(if ($fg.HasExited) { $fg.ExitCode } else { '-' }) health=$(if ($fgh) { $fgh | ConvertTo-Json -Compress -Depth 3 } else { 'no answer' })"
+    if (-not $fg.HasExited) { Stop-Process -Id $fg.Id -Force -ErrorAction SilentlyContinue }
+    foreach ($f in $fgOut, $fgErr) { if (Test-Path -LiteralPath $f) { Write-Host "-- $f"; Get-Content -LiteralPath $f -Tail 60 | Out-Host } }
+}
 Check ($h -and $h.service -eq 'ARGUS') "health answers as ARGUS on port $port"
 Check ($h -and $h.live -eq $true) 'scheduler live'
 Check (Test-Path -LiteralPath (Join-Path $appDir 'client.token')) 'desktop app paired (token written)'

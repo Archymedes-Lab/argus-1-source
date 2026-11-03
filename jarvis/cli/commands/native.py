@@ -193,7 +193,56 @@ def other_install(previous, probe=None):
     return DEFAULT_PORT if doc and doc.get("service") == SERVICE_NAME else 0
 
 
+class _Transcript:
+    """Writes to a log file and, when there is one, the original stream. A program
+    started without a console (the Setup's silent install) may have no stdout at
+    all; its transcript must still say what happened."""
+
+    def __init__(self, stream, fh):
+        self.stream, self.fh = stream, fh
+
+    def write(self, text):
+        self.fh.write(text)
+        if self.stream is not None:
+            try:
+                self.stream.write(text)
+            except (OSError, ValueError):
+                self.stream = None
+        return len(text)
+
+    def flush(self):
+        self.fh.flush()
+        if self.stream is not None:
+            try:
+                self.stream.flush()
+            except (OSError, ValueError):
+                self.stream = None
+
+
+INSTALL_LOG = "install.log"
+
+
 def cmd_install(args, store):
+    """`native install`, with everything it prints also kept in install.log in the
+    service's state folder."""
+    if _refuse_elsewhere():
+        return 2
+    root = state_root()
+    try:
+        os.makedirs(root, exist_ok=True)
+        fh = open(os.path.join(root, INSTALL_LOG), "w", encoding="utf-8", errors="replace")
+    except OSError:
+        return _install(args, store)
+    saved = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = _Transcript(saved[0], fh), _Transcript(saved[1], fh)
+    try:
+        return _install(args, store)
+    finally:
+        sys.stdout, sys.stderr = saved
+        fh.close()
+
+
+def _install(args, store):
     if _refuse_elsewhere():
         return 2
     root = state_root()

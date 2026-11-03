@@ -192,12 +192,33 @@ class NativeCli(unittest.TestCase):
         self.assertEqual(native.other_install(8787, probe=lambda p: ours), 0)  # our own reinstall
         self.assertEqual(native.other_install(0, probe=lambda p: {"service": "other"}), 0)
         self.assertEqual(native.other_install(0, probe=lambda p: None), 0)
+        root = tempfile.mkdtemp(prefix="svc-")
+        self.addCleanup(shutil.rmtree, root, True)
         with mock.patch.object(native.host, "KIND", "windows"), \
+             mock.patch.object(native, "state_root", return_value=root), \
              mock.patch.object(native, "_service_config", return_value={}), \
              mock.patch.object(native, "_health", return_value=ours), \
              mock.patch.object(native, "_run_service_script", side_effect=AssertionError("ran")), \
              mock.patch("sys.stderr", io.StringIO()):
             self.assertEqual(native.cmd_install(mock.Mock(port=0, no_desktop=False), None), 3)
+
+    def test_install_keeps_a_transcript_even_without_a_console(self):
+        # The Setup's silent install runs the engine with no console: stdout can be
+        # None. What install printed must still be in install.log.
+        root = tempfile.mkdtemp(prefix="svc-")
+        self.addCleanup(shutil.rmtree, root, True)
+        with mock.patch.object(native.host, "KIND", "windows"), \
+             mock.patch.object(native, "state_root", return_value=root), \
+             mock.patch.object(native, "_service_config", return_value={}), \
+             mock.patch.object(native, "_health", return_value=None), \
+             mock.patch.object(native, "choose_port", return_value=(8787, "")), \
+             mock.patch.object(native, "_run_service_script", return_value=(1, "task refused: reason X")), \
+             mock.patch("sys.stdout", None), mock.patch("sys.stderr", None):
+            self.assertEqual(native.cmd_install(mock.Mock(port=0, no_desktop=False), None), 1)
+            self.assertIsNone(sys.stdout)   # restored
+        log = Path(root, native.INSTALL_LOG).read_text(encoding="utf-8")
+        self.assertIn("task refused: reason X", log)
+        self.assertIn("could not be registered", log)
 
     def test_wait_healthy_retries_then_gives_up(self):
         answers = iter([None, {"live": False}, {"live": True}])
