@@ -218,7 +218,8 @@ def probe(patterns, deadline=PROBE_DEADLINE_S):
     from jarvis.core.paths import PACKAGE_DIR
     # Launched like scheduler._isolated_job: `-m` from the package root. The
     # compiled server dispatches this module by name (release/launcher.py).
-    command = [sys.executable, "-m", "jarvis.core.rulepack", "probe"]
+    from jarvis.core.paths import self_executable
+    command = [self_executable(), "-m", "jarvis.core.rulepack", "probe"]
     try:
         done = subprocess.run(command, input=json.dumps(patterns), capture_output=True, text=True,
                               errors="replace", cwd=str(PACKAGE_DIR.parent), timeout=deadline, check=False)

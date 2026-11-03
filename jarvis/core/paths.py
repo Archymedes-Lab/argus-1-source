@@ -8,6 +8,7 @@ without its data files moving out from under it.
 """
 
 import os
+import sys
 from pathlib import Path
 
 # abspath, not resolve(): the Windows task check compares against the path the
@@ -50,6 +51,30 @@ STATIC_DIR = PACKAGE_DIR / "web" / "static"
 # The owner's settings file. response/alert.py reads it for delivery; lower
 # layers that need one setting read it here instead of importing upward.
 CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
+
+
+def self_executable():
+    """The program file to start when Argus runs a copy of itself (`-m module`).
+
+    `sys.executable` is wrong in a compiled Windows build: Nuitka's standalone
+    mode reports a python.exe in the install folder that does not exist, so
+    every collector worker failed with FileNotFoundError and its job showed as
+    broken (found 2026-11-03 by running the compiled program; Linux reports
+    the binary correctly). When `sys.executable` does not exist, ask Windows
+    for the path of the running program.
+    """
+    exe = sys.executable
+    if exe and os.path.exists(exe):
+        return exe
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(32768)
+            if ctypes.windll.kernel32.GetModuleFileNameW(None, buf, len(buf)) and os.path.exists(buf.value):
+                return buf.value
+        except (AttributeError, OSError):
+            pass
+    return exe
 
 
 def win_script(name):
