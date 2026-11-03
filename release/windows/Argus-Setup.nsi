@@ -21,13 +21,20 @@
 ; upgrade and, unless asked, on uninstall.
 
 Unicode true
-Target amd64-unicode
+; The standard NSIS release ships only 32-bit stubs, so this is a 32-bit
+; installer that runs on 64-bit Windows. It installs 64-bit programs, and it
+; turns off file-system redirection (below) so $SYSDIR is the real System32 and
+; the 64-bit schtasks and taskkill run.
 SetCompressor /SOLID lzma
 SetDateSave off
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "x64.nsh"
+
+!insertmacro un.GetParameters
+!insertmacro un.GetOptions
 
 !define APP "Argus"
 !define TASK "argus native service"
@@ -74,6 +81,19 @@ VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "Archymedes"
 Var Result
 Var Previous
 
+Function .onInit
+  ${IfNot} ${RunningX64}
+    MessageBox MB_ICONSTOP|MB_OK "Argus needs 64-bit Windows 10 or 11." /SD IDOK
+    SetErrorLevel 5
+    Abort
+  ${EndIf}
+  SetRegView 64
+FunctionEnd
+
+Function un.onInit
+  SetRegView 64
+FunctionEnd
+
 ; Stop every running part of Argus so its files can be replaced or removed:
 ; the logon task first (so it cannot restart the program), then the processes.
 !macro StopArgus
@@ -87,7 +107,10 @@ Var Previous
 !macroend
 
 Section "Argus" SecMain
-  SetOutPath "$INSTDIR"
+  ${DisableX64FSRedirection}
+  ; Not inside the install folder: a process cannot rename or delete the
+  ; directory it is standing in.
+  SetOutPath "$TEMP"
 
   ; --- stop the running version; keep it until the new one is in place -------
   DetailPrint "stopping the running Argus"
@@ -191,6 +214,7 @@ Section "Argus" SecMain
 
 rollback:
   DetailPrint "the install failed; restoring the previous version"
+  SetOutPath "$TEMP"
   RMDir /r "$INSTDIR"
   ${If} $Previous != ""
     Rename "$Previous" "$INSTDIR"
@@ -211,6 +235,8 @@ SectionEnd
 Var Purge
 
 Section "Uninstall"
+  ${DisableX64FSRedirection}
+  SetOutPath "$TEMP"
   !insertmacro StopArgus
   nsExec::Exec '"$SYSDIR\schtasks.exe" /Delete /F /TN "${TASK}"'
   Pop $Result
@@ -223,9 +249,9 @@ Section "Uninstall"
   RMDir /r "$APPDATA\local.argus.desktop"
   RMDir /r "$LOCALAPPDATA\local.argus.desktop"
   ; History and settings stay unless the person says otherwise.
-  ${GetParameters} $0
+  ${un.GetParameters} $0
   ClearErrors
-  ${GetOptions} $0 "/PURGE" $1
+  ${un.GetOptions} $0 "/PURGE" $1
   ${IfNot} ${Errors}
     StrCpy $Purge "1"
   ${Else}

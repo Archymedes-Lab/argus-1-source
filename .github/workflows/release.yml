@@ -192,13 +192,38 @@ jobs:
           key: ${{ steps.digests.outputs.desktop_windows_key }}
           enableCrossOsArchive: true
 
+  # Compile the installer script against a dummy folder before the long Nuitka
+  # build starts: a script error is found in minutes, not after the compile.
+  windows-nsis-check:
+    needs: [verify]
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      NSIS_VERSION: "3.11"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install NSIS
+        shell: bash
+        run: |
+          choco install nsis --version "$NSIS_VERSION" -y --no-progress
+          echo "C:\Program Files (x86)\NSIS" >> "$GITHUB_PATH"
+      - name: Compile Argus-Setup.nsi against a stand-in folder
+        shell: bash
+        run: |
+          mkdir stage && echo MZ > stage/argus.exe && echo MZ > stage/argus-desktop.exe
+          makensis -V2 -NOCD -DVERSION=0.0.0 -DPRODUCT_VERSION=0.0.0.0 \
+            "-DSRC=$PWD/stage" "-DOUTFILE=$PWD/check-setup.exe" release/windows/Argus-Setup.nsi
+          ls -l check-setup.exe
+
   # The one Windows download: the desktop app and the compiled monitoring program
   # in a single installer (release/build_windows.py). The first build compiles
   # the whole program with Nuitka and takes a long time; the compiler downloads
   # are cached, keyed on the pinned inputs, so later builds are shorter. The
   # output does not depend on the cache: the cache holds only downloaded tools.
   windows-installer:
-    needs: [verify, desktop-windows]
+    needs: [verify, desktop-windows, windows-nsis-check]
     outputs:
       digests: ${{ steps.digests.outputs.windows_installer }}
       key: ${{ steps.digests.outputs.windows_installer_key }}
