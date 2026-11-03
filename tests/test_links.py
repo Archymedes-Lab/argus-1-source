@@ -454,8 +454,8 @@ class SchedulerIntegrationTests(unittest.TestCase):
         self.assertFalse(sched._links_hold(now))
 
     def test_queue_action_forces_the_job_and_task_action_is_bounded(self):
-        from jarvis.service.scheduler import Scheduler
         from jarvis.service import schedule as schedule_mod
+        from jarvis.service.scheduler import Scheduler
         sched = Scheduler(self.db, ("wsl", "win"))
         # The schedule is derived from this host's domains; a plain Linux CI
         # runner has no Windows "native" job, so give the scheduler one.
