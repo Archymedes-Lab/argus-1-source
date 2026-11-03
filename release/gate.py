@@ -55,20 +55,40 @@ OVERLAP = 4096
 
 
 def load_policy(path=POLICY, proposals=()):
-    """The policy at `path`. `proposals` are additive artifact rules under review
-    (release/proposals/): they may only append artifact rules, never touch the
-    deny lists, so a dry run can inspect an artifact without loosening anything."""
+    """The policy at `path`. `proposals` are changes under review (release/proposals/),
+    loaded only by dry runs (release-test/* branches) and never by a tagged build:
+
+      * `artifacts`: new artifact rules (a name that already has a rule is refused);
+      * `deny_markers`: a replacement regex for a marker that already exists, by id
+        (a marker cannot be added or removed this way).
+
+    Nothing else can be touched: not the suffix, folder or bytecode lists, and not
+    the other markers. Each active proposal is recorded in policy["_proposals"] so
+    the caller can print it."""
     policy = json.loads(Path(path).read_text())
+    policy["_proposals"] = []
     for prop in proposals:
         extra = json.loads(Path(prop).read_text())
-        stray = sorted(k for k in extra if k != "artifacts" and not k.startswith("_"))
+        stray = sorted(k for k in extra if k not in ("artifacts", "deny_markers", "marker_exemptions")
+                       and not k.startswith("_"))
         if stray:
-            raise ValueError(f"{prop}: a proposal may only add artifact rules, not {', '.join(stray)}")
+            raise ValueError(f"{prop}: a proposal may only add artifact rules, replace named markers or add "
+                             f"marker exemptions, not {', '.join(stray)}")
         known = {r["name"] for r in policy["artifacts"]}
         for rule in extra.get("artifacts", []):
             if rule["name"] in known:
                 raise ValueError(f"{prop}: {rule['name']} already has a rule; a proposal cannot replace it")
             policy["artifacts"].append(rule)
+            policy["_proposals"].append(f"{Path(prop).name}: adds artifact rule {rule['name']}")
+        for ex in extra.get("marker_exemptions", []):
+            policy.setdefault("marker_exemptions", []).append(ex)
+            policy["_proposals"].append(f"{Path(prop).name}: exempts {ex['marker']} in {ex['member']} (sha256 pinned)")
+        by_id = {m["id"]: i for i, m in enumerate(policy["deny_markers"])}
+        for marker in extra.get("deny_markers", []):
+            if marker["id"] not in by_id:
+                raise ValueError(f"{prop}: marker {marker['id']} does not exist; a proposal cannot add one")
+            policy["deny_markers"][by_id[marker["id"]]] = {**policy["deny_markers"][by_id[marker["id"]]], **marker}
+            policy["_proposals"].append(f"{Path(prop).name}: REPLACES marker {marker['id']}")
     policy["_markers"] = [(m["id"], re.compile(m["regex"].encode())) for m in policy["deny_markers"]
                           if m["id"] != "python-source-header"]
     policy["_magic"] = [bytes.fromhex(h) for h in policy["deny_bytecode_magic"]]
@@ -224,6 +244,23 @@ def members_of(path, kind):
     raise ValueError(f"unknown artifact kind {kind!r}")
 
 
+def exempt(label, marker_id, data, policy):
+    """True when this exact file is exempted from this marker.
+
+    An exemption names a member path, one marker and the SHA-256 of the file's
+    bytes. It applies to those bytes only: another file with the same marker, or
+    the same file after any change, is refused as usual. They exist for a vendor's
+    signed binary that carries the vendor's own build path and cannot be altered.
+    """
+    for ex in policy.get("marker_exemptions", ()):
+        member = ex["member"]
+        if ex["marker"] == marker_id and (label == member or label.endswith(":" + member)
+                                          or label.endswith("/" + member)):
+            if hashlib.sha256(data).hexdigest() == ex["sha256"]:
+                return True
+    return False
+
+
 def scan_bytes(label, data, policy):
     """Problems found in one file's bytes, whatever the file is."""
     problems = []
@@ -239,6 +276,8 @@ def scan_bytes(label, data, policy):
             m = rx.search(window) if mid not in seen else None
             if m:
                 seen.add(mid)
+                if exempt(label, mid, data, policy):
+                    continue
                 problems.append(f"{label}: contains {mid} ({evidence(mid, m.group(0))})")
     # A zip appended to or embedded in a binary (PyInstaller, a self-extractor).
     if b"PK\x01\x02" in data and not data.startswith(b"PK\x03\x04"):

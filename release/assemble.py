@@ -123,6 +123,8 @@ def main():
     if not files:
         sys.exit("no build records found")
     policy = gate.load_policy(proposals=args.proposal)
+    for line in policy["_proposals"]:
+        print("PROPOSAL ACTIVE (dry run only): " + line)
     counts = {}
     for name in files:
         problems, counts[name] = gate.check_artifact(out / name, gate.rule_for(name, policy), policy)

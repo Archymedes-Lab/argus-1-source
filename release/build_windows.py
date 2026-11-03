@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -87,14 +88,75 @@ def stage_problems(stage):
     return problems
 
 
+def is_ours(rel):
+    """Our own program and data, as opposed to the third-party runtime beside them
+    (the Python and OpenSSL DLLs, extension modules, the cryptography package)."""
+    rel = rel.replace("\\", "/")
+    return rel in ("argus.exe", "argus-desktop.exe") or rel.startswith("argus/")
+
+
+def strict_problems(stage):
+    """Everything that is ours must pass the committed policy's ORIGINAL markers.
+
+    A reviewed policy may narrow the Windows path markers so third-party runtime
+    binaries that carry their maintainers' CI paths are not refused. That must
+    not also hide a leak of our own build machine's paths, so our files are
+    always scanned with the committed policy, never with a proposal.
+    """
+    policy = gate.load_policy()
+    out = []
+    for f in sorted(Path(stage).rglob("*")):
+        rel = f.relative_to(stage).as_posix()
+        if f.is_file() and not f.is_symlink() and is_ours(rel):
+            out += gate.scan_bytes(f"{rel} (ours, committed policy)", f.read_bytes(), policy)
+    return out
+
+
 def stage_folder(dist, desktop_exe, stage):
     stage = Path(stage)
     shutil.copytree(dist, stage)
     shutil.copyfile(desktop_exe, stage / "argus-desktop.exe")
-    problems = stage_problems(stage)
+    problems = stage_problems(stage) + strict_problems(stage)
     if problems:
         sys.exit("refusing to build the installer:\n  " + "\n  ".join(problems))
     return stage
+
+
+SOURCE_MAP_COMMENT = re.compile(rb"\r?\n?[ \t]*(?://|/\*)[#@] sourceMappingURL=[^\r\n]*")
+
+
+def data_files(tree, clean_dir):
+    """[(source path, path inside the program)] for the package data that ships.
+
+    Globbed so it is the same on every Python: `Path.glob("dir/**")` returns only
+    directories up to Python 3.12 and files as well from 3.13, so build_server.py's
+    loop shipped no web/static file at all from a 3.12 build (the published Linux
+    server has none), while a local 3.13 build shipped them. A pattern ending in
+    /** is every file below the directory.
+
+    Vendored web libraries end with a `sourceMappingURL` comment that points at a
+    map we do not ship. The release policy denies that marker, so the comment (not
+    the code) is removed from a copy; the build refuses to go on if it survives.
+    """
+    pkg = Path(tree) / "argus"
+    out = []
+    for pattern in build_server.DATA_KEEP:
+        if pattern.endswith("/**"):
+            found = sorted(p for p in (pkg / pattern[:-3]).rglob("*") if p.is_file())
+        else:
+            found = sorted(p for p in pkg.glob(pattern) if p.is_file())
+        for f in found:
+            rel = f.relative_to(tree).as_posix()
+            data = f.read_bytes()
+            if f.suffix in (".js", ".css") and b"sourceMappingURL=" in data:
+                data = SOURCE_MAP_COMMENT.sub(b"", data)
+                if b"sourceMappingURL=" in data:
+                    sys.exit(f"{rel}: a sourceMappingURL reference remains after cleaning")
+                f = Path(clean_dir) / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(data)
+            out.append((f, rel))
+    return out
 
 
 # ---- build steps (need Windows, Nuitka, MSVC, makensis) ----------------------
@@ -111,11 +173,8 @@ def nuitka(tree, work, jobs):
            f"--report={work}/nuitka-report.xml", "--remove-output",
            "--no-deployment-flag=self-execution",
            "--include-module=_json", "--include-module=_bisect"]
-    pkg = tree / "argus"
-    for pattern in build_server.DATA_KEEP:
-        for f in sorted(pkg.glob(pattern)):
-            if f.is_file():
-                cmd.append(f"--include-data-files={f}={f.relative_to(tree).as_posix()}")
+    for src, rel in data_files(tree, work / "data-clean"):
+        cmd.append(f"--include-data-files={src}={rel}")
     cmd.append(str(tree / "release" / "launcher.py"))
     print("$ " + " ".join(cmd[:12]) + " ...", flush=True)
     subprocess.run(cmd, cwd=tree, check=True)
@@ -164,7 +223,7 @@ def main():
     ap.add_argument("--desktop", required=True, help=f"folder holding {DESKTOP_EXE} (build_desktop.py --platform windows)")
     ap.add_argument("--ref", default="HEAD")
     ap.add_argument("--jobs", type=int, default=4)
-    ap.add_argument("--proposal", action="append", default=[], help="dry run only: an additive policy proposal (release/proposals/)")
+    ap.add_argument("--proposal", action="append", default=[], help="dry run only: a policy proposal under review (release/proposals/)")
     ap.add_argument("--work", help="build folder (default: a temporary one)")
     args = ap.parse_args()
     out = Path(args.out)
@@ -192,6 +251,8 @@ def main():
               "files": {INSTALLER: {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}}}
     (out / "windows-installer-build.json").write_text(json.dumps(record, indent=2) + "\n")
     policy = gate.load_policy(proposals=args.proposal)
+    for line in policy["_proposals"]:
+        print("PROPOSAL ACTIVE (dry run only): " + line)
     problems = gate.check_artifact(out / INSTALLER, gate.rule_for(INSTALLER, policy), policy)[0]
     for p in problems:
         print("REFUSED  " + p)

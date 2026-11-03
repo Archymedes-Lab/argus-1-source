@@ -270,9 +270,24 @@ jobs:
           # build uses the committed policy, which has no rule for the installer
           # until release/proposals/windows-installer.json has been reviewed.
           extra=""
-          case "$GITHUB_REF" in refs/heads/release-test/*) extra="--proposal release/proposals/windows-installer.json";; esac
+          case "$GITHUB_REF" in refs/heads/release-test/*) extra="--proposal release/proposals/windows-installer.json --proposal release/proposals/windows-markers.json";; esac
           python release/build_windows.py --version "$VERSION" --out out/windows-installer \
             --desktop out/desktop-windows --jobs 4 $extra
+      # Dry runs only (release-test/* branches, never a tag): keep the installer and
+      # the build log for one day as a private artifact so it can be tried on a
+      # clean machine. This is for inspection, not distribution; a tagged release
+      # never uploads anything here and is published only by the signed path.
+      - name: Keep the installer for inspection (dry run, private, 1 day)
+        if: always() && startsWith(github.ref, 'refs/heads/release-test/')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: argus-setup-dry-run
+          path: |
+            out/windows-installer/Argus-Setup.exe
+            out/windows-installer/windows-installer-build.json
+            out/windows-installer/nuitka-windows-report.xml
+          retention-days: 1
+          if-no-files-found: warn
       - name: Record the build's digests
         id: digests
         shell: bash
@@ -362,7 +377,7 @@ jobs:
           # Only a dry run (release-test/*) may load the policy proposal; a tagged
           # build is held to the committed policy.
           extra=""
-          case "$GITHUB_REF" in refs/heads/release-test/*) extra="--proposal release/proposals/windows-installer.json";; esac
+          case "$GITHUB_REF" in refs/heads/release-test/*) extra="--proposal release/proposals/windows-installer.json --proposal release/proposals/windows-markers.json";; esac
           python3 release/assemble.py --builds out --out release-out $extra \
             --version "${{ needs.verify.outputs.version }}" --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
