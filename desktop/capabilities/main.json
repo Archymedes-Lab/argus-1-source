@@ -8,6 +8,7 @@
     "core:event:allow-unlisten",
     "allow-daemon-state",
     "allow-daemon-status",
+    "allow-app-status",
     "allow-run-collector",
     "allow-answer-question",
     "allow-ask-jarvis",

@@ -36,8 +36,8 @@
   <div class="mt-auto flex flex-col gap-0.5 px-2 pb-2">
     {@render item(NAV[5])}
     <div class="mt-2 flex items-center gap-2 px-2.5 py-2 text-label-12 text-gray-900">
-      <span class="dot {app.daemon === 'live' ? 'dot-ok' : app.daemon === 'down' ? 'dot-bad' : 'dot-run'}"></span>
-      {app.daemon === "live" ? "Monitoring" : app.daemon === "down" ? "ARGUS-1 unreachable" : "Connecting"}
+      <span class="dot {app.status.phase === 'live' ? 'dot-ok' : app.status.phase === 'degraded' ? 'dot-warn' : app.status.phase === 'starting' ? 'dot-run' : 'dot-bad'}"></span>
+      <span title={app.status.detail}>{app.status.message}</span>
     </div>
   </div>
 </aside>

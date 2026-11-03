@@ -28,7 +28,10 @@
 </script>
 
 {#if !d}
-  <div class="empty">{app.error || "Reading ARGUS-1…"}</div>
+  <div class="empty">
+    {app.status.message}{#if app.status.detail}<br />{app.status.detail}{/if}
+    {#if app.error && app.status.phase === "starting"}<br />{app.error}{/if}
+  </div>
 {:else}
   <div class="flex flex-col gap-8">
     {#if counts.critical}

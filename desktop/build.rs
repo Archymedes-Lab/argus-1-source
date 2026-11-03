@@ -6,6 +6,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "daemon_state",
             "daemon_status",
+            "app_status",
             "run_collector",
             "answer_question",
             "ask_jarvis",

@@ -21,10 +21,11 @@
   <div class="flex min-w-0 flex-1 flex-col">
     <Toolbar />
     <main class="flex-1 overflow-y-auto">
-      {#if app.daemon === "down" && app.data}
-        <div class="mx-auto mt-6 max-w-[1200px] px-8">
-          <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900">
-            <span class="dot dot-warn"></span>ARGUS-1 is not answering right now. Showing the last state it reported; monitoring may still be running.
+      {#if app.status.phase !== "live" && app.status.phase !== "starting"}
+        <div class="mx-auto mt-6 max-w-[1200px] px-8" role="status">
+          <div class="flex flex-col gap-1 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900">
+            <span class="flex items-center gap-3"><span class="dot dot-warn"></span>{app.status.message}{#if app.daemon === "down" && app.data}. Showing the last state it reported.{/if}</span>
+            {#if app.status.detail}<span class="pl-5">{app.status.detail}</span>{/if}
           </div>
         </div>
       {/if}

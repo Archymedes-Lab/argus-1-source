@@ -22,10 +22,18 @@ async function preview<T>(cmd: string): Promise<T> {
   throw new Error("Preview mode: actions are disabled.");
 }
 
+/** What the app knows about the daemon (desktop/src/lifecycle.rs): never "healthy" unless it is. */
+export type AppStatus = {
+  phase: "starting" | "live" | "degraded" | "not_installed" | "not_authorised" | "stopped";
+  message: string;
+  detail: string;
+};
+
 export type Reply = { ok?: boolean; message?: string; answer?: string; source?: string; queued?: boolean };
 
 export const api = {
   state: () => call<any>("daemon_state"),
+  status: () => call<AppStatus>("app_status"),
   runCollector: (job: string) => call<Reply>("run_collector", { job }),
   answer: (id: string, choice: "yes" | "no") => call<Reply>("answer_question", { id, choice }),
   ask: (question: string) => call<Reply>("ask_jarvis", { question }),
