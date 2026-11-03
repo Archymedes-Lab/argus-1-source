@@ -1,4 +1,4 @@
-"""Measured facts about the computer ARGUS-1 runs on (docs/architecture/AGNOSTIC-DEPLOYMENT.md).
+"""Measured facts about the computer ARGUS-INSTINCT runs on (docs/architecture/AGNOSTIC-DEPLOYMENT.md).
 
 One binary must run on many kinds of computer: Ubuntu and Debian, the RHEL
 family, Alpine, containers, virtual machines, WSL and Windows, later macOS.

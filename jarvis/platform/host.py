@@ -80,7 +80,7 @@ def kind():
 def unsupported_reason(kind_=None):
     """Why this daemon must not run here, or "" when the host is supported."""
     if (KIND if kind_ is None else kind_) == "unsupported":
-        return (f"ARGUS-1 does not support {sys.platform} yet: only Linux, WSL and Windows are "
+        return (f"ARGUS-INSTINCT does not support {sys.platform} yet: only Linux, WSL and Windows are "
                 "observable. Nothing was started.")
     return ""
 

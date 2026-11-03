@@ -55,13 +55,13 @@ MAX_LABEL = 60
 MAX_LIMIT = 160
 MAX_LINES = 80
 
-SCORES_NOTE = ('Health and assurance scores describe what ARGUS-1 can observe and how much '
+SCORES_NOTE = ('Health and assurance scores describe what ARGUS-INSTINCT can observe and how much '
                'evidence supports it. Neither is a verdict that this machine is or is not '
                'compromised, and an absence of alerts is not proof of safety.')
 
 PROFILES = {
     'server': {
-        'title': 'ARGUS-1 server edition',
+        'title': 'ARGUS-INSTINCT server edition',
         'audience': 'Linux server admins and self-hosters',
         'capabilities': (
             ('server_ssh_watch', 'SSH configuration, authorised keys and tunnels'),
@@ -75,7 +75,7 @@ PROFILES = {
             ('patch_cve_awareness', 'Pending security updates and known CVEs'),
             ('app_code_vulnerabilities', 'Vulnerable dependencies and secrets in codebases'),
             ('container_inventory', 'Docker privilege and published ports'),
-            ('self_tamper_evidence', 'Changes to ARGUS-1 itself'),
+            ('self_tamper_evidence', 'Changes to ARGUS-INSTINCT itself'),
             ('off_box_heartbeat', 'Off-box "host went silent" heartbeat'),
             ('alert_channels', 'Alert delivery (email, webhook, ntfy, syslog)'),
         ),
@@ -87,14 +87,14 @@ PROFILES = {
         'next_steps': (
             'jarvis server sshwatch      SSH policy, keys and tunnels',
             'jarvis server opshealth     failed services, certificates, OOM kills',
-            'jarvis status               what ARGUS-1 knows so far',
+            'jarvis status               what ARGUS-INSTINCT knows so far',
         ),
         'removal': ('.deb: sudo apt remove argus-server; tarball install: sudo '
                     '/opt/argus/uninstall.sh. Removal on a clean machine has not been '
                     'validated yet.'),
     },
     'desktop': {
-        'title': 'ARGUS-1 desktop',
+        'title': 'ARGUS-INSTINCT desktop',
         'audience': 'Windows and WSL developers',
         'capabilities': (
             ('wsl_trust_boundary', 'The Windows/WSL boundary'),
@@ -113,13 +113,13 @@ PROFILES = {
         ),
         'facts': (
             'Windows mode without WSL has not been installed on another machine yet.',
-            'ARGUS-1 is built never to delete your files automatically.',
+            'ARGUS-INSTINCT is built never to delete your files automatically.',
         ),
         'next_steps': (
-            'jarvis status               what ARGUS-1 knows so far',
+            'jarvis status               what ARGUS-INSTINCT knows so far',
             'jarvis coverage             blind spots, stale collectors, failures',
         ),
-        'removal': ('Remove ARGUS-1 from Installed apps. Removal on a clean machine has not '
+        'removal': ('Remove ARGUS-INSTINCT from Installed apps. Removal on a clean machine has not '
                     'been validated yet.'),
     },
 }

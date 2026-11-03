@@ -290,22 +290,40 @@ class TrustedJournalOrigin(unittest.TestCase):
         self.assertIn("_UID=0", journal.TRUSTED_MATCH)
         self.assertIn("_SYSTEMD_UNIT=sysmon.service", journal.TRUSTED_MATCH)
 
+    # The collector reads through journal.read_since (cursor moves only after a
+    # good read); `run` and `syslog` are its injection points.
+    @staticmethod
+    def _run(stdout, rc, seen=None):
+        def run(cmd, **kw):
+            if seen is not None:
+                seen.append(cmd)
+            return subprocess.CompletedProcess(cmd, rc, stdout, "")
+        return run
+
     def test_collector_reader_queries_trusted_records(self):
-        with mock.patch.object(journal, "_run", return_value=("x", 0)) as run:
-            self.assertEqual(journal._raw(5), "x")
-        cmd = run.call_args[0][0]
+        seen = []
+        text, ok, _ = journal.read_since(5, run=self._run("x", 0, seen),
+                                         syslog=lambda: self.fail("syslog read"))
+        self.assertEqual((text, ok), ("x", True))
+        cmd = seen[0]
         self.assertEqual(cmd[1:1 + len(journal.TRUSTED_MATCH)], list(journal.TRUSTED_MATCH))
 
     def test_quiet_journal_does_not_fall_back_to_untrusted_syslog(self):
-        with mock.patch.object(journal, "_run", return_value=("", 0)), \
-             mock.patch("builtins.open", side_effect=AssertionError("syslog read")):
-            self.assertEqual(journal._raw(5), "")
+        text, ok, _ = journal.read_since(5, run=self._run("", 0),
+                                         syslog=lambda: self.fail("syslog read"))
+        self.assertEqual((text, ok), ("", True))
 
     def test_syslog_only_when_journalctl_cannot_run(self):
-        m = mock.mock_open(read_data="a sysmon line\nother\n")
-        with mock.patch.object(journal, "_run", return_value=("", 1)), \
-             mock.patch("builtins.open", m):
-            self.assertEqual(journal._raw(5), "a sysmon line\n")
+        text, ok, _ = journal.read_since(5, run=self._run("", 1),
+                                         syslog=lambda: ("a sysmon line", False))
+        self.assertEqual((text, ok), ("a sysmon line", True))
+
+    def test_failed_journal_without_syslog_keeps_the_cursor(self):
+        text, ok, why = journal.read_since(5, run=self._run("", 1),
+                                           syslog=lambda: (None, False))
+        self.assertIsNone(text)
+        self.assertFalse(ok)
+        self.assertIn("exit 1", why)
 
     def test_trusted_text_bounds_and_failure(self):
         with mock.patch.object(journal, "_run", return_value=("t", 0)) as run:
