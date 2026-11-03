@@ -26,6 +26,7 @@ compile_error!("release builds need `--features custom-protocol` (see docs/archi
 mod api;
 mod brand;
 mod pairing;
+mod provision;
 mod pulse;
 mod startmenu;
 mod watch;
@@ -184,6 +185,23 @@ fn main() {
             Err(e) => eprintln!("could not remove the Start menu entry: {e}"),
         }
         return;
+    }
+    // `--check`: headless self-test for installers and release tests. Pairs if
+    // needed, asks the daemon for its pulse, reports by exit code only (this
+    // is a windowless program): 0 monitoring answers, 2 cannot pair, 3 daemon
+    // not answering.
+    if std::env::args().any(|a| a == "--check") {
+        if let Err(e) = pairing::client_token() {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+        match pulse::poll() {
+            Ok(_) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(3);
+            }
+        }
     }
     // `--hidden`: start in the tray (used by the logon task).
     let hidden = std::env::args().any(|a| a == "--hidden");

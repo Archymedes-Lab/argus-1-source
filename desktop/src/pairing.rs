@@ -84,9 +84,14 @@ pub fn read_token(path: &Path) -> Result<String, String> {
     }
 }
 
-/// The token for this process's environment, or the message to show.
+/// The token for this process's environment. A missing token file is
+/// provisioned from the local daemon (provision.rs); anything else wrong with
+/// it (unreadable, loose permissions, not a token) is reported, never replaced.
 pub fn client_token() -> Result<String, String> {
     let path = token_path(&|k| std::env::var(k).ok()).ok_or_else(|| unpaired_message(None))?;
+    if std::fs::symlink_metadata(&path).is_err() {
+        crate::provision::ensure(&path).map_err(|why| format!("{why} {}", unpaired_message(Some(&path))))?;
+    }
     read_token(&path)
 }
 
