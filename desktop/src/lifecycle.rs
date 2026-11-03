@@ -103,7 +103,7 @@ pub fn classify_pulse(p: &Value) -> Status {
     }
     if !blind.is_empty() {
         let n = blind.len();
-        let msg = format!("Monitoring, but {n} area{} cannot be watched right now", if n == 1 { "" } else { "s" });
+        let msg = format!("Monitoring is partial: {n} area{} cannot be fully watched", if n == 1 { "" } else { "s" });
         return Status::new(Phase::Degraded, &msg, blind.join("; "));
     }
     Status::new(Phase::Live, "Monitoring is active", "")
@@ -319,7 +319,7 @@ mod tests {
             "blind": [{"job": "sysmon", "label": "Windows event log", "reason": "needs administrator rights"}]});
         let s = classify_pulse(&p);
         assert_eq!(s.phase, Phase::Degraded);
-        assert!(s.message.contains("1 area cannot be watched"), "{}", s.message);
+        assert!(s.message.contains("1 area cannot be fully watched"), "{}", s.message);
         assert!(s.detail.contains("Windows event log") && s.detail.contains("needs administrator rights"));
     }
 
