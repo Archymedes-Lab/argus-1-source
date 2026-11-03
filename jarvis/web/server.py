@@ -43,7 +43,12 @@ from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS, NOT_APPLICABLE
-from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
+from jarvis.service.scheduler import (
+    Scheduler,
+    reliability_watchdog_loop,
+    running_jobs,
+    watchdog_loop,
+)
 from jarvis.web import billing, clients, procview, stream
 from jarvis.web import token as api_token
 
@@ -229,9 +234,7 @@ def _performance_state(jobs, scheduler):
             "scheduled_duty_pct": round(sum(x["duty_pct"] for x in contributors), 1),
             "collector_cpu_pct": round(sum(x["cpu_pct"] for x in measured), 1) if measured else None,
             "top": contributors[:8],
-            "running": [n for n in (getattr(scheduler, "current", None),
-                                      getattr(scheduler, "fast_current", None),
-                                      getattr(scheduler, "bulk_current", None)) if n]}
+            "running": running_jobs(scheduler)}
 
 
 def _intel_state(store):
@@ -348,8 +351,7 @@ def build_state(db_path, scheduler):
                 # is STALE: no result is no result, never clean.
                 "freshness": reliability_mod.classify(
                     (time.time() - s["ts"]) if s and s["ts"] else -1, interval),
-                "running": name in (scheduler.current, getattr(scheduler, "fast_current", None),
-                                    getattr(scheduler, "bulk_current", None)),
+                "running": name in running_jobs(scheduler),
                 "next": int(scheduler.next_run.get(name, 0) - time.time()),
             })
 

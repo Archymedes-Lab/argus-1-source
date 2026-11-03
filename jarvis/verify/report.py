@@ -46,8 +46,12 @@ def run(cases=properties.CASES, seed=0):
     props = properties.run(cases, seed)
     models = [_model(i, n, b) for i, n, b in MODELS]
     try:
-        membership = bool(lanes.required_fast_jobs_are_in_the_fast_lane())
-        membership_error = "" if membership else "a protection job is not in the fast lane"
+        fast = bool(lanes.required_fast_jobs_are_in_the_fast_lane())
+        frequent = bool(lanes.five_minute_jobs_are_in_the_frequent_lane())
+        membership = fast and frequent
+        membership_error = ("" if membership else
+                            "a protection job is not in the fast lane" if not fast else
+                            "a five-minute collector is not in the frequent lane")
     except Exception as exc:
         membership, membership_error = False, f"{type(exc).__name__}: {exc}"[:300]
     mech = mechanism_conformance()

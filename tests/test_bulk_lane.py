@@ -88,6 +88,7 @@ class BulkLaneTests(unittest.TestCase):
         for name in JOBS:
             lane = scheduler.Scheduler._lane_of(sched, name)
             expected = ("fast" if name in scheduler.FAST
+                        else "frequent" if name in scheduler.FREQUENT
                         else "bulk" if name in scheduler.BULK else "main")
             self.assertEqual(lane, expected, name)
         self.assertEqual(scheduler.Scheduler._lane_of(sched, "sysmon"), "main")

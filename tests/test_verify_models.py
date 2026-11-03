@@ -67,6 +67,9 @@ class LaneModelTests(unittest.TestCase):
     def test_protection_jobs_are_in_the_fast_lane(self):
         self.assertTrue(lanes.required_fast_jobs_are_in_the_fast_lane())
 
+    def test_five_minute_collectors_are_in_the_frequent_lane(self):
+        self.assertTrue(lanes.five_minute_jobs_are_in_the_frequent_lane())
+
 
 class InteropGateModelTests(unittest.TestCase):
     def test_gate_invariants_hold_in_every_reachable_state(self):

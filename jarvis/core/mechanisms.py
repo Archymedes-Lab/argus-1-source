@@ -24,7 +24,7 @@ Pure data and pure checks: no imports from JARVIS, so every layer may read it.
 from dataclasses import dataclass, field
 from pathlib import Path
 
-LANES = ("fast", "main", "bulk")
+LANES = ("fast", "frequent", "main", "bulk")
 DOMAINS = ("both", "windows", "linux")
 CRITICALITY = ("critical", "high", "medium", "low")
 # Protection areas in display order. Order is behaviour: score.compute walks
@@ -37,6 +37,16 @@ DEPENDENCY_ROOTS = ("windows-bridge", "native-sensor", "scheduler")
 # Duty-cycle ceiling per serial lane: the share of wall time its jobs may take
 # at steady state, leaving the rest to catch up after a restart or a standby.
 LANE_DUTY_LIMIT = 0.8
+# The frequent lane (2026-11-03): every evidence collector on a cadence of
+# FREQUENT_MAX_INTERVAL or less gets a serial worker of its own, so the post-boot
+# sweep of multi-minute audits on the main lane cannot age it past STALE (2x its
+# cadence). Measured that morning: one main pass took 1331 s after a boot and 20
+# collectors went stale for 16 min with no error. Its jobs may launch PowerShell;
+# platform/interop_gate.py bounds concurrent launches daemon-wide, so a lane
+# count never raises interop concurrency. Each run is bounded by
+# FREQUENT_TIMEOUT_MAX so one slow job cannot hold the lane for long.
+FREQUENT_MAX_INTERVAL = 300
+FREQUENT_TIMEOUT_MAX = 60.0
 
 
 @dataclass(frozen=True)
@@ -169,28 +179,28 @@ COLLECTORS = (
        lane="fast", cost_s=0.2),
     _c("resources", 300, "Resource pressure", None, 0, 2, "medium", 60,
        command="status", health="optional", health_limit_s=900,
-       unscored="performance and resource pressure, not evidence of compromise"),
+       unscored="performance and resource pressure, not evidence of compromise", lane="frequent", cost_s=16.5),
     _c("internet", 120, "Internet apps & incoming traffic", NW, 0, 2, "medium", 60,
        command="netwatch", health="optional", health_limit_s=300, elevated="internetwatch.ps1",
-       domain="windows"),
+       domain="windows", lane="frequent", cost_s=5.4),
     _c("controls", 300, "Brightness & control devices", None, 0, 2, "medium", 60,
        command="control",
-       domain="windows", unscored="device state, not evidence of compromise"),
+       domain="windows", unscored="device state, not evidence of compromise", lane="frequent", cost_s=6.6),
     _c("audio", 300, "Audio endpoints & routes", None, 0, 2, "medium", 60,
        command="audio",
-       domain="windows", unscored="device state, not evidence of compromise"),
+       domain="windows", unscored="device state, not evidence of compromise", lane="frequent", cost_s=10.2),
     # One registry read plus a PnP listing, about 2 s: consent store posture,
     # AppPrivacy policy and capture devices, checked against the owner's seal.
     _c("privacy", 300, "Microphone & camera privacy seal", DP, 5, 2, "medium", 60,
        command="privacy audit",
-       domain="windows", cost_s=2.0),
+       domain="windows", cost_s=3.2, lane="frequent"),
     # Both sides of the WSL boundary: config and mounts from Linux, the
     # registration from the Windows registry (about 1 s), drift against the
     # owner-accepted checkpoint and the previous sample.
-    _c("wsl", 300, "WSL trust boundary", OS, 4, 2, "medium", 60, cost_s=1.0,
+    _c("wsl", 300, "WSL trust boundary", OS, 4, 2, "medium", 60, cost_s=5.5,
        # Its Windows half (distros, .wslconfig, policy) exists wherever Windows
        # does; on a plain Linux server there is no WSL boundary (2026-10-24).
-       command="timeline wsl-boundary", domain="windows"),
+       command="timeline wsl-boundary", domain="windows", lane="frequent"),
     # Headroom on the only disk: system drive free, WSL image overhang,
     # page-file policy, ballast; one PowerShell read plus bounded cache walks.
     _c("storage", 1800, "Disk headroom & WSL image", None, 0, 3, "medium", 180,
@@ -210,8 +220,8 @@ COLLECTORS = (
        unscored="firmware audit records are reported, not yet scored (unsoaked; owner decision pending)"),
     _c("deep_hidden", 86400, "Deep process cross-view scan", AT, 5, 4, "low", 300,
        command="hidden --deep", boot_scoped=True),
-    _c("hidden", 300, "Hidden processes", AT, 4, 2, "high", 60, cost_s=14.0,
-       command="hidden", boot_scoped=True),
+    _c("hidden", 300, "Hidden processes", AT, 4, 2, "high", 60, cost_s=24.0,
+       command="hidden", boot_scoped=True, lane="frequent"),
     _c("firewall", 2400, "Firewall & inbound", OS, 1, 3, "high", 240,
        command="firewall",
        depends_on=("windows-bridge",), cost_s=18.0, boot_scoped=True),
@@ -276,7 +286,7 @@ COLLECTORS = (
     # through PowerShell. On a server it has nothing to observe (2026-10-24).
     _c("netwatch", 300, "Network & wireless state", NW, 1, 1, "high", 45,
        command="netwatch", domain="windows",
-       depends_on=("scheduler",), cost_s=10.0),
+       depends_on=("scheduler",), cost_s=11.5, lane="frequent"),
     _c("posture", 7200, "Windows security posture", OS, 0, 3, "high", 300,
        command="posture", elevated="posture.ps1",
        domain="windows", governed=True, depends_on=("windows-bridge",), cost_s=14.0, boot_scoped=True),
@@ -296,7 +306,7 @@ COLLECTORS = (
     # injected-event audit. input_hook keeps the helper alive.
     _c("input", 300, "Synthetic input", AT, 9, 2, "high", 60,
        command="inputwatch",
-       domain="windows", depends_on=("windows-bridge",)),
+       domain="windows", depends_on=("windows-bridge",), lane="frequent", cost_s=0.7),
     # Walks every readable process's address space; expensive, so rare.
     _c("memscan", 7200, "Memory & instruction level", AT, 3, 3, "medium", 300,
        command="memscan", elevated="memscan.ps1",
@@ -358,23 +368,23 @@ COLLECTORS = (
     # Reads the packet sensor's spool (a separate CAP_NET_RAW unit); cheap.
     _c("netflow", 60, "Incoming packets (header-only)", None, 0, 2, "medium", 30,
        command="netflow", domain="linux", cost_s=0.2,
-       unscored="source-tested only; detection thresholds not yet tuned on real internet traffic"),
+       unscored="source-tested only; detection thresholds not yet tuned on real internet traffic", lane="frequent"),
     # sshd "Accepted" records behind a journal cursor.
     _c("logins", 300, "SSH logins", None, 0, 2, "medium", 60,
        command="logins", domain="linux", cost_s=0.5,
-       unscored="source-tested only; new-network and new-key learning not yet soaked"),
+       unscored="source-tested only; new-network and new-key learning not yet soaked", lane="frequent"),
     # Effective sshd policy, every account's authorised keys and host keys
     # (learned, then drift), and the tunnels sshd and ssh clients hold open now.
     _c("sshwatch", 300, "SSH server, keys and tunnels", None, 0, 2, "medium", 60,
        command="sshwatch", domain="linux", cost_s=0.1,
-       unscored="source-tested only; never run against a real internet-facing sshd"),
+       unscored="source-tested only; never run against a real internet-facing sshd", lane="frequent"),
     # The daily checks operators most want automated (Exa research 2026-10-28):
     # failed units, TLS certificate expiry, kernel OOM kills, unclean reboots.
     # What WSL (or any systemd host) runs against the owner-approved manifest:
     # owners from cgroups, drift per owner (owner request 2026-10-31).
     _c("wslmanifest", 300, "WSL process manifest", None, 0, 2, "medium", 60,
        command="wslmanifest", domain="linux", cost_s=0.3,
-       unscored="new; reports drift only after the owner approves a manifest, not yet soaked"),
+       unscored="new; reports drift only after the owner approves a manifest, not yet soaked", lane="frequent"),
     _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
        command="opshealth", domain="linux", cost_s=0.6, requires=("systemd",),
        unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),
@@ -466,7 +476,7 @@ COLLECTORS = (
     # Planted canary bait: journal verification, decoy fingerprints, off-box
     # callback hits. Cheap and local, frequent so a trip surfaces quickly.
     _c("canary", 300, "Canary tokens & tripwires", MO, 7, 2, "medium", 60,
-       command="canary status"),
+       command="canary status", lane="frequent", cost_s=0.1),
     # Tamper evidence that holds when the source is public (DETECTION-CONTENT.md):
     # Python startup hooks, Argus's own code against RELEASE.json, its units,
     # its state directory's writers and the signed rule-pack channel. Hashes
@@ -565,13 +575,17 @@ PRIMITIVES = (
         "the coverage view shows it failing or stale; score counts it blind"),
     Primitive(
         "lane",
-        "A serial worker: fast (sub-second liveness), main (PowerShell interop), bulk (DrvFS and "
-        "network). One job at a time per lane.",
+        "A serial worker: fast (sub-second liveness), frequent (five-minute collectors), main "
+        "(long PowerShell audits), bulk (DrvFS and network). One job at a time per lane; "
+        "PowerShell launches from every lane share the interop admission gate.",
         ("fast-lane jobs are never governed and finish in seconds",
          "each lane's measured duty cycle stays under LANE_DUTY_LIMIT",
-         "starving jobs (past the hard deadline) are served first"),
+         "starving jobs (past the hard deadline) are served first",
+         "an evidence collector on a cadence of 300 s or less runs in the frequent lane, "
+         "never behind the main lane's post-boot sweep"),
         ("jarvis/service/scheduler.py",),
-        ("tests/test_mechanisms.py", "tests/test_lane_fairness.py", "tests/test_bulk_lane.py"),
+        ("tests/test_mechanisms.py", "tests/test_lane_fairness.py", "tests/test_bulk_lane.py",
+         "tests/test_frequent_lane.py"),
         "lane age grows; protection health reports the lane stalled"),
     Primitive(
         "freshness budget",
@@ -763,8 +777,22 @@ def conformance(root=None, files=True):
             out.append(f"{where}: scored and also given an unscored reason")
         if c.governed and (c.tier == 0 or c.lane == "fast"):
             out.append(f"{where}: tier 0 and fast-lane collectors must never be governed")
-        if c.isolated and c.lane == "main":
+        if c.isolated and c.lane in ("main", "frequent"):
             out.append(f"{where}: isolation is defined for the fast and bulk lanes only")
+        if c.lane == "frequent":
+            if c.governed:
+                out.append(f"{where}: frequent-lane collectors must never be governed")
+            if c.interval > FREQUENT_MAX_INTERVAL:
+                out.append(f"{where}: the frequent lane holds cadences of at most "
+                           f"{FREQUENT_MAX_INTERVAL}s, not {c.interval}s")
+            if c.timeout > FREQUENT_TIMEOUT_MAX:
+                out.append(f"{where}: a frequent-lane timeout of {c.timeout}s is over "
+                           f"{FREQUENT_TIMEOUT_MAX}s")
+            if c.cost_s is None:
+                out.append(f"{where}: a frequent-lane collector needs a measured cost_s")
+        elif (c.lane == "main" and c.evidence and c.interval <= FREQUENT_MAX_INTERVAL):
+            out.append(f"{where}: a {c.interval}s evidence collector on the main lane waits "
+                       f"behind the post-boot backlog; declare lane=\"frequent\"")
         if not c.command:
             out.append(f"{where}: needs the CLI command that audits the same ground")
         if c.health not in ("", "required", "optional"):

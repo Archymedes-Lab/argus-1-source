@@ -12,7 +12,7 @@ from unittest import mock
 
 from jarvis.service import scheduler as sched_mod
 from jarvis.service.schedule import JOBS
-from jarvis.service.scheduler import BULK, FAST, STARVING, Scheduler
+from jarvis.service.scheduler import BULK, FAST, FREQUENT, STARVING, Scheduler
 
 # Measured durations (s) from the live dashboard on 2026-10-10; others ~5 s.
 DURATIONS = {"sysmon": 57.0, "evidence": 314.0, "hidden": 32.5, "netwatch": 24.7,
@@ -23,6 +23,42 @@ DURATIONS = {"sysmon": 57.0, "evidence": 314.0, "hidden": 32.5, "netwatch": 24.7
 
 def _no_pressure():
     return mock.patch("jarvis.core.governor.live_pressure", return_value=(False, ""))
+
+
+def replay_lanes(s, clock, lanes, durations, until, watched, tick=None,
+                 worst_after=None, default_s=5.0):
+    """Run `lanes` side by side in virtual time, as their threads do: each
+    lane picks its next job with the real Scheduler._due when idle and holds
+    it for the job's duration. Evidence lands when a run completes. Returns
+    each watched job's completion times and its worst lateness after
+    `worst_after`."""
+    runs = {n: [] for n in watched}
+    worst = {n: 0.0 for n in watched}
+    busy = {lane: None for lane in lanes}               # lane -> (name, done_at)
+    with _no_pressure(), mock.patch.object(sched_mod.time, "time", clock):
+        while clock.t < until:
+            if tick:
+                tick(clock.t)
+            for lane in lanes:
+                job = busy[lane]
+                if job and job[1] <= clock.t:
+                    name = job[0]
+                    s.last_attempt[name] = s.evidence_ts[name] = clock.t
+                    s.next_run[name] = clock.t + JOBS[name][0]
+                    if name in runs:
+                        runs[name].append(clock.t)
+                    busy[lane] = job = None
+                if job is None:
+                    name = s._due(lane)
+                    if name is not None:
+                        # A running job is not due again (the thread holds it).
+                        s.next_run[name] = float("inf")
+                        busy[lane] = (name, clock.t + durations.get(name, default_s))
+            if worst_after is not None and clock.t > worst_after:
+                for n in watched:
+                    worst[n] = max(worst[n], s.lateness(n, clock.t))
+            clock.t += 1.0
+    return runs, worst
 
 
 class Clock:
@@ -96,12 +132,12 @@ class LatenessTests(unittest.TestCase):
         now = 1_000_000.0
         self.s.next_run = {n: now - 1 for n in JOBS}
         self.s.evidence_ts = {n: now - 10 for n in JOBS}
-        self.s.evidence_ts["audio"] = now - 5600        # 18.7x its 300 s cadence
+        self.s.evidence_ts["firewall"] = now - 45000     # 18.7x its 2400 s cadence
         self.s.evidence_ts["sysmon"] = now - 700
         self.s.reliability.health["sysmon"].consecutive_failures = 3
         self.s.force("sysmon")
         with _no_pressure(), mock.patch.object(sched_mod.time, "time", return_value=now):
-            self.assertEqual(self.s._due("main"), "audio")
+            self.assertEqual(self.s._due("main"), "firewall")
 
     def test_governor_defers_by_real_lateness(self):
         from jarvis.core import governor
@@ -154,26 +190,16 @@ class MonopolyReplayTests(unittest.TestCase):
         main = [n for n in JOBS if n not in FAST and n not in BULK]
         s.next_run = {n: start for n in JOBS}
         s.evidence_ts = {n: start - 6 * 3600 for n in JOBS}   # 6 h stale at restart
-        runs = {n: [] for n in main}
-        worst = {n: 0.0 for n in main}
-        next_force = start
-        with _no_pressure(), mock.patch.object(sched_mod.time, "time", clock):
-            while clock.t < start + hours * 3600:
-                while next_force <= clock.t:
-                    s.force("sysmon")
-                    next_force += force_every
-                name = s._due("main")
-                if name is None:
-                    clock.t += 1.0
-                    continue
-                clock.t += DURATIONS.get(name, 5.0)
-                s.last_attempt[name] = clock.t
-                s.evidence_ts[name] = clock.t
-                s.next_run[name] = clock.t + JOBS[name][0]
-                runs[name].append(clock.t)
-                if clock.t > start + 3600:         # after the catch-up hour
-                    for n in main:
-                        worst[n] = max(worst[n], s.lateness(n, clock.t))
+        next_force = [start]
+
+        def tick(now):
+            while next_force[0] <= now:
+                s.force("sysmon")
+                next_force[0] += force_every
+
+        runs, worst = replay_lanes(s, clock, ("main", "frequent"), DURATIONS,
+                                   start + hours * 3600, main, tick=tick,
+                                   worst_after=start + 3600)
         return s, runs, worst, start
 
     def test_every_main_collector_catches_up_within_the_first_hour(self):
@@ -191,6 +217,87 @@ class MonopolyReplayTests(unittest.TestCase):
         _s, _runs, worst, _start = self._replay()
         over = {n: round(v, 2) for n, v in worst.items() if v >= 3.0}
         self.assertEqual(over, {}, f"collectors past 3x their cadence: {over}")
+
+
+# Measured on the live release after the 2026-11-03 10:13 boot (snapshot
+# durations, s). Jobs not listed took under a second.
+BOOT_2026_11_03 = {"intrusion": 299.0, "secrets": 168.0, "firewall": 117.0,
+                   "deep_hidden": 113.0, "boot": 91.0, "control": 85.0, "storage": 75.0,
+                   "evasion": 46.0, "memscan": 36.0, "implant": 35.0, "toolchain": 29.0,
+                   "spy": 24.0, "hidden": 24.0, "arena": 22.0, "audio": 10.2,
+                   "pixel": 10.8, "netwatch": 11.5, "resources": 16.5, "hunt": 12.3,
+                   "backdoor": 8.7, "controls": 6.6, "preos": 6.5, "wsl": 5.5,
+                   "internet": 5.4, "sysmon_linux": 5.4, "sysmon": 4.4, "containers": 4.2,
+                   "model": 4.1, "privacy": 3.2, "attackmap": 3.1, "opshealth": 3.0,
+                   "asep": 2.9, "patches": 2.4, "identity": 2.2, "bruteforce": 2.1}
+
+
+class PostBootFrequentLaneTests(unittest.TestCase):
+    """Replay of the 2026-11-03 boot: every job due at once with evidence from
+    before the boot, the main lane owing a 1331 s sweep. Twenty collectors
+    went STALE for 16 minutes behind it with no error."""
+
+    HORIZON_S = 2 * 3600
+
+    def _boot(self, frequent_lane):
+        s = Scheduler(":memory:", ("wsl", "win"))
+        s.cold_start_pending.clear()
+        clock = Clock(1_000_000.0)
+        start = clock.t
+        s.boot_at = start - 60
+        s.next_run = {n: start for n in JOBS}
+        s.evidence_ts = {n: start - 3 * 3600 for n in JOBS}   # machine was off 3 h
+        lanes = ("main", "frequent") if frequent_lane else ("main",)
+        watched = sorted(FREQUENT)
+        if frequent_lane:
+            runs, worst = replay_lanes(s, clock, lanes, BOOT_2026_11_03,
+                                       start + self.HORIZON_S, watched, default_s=0.5)
+        else:
+            with mock.patch.object(sched_mod, "FREQUENT", frozenset()):
+                runs, worst = replay_lanes(s, clock, lanes, BOOT_2026_11_03,
+                                           start + self.HORIZON_S, watched, default_s=0.5)
+        return runs, start
+
+    @staticmethod
+    def _oldest(runs, start, until):
+        """Each job's worst evidence age once it first ran after the boot."""
+        out = {}
+        for name, done in runs.items():
+            if not done:
+                out[name] = float("inf")
+                continue
+            gaps = [b - a for a, b in zip(done, done[1:])] + [until - done[-1]]
+            out[name] = max(gaps)
+        return out
+
+    def test_the_old_single_lane_reproduces_the_stale_morning(self):
+        # Without the lane the replay must show the fault, or the test below
+        # proves nothing.
+        runs, start = self._boot(frequent_lane=False)
+        ages = self._oldest(runs, start, start + self.HORIZON_S)
+        stale = sorted(n for n, age in ages.items()
+                       if age > sched_mod.reliability.STALE_AFTER * JOBS[n][0])
+        self.assertTrue(stale, "single-lane replay no longer reproduces the fault")
+
+    def test_every_frequent_collector_runs_within_its_first_cadence_after_boot(self):
+        runs, start = self._boot(frequent_lane=True)
+        late = {n: (r[0] - start if r else None) for n, r in runs.items()
+                if not r or r[0] - start > JOBS[n][0]}
+        self.assertEqual(late, {}, "first post-boot run later than one cadence")
+
+    def test_no_frequent_collector_goes_stale_behind_the_boot_sweep(self):
+        runs, start = self._boot(frequent_lane=True)
+        ages = self._oldest(runs, start, start + self.HORIZON_S)
+        stale = {n: age for n, age in ages.items()
+                 if age > sched_mod.reliability.STALE_AFTER * JOBS[n][0]}
+        self.assertEqual(stale, {})
+        # The wait past a job's cadence is bounded by one pass of the lane's
+        # own declared costs, whatever the main lane is running.
+        from jarvis.core import mechanisms
+        one_pass = sum(mechanisms.BY_NAME[n].cost_s for n in FREQUENT)
+        over = {n: age - JOBS[n][0] for n, age in ages.items()
+                if age - JOBS[n][0] > one_pass}
+        self.assertEqual(over, {}, f"waited past one {one_pass:.0f} s pass")
 
 
 class OutageHookTests(unittest.TestCase):

@@ -255,6 +255,15 @@ class ConformanceCatchesBrokenDeclarations(unittest.TestCase):
     def test_isolation_outside_fast_lane(self):
         self.assertBreaks("isolation", _with("hidden", isolated=True))
 
+    def test_frequent_lane_contract(self):
+        self.assertBreaks("must never be governed", _with("audio", governed=True))
+        self.assertBreaks("cadences of at most 300s", _with("audio", interval=600))
+        self.assertBreaks("timeout of 90.0s is over 60.0s", _with("audio", timeout=90.0))
+        self.assertBreaks("needs a measured cost_s", _with("audio", cost_s=None))
+        # A five-minute evidence collector put back on the main lane would
+        # wait behind the post-boot sweep again (2026-11-03).
+        self.assertBreaks('declare lane="frequent"', _with("audio", lane="main"))
+
     def test_primitive_pointing_at_missing_code_or_test(self):
         broken = (dataclasses.replace(mechanisms.PRIMITIVES[0],
                                       implemented_by=("jarvis/core/nowhere.py",),
