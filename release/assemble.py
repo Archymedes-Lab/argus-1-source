@@ -33,6 +33,11 @@ import gate  # noqa: E402
 
 REPO = HERE.parent
 
+# Build inputs that are never published. The Windows desktop app on its own has no
+# monitoring program: as a download it opens, finds nothing to talk to and leaves the
+# customer to install the rest. It ships only inside Argus-Setup.exe.
+INTERNAL_INPUTS = {"argus-desktop-windows-x64.exe"}
+
 
 def load_previous(where):
     if not where:
@@ -105,6 +110,8 @@ def main():
         if rec["version"] != args.version:
             sys.exit(f"{rec_path.name} is version {rec['version']}, not {args.version}")
         for name, meta in rec["files"].items():
+            if name in INTERNAL_INPUTS:
+                continue
             src = rec_path.parent / name
             if hashlib.sha256(src.read_bytes()).hexdigest() != meta["sha256"]:
                 sys.exit(f"{name} changed after its build recorded it")

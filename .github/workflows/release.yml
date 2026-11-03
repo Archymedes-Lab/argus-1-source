@@ -192,8 +192,103 @@ jobs:
           key: ${{ steps.digests.outputs.desktop_windows_key }}
           enableCrossOsArchive: true
 
+  # The one Windows download: the desktop app and the compiled monitoring program
+  # in a single installer (release/build_windows.py). The first build compiles
+  # the whole program with Nuitka and takes a long time; the compiler downloads
+  # are cached, keyed on the pinned inputs, so later builds are shorter. The
+  # output does not depend on the cache: the cache holds only downloaded tools.
+  windows-installer:
+    needs: [verify, desktop-windows]
+    outputs:
+      digests: ${{ steps.digests.outputs.windows_installer }}
+      key: ${{ steps.digests.outputs.windows_installer_key }}
+    runs-on: windows-2025
+    timeout-minutes: 180
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      NSIS_VERSION: "3.11"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: out/desktop-windows
+          key: ${{ needs.desktop-windows.outputs.key }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+      - name: The desktop app is the one its build recorded
+        shell: bash
+        env:
+          DIGESTS: ${{ needs.desktop-windows.outputs.digests }}
+        run: python release/digests.py verify out/desktop-windows "$DIGESTS"
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ~\AppData\Local\Nuitka
+            ~\AppData\Local\Microsoft\Windows\INetCache\nuitka
+          key: nuitka-win-${{ hashFiles('release/requirements-windows.txt', 'release/build-tools.txt', 'release/build_windows.py') }}
+      - name: Build tools (pinned by hash) and NSIS
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r release/build-tools.txt
+          python -m pip install --disable-pip-version-check --require-hashes --no-build-isolation -r release/requirements-windows.txt
+          choco install nsis --version "$NSIS_VERSION" -y --no-progress
+          echo "C:\Program Files (x86)\NSIS" >> "$GITHUB_PATH"
+      - name: Compile the daemon, pack Argus-Setup.exe, run the content gate
+        shell: bash
+        run: |
+          # Only a dry run (release-test/*) may load the policy proposal. A tagged
+          # build uses the committed policy, which has no rule for the installer
+          # until release/proposals/windows-installer.json has been reviewed.
+          extra=""
+          case "$GITHUB_REF" in refs/heads/release-test/*) extra="--proposal release/proposals/windows-installer.json";; esac
+          python release/build_windows.py --version "$VERSION" --out out/windows-installer \
+            --desktop out/desktop-windows --jobs 4 $extra
+      - name: Record the build's digests
+        id: digests
+        shell: bash
+        run: python release/digests.py record out/windows-installer windows_installer
+      - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: out/windows-installer
+          key: ${{ steps.digests.outputs.windows_installer_key }}
+          enableCrossOsArchive: true
+
+  # A fresh runner stands in for a clean machine: download -> install -> open ->
+  # monitoring data -> crash recovery -> upgrade -> uninstall, with no manual step
+  # (release/windows/install_test.py). It is not a substitute for one look at a
+  # real clean PC before the first public release (docs/guides/RELEASING.md).
+  windows-install-test:
+    needs: [windows-installer]
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: out/windows-installer
+          key: ${{ needs.windows-installer.outputs.key }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+      - name: The installer is the one the build recorded
+        shell: bash
+        env:
+          DIGESTS: ${{ needs.windows-installer.outputs.digests }}
+        run: python release/digests.py verify out/windows-installer "$DIGESTS"
+      - name: Install, pair, monitor, crash, recover, upgrade, uninstall
+        run: python release/windows/install_test.py out/windows-installer/Argus-Setup.exe
+
   draft:
-    needs: [verify, server, server-install-test, desktop-linux, desktop-windows]
+    needs: [verify, server, server-install-test, desktop-linux, desktop-windows, windows-installer, windows-install-test]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -220,8 +315,15 @@ jobs:
           key: ${{ needs.desktop-windows.outputs.key }}
           enableCrossOsArchive: true
           fail-on-cache-miss: true
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: out/windows-installer
+          key: ${{ needs.windows-installer.outputs.key }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
       - name: Every file is exactly what its build recorded
         env:
+          INSTALLER: ${{ needs.windows-installer.outputs.digests }}
           SERVER: ${{ needs.server.outputs.digests }}
           LINUX: ${{ needs.desktop-linux.outputs.digests }}
           WINDOWS: ${{ needs.desktop-windows.outputs.digests }}
@@ -229,13 +331,20 @@ jobs:
           python3 release/digests.py verify out/server "$SERVER"
           python3 release/digests.py verify out/desktop-linux "$LINUX"
           python3 release/digests.py verify out/desktop-windows "$WINDOWS"
+          python3 release/digests.py verify out/windows-installer "$INSTALLER"
       - name: Assemble and gate
         run: |
-          python3 release/assemble.py --builds out --out release-out \
+          # Only a dry run (release-test/*) may load the policy proposal; a tagged
+          # build is held to the committed policy.
+          extra=""
+          case "$GITHUB_REF" in refs/heads/release-test/*) extra="--proposal release/proposals/windows-installer.json";; esac
+          python3 release/assemble.py --builds out --out release-out $extra \
             --version "${{ needs.verify.outputs.version }}" --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --previous https://www.archymedes.xyz/downloads/argus/manifest.json
           cat release-out/release-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Manifest, checksums and file names agree with the artifacts
+        run: python3 release/verify_release.py release-out --version "${{ needs.verify.outputs.version }}"
       - name: Draft release (unsigned, unpublished)
         if: github.ref_type == 'tag'
         env:

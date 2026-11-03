@@ -138,3 +138,10 @@ class WindowsRequirementsTest(unittest.TestCase):
         lines = [ln for ln in text.splitlines() if ln and not ln.startswith("#")]
         self.assertTrue(lines)
         self.assertTrue(all("--hash=sha256:" in ln for ln in lines), lines)
+
+
+class InternalInputsTest(unittest.TestCase):
+    def test_the_client_only_desktop_exe_is_never_published(self):
+        import assemble
+        self.assertIn("argus-desktop-windows-x64.exe", assemble.INTERNAL_INPUTS)
+        self.assertNotIn("Argus-Setup.exe", assemble.INTERNAL_INPUTS)
