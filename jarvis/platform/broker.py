@@ -29,13 +29,14 @@ LEGACY_BROKER_SCRIPT = "broker-jarvis.ps1"
 OUT = os.path.join(ROOT, "out")
 # Collectors declare their elevated script in core/mechanisms.py; the rest are
 # broker tasks that serve other jobs (Sysmon policy and pressure probes, the
-# evidence vault, the input audit trace).
+# evidence vault, the input audit trace, the Beep() caller trace).
 SCRIPTS = {
     **mechanisms.elevated_scripts(),
     "sysmon_policy": "sysmon_policy.ps1",
     "sysmon_pressure": "sysmon_pressure.ps1",
     "vault": "vault.ps1",
     "inputaudit": "inputaudit.ps1",
+    "beeptrace": "beeptrace.ps1",
 }
 MAX_AGE = 45 * 60          # three missed 15-minute runs
 

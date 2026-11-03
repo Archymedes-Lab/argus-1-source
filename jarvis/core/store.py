@@ -70,7 +70,12 @@ class Store:
                           ("caller_blocked_new", "INTEGER NOT NULL DEFAULT -1"),
                           ("console_pid", "INTEGER NOT NULL DEFAULT 0"),
                           ("console_app", "TEXT NOT NULL DEFAULT ''"),
-                          ("console_start", "TEXT NOT NULL DEFAULT ''")):
+                          ("console_start", "TEXT NOT NULL DEFAULT ''"),
+                          ("likely_pid", "INTEGER NOT NULL DEFAULT 0"),
+                          ("likely_app", "TEXT NOT NULL DEFAULT ''"),
+                          ("likely_start", "TEXT NOT NULL DEFAULT ''"),
+                          ("likely_list", "TEXT NOT NULL DEFAULT ''"),
+                          ("likely_n", "INTEGER NOT NULL DEFAULT 0")):
             if col not in sounds:
                 self.db.execute(f"ALTER TABLE sound_events ADD COLUMN {col} {decl}")
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_ind_source "

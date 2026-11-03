@@ -172,6 +172,10 @@ class FactsMovedIntoTheRegistry(unittest.TestCase):
         for name in ADDED_AFTER_GOLDEN:
             if mechanisms.BY_NAME[name].elevated:
                 golden[name] = mechanisms.BY_NAME[name].elevated
+        # Broker tasks that serve a collector rather than being one, added
+        # after the golden snapshot (2026-11-03: the Beep() caller trace,
+        # read by the audio collector).
+        golden["beeptrace"] = "beeptrace.ps1"
         self.assertEqual(broker.SCRIPTS, golden)
 
     @unittest.skipUnless(importlib.util.find_spec("jarvis.core.assurance"), "no register")

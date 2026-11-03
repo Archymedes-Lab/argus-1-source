@@ -1248,7 +1248,7 @@ class Track {
     public bool Active; public long StartMs, LastLoudMs, EndedMs = -1; public double Max; public int Pulses;
     public bool WasLoud; public long StartUnixMs; public long QuietMs, IdleS;
     public string DeviceId = "", Source = "session", App = "", ProcStart = "", Fg = "";
-    public uint Pid; public bool Known, Sys;
+    public uint Pid, FgPid; public bool Known, Sys;
     // JSON fragments: who called Beep() for this episode, and whose console it is.
     public volatile string Caller = ""; public string ConsoleOwner = "";
 }
@@ -1442,7 +1442,86 @@ static class BeepCallers {
         }
         // No Beep() caller this helper can see. With no new unopenable handle
         // either, nobody called Beep(): a Windows event sound or PlaySound.
-        return "\"caller\":\"" + (blockedNew > 0 ? "none visible" : "none") + "\"" + counts;
+        // Either way the foreground's process tree is added as an inference.
+        return "\"caller\":\"" + (blockedNew > 0 ? "none visible" : "none") + "\"" + counts + Likely(t.FgPid);
+    }
+
+    // The likely source of a tone nobody could be seen calling: the programs
+    // under the window that was in front at its onset. Measured 2026-11-03:
+    // four double 50 ms Beep() tones since 10-29 played while Windows Terminal
+    // was in front and its one Windows shell (PowerShell, whose line editor
+    // dings on a key that does nothing) was the only candidate; tones that
+    // short end before the handle snapshot. Console hosts, WSL launchers and
+    // the terminal itself never call Beep(), so they are not candidates; the
+    // window's own process is one only when nothing runs under it. A single
+    // candidate is named with its start time; several are listed, none named.
+    // This is an inference and is reported as one, never as the caller.
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct ProcessEntry {
+        public uint Size; public uint Usage; public uint ProcessId; public IntPtr DefaultHeapId; public uint ModuleId;
+        public uint Threads; public uint ParentProcessId; public int PriorityBase; public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string ExeFile;
+    }
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
+    const int MaxTreeDepth = 4, MaxTreeNodes = 64, MaxListed = 4;
+    static readonly string[] NotCallers = { "conhost", "openconsole", "windowsterminal", "wsl", "wslhost", "wslrelay", "wslservice" };
+
+    internal static bool NotCaller(string name) {
+        string n = name.ToLowerInvariant();
+        if (n.EndsWith(".exe")) n = n.Substring(0, n.Length - 4);
+        if (n.StartsWith("ubuntu")) return true;       // the distro launchers (ubuntu.exe, ubuntu2404.exe)
+        return Array.IndexOf(NotCallers, n) >= 0;
+    }
+
+    static string Likely(uint fgPid) {
+        if (fgPid == 0) return "";
+        var names = new Dictionary<uint, string>();
+        var children = new Dictionary<uint, List<uint>>();
+        IntPtr snap = CreateToolhelp32Snapshot(0x2, 0);            // TH32CS_SNAPPROCESS
+        if (snap == IntPtr.Zero || snap == new IntPtr(-1)) return "";
+        try {
+            var e = new ProcessEntry(); e.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+            if (!Process32FirstW(snap, ref e)) return "";
+            do {
+                names[e.ProcessId] = e.ExeFile ?? "";
+                if (e.ParentProcessId != e.ProcessId) {
+                    List<uint> kids;
+                    if (!children.TryGetValue(e.ParentProcessId, out kids)) children[e.ParentProcessId] = kids = new List<uint>();
+                    kids.Add(e.ProcessId);
+                }
+            } while (Process32NextW(snap, ref e));
+        } finally { CloseHandle(snap); }
+        if (!names.ContainsKey(fgPid)) return "";
+        var found = new List<uint>();
+        var level = new List<uint> { fgPid };
+        int visited = 0;
+        for (int depth = 0; depth < MaxTreeDepth && level.Count > 0 && visited < MaxTreeNodes; depth++) {
+            var next = new List<uint>();
+            foreach (uint pid in level) {
+                List<uint> kids;
+                if (!children.TryGetValue(pid, out kids)) continue;
+                foreach (uint kid in kids) {
+                    if (++visited > MaxTreeNodes) break;
+                    next.Add(kid);
+                    if (!NotCaller(names[kid])) found.Add(kid);
+                }
+            }
+            level = next;
+        }
+        if (found.Count == 0 && !NotCaller(names[fgPid])) found.Add(fgPid);
+        if (found.Count == 0) return "";
+        var listed = new StringBuilder();
+        for (int i = 0; i < found.Count && i < MaxListed; i++) {
+            string n = names[found[i]];
+            if (n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) n = n.Substring(0, n.Length - 4);
+            listed.Append(i > 0 ? " " : "").Append(n).Append(':').Append(found[i]);
+        }
+        if (found.Count > MaxListed) listed.Append(" +").Append(found.Count - MaxListed);
+        uint one = found.Count == 1 ? found[0] : 0;
+        return ",\"likely_pid\":" + one + ",\"likely_n\":" + Math.Min(found.Count, MaxTreeNodes) +
+               ",\"likely_list\":\"" + Listener.Esc(listed.ToString()) + "\"" +
+               (one != 0 ? ProcessFields(one, "likely") : "");
     }
 
     static uint PidOf(string key) { return UInt32.Parse(key.Substring(0, key.IndexOf(':'))); }
@@ -1610,7 +1689,7 @@ public static class Listener {
             t.Active = true; t.StartMs = now; t.LastLoudMs = now; t.Max = peak; t.Pulses = 1; t.WasLoud = true;
             t.StartUnixMs = UnixMs();
             t.QuietMs = t.EndedMs < 0 ? -1 : now - t.EndedMs;
-            t.IdleS = IdleSeconds(); t.Fg = Foreground();
+            t.IdleS = IdleSeconds(); t.Fg = Foreground(out t.FgPid);
             t.Caller = "";
             if (t.Sys) BeepCallers.Request(t);
         } else if (loud) {
@@ -1785,9 +1864,9 @@ public static class Listener {
         return (long)unchecked((uint)Environment.TickCount - li.dwTime) / 1000;
     }
 
-    static string Foreground() {
+    static string Foreground(out uint pid) {
+        pid = 0;
         try {
-            uint pid;
             GetWindowThreadProcessId(GetForegroundWindow(), out pid);
             if (pid == 0) return "";
             using (Process process = Process.GetProcessById((int)pid)) return process.ProcessName;
