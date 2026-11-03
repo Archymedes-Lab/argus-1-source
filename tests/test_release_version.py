@@ -112,3 +112,16 @@ class PublishRefuses(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublishAuthor(unittest.TestCase):
+    """Vercel blocked the 2026.11.03-0 deployment: its commit author was the
+    made-up "argus-release", which has no Git account."""
+
+    def test_the_site_commit_is_not_given_a_made_up_author(self):
+        import publish
+        src = Path(publish.__file__).read_text()
+        self.assertNotIn("user.name=argus-release", src)
+        self.assertNotIn("user.email=releases@", src)
+        self.assertIn('"config", "user.email"', src)
+

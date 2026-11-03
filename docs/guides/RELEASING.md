@@ -86,6 +86,10 @@ version order, the site copy's own check and the live read-back.
    site without downloading or asking for the passphrase, provided the folder
    still matches its signature.
 
+The site commit is made with the site checkout's own git identity: it must be
+an account Vercel can match to Git (your GitHub email), or Vercel blocks the
+production deployment ("couldn't find a Git account for the commit author").
+
 Paths can be overridden: `ARGUS_PUBLISH_DIR` (working folder, default
 `~/.cache/argus-instinct-publish`), `ARGUS_SITE_REPO` (default
 `~/archymedes-site`), `ARGUS_RELEASE_KEY`, `ARGUS_7Z_DIR`.

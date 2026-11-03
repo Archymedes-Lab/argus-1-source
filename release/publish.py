@@ -103,8 +103,14 @@ def publish(release, site, tag, rollback=False):
     msg = (f"Argus {manifest['version']}: signed release of {manifest['commit'][:12]}\n\n"
            f"Tag {tag}, built by {manifest.get('run_url')}, signed by {principal} ({fp}).\n"
            f"Published by release/publish.py; only {DOWNLOADS} and {GATE_DIR} change.\n")
-    git(site, "-c", "user.name=argus-release", "-c", "user.email=releases@archymedes.xyz",
-        "commit", "-q", "-m", msg, "--", str(DOWNLOADS), str(GATE_DIR))
+    # Committed as the releaser (the site checkout's own git identity): Vercel
+    # blocks a deployment whose commit author has no Git account, which is what
+    # happened to the 2026.11.03-0 publish committed as "argus-release".
+    email = subprocess.run(["git", "-C", str(site), "config", "user.email"],
+                           capture_output=True, text=True).stdout.strip()
+    if not email:
+        sys.exit("the site checkout has no git user.email: set it to your GitHub account's email")
+    git(site, "commit", "-q", "-m", msg, "--", str(DOWNLOADS), str(GATE_DIR))
     git(site, "push", "-q", "origin", "HEAD:master")
     print(f"pushed {git(site, 'rev-parse', '--short', 'HEAD').strip()} to the site's master")
 
