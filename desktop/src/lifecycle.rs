@@ -249,10 +249,13 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
             "It was restarted several times in the last ten minutes and stopped each time. Nothing is being monitored. Restart the computer, or reinstall ARGUS-1 if this continues.",
         );
     }
+    // The task is the supported way. If Windows will not run it (no interactive
+    // session, a disabled task) a direct start is still better than no monitoring;
+    // the single-instance port check above keeps it from becoming a second daemon.
     let started = match start_task() {
         Ok(true) => Ok(()),
         Ok(false) => start_direct(&env, port),
-        Err(e) => Err(e),
+        Err(task_err) => start_direct(&env, port).map_err(|e| format!("{task_err}; {e}")),
     };
     if let Err(e) = started {
         return Status::new(Phase::Stopped, "ARGUS-1 monitoring is not running and could not be started", e);

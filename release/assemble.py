@@ -93,6 +93,7 @@ def main():
     ap.add_argument("--commit", required=True)
     ap.add_argument("--run-url", default="")
     ap.add_argument("--previous", default="")
+    ap.add_argument("--proposal", action="append", default=[], help="dry run only: an additive policy proposal")
     args = ap.parse_args()
     builds, out = Path(args.builds), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -111,7 +112,7 @@ def main():
             files[name] = meta
     if not files:
         sys.exit("no build records found")
-    policy = gate.load_policy()
+    policy = gate.load_policy(proposals=args.proposal)
     counts = {}
     for name in files:
         problems, counts[name] = gate.check_artifact(out / name, gate.rule_for(name, policy), policy)

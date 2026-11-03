@@ -54,8 +54,21 @@ CHUNK = 8 * 1024 * 1024
 OVERLAP = 4096
 
 
-def load_policy(path=POLICY):
+def load_policy(path=POLICY, proposals=()):
+    """The policy at `path`. `proposals` are additive artifact rules under review
+    (release/proposals/): they may only append artifact rules, never touch the
+    deny lists, so a dry run can inspect an artifact without loosening anything."""
     policy = json.loads(Path(path).read_text())
+    for prop in proposals:
+        extra = json.loads(Path(prop).read_text())
+        stray = sorted(k for k in extra if k != "artifacts" and not k.startswith("_"))
+        if stray:
+            raise ValueError(f"{prop}: a proposal may only add artifact rules, not {', '.join(stray)}")
+        known = {r["name"] for r in policy["artifacts"]}
+        for rule in extra.get("artifacts", []):
+            if rule["name"] in known:
+                raise ValueError(f"{prop}: {rule['name']} already has a rule; a proposal cannot replace it")
+            policy["artifacts"].append(rule)
     policy["_markers"] = [(m["id"], re.compile(m["regex"].encode())) for m in policy["deny_markers"]
                           if m["id"] != "python-source-header"]
     policy["_magic"] = [bytes.fromhex(h) for h in policy["deny_bytecode_magic"]]
