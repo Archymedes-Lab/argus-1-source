@@ -91,7 +91,7 @@ def result(name, now=None):
     """-> (data, "") for a fresh, verified elevated result, else (None, why)."""
     now = time.time() if now is None else now
     if not installed():
-        from jarvis.core.elevated import NEEDS_ADMIN_SENSOR
+        from jarvis.core.mechanisms import NEEDS_ADMIN_SENSOR
         return None, f"{NEEDS_ADMIN_SENSOR}: the elevated broker is not installed in this edition"
     if SCRIPTS[name] in drifted():
         return None, f"the broker's copy of {SCRIPTS[name]} differs from this checkout"

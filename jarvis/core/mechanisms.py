@@ -62,6 +62,12 @@ class Collector:
     this collector's evidence is older than the limit; "optional" reports its
     freshness in /api/health without making it a dependency.
     elevated: the broker script that runs this collector's elevated half, if any.
+    admin_sensor: "unavailable" when this collector produces nothing without the
+    administrator sensor (the native sensor, the elevated broker), "limited" when
+    it still checks what an unprivileged account can see. Without the sensor the
+    daemon reports such a job as blind with NEEDS_ADMIN_SENSOR, never as
+    complete coverage (platform/admin_sensor.py). Derived from the collector code:
+    each of these calls broker.result or reads the sensor's spool.
     servers: False for workstation features (a news globe, a local model) that a
     plain Linux server neither has nor wants; there they are not applicable.
     boot_scoped: its evidence describes state a reboot activates or resets
@@ -90,6 +96,7 @@ class Collector:
     health: str = ""
     health_limit_s: int = 0
     elevated: str = ""
+    admin_sensor: str = ""
     servers: bool = True
     boot_scoped: bool = False
 
@@ -115,11 +122,13 @@ COLLECTORS = (
        command="coverage", health="required", health_limit_s=135,
        lane="fast", domain="windows", depends_on=("scheduler",)),
     _c("input_hook", 45, "Input monitor watchdog", AT, 10, 1, "high", 30,
+       admin_sensor="limited",
        command="inputwatch",
        lane="fast", domain="windows", depends_on=("windows-bridge",)),
     # Drains the native Windows sensor's spool into the event log: local file
     # reads only, no PowerShell, and ahead of sysmon, which reads its output.
     _c("native", 60, "Native sensor ingestion", MO, 3, 0, "critical", 45,
+       admin_sensor="unavailable",
        command="timeline status", health="required", health_limit_s=180,
        lane="fast", domain="windows", isolated=True, depends_on=("native-sensor",), cost_s=1.5),
     # The other half of mutual supervision: jarvis-selfcheck.timer restarts
@@ -131,6 +140,7 @@ COLLECTORS = (
        command="status", health="optional", health_limit_s=900,
        unscored="performance and resource pressure, not evidence of compromise"),
     _c("internet", 120, "Internet apps & incoming traffic", NW, 0, 2, "medium", 60,
+       admin_sensor="limited",
        command="netwatch", health="optional", health_limit_s=300, elevated="internetwatch.ps1",
        domain="windows"),
     _c("controls", 300, "Brightness & control devices", None, 0, 2, "medium", 60,
@@ -165,6 +175,7 @@ COLLECTORS = (
     # Reads the elevated broker's copy of the HP Sure Start audit log (the
     # broker refreshes it every 15 min); local file reads only.
     _c("fwaudit", 1800, "HP firmware audit log", None, 0, 3, "medium", 60,
+       admin_sensor="unavailable",
        command="status", elevated="hp_firmware_audit.ps1",
        domain="windows", cost_s=0.1,
        unscored="firmware audit records are reported, not yet scored (unsoaked; owner decision pending)"),
@@ -176,6 +187,7 @@ COLLECTORS = (
        command="firewall",
        depends_on=("windows-bridge",), cost_s=18.0, boot_scoped=True),
     _c("control", 1800, "Control surfaces", PA, 0, 3, "high", 180,
+       admin_sensor="limited",
        command="control",
        depends_on=("windows-bridge",), cost_s=16.0, boot_scoped=True),
     # One registry/environment read, about 1 s: CLR profiler, startup-hook,
@@ -238,6 +250,7 @@ COLLECTORS = (
        command="netwatch", domain="windows",
        depends_on=("scheduler",), cost_s=10.0),
     _c("posture", 7200, "Windows security posture", OS, 0, 3, "high", 300,
+       admin_sensor="limited",
        command="posture", elevated="posture.ps1",
        domain="windows", governed=True, depends_on=("windows-bridge",), cost_s=14.0, boot_scoped=True),
     _c("backdoor", 3600, "Backdoors & access grants", PA, 3, 3, "high", 300,
@@ -255,10 +268,12 @@ COLLECTORS = (
     # The helper does the watching; this drains its output and runs the
     # injected-event audit. input_hook keeps the helper alive.
     _c("input", 300, "Synthetic input", AT, 9, 2, "high", 60,
+       admin_sensor="limited",
        command="inputwatch",
        domain="windows", depends_on=("windows-bridge",)),
     # Walks every readable process's address space; expensive, so rare.
     _c("memscan", 7200, "Memory & instruction level", AT, 3, 3, "medium", 300,
+       admin_sensor="limited",
        command="memscan", elevated="memscan.ps1",
        domain="windows", governed=True, cost_s=90.0, boot_scoped=True),
     # Walks the home directory; secrets do not appear by the minute.
@@ -285,6 +300,7 @@ COLLECTORS = (
     # The interception layer: frequent, because its value is catching things
     # that start and exit between sampling passes. Incremental, 1.5 s.
     _c("sysmon", 600, "Sysmon telemetry", AT, 1, 0, "critical", 45,
+       admin_sensor="unavailable",
        command="sysmon", health="required", health_limit_s=1500,
        domain="windows", depends_on=("windows-bridge", "native-sensor"), cost_s=1.5),
     # ATT&CK coverage, validated by probing the real detectors.
@@ -404,6 +420,7 @@ COLLECTORS = (
     # Stages sealed history for the broker's vault, verifies it, checks the
     # running Sysmon rules and timestamps chain heads. DrvFS hashing: bulk.
     _c("evidence", 900, "Evidence vault & anchors", MO, 6, 3, "medium", 90,
+       admin_sensor="unavailable",
        command="broker status",
        lane="bulk", cost_s=217.0),
     # Planted canary bait: journal verification, decoy fingerprints, off-box
@@ -427,6 +444,14 @@ BY_NAME = {c.name: c for c in COLLECTORS}
 def schedule_table():
     """name -> (interval, label), in declaration order: schedule.ALL_JOBS."""
     return {c.name: (c.interval, c.label) for c in COLLECTORS}
+
+
+NEEDS_ADMIN_SENSOR = "Needs administrator sensor"
+
+
+def admin_sensor_jobs():
+    """{job: "unavailable" | "limited"} for the collectors that need the administrator sensor."""
+    return {c.name: c.admin_sensor for c in COLLECTORS if c.admin_sensor}
 
 
 def names(**match):
