@@ -42,7 +42,10 @@ import urllib.request
 from pathlib import Path
 
 for _stream in (sys.stdout, sys.stderr):
-    _stream.reconfigure(errors="replace")  # a refusal must print, not crash on a cp1252 console
+    # A refusal must print, not crash on a cp1252 console. Some runners replace the
+    # stream with one that cannot be reconfigured (unittest buffering), so ask first.
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(errors="replace")
 
 PORT = 8787
 TASK = "argus native service"
