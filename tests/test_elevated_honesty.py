@@ -11,20 +11,27 @@ LABELS = {j: j.title() for j in elevated.ADMIN_SENSOR_JOBS} | {"scan": "Processe
 
 class ElevatedHonestyTest(unittest.TestCase):
     def test_every_affected_job_is_named_with_the_one_reason(self):
-        out = elevated.blind_entries(LABELS, is_absent=True)
+        out = elevated.merge_blind([], LABELS, is_absent=True)
         self.assertEqual({e["job"] for e in out}, set(elevated.ADMIN_SENSOR_JOBS))
         self.assertTrue(all(e["reason"] == "Needs administrator sensor" for e in out))
         self.assertNotIn("scan", {e["job"] for e in out}, "jobs that need no sensor are not accused")
 
-    def test_a_job_already_blind_keeps_its_own_more_specific_reason(self):
-        out = elevated.blind_entries(LABELS, already={"native"}, is_absent=True)
-        self.assertNotIn("native", {e["job"] for e in out})
+    def test_a_job_already_stale_or_failing_gets_the_real_reason_and_keeps_its_state(self):
+        blind = [{"job": "native", "label": "Native", "freshness": "FRESH", "error": True},
+                 {"job": "scan", "label": "Processes", "freshness": "STALE", "error": False}]
+        elevated.merge_blind(blind, LABELS, is_absent=True)
+        native = next(b for b in blind if b["job"] == "native")
+        self.assertEqual(native["reason"], "Needs administrator sensor")
+        self.assertTrue(native["error"] and native["freshness"] == "FRESH")
+        self.assertEqual([b["job"] for b in blind].count("native"), 1, "no duplicate entry")
+        scan = next(b for b in blind if b["job"] == "scan")
+        self.assertNotIn("reason", scan, "a stale job that needs no sensor is not accused")
 
     def test_nothing_is_reported_once_the_sensor_is_installed(self):
-        self.assertEqual(elevated.blind_entries(LABELS, is_absent=False), [])
+        self.assertEqual(elevated.merge_blind([], LABELS, is_absent=False), [])
 
     def test_unavailable_and_limited_are_distinguished(self):
-        levels = {e["job"]: e["level"] for e in elevated.blind_entries(LABELS, is_absent=True)}
+        levels = {e["job"]: e["level"] for e in elevated.merge_blind([], LABELS, is_absent=True)}
         self.assertEqual(levels["fwaudit"], "unavailable")
         self.assertEqual(levels["memscan"], "limited")
 

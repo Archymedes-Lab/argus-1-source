@@ -43,15 +43,26 @@ def absent():
         return True
 
 
-def blind_entries(labels, already=(), is_absent=None):
-    """Pulse `blind` entries for the jobs the missing sensor affects.
+def merge_blind(blind, labels, is_absent=None):
+    """Add the missing sensor's reason to the pulse's `blind` list, in place.
 
-    `labels` maps job -> display label; jobs already reported blind for
-    another reason are left as they are (their own reason is more specific).
+    A job that needs the sensor is reported with the one reason whether or not
+    it is also stale or erroring for a generic reason: without the sensor that
+    is the cause, and "stale" would hide it. A job already listed keeps its
+    freshness and error fields and gains `reason` and `level`; a job not yet
+    listed (it ran, unprivileged, and found what it could) is added as limited.
+    `labels` maps job -> display label.
     """
     if not (absent() if is_absent is None else is_absent):
-        return []
-    seen = set(already)
-    return [{"job": job, "label": labels.get(job, job), "reason": NEEDS_ADMIN_SENSOR, "level": level,
-             "freshness": "UNAVAILABLE", "error": False}
-            for job, level in ADMIN_SENSOR_JOBS.items() if job in labels and job not in seen]
+        return blind
+    listed = {b.get("job"): b for b in blind}
+    for job, level in ADMIN_SENSOR_JOBS.items():
+        if job not in labels:
+            continue
+        entry = listed.get(job)
+        if entry is None:
+            blind.append({"job": job, "label": labels[job], "reason": NEEDS_ADMIN_SENSOR, "level": level,
+                          "freshness": "UNAVAILABLE", "error": False})
+        else:
+            entry["reason"], entry["level"] = NEEDS_ADMIN_SENSOR, level
+    return blind

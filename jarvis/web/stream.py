@@ -92,7 +92,7 @@ def build(db_path, scheduler, stamp=None):
                                "acknowledged": bool(acked)})
     # A release without the administrator sensor must not read as full coverage:
     # name every job it affects, with the same reason everywhere (core/elevated.py).
-    blind += elevated.blind_entries({n: lbl for n, (_iv, lbl) in JOBS.items()}, {b["job"] for b in blind})
+    elevated.merge_blind(blind, {n: lbl for n, (_iv, lbl) in JOBS.items()})
     urgent.sort(key=lambda u: (u["acknowledged"], _RANK.get(u["severity"], 9), u["job"]))
     worst = min(totals, key=lambda s: _RANK.get(s, 9)) if totals else "ok"
 
