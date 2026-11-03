@@ -455,9 +455,15 @@ class SchedulerIntegrationTests(unittest.TestCase):
 
     def test_queue_action_forces_the_job_and_task_action_is_bounded(self):
         from jarvis.service.scheduler import Scheduler
+        from jarvis.service import schedule as schedule_mod
         sched = Scheduler(self.db, ("wsl", "win"))
-        self.assertEqual(sched._link_action(links.BY_NAME["native-sensor"], links.QUEUE), "")
+        # The schedule is derived from this host's domains; a plain Linux CI
+        # runner has no Windows "native" job, so give the scheduler one.
+        with patch.dict("jarvis.service.scheduler.JOBS", {"native": schedule_mod.ALL_JOBS["native"]}):
+            self.assertEqual(sched._link_action(links.BY_NAME["native-sensor"], links.QUEUE), "")
         self.assertIn("native", sched.forced)
+        with patch.dict("jarvis.service.scheduler.JOBS", clear=True):
+            self.assertEqual(sched._link_action(links.BY_NAME["native-sensor"], links.QUEUE), "unknown job")
         scripts = []
         with patch("jarvis.platform.windows.ps_json",
                    side_effect=lambda script, timeout=60: scripts.append(script) or {"ok": False, "error": "Access is denied"}):

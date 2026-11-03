@@ -185,11 +185,11 @@ def _refuse_elsewhere():
 SERVICE_NAME = "JARVIS"     # what /api/health answers as `service`
 
 
-def other_install(previous, probe=_health):
+def other_install(previous, probe=None):
     """The port of a JARVIS daemon this service did not start, or 0."""
     if previous:
         return 0
-    doc = probe(DEFAULT_PORT)
+    doc = (probe or _health)(DEFAULT_PORT)
     return DEFAULT_PORT if doc and doc.get("service") == SERVICE_NAME else 0
 
 
