@@ -32,7 +32,7 @@ _state = {"at": 0.0, "value": None, "scan_at": 0.0}
 
 
 def _powershell(script, timeout):
-    return subprocess.run(_BASE + [script], capture_output=True, text=True,
+    return subprocess.run(_BASE + [script], capture_output=True, text=True, errors="replace",
                           timeout=timeout, creationflags=_FLAGS)
 
 

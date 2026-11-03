@@ -63,7 +63,7 @@ def compiled():
 
 def _service_config(root):
     try:
-        with open(os.path.join(root, "service.json"), encoding="utf-8-sig") as fh:
+        with open(os.path.join(root, "service.json"), encoding="utf-8-sig", errors="replace") as fh:
             doc = json.load(fh)
         return doc if isinstance(doc, dict) else {}
     except (OSError, ValueError):

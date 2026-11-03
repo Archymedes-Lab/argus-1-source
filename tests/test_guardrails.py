@@ -72,6 +72,35 @@ class AssistantWiringTests(unittest.TestCase):
                     store.close()
         self.assertIn("absence of alerts", seen["system"])
 
+    def _prompt_for(self, question):
+        seen = {}
+        with mock.patch.object(
+                assistant.llm, "chat",
+                side_effect=lambda c, s, u, **k: (seen.update(system=s, user=u), ("ok", ""))[1]), \
+                mock.patch.object(assistant.llm, "cooling_down", return_value=False):
+            import tempfile
+
+            from jarvis.core.store import Store
+            with tempfile.TemporaryDirectory() as tmp:
+                store = Store(f"{tmp}/t.db")
+                try:
+                    assistant._ollama(store, question, {})
+                finally:
+                    store.close()
+        return seen
+
+    def test_general_topic_gets_the_short_prompt_with_the_preamble(self):
+        seen = self._prompt_for("explain ransomware in simple words")
+        self.assertNotIn("<DATA>", seen["user"])
+        self.assertIn("absence of alerts", seen["system"])
+
+    def test_questions_without_a_general_topic_keep_this_computers_data(self):
+        for q in ("hi", "what matters most?", "is my laptop hacked by ransomware?"):
+            with self.subTest(q):
+                seen = self._prompt_for(q)
+                self.assertIn("<DATA>", seen["user"])
+                self.assertIn("absence of alerts", seen["system"])
+
 
 if __name__ == "__main__":
     unittest.main()

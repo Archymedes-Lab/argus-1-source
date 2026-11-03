@@ -19,9 +19,21 @@ _ABOUT_THIS_COMPUTER = re.compile(
     r"detected|found|hacked|infected|safe|approve|proposal)\b")
 
 
+# A question goes to the short general-knowledge prompt only when it names a general
+# security topic; anything else ("hi", "what matters most?") keeps this computer's data
+# and the evidence-bound prompt, which also answers general questions.
+_GENERAL_TOPIC = re.compile(
+    r"\b(password|passwords|passkey|passkeys|phishing|scam|scams|ransomware|malware|virus|viruses|"
+    r"trojan|spyware|keylogger|firewall|firewalls|vpn|wifi|wi-fi|router|encryption|encrypt|2fa|mfa|"
+    r"two-factor|backup|backups|update|updates|patch|patches|antivirus|cookie|cookies|https|"
+    r"social engineering|hacker|hackers|breach|breaches|zero-day|botnet|ddos)\b")
+
+
 def _is_general(question):
-    """True for a general-knowledge question that does not concern this computer's state."""
-    return not _ABOUT_THIS_COMPUTER.search(" ".join((question or "").lower().split()))
+    """True for a general-knowledge question that names a general security topic and does
+    not concern this computer's state."""
+    text = " ".join((question or "").lower().split())
+    return bool(_GENERAL_TOPIC.search(text)) and not _ABOUT_THIS_COMPUTER.search(text)
 
 
 def _current(store):
@@ -377,6 +389,7 @@ def _ollama(store, question, conf, jobs=None, level="expert", lang="en"):
                   "most 90 words, and finish the last sentence. Do not mention scan results; you have "
                   "not been given any. Never claim a computer is safe or clean, and never advise "
                   "wiping disks, deleting files or disabling protection.")
+        system += guardrails_mod.PREAMBLE + plainwords.language_instruction(lang)
         user = question[:2000]
     # Measured live 2026-09-24: the small dashboard default (llama3.2:1b) broke
     # persona on open questions with thin context ("I'm not a JARVIS endpoint

@@ -163,7 +163,7 @@ def cmd_auto(args, store):
         return
     path = alert_mod.CONFIG_PATH
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8", errors="replace") as fh:
             doc = json.load(fh)
     except (OSError, ValueError):
         doc = {}
