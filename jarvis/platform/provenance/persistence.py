@@ -22,7 +22,6 @@ installed from it.
 """
 
 import hashlib
-import os
 import re
 from dataclasses import dataclass, replace
 

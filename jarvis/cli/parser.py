@@ -73,6 +73,7 @@ from .commands import impersonation as impersonation_cli
 from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
 from .commands import mesh as mesh_cli
+from .commands import native as native_cli
 from .commands import notify as notify_cli
 from .commands import pixel as pixel_cli
 from .commands import privacy as privacy_cli
@@ -85,7 +86,6 @@ from .commands import server as server_cli
 from .commands import timeline as timeline_cli
 from .commands import update as update_cli
 from .commands import veil as veil_cli
-from .commands import native as native_cli
 from .commands import welcome as welcome_cli
 
 
