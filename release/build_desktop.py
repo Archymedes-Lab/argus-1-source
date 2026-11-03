@@ -47,6 +47,8 @@ def remap_flags(src):
     cargo = Path(os.environ.get("CARGO_HOME", home / ".cargo"))
     rustup = Path(os.environ.get("RUSTUP_HOME", home / ".rustup"))
     pairs = [(src, "/build"), (cargo, "/cargo"), (rustup, "/rustup"), (home, "/h")]
+    if os.environ.get("CARGO_TARGET_DIR"):
+        pairs.insert(0, (Path(os.environ["CARGO_TARGET_DIR"]), "/target"))
     return " ".join(f"--remap-path-prefix={p}=/{n.lstrip('/')}" for p, n in pairs)
 
 
@@ -60,7 +62,10 @@ def build(tree, platform):
     env = {**os.environ, "RUSTFLAGS": remap_flags(src),
            "CARGO_PROFILE_RELEASE_DEBUG": "0", "CARGO_PROFILE_RELEASE_STRIP": "symbols"}
     run(["cargo", "build", "--release", "--locked", "--features", "custom-protocol"], src, env)
-    exe = src / "target" / "release" / ("argus-desktop.exe" if platform == "windows" else "argus-desktop")
+    # CARGO_TARGET_DIR (CI: a cached folder) keeps compiled dependencies between
+    # dry runs; cargo rebuilds whatever its fingerprints say changed.
+    target = Path(os.environ.get("CARGO_TARGET_DIR") or src / "target")
+    exe = target / "release" / ("argus-desktop.exe" if platform == "windows" else "argus-desktop")
     if not exe.is_file():
         sys.exit(f"{exe} is missing")
     return src, exe
@@ -106,11 +111,16 @@ def main():
     ap.add_argument("--version", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--ref", default="HEAD")
+    ap.add_argument("--work", help="build folder (default: a temporary one). A fixed folder keeps "
+                                   "the compiler flags, which name it, the same between builds")
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="argus-desktop-") as tmp:
-        tree = Path(tmp)
+        tree = Path(args.work or tmp)
+        if args.work:
+            shutil.rmtree(tree, ignore_errors=True)
+            tree.mkdir(parents=True)
         commit = rename.export(HERE.parent, args.ref, tree, paths=("desktop",))
         src, exe = build(tree, args.platform)
         if args.platform == "linux":

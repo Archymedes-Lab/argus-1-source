@@ -438,11 +438,25 @@ class WindowsBuild(unittest.TestCase):
 class Workflow(unittest.TestCase):
     def test_draft_waits_for_the_windows_install_test(self):
         text = (ROOT / ".github" / "workflows" / "release.yml").read_text()
-        needs = next(line for line in text.splitlines() if line.strip().startswith("needs: [verify, server,"))
-        for job in ("engine-windows", "windows-setup", "windows-install-test"):
+        needs = next(line for line in text.splitlines() if line.strip().startswith("needs: [meta, verify,"))
+        # Builds start beside verify; nothing is assembled unless verify, the
+        # source smoke and both install tests passed.
+        for job in ("verify", "windows-source-smoke", "engine-windows", "windows-setup",
+                    "windows-install-test", "server-install-test"):
             self.assertIn(job, needs)
         self.assertIn("release/windows/install_test.ps1", text)
         self.assertIn(r"--work C:\argus-build ", text)
+
+    def test_only_dry_runs_are_cancelled_or_built_warm(self):
+        text = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        self.assertIn("cancel-in-progress: ${{ github.ref_type != 'tag' }}", text)
+        # Every cache restore of build state is skipped for a tag: a release builds cold.
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if "actions/cache/restore@" in line and "Restore" in lines[i - 2]:
+                self.assertIn("if: github.ref_type != 'tag'", lines[i - 1], lines[i - 2])
+        self.assertIn("release/windows/source_smoke.ps1", text)
+        self.assertIn("retention-days: 7", text)
 
     def test_service_loop_requires_the_exact_engine(self):
         text = (ROOT / "jarvis-native-service.ps1").read_text(encoding="utf-8")
