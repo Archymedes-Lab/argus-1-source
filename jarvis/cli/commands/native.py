@@ -44,7 +44,7 @@ PORT_RANGE = range(8787, 8800)
 HEALTH_WAIT_S = 180
 # The desktop app's identifier (desktop/tauri.conf.json) names its config folder.
 DESKTOP_APP_DIR = "local.jarvis.desktop"
-DESKTOP_CLIENT_NAME = "desktop (this computer)"
+DESKTOP_CLIENT_NAME = "desktop app on this computer"
 
 
 def state_root(env=None):

@@ -245,6 +245,20 @@ class NativeCli(unittest.TestCase):
             self.assertEqual(pair.call_count, 1)
         self.assertEqual(native.pair_desktop(None, str(d / "new"), 8787), "no store to pair the desktop app")
 
+    def test_desktop_pairing_against_the_real_client_table(self):
+        # The mocked test above passed while the real pairing refused the name
+        # (run 41670149691: "desktop (this computer)" has parentheses).
+        from jarvis.core.store import Store
+        from jarvis.web import clients
+        d = Path(tempfile.mkdtemp(prefix="app-"))
+        self.addCleanup(shutil.rmtree, d, True)
+        store = Store(str(d / "t.db"))
+        self.addCleanup(store.close)
+        self.assertEqual(native.pair_desktop(store, str(d / "app"), 8787), "paired")
+        token = (d / "app" / "client.token").read_text()
+        self.assertTrue(clients.looks_like(token))
+        self.assertEqual(native.unpair_desktop(store, str(d / "app")), 1)
+
     def test_uninstall_revokes_only_its_own_client(self):
         from jarvis.web import clients
         d = Path(tempfile.mkdtemp(prefix="app-"))
