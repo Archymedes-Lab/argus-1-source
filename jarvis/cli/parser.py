@@ -85,6 +85,7 @@ from .commands import server as server_cli
 from .commands import timeline as timeline_cli
 from .commands import update as update_cli
 from .commands import veil as veil_cli
+from .commands import welcome as welcome_cli
 
 
 def build_parser():
@@ -492,6 +493,7 @@ def build_parser():
     impersonation_cli.add_parser(sub)
     retention_cli.add_parser(sub)
     provenance_cli.add_parser(sub)
+    welcome_cli.add_parser(sub)
     return p
 
 

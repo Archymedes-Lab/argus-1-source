@@ -13,6 +13,7 @@ signature, made with a release key whose fingerprint is published on the site.
 Install, upgrade:   sudo ./install.sh [--port 8790] [--net-sensor] [--no-start]
 Uninstall:          sudo /opt/argus/uninstall.sh [--purge]
 Status and logs:    systemctl status argus ; journalctl -u argus -f
+First run:          argus welcome server   (what it looks at, and its limits)
 First report:       argus investigate
 Dashboard:          loopback only; ssh -L 8787:127.0.0.1:8787 your-server
 
