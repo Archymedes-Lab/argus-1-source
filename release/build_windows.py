@@ -228,6 +228,15 @@ def main():
     for p in problems:
         print("REFUSED  " + p)
     if problems:
+        # Every distinct match in each refused file, so one run shows the whole picture.
+        with zipfile.ZipFile(out / ZIP_NAME) as z:
+            for name in sorted({p.split(":", 2)[1] for p in problems if p.count(":") >= 2}):
+                try:
+                    found = gate.marker_texts(z.read(name), policy)
+                except KeyError:
+                    continue
+                if found:
+                    print(f"MATCHES  {name}: {json.dumps(found)}")
         sys.exit(f"the Windows engine fails the content gate ({len(problems)} problems)")
     print("Windows engine passes the content gate: " + ", ".join(built))
 

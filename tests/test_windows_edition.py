@@ -280,6 +280,14 @@ class WindowsBuild(unittest.TestCase):
             with self.subTest(why):
                 self.assertTrue(self._gate(self._zip(extra)), f"{why} was not refused")
 
+    def test_a_zip_signature_constant_is_not_an_archive_but_a_real_one_is(self):
+        def header(name):
+            return b"PK\x01\x02" + b"\x00" * 24 + len(name).to_bytes(2, "little") + b"\x00" * 16 + name
+        constant = ("python312.dll", b"MZ zipimport" + header(b"\x00\x00\x00z\x19bad local header") + b"tail")
+        self.assertEqual(self._gate(self._zip([constant])), [])
+        planted = ("python312.dll", b"MZ" + header(b"argus/core/main.pyc") + b"tail")
+        self.assertTrue(any("embedded archive member" in p for p in self._gate(self._zip([planted]))))
+
     def test_setup_stage_refuses_members_outside_the_top_folder(self):
         for bad in ("../evil.exe", "other/x.dll", "/abs.dll"):
             z = self.tmp / f"bad{abs(hash(bad))}.zip"

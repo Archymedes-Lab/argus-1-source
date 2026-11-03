@@ -284,7 +284,7 @@
     "f30d0d0a"
   ],
   "max_file_count_growth": 0.25,
-  "_third_party_comment": "Reviewed upstream build paths inside third-party binaries of the Windows engine: python.org's CPython 3.12 release build (D:\\\\a\\\\1\\\\), the OpenSSL it ships (C:\\\\A\\\\_work\\\\) and the pinned cryptography wheel built on its maintainers' GitHub runner. Each entry exempts one exact matched text in the named files only; every other match in those files, and the same text in any other file (our own program included), is still refused. Changing this list needs the same two-person review as a release.",
+  "_third_party_comment": "Reviewed upstream build paths inside third-party binaries of the Windows engine: python.org's CPython 3.12 release build (D:\\\\a\\\\1\\\\), the OpenSSL it ships (C:\\\\A\\\\_work\\\\) the Microsoft C++ runtime it ships (D:\\\\a\\\\_work\\\\) and the pinned cryptography wheel built on its maintainers' GitHub runner. Each entry exempts one exact matched text in the named files only; every other match in those files, and the same text in any other file (our own program included), is still refused. Changing this list needs the same two-person review as a release.",
   "third_party_markers": [
     {
       "marker": "windows-build-path",
@@ -303,7 +303,10 @@
         "**/engine/_sqlite3.pyd",
         "**/engine/_ssl.pyd",
         "**/engine/_uuid.pyd",
-        "**/engine/_wmi.pyd"
+        "**/engine/_wmi.pyd",
+        "**/engine/select.pyd",
+        "**/engine/unicodedata.pyd",
+        "**/engine/sqlite3.dll"
       ],
       "why": "python.org CPython 3.12 Windows release build agent"
     },
@@ -325,12 +328,29 @@
       "why": "pinned cryptography wheel (release/requirements-runtime.txt), built by its maintainers' CI"
     },
     {
+      "marker": "windows-build-path",
+      "text": "D:\\a\\infra\\",
+      "members": [
+        "**/engine/cryptography/hazmat/bindings/_rust.pyd"
+      ],
+      "why": "pinned cryptography wheel, built by its maintainers' CI (second checkout path)"
+    },
+    {
       "marker": "windows-home-path",
       "text": "C:\\Users\\runneradmin\\",
       "members": [
         "**/engine/cryptography/hazmat/bindings/_rust.pyd"
       ],
       "why": "pinned cryptography wheel, built by its maintainers' CI (GitHub runner account)"
+    },
+    {
+      "marker": "windows-build-path",
+      "text": "D:\\a\\_work\\",
+      "members": [
+        "**/engine/vcruntime140.dll",
+        "**/engine/vcruntime140_1.dll"
+      ],
+      "why": "Microsoft Visual C++ runtime redistributable, as shipped with python.org CPython"
     }
   ]
 }

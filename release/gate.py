@@ -223,6 +223,16 @@ def members_of(path, kind):
     raise ValueError(f"unknown artifact kind {kind!r}")
 
 
+def marker_texts(data, policy):
+    """Every distinct marker match in the bytes, as {marker: [evidence]} (build diagnostics)."""
+    found = {}
+    for mid, rx in policy["_markers"]:
+        texts = sorted({m.group(0) for m in rx.finditer(data)})
+        if texts:
+            found[mid] = [evidence(mid, t) for t in texts[:20]]
+    return found
+
+
 def scan_bytes(label, data, policy, member=None):
     """Problems found in one file's bytes, whatever the file is. `member` is the
     file's path inside its artifact, for the reviewed third-party exemptions:
@@ -262,13 +272,25 @@ def evidence(marker_id, found):
     return f"{head.decode('ascii', 'replace')}... {len(found)} bytes, redacted"
 
 
+MAX_ENTRY_NAME = 1024
+
+
 def embedded_zip_names(data):
-    """File names from every zip central-directory header found in the bytes."""
+    """File names from every zip central-directory header found in the bytes.
+
+    Only a plausible entry name counts: valid UTF-8, printable, 1..1024 bytes. A
+    real archive (a PyInstaller payload, a self-extractor) always has such names;
+    the four signature bytes alone also occur as a constant in programs that read
+    zips (CPython's frozen zipimport in python312.dll), followed by binary data."""
     names, pos = [], data.find(b"PK\x01\x02")
     while pos != -1 and pos + 46 <= len(data):
         n_len = int.from_bytes(data[pos + 28:pos + 30], "little")
-        name = data[pos + 46:pos + 46 + n_len].decode("utf-8", "replace")
-        if name:
+        raw = data[pos + 46:pos + 46 + n_len]
+        try:
+            name = raw.decode("utf-8") if 0 < n_len <= MAX_ENTRY_NAME and len(raw) == n_len else ""
+        except UnicodeDecodeError:
+            name = ""
+        if name and name.isprintable():
             names.append(_norm(name))
         pos = data.find(b"PK\x01\x02", pos + 4)
     return names
