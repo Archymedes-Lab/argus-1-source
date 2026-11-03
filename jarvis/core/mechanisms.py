@@ -413,8 +413,10 @@ COLLECTORS = (
     # Chocolatey), important first; with auto_update opted in, hands user-scope
     # items to the bounded updater (response/updater.py). Listing measured
     # 2026-11-02 at ~75 s (winget 2 x 24 s, Chocolatey 25 s, Homebrew 19 s).
+    # Main lane: the winget and Chocolatey listings run through PowerShell, and
+    # the bulk lane never crosses into Windows (tests/test_bulk_lane.py).
     _c("updates", 21600, "Outdated software", None, 0, 4, "medium", 300,
-       command="update plan", lane="bulk", governed=True, cost_s=75.0,
+       command="update plan", governed=True, cost_s=75.0,
        unscored="source-tested; scored after its listings are measured across machines"),
     # Daily download of the release's own OVAL security data. Debian 12 parses at
     # ~85 MB above baseline and returns to +6 MB once freed (measured 2026-10-25).
