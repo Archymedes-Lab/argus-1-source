@@ -116,6 +116,57 @@ class PayloadSeam(unittest.TestCase):
                          persistence.normalized_text_hash(str(ROOT / "jarvis-native-service.ps1")))
 
 
+class ProgramPath(unittest.TestCase):
+    """Run 41646681752: the compiled engine registered <dist>\\python.exe (Nuitka's
+    sys.executable), a file that does not exist, as the service program."""
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp(prefix="dist-"))
+        self.addCleanup(shutil.rmtree, self.d, True)
+        (self.d / "argus-instinct.exe").write_bytes(b"MZ")
+        self.fake_python = str(self.d / "python.exe")          # does not exist
+
+    def test_source_tree_uses_the_interpreter(self):
+        self.assertEqual(paths.program(compiled=False, executable="/usr/bin/python3"), "/usr/bin/python3")
+
+    def test_compiled_uses_the_program_it_was_started_as(self):
+        exe = str(self.d / "argus-instinct.exe")
+        self.assertEqual(paths.program(compiled=True, argv0=exe, executable=self.fake_python), exe)
+        # Started without the extension (from a shell): the .exe is still found.
+        self.assertEqual(paths.program(compiled=True, argv0=exe[:-4], executable=self.fake_python), exe)
+
+    def test_compiled_falls_back_to_the_one_program_beside_it(self):
+        got = paths.program(compiled=True, argv0="argus-instinct-renamed", executable=self.fake_python)
+        self.assertEqual(got, str(self.d / "argus-instinct.exe"))
+        self.assertNotEqual(got, self.fake_python)
+
+    def test_children_and_the_service_use_it(self):
+        import inspect
+
+        from jarvis.collectors.host import fridaydefender
+        from jarvis.core import rulepack
+        from jarvis.service import scheduler
+        for mod in (scheduler, rulepack, fridaydefender, native):
+            src = inspect.getsource(mod)
+            self.assertNotRegex(src, r"\[sys\.executable, \"-m\"", mod.__name__)
+            self.assertIn("program()", src, mod.__name__)
+
+
+class CliExitCode(unittest.TestCase):
+    def test_a_commands_integer_result_is_the_exit_code(self):
+        from jarvis.cli import parser
+        home = tempfile.mkdtemp(prefix="cli-home-")
+        self.addCleanup(shutil.rmtree, home, True)
+        with mock.patch.dict(os.environ, {"HOME": home}), mock.patch.object(native.host, "KIND", "linux"), \
+                mock.patch("sys.stderr", io.StringIO()):
+            self.assertEqual(parser.main(["--db", f"{home}/t.db", "native", "install"]), 2)
+        for result, code in ((None, 0), (True, 0), (1, 1), (3, 3)):
+            with self.subTest(result=result), \
+                    mock.patch.dict(os.environ, {"HOME": home}), \
+                    mock.patch.object(native, "cmd_status", return_value=result):
+                self.assertEqual(parser.main(["--db", f"{home}/t.db", "native", "status"]), code)
+
+
 class NativeCli(unittest.TestCase):
     def test_refuses_off_windows_without_running_anything(self):
         with mock.patch.object(native.host, "KIND", "linux"), \

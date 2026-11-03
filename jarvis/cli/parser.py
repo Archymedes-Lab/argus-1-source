@@ -515,7 +515,9 @@ def main(argv=None):
         return 2
     store = Store(args.db)
     try:
-        args.fn(args, store)
+        rc = args.fn(args, store)
     finally:
         store.close()
-    return 0
+    # A command's integer result is the exit code (installers and scripts read it);
+    # None, a bool or anything else is success, as before.
+    return rc if isinstance(rc, int) and not isinstance(rc, bool) else 0

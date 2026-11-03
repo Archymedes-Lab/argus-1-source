@@ -8,6 +8,7 @@ without its data files moving out from under it.
 """
 
 import os
+import sys
 from pathlib import Path
 
 # abspath, not resolve(): the Windows task check compares against the path the
@@ -100,6 +101,36 @@ def materialize(name, data, root):
         os.fsync(fh.fileno())
     os.replace(tmp, path)
     return path
+
+
+def _compiled():
+    """True inside a Nuitka-compiled edition (Nuitka defines __compiled__ in every module)."""
+    return "__compiled__" in globals()
+
+
+def program(compiled=None, argv0=None, executable=None, listdir=os.listdir):
+    """The command that runs this program again: the Python interpreter in a source tree,
+    the compiled program itself in an edition. In a Nuitka standalone build sys.executable
+    names a python.exe that does not exist (measured on Windows, run 41646681752), so the
+    program is argv[0], or else the one other program in its folder."""
+    compiled = _compiled() if compiled is None else compiled
+    executable = sys.executable if executable is None else executable
+    if not compiled:
+        return executable
+    argv0 = (sys.argv[0] if sys.argv else "") if argv0 is None else argv0
+    candidates = [os.path.abspath(argv0)] if argv0 else []
+    candidates += [c + ".exe" for c in candidates if not c.lower().endswith(".exe")]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    folder = os.path.dirname(os.path.abspath(executable))
+    try:
+        others = [n for n in listdir(folder) if n.lower().endswith(".exe") and n.lower() != "python.exe"]
+    except OSError:
+        others = []
+    if len(others) == 1:
+        return os.path.join(folder, others[0])
+    return executable
 
 
 def win_script(name):

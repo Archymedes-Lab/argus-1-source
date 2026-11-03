@@ -210,7 +210,7 @@ def cmd_install(args, store):
         return 1
     if note:
         print(note)
-    runner = ["-Engine", sys.executable] if compiled() else ["-Python", sys.executable]
+    runner = ["-Engine", paths.program()] if compiled() else ["-Python", sys.executable]
     code, out = _run_service_script(["-Install", *runner, "-Port", str(port)])
     if out:
         print(out)

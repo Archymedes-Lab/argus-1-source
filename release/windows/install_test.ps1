@@ -42,8 +42,17 @@ function Health([int]$port) {
     } catch { return $null }
 }
 
+# PowerShell 5.1 turns a native program's stderr into a terminating error under
+# ErrorActionPreference=Stop: run the engine with Continue and keep its output.
+function Run-Engine {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { return (& $engine @args 2>&1 | ForEach-Object { "$_" } | Out-String) }
+    finally { $ErrorActionPreference = $saved }
+}
+
 function Boot-Findings {
-    $out = & $engine boot --json 2>$null | Out-String
+    $out = Run-Engine boot --json
     $start = $out.IndexOf('[')
     if ($start -lt 0) { return @() }
     try { return @($out.Substring($start) | ConvertFrom-Json) } catch { return @() }
@@ -81,7 +90,7 @@ $state = Join-Path $env:LOCALAPPDATA 'Argus\NativeService'
 if (-not $t) {
     # Diagnose before judging: what the Setup's own step would have printed.
     Write-Host "-- no task after Setup: running the install step by hand"
-    $out = & $engine native install 2>&1 | Out-String
+    $out = Run-Engine native install
     Write-Host $out
     Write-Host "-- native install exit code: $LASTEXITCODE"
     foreach ($f in 'service.log', 'daemon.err.log', 'daemon.out.log') {
@@ -102,11 +111,11 @@ Check ($h -and $h.live -eq $true) 'scheduler live'
 Check (Test-Path -LiteralPath (Join-Path $appDir 'client.token')) 'desktop app paired (token written)'
 
 Write-Host "== adapts to this host"
-$status = & $engine native status --all 2>&1 | Out-String
+$status = Run-Engine native status --all
 Write-Host $status
 Check ($status -match 'not here\s+auditd\b') 'Linux-only audit listed as not applicable here'
 Check ($status -match 'daemon process: pid') 'supervisor sees the daemon it started'
-$welcome = & $engine welcome 2>&1 | Out-String
+$welcome = Run-Engine welcome
 Write-Host $welcome
 Check ($welcome -match 'for Windows') "first-run statement chosen for native Windows"
 

@@ -19,7 +19,6 @@ must never be able to make JARVIS look dead.
 import json
 import os
 import subprocess
-import sys
 import threading
 import time
 import traceback
@@ -122,11 +121,11 @@ def _isolated_job(name, hosts, db_path, timeout):
     thread timeout cannot recover it. A child process gives the scheduler a
     real deadline and releases the event-log writer lock when terminated.
     """
-    command = [sys.executable, "-m", "jarvis.service.collector_worker",
+    from jarvis.core.paths import PACKAGE_DIR, program
+    command = [program(), "-m", "jarvis.service.collector_worker",
                name, db_path, *hosts]
     # From the package root: `-m` resolves against the working directory, and
     # the Argus unit runs from "/" (found 2026-10-29), where it would not import.
-    from jarvis.core.paths import PACKAGE_DIR
     try:
         done = subprocess.run(command, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True,
