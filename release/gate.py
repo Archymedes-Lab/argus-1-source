@@ -296,15 +296,52 @@ def evidence(marker_id, found):
     return f"{head.decode('ascii', 'replace')}... {len(found)} bytes, redacted"
 
 
-def embedded_zip_names(data):
-    """File names from every zip central-directory header found in the bytes."""
-    names, pos = [], data.find(b"PK\x01\x02")
-    while pos != -1 and pos + 46 <= len(data):
+def _walk_central_directory(data, end, entries, size):
+    """Names listed by the central directory of `entries` records and `size` bytes that
+    ends at `end`, or None when the bytes there are not a consistent directory."""
+    start = end - size
+    if entries <= 0 or start < 0 or data[start:start + 4] != b"PK\x01\x02":
+        return None
+    names, pos = [], start
+    for _ in range(entries):
+        if data[pos:pos + 4] != b"PK\x01\x02" or pos + 46 > end:
+            return None
         n_len = int.from_bytes(data[pos + 28:pos + 30], "little")
-        name = data[pos + 46:pos + 46 + n_len].decode("utf-8", "replace")
-        if name:
-            names.append(_norm(name))
-        pos = data.find(b"PK\x01\x02", pos + 4)
+        extra = int.from_bytes(data[pos + 30:pos + 32], "little")
+        comment = int.from_bytes(data[pos + 32:pos + 34], "little")
+        names.append(_norm(data[pos + 46:pos + 46 + n_len].decode("utf-8", "replace")))
+        pos += 46 + n_len + extra + comment
+    return names if pos == end else None
+
+
+def embedded_zip_names(data):
+    """File names of every real zip archive appended to or embedded in the bytes.
+
+    A real archive has a central directory that is consistent with its
+    end-of-directory record. Finding the four bytes `PK\x01\x02` is not enough: a
+    Python runtime (python3*.dll) carries those bytes, and the end-record and
+    zip64 signatures too, as constants in its built-in zipimport code, and decoding
+    what follows them reported garbage as "archive members". The check stays strict
+    for what it is for: a zip after or inside a binary (the PyInstaller pattern) is
+    found wherever it sits, in the classic layout and in zip64 (whose sizes are in the
+    zip64 end record, not the classic one).
+    """
+    names = []
+    pos = data.find(b"PK\x05\x06")
+    while pos != -1:
+        if pos + 22 <= len(data):
+            entries = int.from_bytes(data[pos + 10:pos + 12], "little")
+            size = int.from_bytes(data[pos + 12:pos + 16], "little")
+            if entries != 0xFFFF and size != 0xFFFFFFFF:
+                names += _walk_central_directory(data, pos, entries, size) or []
+        pos = data.find(b"PK\x05\x06", pos + 4)
+    pos = data.find(b"PK\x06\x06")
+    while pos != -1:
+        if pos + 56 <= len(data):
+            entries = int.from_bytes(data[pos + 32:pos + 40], "little")
+            size = int.from_bytes(data[pos + 40:pos + 48], "little")
+            names += _walk_central_directory(data, pos, entries, size) or []
+        pos = data.find(b"PK\x06\x06", pos + 4)
     return names
 
 

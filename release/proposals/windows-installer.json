@@ -24,7 +24,9 @@
         "$PLUGINSDIR/*.dll",
         "[NSIS].nsi",
         "$PLUGINSDIR/*.bmp",
-        "$PLUGINSDIR/*.ico"
+        "$PLUGINSDIR/*.ico",
+        "argus/web/static/**/*.json",
+        "Uninstall.exe"
       ],
       "executables": []
     }
