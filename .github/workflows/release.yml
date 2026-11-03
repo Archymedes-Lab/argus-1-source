@@ -117,15 +117,23 @@ jobs:
       - name: Native server program (in the pinned manylinux image, no network credentials)
         env:
           WARM: ${{ github.ref_type != 'tag' && '1' || '' }}
+          CCACHE_VERSION: "4.14.2"   # 2026-10-18
+          CCACHE_SHA256: d540ba01f160addbd3dd5e18eda9bd34005591b095c09ac8ae9d0a1b655e7ef5
         run: |
-          mkdir -p nuitka-cache
+          mkdir -p nuitka-cache ccache-bin
           if [ -n "$(du -s --block-size=1G nuitka-cache | awk '$1>2')" ]; then rm -rf nuitka-cache/*; echo "over 2 GiB: reset"; fi
-          docker run --rm -e VERSION -e WARM -v "$PWD:/src" -v "$PWD/nuitka-cache:/nuitka-cache" -w /src "$IMAGE" bash -euo pipefail -c '
+          # ccache's own static build, pinned by SHA-256 (run 41729562271 spent 19
+          # minutes in dnf fetching EPEL metadata for it).
+          if [ -n "$WARM" ]; then
+            curl -fsSL --retry 3 -o ccache.tgz "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/ccache-${CCACHE_VERSION}-linux-x86_64-musl-static.tar.gz"
+            echo "${CCACHE_SHA256}  ccache.tgz" | sha256sum -c -
+            tar xzf ccache.tgz --strip-components=1 -C ccache-bin "ccache-${CCACHE_VERSION}-linux-x86_64-musl-static/ccache"
+          fi
+          docker run --rm -e VERSION -e WARM -v "$PWD:/src" -v "$PWD/nuitka-cache:/nuitka-cache" -v "$PWD/ccache-bin:/opt/ccache:ro" -w /src "$IMAGE" bash -euo pipefail -c '
             PY=/opt/python/cp312-cp312/bin/python
             git config --global --add safe.directory /src
             if [ -n "$WARM" ]; then
-              dnf -q -y install ccache >/dev/null 2>&1 || { dnf -q -y install epel-release >/dev/null 2>&1 && dnf -q -y install ccache >/dev/null 2>&1; } || echo "no ccache here: a cold build"
-              export NUITKA_CACHE_DIR=/nuitka-cache CCACHE_BASEDIR=/work CCACHE_NOHASHDIR=1 CCACHE_MAXSIZE=1500M
+              export PATH=/opt/ccache:$PATH NUITKA_CACHE_DIR=/nuitka-cache CCACHE_BASEDIR=/work CCACHE_NOHASHDIR=1 CCACHE_MAXSIZE=1500M
             fi
             (cd /opt/_internal && tar xf static-libs-for-embedding-only.tar.xz)
             $PY -m pip install --disable-pip-version-check --require-hashes -r release/build-tools.txt
