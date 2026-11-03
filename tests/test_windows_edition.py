@@ -435,6 +435,33 @@ class Workflow(unittest.TestCase):
         self.assertIn("if (-not $p.ExecutablePath -or $p.ExecutablePath -ne $Engine) { return $null }", text)
         self.assertIn("[string]$Engine = ''", text)
 
+class OutputEncoding(unittest.TestCase):
+    """The service's stdout is a cp1252 file on Windows; an arrow in the start-up
+    line stopped the daemon (run 41663851546)."""
+
+    def test_redirected_cp1252_output_takes_any_character(self):
+        from jarvis.cli import parser
+        raw = io.BytesIO()
+        out = io.TextIOWrapper(raw, encoding="cp1252")
+        with self.assertRaises(UnicodeEncodeError):
+            out.write("\u2192"); out.flush()
+        raw = io.BytesIO()
+        out = io.TextIOWrapper(raw, encoding="cp1252")
+        err = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+        parser.safe_streams([out, err])
+        print("dashboard \u2192 http://127.0.0.1:8787", file=out, flush=True)
+        self.assertIn("\u2192".encode("utf-8"), raw.getvalue())
+        parser.safe_streams([None, None])   # no console at all: nothing to do
+
+    def test_windows_state_dir_is_not_judged_by_posix_modes(self):
+        from jarvis.core import statedir
+        d = tempfile.mkdtemp(prefix="st-")
+        self.addCleanup(shutil.rmtree, d, True)
+        os.chmod(d, 0o777)
+        self.assertEqual(statedir.private_problems(d, os_name="nt"), [f"{d}: {statedir.WINDOWS_NOTE}"])
+        self.assertTrue(any("must be 0700" in p for p in statedir.private_problems(d, os_name="posix")))
+
+
 
 if __name__ == "__main__":
     importlib.invalidate_caches()

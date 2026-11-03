@@ -499,7 +499,30 @@ def build_parser():
     return p
 
 
+def safe_streams(streams=None):
+    """Make printing never fail on the encoding. A redirected stdout on Windows
+    (the service's daemon.out.log) is cp1252, and one arrow in a status line
+    stopped the whole daemon: redirected output becomes UTF-8, and a console
+    keeps its encoding but replaces what it cannot show."""
+    names = ("stdout", "stderr")
+    for name, stream in zip(names, streams or [getattr(sys, n) for n in names]):
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            tty = stream.isatty()
+        except (OSError, ValueError):
+            tty = False
+        try:
+            if tty:
+                stream.reconfigure(errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main(argv=None):
+    safe_streams()
     args = build_parser().parse_args(argv)
     if (args.cmd == 'mesh' or getattr(args, 'no_store', False)
             or (args.cmd == 'desktop' and args.action == 'save')):

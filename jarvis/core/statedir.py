@@ -36,13 +36,22 @@ def load_marker(path=MARKER):
     return value if isinstance(value, dict) and value.get("state_dir") else None
 
 
-def private_problems(state_dir, uid=None):
+WINDOWS_NOTE = ("Windows does not use these permission bits; the folder is private through "
+                "your user profile's access list, which this check does not read")
+
+
+def private_problems(state_dir, uid=None, os_name=None):
     """Human-readable problems that expose `state_dir` to other accounts.
 
     Checked: the directory itself (owner, no group/other bits) and every
     sensitive file directly inside it (owner, no group/other bits, not a link).
     An empty list means private. A missing directory is one problem.
     """
+    if (os_name or os.name) == "nt":
+        # POSIX modes read 0777/0666 on every Windows file: reporting them would
+        # be noise, and calling the folder private would be a claim not checked.
+        return [f"{state_dir}: {WINDOWS_NOTE}"] if os.path.isdir(state_dir) else \
+            [f"{state_dir}: not a real directory"]
     uid = os.geteuid() if uid is None and hasattr(os, "geteuid") else uid
     problems = []
     try:
