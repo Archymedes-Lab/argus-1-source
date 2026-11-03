@@ -7,6 +7,7 @@
   import ListChecks from "@lucide/svelte/icons/list-checks";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
   import Pill from "../components/Pill.svelte";
   import ProtectionCard from "../components/ProtectionCard.svelte";
   import { api, type Autopilot } from "../lib/api";
@@ -16,7 +17,9 @@
   import { greeting, headline, plainFinding } from "../lib/plain";
 
   let ap = $state<(Autopilot & { health?: { okay: string; monitoring_line: string } }) | null>(null);
+  let phones = $state<number | null>(null);
   onMount(async () => { try { ap = await api.autopilot(); } catch { ap = null; } });
+  onMount(async () => { try { phones = (await api.phoneStatus()).devices; } catch { phones = null; } });
 
   const d = $derived(app.data);
   const findings = $derived((d?.findings ?? []) as Finding[]);
@@ -100,6 +103,17 @@
     {/if}
 
     <ProtectionCard />
+
+    {#if phones !== null}
+      <button class="card flex items-center gap-4 p-5 text-left transition-colors hover:bg-gray-100" onclick={() => go("phone")}>
+        <span class="grid size-10 place-items-center rounded-xl {phones ? 'bg-green-100 text-green-900' : 'bg-blue-100 text-blue-900'}"><Smartphone size={20} /></span>
+        <span class="flex-1">
+          <span class="block text-label-14">{phones ? (phones === 1 ? tr("Your phone gets alerts") : tr("{n} phones get alerts", { n: phones })) : tr("Get alerts on your phone")}</span>
+          <span class="block text-copy-13 text-gray-900">{phones ? tr("Add another phone or send a test.") : tr("Pair your phone in a minute. Alerts reach it even when you are away.")}</span>
+        </span>
+        <ChevronRight size={16} class="text-gray-700" />
+      </button>
+    {/if}
 
     <button class="card flex items-center gap-4 p-5 text-left transition-colors hover:bg-gray-100" onclick={() => go("assistant")}>
       <span class="grid size-10 place-items-center rounded-xl bg-blue-100 text-blue-900"><Sparkles size={20} /></span>

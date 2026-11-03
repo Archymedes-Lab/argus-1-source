@@ -36,6 +36,15 @@ export const ROUTES: Record<string, (a: Args) => Route> = {
   coverage_state: () => ({ method: "GET", path: "/api/coverage" }),
   world_state: () => ({ method: "GET", path: "/api/world" }),
   procs_baseline: () => ({ method: "GET", path: "/api/procs/baseline" }),
+  phone_status: () => ({ method: "GET", path: "/api/phone/status" }),
+  phone_devices: () => ({ method: "GET", path: "/api/phone/devices" }),
+  phone_pair_current: () => ({ method: "GET", path: "/api/phone/pair" }),
+  phone_pair_start: () => ({ method: "POST", path: "/api/phone/pair/start", body: {} }),
+  phone_pair_poll: (a) => ({ method: "POST", path: "/api/phone/pair/poll", body: { session: a.session } }),
+  phone_pair_confirm: (a) => ({ method: "POST", path: "/api/phone/pair/confirm", body: { session: a.session, sas: a.sas, same: a.same } }),
+  phone_pair_cancel: (a) => ({ method: "POST", path: "/api/phone/pair/cancel", body: { session: a.session } }),
+  phone_revoke: (a) => ({ method: "POST", path: "/api/phone/revoke", body: { device: a.device } }),
+  phone_test: () => ({ method: "POST", path: "/api/phone/test", body: {} }),
 };
 
 /** The daemon pages that open as their own full views. A fixed list. */
@@ -138,6 +147,10 @@ export type World = {
   sources: { key: string; name: string; ok: number; reports: number; error?: string }[];
   rules?: { zone: string; note: string };
 };
+export type PhoneStatus = { relay: string; relay_error: string; crypto: boolean; crypto_error: string; identity: boolean; devices: number; pending: number; last_ok: number | null; last_error: string };
+export type PhoneDevice = { dev: string; name: string; paired_at: number | null; revoked_at: number | null; pending: boolean };
+export type PairState = "waiting" | "claimed" | "confirming" | "paired" | "rejected" | "expired" | "cancelled" | "error";
+export type Pairing = { session: string; state: PairState; code: string; relay: string; expires: number; remaining: number; device?: string; name?: string; sas?: string; message?: string; notice?: string; warning?: boolean };
 export type ProcsSnapshot = { snaps: Record<string, any[][]>; status: any };
 
 export const api = {
@@ -167,6 +180,15 @@ export const api = {
   procsBaseline: () => call<any>("procs_baseline"),
   procsSnapshot: () => call<ProcsSnapshot>("procs_snapshot"),
   openPage: (page: keyof typeof PAGES) => call<Reply>("open_page", { page }),
+  phoneStatus: () => call<PhoneStatus>("phone_status"),
+  phoneDevices: () => call<{ devices: PhoneDevice[] }>("phone_devices"),
+  pairCurrent: () => call<{ pairing: Pairing | null }>("phone_pair_current"),
+  pairStart: () => call<Pairing>("phone_pair_start"),
+  pairPoll: (session: string) => call<Pairing>("phone_pair_poll", { session }),
+  pairConfirm: (session: string, sas: string, same: boolean) => call<Pairing>("phone_pair_confirm", { session, sas, same }),
+  pairCancel: (session: string) => call<Pairing>("phone_pair_cancel", { session }),
+  phoneRevoke: (device: string) => call<Reply>("phone_revoke", { device }),
+  phoneTest: () => call<Reply>("phone_test"),
 };
 
 /** Pulses: from the shell's stream thread in the app, from the daemon's own

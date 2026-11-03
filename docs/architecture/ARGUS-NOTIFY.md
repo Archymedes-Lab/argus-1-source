@@ -100,6 +100,28 @@ stores the pending pairing (server, code, its keys, the 10-minute deadline) in I
 screen with the same keys instead of losing them; Servers shows "pairing in progress" with a
 cancel, and the entry is cleared on success, expiry or cancel.
 
+### Pairing from the desktop app or dashboard (2026-11-03)
+
+`notify pair` needs a terminal; the desktop app and the daemon's web interface
+pair through `/api/phone/*` instead (`jarvis/web/phone.py`), with the same steps
+(`jarvis/response/notify/pairing.py`, shared with the CLI). The daemon keeps one
+pairing session in memory; the page polls it. Rules, tested in
+`tests/test_phone_pairing.py`:
+
+- A phone is paired only by `confirm` with the exact 6-digit code that this
+  session showed, while it is `claimed`; a wrong, stale or repeated confirm is
+  refused and changes nothing. "They don't match" deletes the claim on the relay.
+- The page receives the session id, the pairing code, relay URL, expiry, device
+  id, the claimed name (control characters removed) and the comparison code;
+  never key material.
+- One session at a time, 10 minutes, no thread of its own: each poll makes at
+  most one relay call, at most every 2 s, never two at once.
+- Every route needs the API credential; POSTs also pass the same-origin gate.
+- A daemon restart loses the session; the claim stays pending on the relay and
+  is never activated.
+
+Not yet measured: a real phone paired through the desktop app.
+
 ## Envelopes
 
 Per message and device, the server makes an ephemeral X25519 key `E`:

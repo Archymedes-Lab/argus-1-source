@@ -217,6 +217,15 @@ fn main() {
             api::procs_baseline,
             api::procs_snapshot,
             api::open_page,
+            api::phone_status,
+            api::phone_devices,
+            api::phone_pair_current,
+            api::phone_pair_start,
+            api::phone_pair_poll,
+            api::phone_pair_confirm,
+            api::phone_pair_cancel,
+            api::phone_revoke,
+            api::phone_test,
         ])
         .setup(move |app| {
             if let Ok(dir) = app.path().app_config_dir() {
