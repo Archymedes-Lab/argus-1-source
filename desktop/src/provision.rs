@@ -61,6 +61,9 @@ pub fn pair_command(env: &dyn Fn(&str) -> Option<String>, exists: &dyn Fn(&Path)
         let home = env("JARVIS_HOME").filter(|p| !p.is_empty()).map(PathBuf::from).or_else(|| {
             env("LOCALAPPDATA").map(|l| Path::new(&l).join("Programs").join("Jarvis"))
         })?;
+        if let Some(exe) = crate::lifecycle::packaged_exe(&home, exists) {
+            return Some(PairCommand { program: exe, args: pair_args(vec![]) });
+        }
         let py = home.join("python").join("python.exe");
         return exists(&py).then(|| PairCommand { program: py, args: pair_args(vec!["-m".into(), "jarvis".into()]) });
     }
@@ -309,6 +312,18 @@ mod tests {
         let want = Path::new("C:\\Users\\u\\AppData\\Local").join("Programs").join("Jarvis").join("python").join("python.exe");
         assert_eq!(pair_command(&env, &|p| p == want).unwrap().program, want);
         assert_eq!(pair_command(&env, &|_| false), None, "no runtime installed: say so, do not guess");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_packaged_program_is_preferred_and_takes_no_module_arguments() {
+        let local = r"C:\Users\u\AppData\Local";
+        let env = |k: &str| (k == "LOCALAPPDATA").then(|| local.to_string());
+        let home = Path::new(local).join("Programs").join("Jarvis");
+        let exe = home.join("jarvis.exe");
+        let c = pair_command(&env, &|p| p == exe || p == home.join("python").join("python.exe")).unwrap();
+        assert_eq!(c.program, exe);
+        assert_eq!(c.args, ["desktop", "pair", "--name", "desktop"]);
     }
 
     #[cfg(windows)]

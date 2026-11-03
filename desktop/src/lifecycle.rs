@@ -140,12 +140,19 @@ pub fn runtime_home(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     None
 }
 
+/// The packaged program (a compiled `jarvis.exe` that is both the CLI and the
+/// daemon) when the installer put one in `home`.
+pub fn packaged_exe(home: &Path, exists: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
+    let exe = home.join("jarvis.exe");
+    exists(&exe).then_some(exe)
+}
+
 pub fn installed(env: &dyn Fn(&str) -> Option<String>, exists: &dyn Fn(&Path) -> bool) -> bool {
     if env("JARVIS_PYTHON").filter(|p| !p.is_empty()).is_some() {
         return true;
     }
     if cfg!(windows) {
-        return runtime_home(env).is_some_and(|h| exists(&h.join("python").join("python.exe")));
+        return runtime_home(env).is_some_and(|h| packaged_exe(&h, exists).is_some() || exists(&h.join("python").join("python.exe")));
     }
     ["/usr/local/bin/jarvis-svc", "/usr/bin/jarvis-svc"].iter().any(|p| exists(Path::new(p)))
 }
@@ -190,9 +197,25 @@ fn start_task() -> Result<bool, String> {
 /// stop monitoring). Only used when the installer's task does not exist.
 fn start_direct(env: &dyn Fn(&str) -> Option<String>, port: u16) -> Result<(), String> {
     let home = runtime_home(env).ok_or("ARGUS-1's monitoring program was not found")?;
-    let py = env("JARVIS_PYTHON").filter(|p| !p.is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join("python").join("python.exe"));
-    let mut c = Command::new(py);
-    c.args(["-m", "jarvis", "serve", "--port", &port.to_string()]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let port_s = port.to_string();
+    let mut c = match (env("JARVIS_PYTHON").filter(|p| !p.is_empty()), packaged_exe(&home, &|p| p.exists())) {
+        (Some(py), _) => {
+            let mut c = Command::new(py);
+            c.args(["-m", "jarvis", "serve", "--port", &port_s]);
+            c
+        }
+        (None, Some(exe)) => {
+            let mut c = Command::new(exe);
+            c.args(["serve", "--port", &port_s]).current_dir(&home);
+            c
+        }
+        (None, None) => {
+            let mut c = Command::new(home.join("python").join("python.exe"));
+            c.args(["-m", "jarvis", "serve", "--port", &port_s]);
+            c
+        }
+    };
+    c.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     if let Some(app) = env("JARVIS_APP_DIR").filter(|p| !p.is_empty()).map(PathBuf::from).or_else(|| Some(home.join("app")).filter(|p| p.is_dir())) {
         c.current_dir(app);
     }
