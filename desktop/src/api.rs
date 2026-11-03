@@ -383,6 +383,92 @@ pub async fn protection_scan() -> Result<Value, String> {
     blocking(|| post_json("/api/protection/scan", &json!({}), ACTION_TIMEOUT)).await
 }
 
+// ---- phone alerts: pairing through the sealed relay ---------------------------
+//
+// The daemon holds the pairing state machine (jarvis/response/notify/pairing.py):
+// a phone is paired only after the owner compares the 6-digit code here with the
+// one on the phone and clicks. The app only forwards well-formed requests.
+
+/// A confirm records the device and activates it on the relay, retried up to
+/// five times: allow for that instead of reporting a timeout mid-way.
+const PAIR_CONFIRM_TIMEOUT: Duration = Duration::from_secs(150);
+
+/// Pairing session ids: 16 lowercase hex digits.
+pub fn valid_pair_session(s: &str) -> bool {
+    s.len() == 16 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// The 6-digit comparison code.
+pub fn valid_sas(s: &str) -> bool {
+    s.len() == 6 && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Device ids (or an unambiguous prefix of at least four characters).
+pub fn valid_device_id(d: &str) -> bool {
+    (4..=64).contains(&d.len()) && d.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+#[tauri::command]
+pub async fn phone_status() -> Result<Value, String> {
+    blocking(|| get_json("/api/phone/status", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn phone_devices() -> Result<Value, String> {
+    blocking(|| get_json("/api/phone/devices", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn phone_pair_current() -> Result<Value, String> {
+    blocking(|| get_json("/api/phone/pair", STATE_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn phone_pair_start() -> Result<Value, String> {
+    blocking(|| post_json("/api/phone/pair/start", &json!({}), ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn phone_pair_poll(session: String) -> Result<Value, String> {
+    if !valid_pair_session(&session) {
+        return Err("invalid pairing session".into());
+    }
+    blocking(move || post_json("/api/phone/pair/poll", &json!({ "session": session }), ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn phone_pair_confirm(session: String, sas: String, same: bool) -> Result<Value, String> {
+    if !valid_pair_session(&session) || !valid_sas(&sas) {
+        return Err("invalid confirmation".into());
+    }
+    blocking(move || {
+        post_json("/api/phone/pair/confirm", &json!({ "session": session, "sas": sas, "same": same }),
+                  PAIR_CONFIRM_TIMEOUT)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn phone_pair_cancel(session: String) -> Result<Value, String> {
+    if !valid_pair_session(&session) {
+        return Err("invalid pairing session".into());
+    }
+    blocking(move || post_json("/api/phone/pair/cancel", &json!({ "session": session }), ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn phone_revoke(device: String) -> Result<Value, String> {
+    if !valid_device_id(&device) {
+        return Err("invalid device id".into());
+    }
+    blocking(move || post_json("/api/phone/revoke", &json!({ "device": device }), ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn phone_test() -> Result<Value, String> {
+    blocking(|| post_json("/api/phone/test", &json!({}), ACTION_TIMEOUT)).await
+}
+
 // ---- pages: location, coverage, world, processes ----------------------------
 
 #[tauri::command]
@@ -479,6 +565,21 @@ pub async fn procs_snapshot() -> Result<Value, String> {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn phone_arguments_are_bounded() {
+        assert!(valid_pair_session("0123456789abcdef"));
+        assert!(!valid_pair_session("0123456789ABCDEF"));
+        assert!(!valid_pair_session("0123456789abcde"));
+        assert!(valid_sas("012345"));
+        assert!(!valid_sas("01234"));
+        assert!(!valid_sas("01234a"));
+        assert!(valid_device_id("abcd"));
+        assert!(valid_device_id("Ab_c-9xyzAb_c-9xyzAb_c"));
+        assert!(!valid_device_id("abc"));
+        assert!(!valid_device_id("../etc"));
+        assert!(!valid_device_id(&"a".repeat(65)));
+    }
 
     fn parse(raw: &str) -> io::Result<Response> {
         parse_response(&mut Cursor::new(raw.as_bytes().to_vec()))

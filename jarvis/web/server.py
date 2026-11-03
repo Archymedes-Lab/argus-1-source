@@ -44,7 +44,7 @@ from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS, NOT_APPLICABLE
 from jarvis.service.scheduler import Scheduler, reliability_watchdog_loop, watchdog_loop
-from jarvis.web import billing, clients, procview, stream
+from jarvis.web import billing, clients, phone, procview, stream
 from jarvis.web import token as api_token
 
 PAGE = str(STATIC_DIR / "dashboard.html")
@@ -856,6 +856,14 @@ class Handler(BaseHTTPRequestHandler):
         # jarvis/web/token.py for what this does and does not close.
         if not self._authorized():
             return self._send(403, json.dumps({"error": "missing or wrong API token"}))
+        if url.path in phone.ROUTES_POST:
+            payload = self._json_body(4096) or {}
+            store = Store(self.db_path)
+            try:
+                code, result = phone.post(url.path, payload, store)
+            finally:
+                store.close()
+            return self._send(code, json.dumps(result))
         if url.path in ("/api/pause", "/api/resume"):
             if url.path.endswith("resume"):
                 self.scheduler.resume()
@@ -1182,6 +1190,14 @@ class Handler(BaseHTTPRequestHandler):
                                       cookie=self._token_cookie())
             except OSError:
                 return self._send(500, "dashboard.html missing", "text/plain")
+
+        if url.path in phone.ROUTES_GET:
+            store = Store(self.db_path)
+            try:
+                code, result = phone.get(url.path, store)
+            finally:
+                store.close()
+            return self._send(code, json.dumps(result, default=str))
 
         if url.path in ("/api/autopilot", "/api/autopilot/notices"):
             store = Store(self.db_path)

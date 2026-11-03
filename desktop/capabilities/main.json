@@ -29,6 +29,15 @@
     "allow-world-state",
     "allow-procs-baseline",
     "allow-procs-snapshot",
-    "allow-open-page"
+    "allow-open-page",
+    "allow-phone-status",
+    "allow-phone-devices",
+    "allow-phone-pair-current",
+    "allow-phone-pair-start",
+    "allow-phone-pair-poll",
+    "allow-phone-pair-confirm",
+    "allow-phone-pair-cancel",
+    "allow-phone-revoke",
+    "allow-phone-test"
   ]
 }

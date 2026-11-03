@@ -28,6 +28,15 @@ fn main() {
             "procs_baseline",
             "procs_snapshot",
             "open_page",
+            "phone_status",
+            "phone_devices",
+            "phone_pair_current",
+            "phone_pair_start",
+            "phone_pair_poll",
+            "phone_pair_confirm",
+            "phone_pair_cancel",
+            "phone_revoke",
+            "phone_test",
         ]),
     ))
     .expect("tauri build");

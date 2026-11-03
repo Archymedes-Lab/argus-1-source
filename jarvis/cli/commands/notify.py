@@ -13,17 +13,14 @@ import sys
 import time
 
 from jarvis.response import alert
-from jarvis.response.notify import channel, crypto, devices, relay
+from jarvis.response.notify import channel, crypto, devices, pairing, relay
 
-PAIR_WAIT_S = 600
+PAIR_WAIT_S = pairing.PAIR_WAIT_S
 POLL_S = 3
-
-
-def _printable(text, limit=40):
-    """A name chosen by whoever claimed the code, made safe for the terminal:
-    control characters (escape sequences could hide or fake the 6-digit code
-    printed after it) become spaces."""
-    return "".join(ch if ch.isprintable() else " " for ch in str(text))[:limit].strip() or "phone"
+ACTIVATE_TRIES = pairing.ACTIVATE_TRIES
+ACTIVATE_WAIT_S = pairing.ACTIVATE_WAIT_S
+_printable = pairing.printable
+activate = pairing.activate
 
 
 def _conf():
@@ -48,9 +45,7 @@ def cmd_pair(args, store):
     code = crypto.pairing_code()
     expires = int(time.time()) + PAIR_WAIT_S
     try:
-        relay.call(conf, ident, "PUT", f"/v1/pair/{code}",
-                   {"mb": ident.mailbox, "s_sig": crypto.b64u(ident.sig_pub),
-                    "s_enc": crypto.b64u(ident.enc_pub), "label": label, "expires": expires})
+        pairing.offer(conf, ident, code, label, expires)
     except relay.RelayError as exc:
         sys.exit(f"notify: the relay refused the pairing offer ({exc})")
     url = relay.base_url(conf)
@@ -63,66 +58,28 @@ def cmd_pair(args, store):
     while time.monotonic() < deadline and claim is None:
         time.sleep(POLL_S)
         try:
-            claims = relay.call(conf, ident, "GET", f"/v1/mailbox/{ident.mailbox}/claims?code={code}") or []
+            claim = pairing.find_claim(conf, ident, code)
         except relay.RelayError as exc:
             print(f"  (relay: {exc}; retrying)", flush=True)
-            continue
-        claim = next((c for c in claims if isinstance(c, dict) and c.get("code") == code), None)
     if claim is None:
         sys.exit("notify: no phone claimed the code in 10 minutes; run `notify pair` again")
     try:
-        d_sig, d_enc = crypto.unb64u(claim["d_sig"]), crypto.unb64u(claim["d_enc"])
-        if len(d_sig) != 32 or len(d_enc) != 32 or crypto.key_id(d_sig) != claim.get("dev"):
-            raise ValueError("device keys do not match the device id")
-    except (KeyError, ValueError) as exc:
-        sys.exit(f"notify: the relay returned a malformed claim ({exc}); nothing was paired")
-    sas = crypto.sas(ident.sig_pub, ident.enc_pub, d_sig, d_enc)
-    name = _printable(claim.get("name") or "phone")
+        dev, name, sas = pairing.check_claim(ident, claim)
+    except ValueError as exc:
+        sys.exit(f"notify: the relay returned a {exc}; nothing was paired")
     print(f"\n  “{name}” wants to receive this server's alerts.\n"
           f"  It shows a code. Pair only if it is exactly:\n\n      {sas[:3]} {sas[3:]}\n", flush=True)
     answer = input("  Same code on the phone? [y/N] ")
-    path = f"/v1/mailbox/{ident.mailbox}/devices/{claim['dev']}"
     if answer.strip().lower() not in ("y", "yes"):
-        try:
-            relay.call(conf, ident, "DELETE", path)
-        except relay.RelayError:
-            pass
+        pairing.reject(conf, ident, dev)
         sys.exit("notify: not paired. If the codes differed, someone may be interfering; pair again.")
-    devices.add({"dev": claim["dev"], "d_sig": claim["d_sig"], "d_enc": claim["d_enc"], "name": name,
-                 "relay_pending": True})
-    err = activate(conf, ident, claim["dev"], code)
+    err = pairing.accept(conf, ident, claim, code, name, activate_fn=activate)
     if err:
         print(f"  warning: paired here, but the relay did not activate the phone ({err}).\n"
               f"  The phone will not receive alerts until it is activated: run `notify pair` again.", flush=True)
-    else:
-        devices.mark_active(claim["dev"])
     err = channel.send(conf, f"{label} is paired", "Alerts from this server will arrive here.",
                        severity="ok", kind="test", store=store)
     print(f"\n  Paired “{name}”." + (" A test notification is on its way." if not err else f" Test failed: {err}"))
-
-
-ACTIVATE_TRIES = 5
-ACTIVATE_WAIT_S = 6
-
-
-def activate(conf, ident, dev, code, tries=ACTIVATE_TRIES, wait=ACTIVATE_WAIT_S, sleep=time.sleep):
-    """Tell the relay the owner confirmed this phone; '' when it agreed.
-
-    Retried: a relay hiccup here used to leave a device recorded locally but
-    pending on the relay, so every later send failed with "unknown or inactive
-    device" and nothing said why."""
-    err = ""
-    for attempt in range(tries):
-        try:
-            relay.call(conf, ident, "POST", f"/v1/mailbox/{ident.mailbox}/devices/{dev}/activate", {"code": code})
-            return ""
-        except relay.RelayError as exc:
-            err = str(exc)
-            if err.startswith("HTTP 404"):
-                return err      # no pending claim any more: retrying cannot help
-        if attempt + 1 < tries:
-            sleep(wait)
-    return err
 
 
 def cmd_devices(args, store):

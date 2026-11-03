@@ -15,6 +15,7 @@ export const W = {
   "nav.coverage": ["What ARGUS-INSTINCT can see", "Coverage"],
   "nav.world": ["World events", "World"],
   "nav.procs": ["Running programs", "Processes"],
+  "nav.phone": ["Alerts on my phone", "Phone"],
   "nav.pricing": ["Plan", "Pricing"],
   "nav.settings": ["Settings", "Settings"],
   // findings

@@ -9,6 +9,7 @@ import MapPin from "@lucide/svelte/icons/map-pin";
 import Grid3x3 from "@lucide/svelte/icons/grid-3x3";
 import Globe from "@lucide/svelte/icons/globe";
 import Cpu from "@lucide/svelte/icons/cpu";
+import Smartphone from "@lucide/svelte/icons/smartphone";
 import type { View } from "./store.svelte";
 
 export type NavGroup = "main" | "explore" | "bottom";
@@ -23,6 +24,7 @@ export const NAV: { view: View; label: string; icon: typeof LayoutGrid; group: N
   { view: "coverage", label: "Coverage", icon: Grid3x3, group: "explore" },
   { view: "world", label: "World", icon: Globe, group: "explore" },
   { view: "procs", label: "Processes", icon: Cpu, group: "explore" },
+  { view: "phone", label: "Phone", icon: Smartphone, group: "bottom" },
   { view: "pricing", label: "Pricing", icon: CreditCard, group: "bottom" },
   { view: "settings", label: "Settings", icon: Settings, group: "bottom" },
 ];

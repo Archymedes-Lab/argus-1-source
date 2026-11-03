@@ -32,6 +32,8 @@ STATE_CHANGING = (
     "/api/run?job=secrets", "/api/ask", "/api/assistant/action", "/api/score-coach",
     "/api/voice", "/api/brief", "/api/geo/here", "/api/geo/zone", "/api/answer",
     "/api/fix/approve", "/api/fix/authorize", "/api/fix/retry", "/api/fix/reject",
+    "/api/phone/pair/start", "/api/phone/pair/poll", "/api/phone/pair/confirm",
+    "/api/phone/pair/cancel", "/api/phone/revoke", "/api/phone/test",
 )
 
 
