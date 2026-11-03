@@ -57,6 +57,21 @@ def win_script(name):
     return WIN_SCRIPTS_DIR / name
 
 
+def _embedded_payloads():
+    """The payloads compiled into a release build, or {} in a source checkout.
+
+    A release ships no .ps1 files (the content policy forbids them), so the
+    build generates jarvis/core/win_payloads.py holding each payload's text and
+    compiles it into the program. Looked up lazily so a source tree, which has
+    no such module, reads the files as before.
+    """
+    try:
+        from jarvis.core import win_payloads
+    except ImportError:
+        return {}
+    return getattr(win_payloads, "PAYLOADS", {})
+
+
 def load_win_script(name):
     """Text of a bundled PowerShell payload, byte for byte.
 
@@ -66,6 +81,9 @@ def load_win_script(name):
     script then shows up as that collector's "unavailable" finding instead of
     stopping the daemon and every other collector with it.
     """
+    embedded = _embedded_payloads().get(name)
+    if embedded is not None:
+        return embedded
     try:
         with open(win_script(name), encoding="utf-8", errors="replace", newline="") as fh:
             return fh.read()
