@@ -28,6 +28,7 @@ class PayloadEmbeddingTest(unittest.TestCase):
 
     def test_the_loader_reads_the_generated_module(self):
         import types
+
         from jarvis.core import paths
         mod = types.ModuleType("jarvis.core.win_payloads")
         exec(build_windows.payloads_module(WIN), mod.__dict__)

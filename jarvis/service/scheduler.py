@@ -18,7 +18,6 @@ must never be able to make JARVIS look dead.
 
 import json
 import subprocess
-import sys
 import threading
 import time
 import traceback
