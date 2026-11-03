@@ -25,6 +25,20 @@ cd ~/jarvis
 jarvis investigate       # or a one-off report in the terminal
 ```
 
+## Releasing
+
+Releases are built by CI only, never on a laptop. The current method: push
+the commit to a `release-test/*` branch of Argus-1, wait for the **Release
+build** run to go green (about 15-20 minutes), then on the releaser's machine:
+
+```sh
+bash release/publish_dry_run.sh <run id>
+```
+
+It gates and signs the run's release folder, publishes it to
+www.archymedes.xyz and reads the live site back. The full rules, the tagged
+release flow and rollback: [docs/guides/RELEASING.md](docs/guides/RELEASING.md).
+
 ## The dashboard
 
 `jarvis serve` runs a scheduler and a local web page. It is plain

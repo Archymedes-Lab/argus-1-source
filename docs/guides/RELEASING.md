@@ -36,7 +36,8 @@ problem instead of allowing only known-good content).
 ## Version order
 
 A tag is `vYYYY.MM.DD`, or `vYYYY.MM.DD-N` for the Nth release that day (no suffix is the
-first). Order is by that rule, not by string: `2026.10.31-10` is newer than `2026.10.31-9`.
+first). A dry run (below) is versioned `YYYY.MM.DD-<run number>`, so a later dry run is always
+newer; the 2026-11-03 dry runs carry `-0`, which sorts before that day's first tag. Order is by that rule, not by string: `2026.10.31-10` is newer than `2026.10.31-9`.
 `release/publish.py` reads the version the site serves now (the site checkout's
 `public/downloads/argus/manifest.json`) and **refuses** a candidate that is equal, older, or
 not a valid tag version (for example the dotted `2026.10.29.1`), before the site is touched.
@@ -54,6 +55,45 @@ tag whose attestation is missing, unsigned by a pinned releaser, incomplete, or 
 
 Adding a second releaser, a lost or compromised key, revocation and rotation:
 `docs/guides/RELEASER-KEYS.md`.
+
+## Publishing a dry run (the current method)
+
+Owner decision 2026-11-03: a green dry run is published straight to the site,
+without a tag, draft or `publish.yml`. The checks are the same: the content
+gate, `SHA256SUMS`, the releaser's signature against the pinned keys, the
+version order, the site copy's own check and the live read-back.
+
+1. Push the commit to a `release-test/*` branch of Argus-1. The **Release
+   build** workflow runs every stage (builds, both install tests, assembly and
+   gate) and hands the assembled release folder over as the `release-out`
+   artifact, kept 7 days. A newer push to the same branch cancels the run in
+   progress. About 15-20 minutes with warm caches.
+2. When the run is green, on the releaser's machine (it needs `gh`, `7z`,
+   `bun`, the Vercel CLI linked to the site, and the release key):
+
+   ```sh
+   bash release/publish_dry_run.sh <run id>
+   ```
+
+   It checks the run is green, downloads `release-out`, gates every file again
+   (the Setup opened with 7z) and checks `SHA256SUMS`, signs it (the
+   passphrase is asked again on a typo, up to 5 times), lays the downloads out
+   in a fresh worktree of the site's `master` (`release/publish.py`, which
+   refuses a version not newer than the live one), commits and pushes, deploys
+   to production with the Vercel CLI and reads the live site back.
+
+   If it stops after signing, run the same command again: it resumes at the
+   site without downloading or asking for the passphrase, provided the folder
+   still matches its signature.
+
+Paths can be overridden: `ARGUS_PUBLISH_DIR` (working folder, default
+`~/.cache/argus-instinct-publish`), `ARGUS_SITE_REPO` (default
+`~/archymedes-site`), `ARGUS_RELEASE_KEY`, `ARGUS_7Z_DIR`.
+
+What a dry run does not have that a tag does: the commit need not be on
+`main`, the host-bound tests' signed attestation is not checked, and the
+builds use the compiler caches kept between dry runs (a tag builds cold). The
+manifest records the run and the commit either way.
 
 ## Making a release
 
