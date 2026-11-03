@@ -334,8 +334,17 @@ class WindowsBuild(unittest.TestCase):
         nsis = Path.home() / ".cache/argus-tools/nsis/root"
         env = {"NSISDIR": str(nsis / "usr/share/nsis"),
                "PATH": f"{Path.home() / '.cache/argus-tools/7zip/root/usr/lib/7zip'}{os.pathsep}{os.environ['PATH']}"}
+        # Relative --out, as the workflow passes it (makensis resolves a relative
+        # OutFile against the .nsi's folder: run 41629504457 failed on exactly that).
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        os.chdir(self.tmp)
         with mock.patch.dict(os.environ, env):
-            self._setup(*self._inputs(), makensis=str(nsis / "usr/bin/makensis"))
+            eng, desk = self._inputs()
+            argv = ["build_setup.py", "--engine", str(eng), "--desktop", str(desk), "--version", "2026.11.03-0",
+                    "--out", "setup", "--makensis", str(nsis / "usr/bin/makensis")]
+            with mock.patch.object(sys, "argv", argv):
+                build_setup.main()
             setup = self.tmp / "setup" / build_setup.SETUP_NAME
             self.assertEqual(self._gate(setup), [])
 

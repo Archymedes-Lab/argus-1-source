@@ -73,10 +73,11 @@ def main():
     for path, rec in ((engine_zip, engine_rec), (desktop_exe, desktop_rec)):
         if hashlib.sha256(path.read_bytes()).hexdigest() != rec["files"][path.name]["sha256"]:
             sys.exit(f"{path.name} differs from its build record")
-    out = Path(args.out)
+    # Absolute: makensis resolves a relative OutFile against the .nsi's folder, not the cwd.
+    out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="argus-setup-") as tmp:
-        src = Path(tmp) / "src"
+        src = Path(tmp).resolve() / "src"
         src.mkdir()
         stage(engine_zip, desktop_exe, src)
         cmd = [args.makensis, "-V2", "-INPUTCHARSET", "UTF8",
