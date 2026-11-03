@@ -94,6 +94,45 @@ commits exactly the release files to the site, the site's deploy job checks
 them again, and the workflow reads the live site back. Watch it to the end:
 `gh run watch -R chrisnkuno/Argus-1`.
 
+## The Windows installer
+
+Windows customers get **one** download, `Argus-Setup.exe`: the desktop app and
+the compiled monitoring program (`argus.exe`, Nuitka, no Python, bytecode or
+script) installed for the signed-in user, with a logon task that starts and
+restarts the program. The app on its own (`argus-desktop-windows-x64.exe`) is a
+build input and is not published: without the program it has nothing to show.
+It is built by `release/build_windows.py` (job `windows-installer`) and the
+`windows-install-test` job installs it on a fresh Windows runner and checks
+pairing, monitoring data, crash recovery, upgrade and uninstall
+(`release/windows/install_test.py`).
+
+**Not in this edition:** the elevated native sensor and the read-only broker
+(PowerShell, so the content policy forbids shipping them). Every job that needs
+them is listed in `jarvis/core/elevated.py` and appears in the app as blind with
+the reason "Needs administrator sensor"; the app shows monitoring as partial,
+never as complete. Adding native elevated components later removes the
+accusation by itself: the list is empty once the broker is installed.
+
+**Dry run first.** Push a branch named `release-test/<anything>`: every job
+runs, nothing is drafted. The first run compiles the whole program with Nuitka
+and takes well over an hour; the downloaded compiler is cached, so later runs
+are shorter. The result does not depend on the cache.
+
+**Policy review before a tag.** `release/policy.json` has no rule for
+`Argus-Setup.exe`, so a tagged build refuses it (deny by default). The proposed
+rule is `release/proposals/windows-installer.json`; dry runs load it through
+`--proposal`, which can only add an artifact rule and never loosens a deny
+list. Tune its `allow` list against the dry run's member list, get the usual
+two-person review, then merge the rule into `policy.json` and delete the
+proposal. A test (`tests/test_release_windows.py`) fails if the two disagree
+silently.
+
+**Before the first public Windows release**, once, on a real clean Windows PC
+(not a CI runner): download `Argus-Setup.exe` from the preview site, run it,
+open Argus from the Start menu, and confirm monitoring data appears with no
+terminal step. Windows SmartScreen will warn about an unsigned installer until
+a code-signing certificate is in place (none is configured yet).
+
 ## Rolling back
 
 ```sh
