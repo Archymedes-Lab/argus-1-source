@@ -52,9 +52,80 @@ STATIC_DIR = PACKAGE_DIR / "web" / "static"
 CONFIG_PATH = os.path.expanduser("~/.jarvis/config.json")
 
 
+# The compiled Windows edition ships no .ps1 file: release/build_windows.py
+# generates jarvis/core/_payloads.py (SCRIPTS: {name: bytes}, DIGEST: sha256 of
+# the whole set) and Nuitka compiles it into the program. The compiled copy
+# always wins over a file of the same name, so a script planted beside the
+# program cannot replace a payload. Payloads that something runs as a file
+# (scheduled tasks, the broker, the input hook) are written, byte for byte, into
+# a per-user folder named by DIGEST, so two releases never mix their scripts.
+PAYLOAD_MODULE = "jarvis.core._payloads"
+
+
+def _embedded():
+    """(SCRIPTS, DIGEST) of a compiled edition, or (None, None) in a source tree."""
+    try:
+        import importlib
+        mod = importlib.import_module(PAYLOAD_MODULE)
+    except ImportError:
+        return None, None
+    return mod.SCRIPTS, mod.DIGEST
+
+
+def payload_root(digest, env=None):
+    """Per-user folder the compiled payloads of one release are written to."""
+    env = os.environ if env is None else env
+    base = env.get("LOCALAPPDATA") if os.name == "nt" else None
+    if not base:
+        base = os.path.join(os.path.expanduser("~"), ".jarvis")
+    return Path(base) / "Jarvis" / "Payload" / digest[:16]
+
+
+def materialize(name, data, root):
+    """Write `data` to root/name unless it already holds exactly those bytes; the
+    write goes through a temporary file and a rename, so a reader never sees half
+    a script. Returns the path."""
+    path = Path(root) / name
+    try:
+        with open(path, "rb") as fh:
+            if fh.read() == data:
+                return path
+    except OSError:
+        pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    return path
+
+
 def win_script(name):
-    """Path of a bundled PowerShell payload."""
+    """Path of a bundled PowerShell payload (written out first in a compiled edition)."""
+    scripts, digest = _embedded()
+    if scripts is not None and name in scripts:
+        root = payload_root(digest)
+        try:
+            return materialize(name, scripts[name], root)
+        except OSError:
+            # Called at import time by some collectors: an unwritable profile
+            # must not stop the daemon. Whatever runs this path then fails and
+            # reports itself unavailable.
+            return root / name
     return WIN_SCRIPTS_DIR / name
+
+
+def shipped_script(rel, code_root):
+    """Path of a script the release ships at `rel` (relative to `code_root`): the
+    compiled copy, written out, when this edition carries one by that name, else
+    the file in the tree. The control audit fingerprints what this returns."""
+    scripts, _ = _embedded()
+    name = os.path.basename(str(rel))
+    if scripts is not None and name in scripts:
+        return win_script(name)
+    return Path(code_root) / rel
 
 
 def load_win_script(name):
@@ -66,8 +137,13 @@ def load_win_script(name):
     script then shows up as that collector's "unavailable" finding instead of
     stopping the daemon and every other collector with it.
     """
+    scripts, _ = _embedded()
+    if scripts is not None:
+        if name in scripts:
+            return scripts[name].decode("utf-8", errors="replace")
+        return f'throw "{name} is not part of this edition"\n'
     try:
-        with open(win_script(name), encoding="utf-8", errors="replace", newline="") as fh:
+        with open(WIN_SCRIPTS_DIR / name, encoding="utf-8", errors="replace", newline="") as fh:
             return fh.read()
     except FileNotFoundError:
         # The Linux server edition ships no Windows payloads. A payload that

@@ -99,6 +99,60 @@
       "kind": "binary",
       "allow": [],
       "executables": []
+    },
+    {
+      "name": "argus-instinct-windows-x64.zip",
+      "kind": "zip",
+      "allow": [
+        "ARGUS-INSTINCT/engine/argus-instinct.exe",
+        "ARGUS-INSTINCT/engine/*.dll",
+        "ARGUS-INSTINCT/engine/**/*.dll",
+        "ARGUS-INSTINCT/engine/*.pyd",
+        "ARGUS-INSTINCT/engine/**/*.pyd",
+        "ARGUS-INSTINCT/engine/argus/web/static/**/*.html",
+        "ARGUS-INSTINCT/engine/argus/web/static/**/*.js",
+        "ARGUS-INSTINCT/engine/argus/web/static/**/*.css",
+        "ARGUS-INSTINCT/engine/argus/web/static/**/*.woff2",
+        "ARGUS-INSTINCT/engine/argus/web/static/**/*.txt",
+        "ARGUS-INSTINCT/engine/argus/web/static/**/*.png",
+        "ARGUS-INSTINCT/engine/argus/web/static/**/*.svg",
+        "ARGUS-INSTINCT/engine/argus/web/styles/*.css",
+        "ARGUS-INSTINCT/engine/argus/intel/data/*.json",
+        "ARGUS-INSTINCT/engine/argus/lab/scenarios/*.json",
+        "ARGUS-INSTINCT/engine/windows-sysmon/*.xml",
+        "ARGUS-INSTINCT/README.txt",
+        "ARGUS-INSTINCT/VERSION"
+      ],
+      "executables": []
+    },
+    {
+      "name": "ARGUS-INSTINCT-Setup-windows-x64.exe",
+      "kind": "nsis",
+      "allow": [
+        "engine/argus-instinct.exe",
+        "engine/*.dll",
+        "engine/**/*.dll",
+        "engine/*.pyd",
+        "engine/**/*.pyd",
+        "engine/argus/web/static/**/*.html",
+        "engine/argus/web/static/**/*.js",
+        "engine/argus/web/static/**/*.css",
+        "engine/argus/web/static/**/*.woff2",
+        "engine/argus/web/static/**/*.txt",
+        "engine/argus/web/static/**/*.png",
+        "engine/argus/web/static/**/*.svg",
+        "engine/argus/web/styles/*.css",
+        "engine/argus/intel/data/*.json",
+        "engine/argus/lab/scenarios/*.json",
+        "engine/windows-sysmon/*.xml",
+        "argus-desktop.exe",
+        "README.txt",
+        "VERSION",
+        "$PLUGINSDIR/*.dll",
+        "$PLUGINSDIR/modern-wizard.bmp",
+        "Uninstall.exe"
+      ],
+      "executables": []
     }
   ],
   "deny_suffixes": [

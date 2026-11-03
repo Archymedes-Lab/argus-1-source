@@ -48,8 +48,10 @@ def of_finding(finding, job=""):
     if cat in MONITORING or _upkeep(cat):
         return "monitoring"
     try:
-        from jarvis.response.reporting import score
-        area = score.AREA_OF.get(job)
+        # The registry the score's areas come from (reporting/score.py AREA_OF),
+        # read here directly: categories sits below reporting.
+        from jarvis.core import mechanisms
+        area = next((a for a, jobs in mechanisms.score_areas() if job in jobs), None)
     except Exception:
         area = None
     if area == THREAT_AREA or cat in THREAT_CATEGORIES:

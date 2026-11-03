@@ -187,6 +187,19 @@ fn main() {
         }
         return;
     }
+    // `--install-shortcut`: write the Start menu entry without opening the app
+    // (the Setup's silent install); the ID is the app identifier its toasts use.
+    if std::env::args().any(|a| a == "--install-shortcut") {
+        match startmenu::ensure(pairing::APP_DIR) {
+            Ok(true) => println!("wrote the Start menu entry"),
+            Ok(false) => println!("the Start menu entry was already there"),
+            Err(e) => {
+                eprintln!("could not write the Start menu entry: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     // `--hidden`: start in the tray (used by the logon task).
     let hidden = std::env::args().any(|a| a == "--hidden");
     tauri::Builder::default()

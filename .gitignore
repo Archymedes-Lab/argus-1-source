@@ -24,3 +24,4 @@ hosted/mesh-cloudflare/.dev.vars
 
 # Rust build output
 rust-runtime/target/
+jarvis/core/_payloads.py

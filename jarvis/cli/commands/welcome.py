@@ -10,10 +10,19 @@ import json
 import sys
 
 from jarvis.core import audience
+from jarvis.platform import host
+
+
+def profile_for_host(kind=None):
+    """The first-run profile for this computer: native Windows, Windows with WSL
+    (the desktop app beside the WSL engine), or a Linux server."""
+    kind = host.KIND if kind is None else kind
+    return {"windows": "windows", "wsl": "desktop"}.get(kind, "server")
 
 
 def cmd_welcome(args, store):
-    statement = audience.first_run(args.profile)
+    profile = profile_for_host() if args.profile == "auto" else args.profile
+    statement = audience.first_run(profile)
     if args.json:
         json.dump(statement, sys.stdout, indent=2)
         sys.stdout.write("\n")
@@ -25,7 +34,7 @@ def cmd_welcome(args, store):
 def add_parser(sub):
     p = sub.add_parser("welcome",
                        help="first-run: what this edition looks at, its limits, how to remove it")
-    p.add_argument("profile", choices=sorted(audience.PROFILES),
-                   help="the edition's audience")
+    p.add_argument("profile", nargs="?", default="auto", choices=["auto", *sorted(audience.PROFILES)],
+                   help="the edition's audience (auto: from this computer)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_welcome, no_store=True)

@@ -388,14 +388,17 @@ def findings(p, pol, auto_state=None):
     return out
 
 
-def audit(store, *, plan_fn=plan, conf=None, start_auto=None, notify=None, now=None):
+def audit(store, *, plan_fn=plan, conf=None, start_auto=None, last_auto=None, notify=None, now=None):
     """The `updates` job: list, rank, persist the plan, and (when the owner
     opted in) hand eligible items to the bounded updater. Never raises past
-    the scheduler's observation."""
+    the scheduler's observation.
+
+    The acting parts live in the response layer and are handed in by the job
+    (service/jobs.py `_updates_job`): `start_auto` (response/updater.py),
+    `last_auto` and `notify`. Without them this only lists and ranks."""
     from jarvis.core import collection
-    from jarvis.response import alert, updater
     now = time.time() if now is None else now
-    conf = alert.load_conf() if conf is None else conf
+    conf = {} if conf is None else conf
     pol = policy(conf)
     p = plan_fn()
     for name in p["failed"]:
@@ -403,12 +406,12 @@ def audit(store, *, plan_fn=plan, conf=None, start_auto=None, notify=None, now=N
     store.set_meta(STATE_META, json.dumps(p, sort_keys=True)[:200_000])
     if pol["mode"] in ("important", "all"):
         eligible = [i for i in p["items"] if auto_eligible(i, pol)]
-        if eligible:
-            (start_auto or updater.start_auto)(store, eligible, now=now)
-    out = findings(p, pol, updater.last_auto(store))
-    if pol["mode"] != "off":
+        if eligible and start_auto is not None:
+            start_auto(store, eligible, now=now)
+    out = findings(p, pol, last_auto(store) if last_auto is not None else None)
+    if pol["mode"] != "off" and notify is not None:
         try:
-            (notify or notify_owner)(store, conf, p, pol, now)
+            notify(store, conf, p, pol, now)
         except Exception:
             pass
     return out
@@ -417,11 +420,13 @@ def audit(store, *, plan_fn=plan, conf=None, start_auto=None, notify=None, now=N
 NOTIFY_EVERY_S = 12 * 3600
 
 
-def notify_owner(store, conf, p, pol, now, deliver=None):
+def notify_owner(store, conf, p, pol, now, deliver=None, enabled=None):
     """One categorized "updates" notice when the set of important pending
     updates changes (new ones appear), at most every NOTIFY_EVERY_S. Returns
-    True when one was sent."""
-    from jarvis.response import alert
+    True when one was sent. `deliver` and `enabled` are response/alert.py's,
+    handed in by the job; without `deliver` nothing is sent."""
+    if deliver is None:
+        return False
     if conf.get("notify_updates", True) is False:
         return False
     imp = sorted(f"{i['manager']}:{i['id']}:{i['available']}" for i in p["items"] if i["important"])
@@ -435,14 +440,14 @@ def notify_owner(store, conf, p, pol, now, deliver=None):
         if not imp:
             store.set_meta(NOTIFY_META, json.dumps({"at": last.get("at") or 0, "seen": []}))
         return False
-    if not alert.enabled(conf):
+    if enabled is not None and not enabled(conf):
         return False
     names = [i["name"] for i in p["items"] if i["important"]]
     auto = [i for i in p["items"] if auto_eligible(i, pol)]
     text = (f"{len(names)} important update(s) are not installed: {_names([{'name': n} for n in names])}.\n"
             + (f"Argus will update {len(auto)} of them itself.\n" if auto else "")
             + "To see and install the rest: jarvis update plan, then jarvis update apply.")
-    err = (deliver or alert.deliver)(conf, f"[ARGUS-INSTINCT] {len(names)} important update(s) available", text,
+    err = deliver(conf, f"[ARGUS-INSTINCT] {len(names)} important update(s) available", text,
                                      category="updates")
     if not err:
         store.set_meta(NOTIFY_META, json.dumps({"at": now, "seen": imp}))

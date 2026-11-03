@@ -19,6 +19,8 @@
 # serve"). It needs no elevation and changes no Windows setting.
 #
 #   .\jarvis-native-service.ps1 -Install [-Python C:\...\python.exe] [-Port 8787]
+#   .\jarvis-native-service.ps1 -Install -Engine C:\...\jarvis.exe [-Port 8787]
+#                                          the compiled edition: no Python needed
 #   .\jarvis-native-service.ps1 -Remove       stop the daemon, unregister the task
 #   .\jarvis-native-service.ps1 -Once         one check, then exit
 #   .\jarvis-native-service.ps1               run the loop (what the task does)
@@ -35,6 +37,7 @@ param(
     [string]$TaskName = 'jarvis native service',
     [string]$RepoRoot = '',
     [string]$Python = '',
+    [string]$Engine = '',          # the compiled edition's program; replaces -Python
     [int]$Port = 0,
     [int]$Interval = 5,
     [int]$HungAfter = 90,
@@ -96,14 +99,25 @@ function Find-Python {
     return ''
 }
 
+function Test-Engine([string]$exe) {
+    return [bool]($exe -and $exe -like '*.exe' -and (Test-Path -LiteralPath $exe -PathType Leaf))
+}
+
 function Get-DaemonProcess([int]$processId, [string]$exe) {
-    # The recorded pid counts only while it is still that python running the
-    # JARVIS daemon: Windows reuses pids, and this loop may stop what it finds.
+    # The recorded pid counts only while it is still the JARVIS daemon: Windows
+    # reuses pids, and this loop may stop what it finds. The compiled edition's
+    # program must be exactly the configured engine (its path is the only thing
+    # that names it); a python must be running "-m jarvis serve".
     if ($processId -le 0) { return $null }
     try {
         $p = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction Stop
     } catch { return $null }
     if (-not $p -or -not $p.CommandLine) { return $null }
+    if ($Engine) {
+        if (-not $p.ExecutablePath -or $p.ExecutablePath -ne $Engine) { return $null }
+        if ($p.CommandLine -notmatch '\sserve\s') { return $null }
+        return $p
+    }
     if ($p.ExecutablePath -and $exe -and ($p.ExecutablePath -ne $exe)) { return $null }
     if ($p.CommandLine -notmatch '-m\s+jarvis\s+serve\b') { return $null }
     return $p
@@ -127,11 +141,20 @@ if ($Install -or $Remove) {
     try { $old = Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { }
     $oldConfig = $null
     try { $oldConfig = Get-Content -LiteralPath $configPath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { }
+    $newEngine = $Engine
+    $Engine = $(if ($oldConfig -and $oldConfig.engine) { "$($oldConfig.engine)" } else { '' })
     if ($old -and $old.pid -and (Stop-Daemon ([int]$old.pid) "$($oldConfig.python)")) {
         Say "stopped the daemon (pid $($old.pid))"
     }
+    $Engine = $newEngine
     if ($Remove) { Say "removed task '$TaskName'"; return }
 
+    if ($Engine) {
+        if (-not (Test-Engine $Engine)) { Say "FAILED: $Engine is not a program file"; exit 1 }
+        $Engine = (Resolve-Path -LiteralPath $Engine).ProviderPath
+        # The compiled program carries its own code: its folder is the code root.
+        if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $Engine }
+    }
     if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $self }
     $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath.TrimEnd('\')
     if ($RepoRoot -like '\\*') {
@@ -140,10 +163,11 @@ if ($Install -or $Remove) {
         Say "FAILED: $RepoRoot is a network path. Install from a local Windows folder."
         exit 1
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'jarvis\__main__.py'))) {
+    if ($Engine) {
+        $Python = ''
+    } elseif (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'jarvis\__main__.py'))) {
         Say "FAILED: no jarvis package under $RepoRoot"; exit 1
-    }
-    if ($Python) {
+    } elseif ($Python) {
         if (-not (Test-Python $Python)) { Say "FAILED: $Python is not Python 3.12 or newer"; exit 1 }
         $Python = (Resolve-Path -LiteralPath $Python).ProviderPath
     } else {
@@ -151,7 +175,7 @@ if ($Install -or $Remove) {
         if (-not $Python) { Say "FAILED: Python 3.12 or newer was not found. Install it, or pass -Python."; exit 1 }
     }
     if ($Port -le 0) { $Port = 8787 }
-    Save-Json @{ python = $Python; port = $Port; repoRoot = $RepoRoot } $configPath
+    Save-Json @{ python = $Python; engine = $Engine; port = $Port; repoRoot = $RepoRoot } $configPath
 
     # Run from a staged copy so the task's script is one fixed, fingerprinted
     # file (the control audit verifies it) rather than whatever is in the tree.
@@ -178,14 +202,15 @@ if ($Install -or $Remove) {
     $check = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if (-not $check) { Say "FAILED to register task '$TaskName'"; exit 1 }
     Start-ScheduledTask -TaskName $TaskName
-    Say "registered and started task '$TaskName' ($Python, port $Port, code $RepoRoot)"
+    Say "registered and started task '$TaskName' ($(if ($Engine) { $Engine } else { $Python }), port $Port, code $RepoRoot)"
     return
 }
 
 # --- configuration -----------------------------------------------------------
 $config = $null
 try { $config = Get-Content -LiteralPath $configPath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { }
-if (-not $Python -and $config) { $Python = "$($config.python)" }
+if (-not $Engine -and $config -and $config.engine) { $Engine = "$($config.engine)" }
+if (-not $Python -and -not $Engine -and $config) { $Python = "$($config.python)" }
 if ($Port -le 0) { $Port = $(if ($config -and $config.port) { [int]$config.port } else { 8787 }) }
 if (-not $RepoRoot -and $config) { $RepoRoot = "$($config.repoRoot)" }
 $HealthUrl = "http://127.0.0.1:$Port/api/health"
@@ -226,14 +251,18 @@ $owned = $false
 try { $owned = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $owned = $true }
 if (-not $owned) { return }
 
-if (-not (Test-Python $Python)) { Say "no usable Python configured ($Python) -- run -Install again"; exit 1 }
-if (-not $RepoRoot -or -not (Test-Path -LiteralPath (Join-Path $RepoRoot 'jarvis\__main__.py'))) {
-    Say "no jarvis package under '$RepoRoot' -- run -Install again"; exit 1
+if ($Engine) {
+    if (-not (Test-Engine $Engine)) { Say "the configured program is missing ($Engine) -- run -Install again"; exit 1 }
+} else {
+    if (-not (Test-Python $Python)) { Say "no usable Python configured ($Python) -- run -Install again"; exit 1 }
+    if (-not $RepoRoot -or -not (Test-Path -LiteralPath (Join-Path $RepoRoot 'jarvis\__main__.py'))) {
+        Say "no jarvis package under '$RepoRoot' -- run -Install again"; exit 1
+    }
 }
 
 $st = @{ startedAt = (Now); checkedAt = 0; pid = 0; daemonStartedAt = 0; healthy = $null
          firstFailure = 0; lastAction = ''; lastActionAt = 0; restarts = @(); gaveUp = $false
-         paused = $false; port = $Port; python = $Python; repoRoot = $RepoRoot }
+         paused = $false; port = $Port; python = $Python; engine = $Engine; repoRoot = $RepoRoot }
 try {
     $saved = Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json
     $st.restarts = @($saved.restarts | Where-Object { $_ })
@@ -270,8 +299,11 @@ function Start-Daemon([string]$why) {
         if (Test-Path -LiteralPath $f) { Move-Item -LiteralPath $f -Destination ($f + '.1') -Force -ErrorAction SilentlyContinue }
     }
     try {
-        # -u: unbuffered, so the log shows what happened right up to a crash.
-        $p = Start-Process -FilePath $Python -ArgumentList @('-u', '-m', 'jarvis', 'serve', '--port', "$Port") `
+        # -u: unbuffered, so the log shows what happened right up to a crash
+        # (the compiled program is built unbuffered).
+        if ($Engine) { $file = $Engine; $argv = @('serve', '--port', "$Port") }
+        else { $file = $Python; $argv = @('-u', '-m', 'jarvis', 'serve', '--port', "$Port") }
+        $p = Start-Process -FilePath $file -ArgumentList $argv `
             -WorkingDirectory $RepoRoot -WindowStyle Hidden -PassThru `
             -RedirectStandardOutput (Join-Path $StateRoot 'daemon.out.log') `
             -RedirectStandardError (Join-Path $StateRoot 'daemon.err.log')

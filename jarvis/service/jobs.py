@@ -413,6 +413,18 @@ def _store_only(audit):
     return run
 
 
+def _updates_job(store):
+    """The updates collector with the response layer's acting parts handed in
+    (a collector never imports the response layer)."""
+    from jarvis.response import alert, updater
+
+    def notify(store, conf, p, pol, now):
+        return updates.notify_owner(store, conf, p, pol, now, deliver=alert.deliver, enabled=alert.enabled)
+
+    return updates.audit(store, conf=alert.load_conf(), start_auto=updater.start_auto,
+                         last_auto=updater.last_auto, notify=notify)
+
+
 def _hosts_only(audit):
     """A job whose collector takes only hosts=..."""
     return lambda hosts, db_path: audit(hosts=hosts)
@@ -501,7 +513,7 @@ RUNNERS = {
     "heartbeat": _store_only(heartbeat.run),
     "sensorprobe": _store_only(sensorprobe.run),
     "patches": _store_only(patches.audit),
-    "updates": _store_only(updates.audit),
+    "updates": _store_only(_updates_job),
     "distrovuln": lambda hosts, db_path: distrovuln.refresh(),
     "appcode": _store_only(appcode.audit),
     "osv": lambda hosts, db_path: osv.refresh(),

@@ -125,6 +125,38 @@ PROFILES = {
 }
 
 
+# Native Windows (no WSL), the Setup's per-user edition. Only capabilities whose
+# collectors run on Windows without elevation and without WSL; what this
+# edition does not install is said in `facts`, never left out silently.
+PROFILES['windows'] = {
+    'title': 'ARGUS-INSTINCT for Windows',
+    'audience': 'Windows PCs, no WSL needed',
+    'capabilities': (
+        ('credential_guardian', 'Secrets and credential access'),
+        ('download_provenance', 'Where downloaded programs came from'),
+        ('peripheral_privacy_seal', 'Microphone and camera consent'),
+        ('online_guardian', 'Network destinations and threat intelligence'),
+        ('preos_boot_integrity', 'Firmware, Secure Boot and measured boot'),
+        ('dotnet_assembly_defense', '.NET runtime hijacks'),
+        ('native_host_portability', 'Windows without WSL'),
+        ('in_app_notifications', 'In-app notifications'),
+    ),
+    'facts': (
+        'It runs for your account only and needs no administrator.',
+        'Not in this edition: the elevated event sensor, the elevated broker and the '
+        'keyboard-hook watcher. Checks that need them, WSL or Linux are listed as not '
+        'applicable on this PC.',
+        'ARGUS-INSTINCT is built never to delete your files automatically.',
+    ),
+    'next_steps': (
+        'jarvis native status --all  what runs here and what does not apply',
+        'jarvis coverage             blind spots, stale collectors, failures',
+    ),
+    'removal': ('Settings, Apps, ARGUS-INSTINCT, Uninstall. Your history stays in ~/.jarvis '
+                'until you delete that folder. Removal on a clean machine has not been validated yet.'),
+}
+
+
 class UnknownProfile(ValueError):
     pass
 

@@ -17,17 +17,35 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 pub const READ_TIMEOUT: Duration = Duration::from_secs(45);
 pub const MAX_LINE: u64 = 256 * 1024;
 
-/// The daemon's port: 8787, or JARVIS_DESKTOP_PORT for a test daemon. The
-/// host is always 127.0.0.1; only the port can be changed.
+/// The daemon's port: JARVIS_DESKTOP_PORT (a test daemon), else the `port`
+/// file `jarvis native install` writes beside the app's client token (when
+/// 8787 was taken on this machine), else 8787. The host is always 127.0.0.1;
+/// only the port can be changed.
 pub fn port() -> u16 {
     static PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
     *PORT.get_or_init(|| {
-        std::env::var("JARVIS_DESKTOP_PORT")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .filter(|p| *p != 0)
-            .unwrap_or(DEFAULT_PORT)
+        let env = |k: &str| std::env::var(k).ok();
+        resolve_port(&env, &|p: &std::path::Path| std::fs::read_to_string(p).ok())
     })
+}
+
+fn parse_port(v: &str) -> Option<u16> {
+    v.trim().parse().ok().filter(|p| *p != 0)
+}
+
+pub fn resolve_port(
+    env: &dyn Fn(&str) -> Option<String>,
+    read: &dyn Fn(&std::path::Path) -> Option<String>,
+) -> u16 {
+    if let Some(p) = env("JARVIS_DESKTOP_PORT").as_deref().and_then(parse_port) {
+        return p;
+    }
+    crate::pairing::token_path(env)
+        .and_then(|t| t.parent().map(|d| d.join("port")))
+        .and_then(|f| read(&f))
+        .as_deref()
+        .and_then(parse_port)
+        .unwrap_or(DEFAULT_PORT)
 }
 
 pub fn dashboard_url() -> String {
@@ -157,6 +175,28 @@ pub fn poll() -> io::Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn port_env_then_file_then_default() {
+        let none = |_: &str| None::<String>;
+        let file = |_: &std::path::Path| Some("8791\n".to_string());
+        let nofile = |_: &std::path::Path| None::<String>;
+        let appdata = |k: &str| match k {
+            "APPDATA" | "HOME" => Some("/x".to_string()),
+            _ => None,
+        };
+        let both = |k: &str| match k {
+            "JARVIS_DESKTOP_PORT" => Some("9000".to_string()),
+            "APPDATA" | "HOME" => Some("/x".to_string()),
+            _ => None,
+        };
+        assert_eq!(super::resolve_port(&both, &file), 9000);
+        assert_eq!(super::resolve_port(&appdata, &file), 8791);
+        assert_eq!(super::resolve_port(&appdata, &nofile), super::DEFAULT_PORT);
+        assert_eq!(super::resolve_port(&none, &file), super::DEFAULT_PORT);
+        let junk = |_: &std::path::Path| Some("0".to_string());
+        assert_eq!(super::resolve_port(&appdata, &junk), super::DEFAULT_PORT);
+    }
+
     use super::*;
     use std::io::Cursor;
 

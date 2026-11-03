@@ -65,11 +65,24 @@ git tag -a v2026.11.01 -m "Argus 2026.11.01"     # vYYYY.MM.DD, -2 for a second 
 git push origin v2026.11.01
 ```
 
-The **Release build** workflow then runs (about 40 minutes): static gate and
-unit suite, native server build, desktop builds for Linux and Windows, a real
-install-run-remove test of both server packages on a systemd host, assembly
-(manifest, `SHA256SUMS`, a report of what changed since the last release, an
-SBOM) and the content gate. It ends with a **draft** release. Nothing is public.
+The **Release build** workflow then runs (about an hour): static gate and
+unit suite, native server build, the native Windows engine
+(`release/build_windows.py`, PowerShell payloads compiled in), desktop builds
+for Linux and Windows, the Windows Setup made from the engine and the desktop
+app (`release/build_setup.py`), a real install-run-remove test of both server
+packages on a systemd host and of the Setup on a clean Windows host without
+WSL (`release/windows/install_test.ps1`, with a planted-autostart positive
+control), assembly (manifest, `SHA256SUMS`, a report of what changed since the
+last release, an SBOM) and the content gate. It ends with a **draft** release.
+Nothing is public.
+
+The downloads are: `argus-server-linux-x86_64.tar.gz`, `argus-server_<v>_amd64.deb`,
+`argus-desktop_<v>_amd64.deb`, `argus-desktop-windows-x64.exe`,
+`argus-instinct-windows-x64.zip` and `ARGUS-INSTINCT-Setup-windows-x64.exe`
+(docs/architecture/WINDOWS-EDITION.md says who downloads which). The gate opens
+the Setup with 7-Zip, so `release/sign.py` and `release/check.py` need `7z` on
+the releaser's machine (`sudo apt install 7zip`); without it the Setup is
+refused, never passed.
 
 Sign it on your own machine:
 
