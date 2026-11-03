@@ -264,6 +264,22 @@ class WindowsBuild(unittest.TestCase):
             with self.subTest(why):
                 self.assertTrue(self._gate(self._zip(extra)), f"{why} was not refused")
 
+    def test_upstream_build_paths_pass_only_in_their_own_files(self):
+        ok = [("python312.dll", b"MZ pdb D:\\a\\1\\b\\bin\\amd64\\python312.pdb"),
+              ("libssl-3.dll", b"MZ C:\\A\\_work\\1\\s\\ssl"),
+              ("cryptography/hazmat/bindings/_rust.pyd",
+               b"MZ D:\\a\\cryptography\\x C:\\Users\\runneradmin\\.cargo\\x")]
+        self.assertEqual(self._gate(self._zip(ok)), [])
+        refused = [
+            ((("python312.dll", b"MZ D:\\a\\1\\ then D:\\a\\Argus-1\\Argus-1\\x"),), "our path after an exempt one"),
+            ((("argus-instinct.exe", b"MZ D:\\a\\1\\x"),), "exempt text in our own program"),
+            ((("python312.dll", b"MZ C:\\Users\\runneradmin\\x"),), "exempt text in the wrong file"),
+            ((("libssl-3.dll", b"MZ D:\\a\\1\\x"),), "another file's exempt text"),
+        ]
+        for extra, why in refused:
+            with self.subTest(why):
+                self.assertTrue(self._gate(self._zip(extra)), f"{why} was not refused")
+
     def test_setup_stage_refuses_members_outside_the_top_folder(self):
         for bad in ("../evil.exe", "other/x.dll", "/abs.dll"):
             z = self.tmp / f"bad{abs(hash(bad))}.zip"

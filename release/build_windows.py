@@ -198,6 +198,9 @@ def main():
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--work", help="build folder (default: a temporary one)")
     args = ap.parse_args()
+    # The runner's console is cp1252: a refusal quoting an odd byte must print, not crash.
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
     file_version(args.version)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
