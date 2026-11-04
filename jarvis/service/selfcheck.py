@@ -325,6 +325,23 @@ def confirm_unhealthy(db_path=DEFAULT_DB, attempts=ATTEMPTS):
     return verdict
 
 
+# The root-owned restart gate (scripts/repair/jarvis-restart-gate): when it is
+# installed a system-unit restart goes through it, so the fault is re-checked
+# as root and the warrant recorded before the monitor is stopped. A refusal
+# (exit 3) or the rate limit (exit 4) is final: never fall back around it.
+RESTART_GATE = "/usr/local/sbin/jarvis-restart-gate"
+GATE_REFUSED, GATE_RATE_LIMITED = 3, 4
+
+
+def _gate_restart(db_path):
+    """(rc, error) from one restart through the gate."""
+    reason = "unit-down" if check(db_path).get("active_state") != "active" else "health-silent"
+    rc, out, err = _run(["sudo", "-n", RESTART_GATE, "--actor", "selfcheck", "--reason", reason])
+    if rc in (GATE_REFUSED, GATE_RATE_LIMITED):
+        return rc, f"the restart gate declined: {(out or err).strip()[-200:]}"
+    return rc, (err or out or f"the restart gate returned {rc}") if rc else ""
+
+
 def restart(attempts=RESTART_ATTEMPTS, db_path=DEFAULT_DB):
     """Bring the unit back, trying more than once. Returns "" on success.
 
@@ -337,6 +354,7 @@ def restart(attempts=RESTART_ATTEMPTS, db_path=DEFAULT_DB):
     if not scope:
         return f"{UNIT} is not installed under either systemd manager"
     user = (scope == "user")
+    gate = not user and os.access(RESTART_GATE, os.X_OK)
     last = ""
     for i in range(max(1, attempts)):
         if i:
@@ -345,7 +363,12 @@ def restart(attempts=RESTART_ATTEMPTS, db_path=DEFAULT_DB):
             # never leave this machine unmonitored.
             _systemctl("reset-failed", UNIT, user=user, privileged=True)
             time.sleep(RESTART_SETTLE)
-        rc, _, err = _systemctl("restart", UNIT, user=user, privileged=True)
+        if gate:
+            rc, err = _gate_restart(db_path)
+            if rc in (GATE_REFUSED, GATE_RATE_LIMITED):
+                return err
+        else:
+            rc, _, err = _systemctl("restart", UNIT, user=user, privileged=True)
         if rc == 0:
             time.sleep(RESTART_SETTLE)
             if check(db_path)["active_state"] == "active":

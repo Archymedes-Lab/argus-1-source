@@ -401,6 +401,12 @@ COLLECTORS = (
     _c("wslmanifest", 300, "WSL process manifest", None, 0, 2, "medium", 60,
        command="wslmanifest", domain="linux", cost_s=0.3,
        unscored="new; reports drift only after the owner approves a manifest, not yet soaked", lane="frequent"),
+    # Restart autopsy (2026-11-04): every stop of this daemon is attributed to
+    # an actor and its reason cross-examined (systemd, Sysmon lineage, the
+    # restarters' own logs); an unidentified stop is a high tamper finding.
+    _c("restarts", 300, "Daemon stop attribution", None, 0, 1, "high", 60,
+       command="restarts", domain="linux", cost_s=4.0,
+       unscored="new; restarter signatures source-tested and replayed on 23 real stops, not yet soaked", lane="frequent"),
     _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
        command="opshealth", domain="linux", cost_s=0.6, requires=("systemd",),
        unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),

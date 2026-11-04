@@ -35,6 +35,7 @@ ADDED_AFTER_GOLDEN = {
     "logins": "successful SSH logins, new networks and keys (ARGUS-SERVER.md W3, 2026-10-24)",
     "sshwatch": "effective sshd policy, authorised and host key drift, live SSH tunnels (2026-10-28)",
     "opshealth": "failed units, TLS certificate expiry, kernel OOM kills, unclean reboots (2026-10-28)",
+    "restarts": "attribution of every jarvis.service stop; unidentified stops are high (2026-11-04)",
     "bootchain": "Linux boot-chain persistence and kernel attack surface (2026-10-29)",
     "keyreaders": "Linux keyboard, raw HID and uinput readers by image; hidden staging (2026-10-29)",
     "friday_defender": "consented Friday Defender reviews of found codebases, advisory (2026-10-29)",
