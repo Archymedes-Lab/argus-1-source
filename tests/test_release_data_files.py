@@ -55,5 +55,34 @@ class DataFilesTest(unittest.TestCase):
             self.assertNotIn(b"sourceMappingURL=", Path(src).read_bytes(), rel)
 
 
+class ShippedDataIsAllowed(unittest.TestCase):
+    """Every data file the builds ship must be allowed, path by path, in each
+    artifact that carries the engine: run 41744195602 found world-50m.json
+    refused only after a 10-minute compile, once dashboard files began to ship."""
+
+    PREFIXES = {
+        "argus-server-linux-x86_64.tar.gz": "argus-server/bin/",
+        "argus-server_*_amd64.deb": "usr/share/argus-server/bin/",
+        "argus-instinct-windows-x64.zip": "ARGUS-INSTINCT/engine/",
+        "ARGUS-INSTINCT-Setup-windows-x64.exe": "engine/",
+    }
+
+    def test_every_shipped_data_file_is_allowed_and_not_denied(self):
+        import gate
+        import rename
+        tree = Path(tempfile.mkdtemp(prefix="argus-export-"))
+        rename.export(ROOT, "HEAD", tree)
+        rels = [rel for _s, rel in build_server.data_files(tree, Path(tempfile.mkdtemp()))]
+        policy = gate.load_policy()
+        rules = {r["name"]: r for r in policy["artifacts"]}
+        for name, prefix in self.PREFIXES.items():
+            for rel in rels:
+                path = prefix + rel
+                with self.subTest(artifact=name, file=rel):
+                    self.assertIsNone(gate.denied_path(path, policy))
+                    self.assertTrue(any(gate.glob_match(path, p) for p in rules[name]["allow"]),
+                                    f"{path} is not in the allow list of {name}")
+
+
 if __name__ == "__main__":
     unittest.main()
