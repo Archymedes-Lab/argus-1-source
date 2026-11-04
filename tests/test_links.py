@@ -34,7 +34,7 @@ def evidence(now, **over):
     snaps = {job: {"ts": now - 10, "error": "", "findings": []}
              for job in ("bridge", "input_hook", "native", "sysmon", "sysmon_linux")}
     ev = {"windows": True, "snapshots": snaps,
-          "lanes": {"fast": 5.0, "main": 20.0, "bulk": 60.0},
+          "lanes": {"fast": 5.0, "frequent": 10.0, "main": 20.0, "bulk": 60.0},
           "tasks": {"health-monitor": now - 30, "reviver": now - 5,
                     "connectivity-guard": now - 40, "elevated-broker": now - 600},
           "dead_man": {"configured": True, "failures": 0, "last_ok": now - 30},

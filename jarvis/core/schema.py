@@ -353,7 +353,15 @@ CREATE TABLE IF NOT EXISTS sound_events (
     -- console-host episodes: the program whose console rang the bell
     console_pid INTEGER NOT NULL DEFAULT 0,
     console_app TEXT NOT NULL DEFAULT '',
-    console_start TEXT NOT NULL DEFAULT ''
+    console_start TEXT NOT NULL DEFAULT '',
+    -- unattributed system-sounds episodes: the foreground window's process
+    -- tree at onset. An inference, never the caller: likely_pid is set only
+    -- when the tree held exactly one candidate.
+    likely_pid INTEGER NOT NULL DEFAULT 0,
+    likely_app TEXT NOT NULL DEFAULT '',
+    likely_start TEXT NOT NULL DEFAULT '',
+    likely_list TEXT NOT NULL DEFAULT '',
+    likely_n   INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_sound_events_ts ON sound_events(ts DESC);

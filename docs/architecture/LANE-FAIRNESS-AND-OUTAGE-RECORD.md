@@ -82,6 +82,10 @@ anchoring; it makes one PowerShell call. That brings the main lane's duty back
 under 100 %. C was rejected because of memory pressure: the WSL VM was reset by
 a host out-of-memory event at 00:51:16 the same night.
 
+**Follow-up (2026-11-03):** the five-minute collectors now have a frequent
+lane of their own. After a boot they went stale behind the main lane's
+1331 s sweep; see [FREQUENT-LANE.md](FREQUENT-LANE.md).
+
 **Reconsider if:** the main lane's measured duty stays above 90 % after the
 change. The next candidates for the bulk lane would be `world` and `feeds`
 (network-bound).
