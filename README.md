@@ -39,6 +39,43 @@ It gates and signs the run's release folder, publishes it to
 www.archymedes.xyz and reads the live site back. The full rules, the tagged
 release flow and rollback: [docs/guides/RELEASING.md](docs/guides/RELEASING.md).
 
+## Fuzz testing
+
+`tests/fuzz/` throws malformed and hostile input at the parsers an attacker can
+reach: the release content gate, version tags, SSH and login logs, Linux Sysmon
+and Windows event records, the software-update parsers, and the local API's
+request and token handling. Each target runs in its own process with a temporary
+HOME and a hard kill, so a hang still leaves a reproducer; nothing reads your data
+or talks to the running service.
+
+```sh
+python3 -m tests.fuzz.run --budget-seconds 60      # all targets; --list, --target NAME
+```
+
+A run fails only on findings not yet listed in `tests/fuzz/known.json`.
+
+**First results (2026-11-04, 21 targets, ~13 CPU-minutes):** 15 findings, 10
+fixed with regression tests (`tests/test_fuzz_findings.py`), 5 open. Full write-up:
+[docs/security/FUZZ-FINDINGS-2026-11-04.md](docs/security/FUZZ-FINDINGS-2026-11-04.md).
+
+| id | finding | severity | status |
+|----|---------|----------|--------|
+| FZ-04 | a local, unprivileged process can write a fake sshd "Accepted publickey" line to the journal and it counts as login evidence, teaching the baseline an attacker's network and key | high | open |
+| FZ-01 | a crafted `.deb` (negative member size) makes the release gate loop forever | medium | fixed |
+| FZ-02 | a `.deb` with two data members: the gate checked the last, `dpkg` installs the first | medium | fixed |
+| FZ-03 | a chosen SSH username (`bob from 203.0.113.9`) framed an innocent address in the login log | medium | fixed |
+| FZ-06 | one malformed Linux Sysmon line dropped every event in its window; a 56 KB line took 7 s | medium | fixed |
+| FZ-11 | an archive nested inside a release archive is not scanned | medium | open |
+| FZ-12 | a "binary" artifact that is really a zip of denied files passes the gate | medium | open |
+| FZ-13 | `Docs/`, `SRC/`, `x.PY.` are not denied, though Windows treats them as `docs`, `src`, `x.py` | low-medium | open |
+| FZ-14 | no total memory cap while the gate unpacks a download | low-medium | open |
+| FZ-07, FZ-08 | one odd `sshd_config` line stopped the SSH audit; one odd winget program name hid every later update | low-medium | fixed |
+| FZ-05, FZ-09, FZ-10, FZ-15 | a release tag with a trailing newline accepted; crashes on a non-ASCII token digest, unexpected `brew` JSON, a `null` journal line | low | fixed |
+
+No finding in the zip reader, byte scanning, brute-force attribution, Windows
+event XML, `authorized_keys` parsing or token comparison. Not yet covered: the
+signature checker, the NSIS installer, Rust, PowerShell and the phone relay.
+
 ## The dashboard
 
 `jarvis serve` runs a scheduler and a local web page. It is plain
