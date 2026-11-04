@@ -93,15 +93,17 @@ class BrightnessEventTests(unittest.TestCase):
 
     def test_hook_script_samples_brightness_off_the_hook_thread(self):
         src = load_win_script("inputhook.ps1")
-        # Read through WMI on a separate runspace; the hook thread must not block.
+        # Read through WMI on the host's worker thread; the hook thread must not block.
+        sampler = src.split("static void SampleBrightness()", 1)[1].split("\n    }\n", 1)[0]
         self.assertIn("WmiMonitorBrightness", src)
-        self.assertIn("[powershell]::Create()", src)
-        self.assertIn('"control":"brightness"', src)
+        worker = src.split("static void Worker()", 1)[1].split("\n    }\n", 1)[0]
+        self.assertIn('Step("brightness", SampleBrightness)', worker)
+        self.assertIn('\\"control\\":\\"brightness\\"', sampler)
         # Idle context comes from the system-wide last-input clock.
         self.assertIn("GetLastInputInfo", src)
-        self.assertIn('"idle_s":', src)
+        self.assertIn('\\"idle_s\\":', sampler)
         # A dead provider stops the sampler instead of polling forever.
-        self.assertIn("$failures -ge 30", src)
+        self.assertIn("if (_brightFailures >= 30) return;", sampler)
 
 
 if __name__ == "__main__":
