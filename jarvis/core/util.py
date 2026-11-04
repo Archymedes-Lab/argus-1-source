@@ -6,6 +6,7 @@ import os
 import re
 import socket
 import subprocess
+import threading
 import time
 
 # Values that legitimately change between runs of the same program. Collapsing
@@ -126,7 +127,80 @@ def package_manager(exists=os.path.exists) -> str:
     return ""
 
 
-def dpkg_owns(path: str, manager=None) -> bool:
+# Package ownership answers, per process (perf/lighter-faster, 2026-11-04).
+# Measured on the live daemon: the PAM, setuid and key-reader audits asked
+# `dpkg -S` once per path spelling, about 0.12 s CPU each because dpkg-query
+# reads every *.list file, and the same few hundred paths every run. Ownership
+# changes only when the package database changes, so an answer is reused only
+# while the database stamp (mtime and size of the status file and the info
+# directory, or the rpm database) is unchanged, and never beyond OWNS_TTL_S.
+# Errors and timeouts are never cached: they keep the old "unknown" answer.
+# The TTL is longer than the hourly audits' cadence (implant, backdoor), or
+# every hourly run would find its answers just expired; the stamp is what
+# invalidates, the TTL only bounds what an in-place edit of a *.list file
+# (which keeps the directory mtime) could hold back.
+OWNS_TTL_S = 6 * 3600.0
+OWNS_MAX = 4096
+_OWNS = {}
+_OWNS_STAMP = [None]
+_OWNS_LOCK = threading.Lock()
+_PKGDB_PATHS = {"dpkg": ("/var/lib/dpkg/status", "/var/lib/dpkg/info", "/var/lib/dpkg/diversions"),
+                "rpm": ("/var/lib/rpm", "/usr/lib/sysimage/rpm",
+                        "/var/lib/rpm/rpmdb.sqlite", "/usr/lib/sysimage/rpm/rpmdb.sqlite")}
+
+
+def pkgdb_stamp(manager, stat=os.stat):
+    """What changes whenever packages are installed, removed or diverted."""
+    out = [manager]
+    for path in _PKGDB_PATHS.get(manager, ()):
+        try:
+            st = stat(path)
+            out.append((path, st.st_mtime_ns, st.st_size))
+        except OSError:
+            out.append((path, None, None))
+    return tuple(out)
+
+
+def _owns_cached(key, stamp, now):
+    with _OWNS_LOCK:
+        if _OWNS_STAMP[0] != stamp:
+            _OWNS.clear()
+            _OWNS_STAMP[0] = stamp
+            return None
+        hit = _OWNS.get(key)
+        if hit is None or now - hit[0] > OWNS_TTL_S or now < hit[0]:
+            return None
+        return hit[1]
+
+
+def _owns_remember(key, stamp, now, value):
+    with _OWNS_LOCK:
+        if _OWNS_STAMP[0] != stamp:
+            return
+        if len(_OWNS) >= OWNS_MAX:
+            _OWNS.clear()
+        _OWNS[key] = (now, value)
+
+
+def _dpkg_search(cands, run):
+    """True/False from one `dpkg -S` over every spelling; None when dpkg failed.
+
+    Same verdict as asking each spelling alone (exit 0 and a "pkg: path" line):
+    a spelling is found unless dpkg-query names it in "no path found". Exit
+    status 1 only means some spelling was not found; anything else is an error.
+    """
+    r = run(["dpkg", "-S", *cands], capture_output=True, text=True, errors="replace", timeout=8)
+    if r.returncode not in (0, 1):
+        return None
+    missing = {line.split("matching pattern ", 1)[1].strip()
+               for line in (r.stderr or "").splitlines() if "no path found matching pattern " in line}
+    found = [c for c in cands if c not in missing]
+    if r.returncode == 0 and not found:
+        return None         # exit 0 yet every spelling reported missing: not a format we know
+    return bool(found) and ":" in (r.stdout or "")
+
+
+def dpkg_owns(path: str, manager=None, run=None, clock=time.time) -> bool:
     """True when a package owns this file, under any of its path spellings.
 
     Asks dpkg on Debian-family systems and rpm on Red Hat/SUSE-family ones
@@ -135,18 +209,41 @@ def dpkg_owns(path: str, manager=None) -> bool:
     expensive: it turns stock system files into critical alerts. When no
     package manager answers, this returns False and callers should treat that
     as "unknown", not as proof the file is unmanaged.
+
+    dpkg is asked once for every spelling, and an answer is reused while the
+    package database is unchanged (OWNS_TTL_S at most); see _OWNS above.
     """
     manager = package_manager() if manager is None else manager
+    run = subprocess.run if run is None else run
+    cands = dpkg_candidates(path)
+    stamp, now = pkgdb_stamp(manager), clock()
+    # The key holds every spelling, the resolved target included: a symlink
+    # repointed elsewhere is a new question, never an old answer.
+    key = (manager, tuple(cands))
+    cached = _owns_cached(key, stamp, now)
+    if cached is not None:
+        return cached
     if manager == "rpm":
         argv, owned = ["rpm", "-qf"], lambda r: r.returncode == 0 and r.stdout.strip()
     else:
-        argv, owned = ["dpkg", "-S"], lambda r: r.returncode == 0 and ":" in r.stdout
-    for cand in dpkg_candidates(path):
         try:
-            r = subprocess.run(argv + [cand], capture_output=True,
-                               text=True, errors="replace", timeout=8)
+            verdict = _dpkg_search(cands, run)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if verdict is not None:
+            _owns_remember(key, stamp, now, verdict)
+            return verdict
+        argv, owned = ["dpkg", "-S"], lambda r: r.returncode == 0 and ":" in r.stdout
+    for cand in cands:
+        try:
+            r = run(argv + [cand], capture_output=True,
+                    text=True, errors="replace", timeout=8)
             if owned(r):
+                _owns_remember(key, stamp, now, True)
                 return True
         except (OSError, subprocess.SubprocessError):
             return False
+    # A nonzero rpm exit (or a dpkg that failed the batched form) can be an
+    # error rather than "not owned": that False is not remembered.
+    return False
     return False
