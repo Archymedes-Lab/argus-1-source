@@ -3,7 +3,10 @@ import { headline, plainFinding } from "./plain";
 
 test("headline never says fine when something is critical, and admits partial coverage", () => {
   expect(headline(90, 0, 0, 0).tone).toBe("ok");
-  expect(headline(90, 0, 0, 3).body).toContain("incomplete");
+  expect(headline(90, 0, 0, 3).partial).toContain("incomplete");
+  expect(headline(90, 0, 0, 0).partial).toBeUndefined();
+  // Each part is a whole key, so every language translates it (a joined string never matched).
+  expect(headline(10, 2, 0, 3).body.startsWith(" ")).toBe(false);
   expect(headline(10, 2, 5, 0).vars.n).toBe(2);
   expect(headline(10, 2, 5, 0).tone).toBe("bad");
   expect(headline(50, 0, 4, 0).tone).toBe("warn");

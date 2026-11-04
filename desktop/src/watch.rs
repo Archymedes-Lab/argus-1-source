@@ -9,6 +9,11 @@
 //!   pulses notify only for findings, blind collectors or a score crossing
 //!   that were not there before. Owner-acknowledged findings never notify.
 //! * Bounded. At most MAX_TOASTS per pulse; the rest are summarised.
+//! * Plain words. Every pop-up says what happened in everyday language that
+//!   anyone can follow (no "collector", "daemon" or "finding"), and keeps the
+//!   facts the daemon reported: the finding's own title, the names of the checks
+//!   that stopped, the score. A plain sentence never claims a compromise or a
+//!   clean bill of health.
 
 use serde_json::Value;
 use std::collections::HashSet;
@@ -63,14 +68,64 @@ fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
 }
 
+/// The interface's plain guide, per finding category: [what it is, why it
+/// matters, what to do]. One source for the app and the pop-ups.
+static GUIDE: &str = include_str!("../ui/src/lib/guide.json");
+
+fn guide(category: &str, part: usize) -> Option<String> {
+    static TABLE: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    let t = TABLE.get_or_init(|| serde_json::from_str(GUIDE).unwrap_or(Value::Null));
+    t.get(category)?.get(part)?.as_str().map(str::to_string)
+}
+
+/// What a finding of this category is, in one everyday sentence, if known.
+pub fn plain_means(category: &str) -> Option<String> {
+    guide(category, 0)
+}
+
+/// What the person can do about a finding of this category, if known.
+pub fn plain_next(category: &str) -> Option<String> {
+    guide(category, 2)
+}
+
+fn plural(n: usize, one: &str, many: &str) -> String {
+    if n == 1 { format!("1 {one}") } else { format!("{n} {many}") }
+}
+
+fn clip(text: &str, max: usize) -> String {
+    let mut out: String = text.chars().take(max).collect();
+    if text.chars().count() > max {
+        out.push('…');
+    }
+    out
+}
+
+/// A pop-up for one new finding: what kind of thing it is, then exactly what
+/// was seen. Only critical and high findings reach here (the pulse's URGENT).
+fn finding_toast(u: &Value) -> Toast {
+    let title = if s(u, "severity") == "critical" {
+        "ARGUS-INSTINCT: please look at this now"
+    } else {
+        "ARGUS-INSTINCT: something is worth a look"
+    };
+    let seen = clip(&crate::brand::brand(s(u, "title")), 160);
+    let cat = s(u, "category");
+    let body = match (plain_means(cat), plain_next(cat)) {
+        (Some(means), Some(next)) => format!("{means} {next} What it saw: {seen}"),
+        (Some(means), None) => format!("{means} What it saw: {seen}"),
+        (None, _) => format!("What it saw: {seen}. Open ARGUS-INSTINCT to see what this means and what to do."),
+    };
+    Toast { kind: Kind::Finding, title: title.into(), body }
+}
+
 impl Watch {
     pub fn pulse(&mut self, p: &Value) -> View {
         let mut toasts = Vec::new();
         if self.outage_announced {
             toasts.push(Toast {
                 kind: Kind::Outage,
-                title: "ARGUS-INSTINCT daemon reachable again".into(),
-                body: "Live insight resumed.".into(),
+                title: "ARGUS-INSTINCT is watching again".into(),
+                body: "The part that checks your computer is answering again.".into(),
             });
         }
         self.down_since = None;
@@ -79,7 +134,7 @@ impl Watch {
         if p.get("ok").and_then(Value::as_bool) != Some(true) {
             return View {
                 level: Level::Unknown,
-                line: format!("ARGUS-INSTINCT could not build its summary ({})", s(p, "error")),
+                line: format!("ARGUS-INSTINCT could not finish its latest report (error: {})", s(p, "error")),
                 toasts,
             };
         }
@@ -105,17 +160,17 @@ impl Watch {
         };
 
         let mut line = match score {
-            Some(n) => format!("ARGUS-INSTINCT {n} · {}", s(p, "grade")),
-            None => "ARGUS-INSTINCT score unknown".to_string(),
+            Some(n) => format!("ARGUS-INSTINCT · safety score {n} ({})", s(p, "grade")),
+            None => "ARGUS-INSTINCT · safety score not known yet".to_string(),
         };
         if !open.is_empty() {
-            line += &format!(" · {} need you", open.len());
+            line += &format!(" · {} to look at", plural(open.len(), "thing", "things"));
         }
         if !blind.is_empty() {
-            line += &format!(" · {} blind", blind.len());
+            line += &format!(" · {} not working", plural(blind.len(), "check", "checks"));
         }
         if healthy == Some(false) {
-            line += " · daemon unhealthy";
+            line += " · a problem with itself";
         }
 
         // New serious findings.
@@ -131,17 +186,16 @@ impl Watch {
             self.seen.insert(id);
         }
         for u in fresh.iter().take(MAX_TOASTS) {
-            toasts.push(Toast {
-                kind: Kind::Finding,
-                title: format!("ARGUS-INSTINCT: {} finding", s(u, "severity")),
-                body: crate::brand::brand(s(u, "title")).chars().take(180).collect(),
-            });
+            toasts.push(finding_toast(u));
         }
         if fresh.len() > MAX_TOASTS {
             toasts.push(Toast {
                 kind: Kind::Finding,
-                title: "ARGUS-INSTINCT: more findings".into(),
-                body: format!("{} more need you — open ARGUS-INSTINCT.", fresh.len() - MAX_TOASTS),
+                title: {
+                    let more = fresh.len() - MAX_TOASTS;
+                    format!("ARGUS-INSTINCT: {more} more {} to look at", if more == 1 { "thing" } else { "things" })
+                },
+                body: "Open ARGUS-INSTINCT to see them all, most urgent first.".into(),
             });
         }
 
@@ -153,9 +207,16 @@ impl Watch {
             if !gone.is_empty() {
                 let names: Vec<&str> = gone.iter().map(|b| s(b, "label")).collect();
                 toasts.push(Toast {
-                kind: Kind::Collector,
-                    title: "ARGUS-INSTINCT: collector blind".into(),
-                    body: format!("Not reporting: {}. Unobserved is not clean.", names.join(", ")),
+                    kind: Kind::Collector,
+                    title: "ARGUS-INSTINCT can't check everything right now".into(),
+                    body: format!(
+                        "{} stopped working: {}. Until {} again, ARGUS-INSTINCT can't tell whether {} of your computer {} okay. Nothing for you to do now; if this keeps happening, open ARGUS-INSTINCT to see why.",
+                        if names.len() == 1 { "This check" } else { "These checks" },
+                        names.join(", "),
+                        if names.len() == 1 { "it works" } else { "they work" },
+                        if names.len() == 1 { "that part" } else { "those parts" },
+                        if names.len() == 1 { "is" } else { "are" },
+                    ),
                 });
             }
         }
@@ -166,9 +227,9 @@ impl Watch {
             let below = n < GATE;
             if self.seeded && below && !self.below_gate {
                 toasts.push(Toast {
-                kind: Kind::Score,
-                    title: format!("ARGUS-INSTINCT score fell to {n}"),
-                    body: format!("Below {GATE}. Open ARGUS-INSTINCT to see what changed."),
+                    kind: Kind::Score,
+                    title: format!("Your safety score dropped to {n} out of 100"),
+                    body: format!("That is below {GATE}, the level ARGUS-INSTINCT aims for. Open ARGUS-INSTINCT to see what changed."),
                 });
             }
             self.below_gate = below;
@@ -187,11 +248,11 @@ impl Watch {
             self.outage_announced = true;
             toasts.push(Toast {
                 kind: Kind::Outage,
-                title: "ARGUS-INSTINCT daemon unreachable".into(),
-                body: "No live insight: monitoring may be down. Check `jarvis serve`.".into(),
+                title: "ARGUS-INSTINCT has stopped watching your computer".into(),
+                body: "The part that checks your computer has not answered for a minute, so nothing is being checked. ARGUS-INSTINCT keeps trying and will tell you when it is back.".into(),
             });
         }
-        View { level: Level::Unknown, line: "ARGUS-INSTINCT daemon unreachable — retrying".into(), toasts }
+        View { level: Level::Unknown, line: "ARGUS-INSTINCT is not answering · trying again".into(), toasts }
     }
 }
 
@@ -210,7 +271,7 @@ mod tests {
         let v = Watch::default().pulse(&pulse(91, json!([]), json!([])));
         assert_eq!(v.level, Level::Good);
         assert!(v.toasts.is_empty());
-        assert_eq!(v.line, "ARGUS-INSTINCT 91 · secure");
+        assert_eq!(v.line, "ARGUS-INSTINCT · safety score 91 (secure)");
     }
 
     #[test]
@@ -242,7 +303,8 @@ mod tests {
         let v = w.pulse(&pulse(80, urgent.clone(), json!([])));
         assert_eq!(v.level, Level::Alarm);
         assert_eq!(v.toasts.len(), 1);
-        assert_eq!(v.toasts[0].body, "ransom note");
+        assert!(v.toasts[0].body.contains("What it saw: ransom note"), "{}", v.toasts[0].body);
+        assert_eq!(v.toasts[0].title, "ARGUS-INSTINCT: please look at this now");
         // Same findings again: nothing new to say.
         assert!(w.pulse(&pulse(80, urgent, json!([]))).toasts.is_empty());
     }
@@ -275,7 +337,7 @@ mod tests {
             .collect();
         let v = w.pulse(&pulse(91, Value::Array(many), json!([])));
         assert_eq!(v.toasts.len(), MAX_TOASTS + 1);
-        assert!(v.toasts.last().unwrap().body.starts_with("7 more"));
+        assert!(v.toasts.last().unwrap().title.contains("7 more things"), "{:?}", v.toasts.last());
     }
 
     #[test]
@@ -309,6 +371,84 @@ mod tests {
         assert_eq!(w.unreachable(t0 + OUTAGE_AFTER).toasts.len(), 1);
         assert!(w.unreachable(t0 + OUTAGE_AFTER * 2).toasts.is_empty());
         let v = w.pulse(&pulse(91, json!([]), json!([])));
-        assert_eq!(v.toasts[0].title, "ARGUS-INSTINCT daemon reachable again");
+        assert_eq!(v.toasts[0].title, "ARGUS-INSTINCT is watching again");
+    }
+
+    /// Words a person who is not an engineer would not understand.
+    const JARGON: [&str; 9] = ["daemon", "collector", "finding", "blind", "unobserved", "jarvis serve", "insight", "unhealthy", "`"];
+
+    fn assert_plain(t: &Toast) {
+        let all = format!("{} {}", t.title, t.body).to_lowercase();
+        for w in JARGON {
+            assert!(!all.contains(w), "jargon {w:?} in {all:?}");
+        }
+    }
+
+    #[test]
+    fn every_kind_of_popup_is_in_plain_words() {
+        let mut w = Watch::default();
+        w.pulse(&pulse(95, json!([]), json!([])));
+        let urgent: Vec<Value> = (0..5)
+            .map(|i| json!({"id": format!("f{i}"), "severity": if i == 0 {"critical"} else {"high"},
+                            "title": "odd listener", "category": if i == 1 {"remote"} else {""}}))
+            .collect();
+        let blind = json!([{"job": "scan", "label": "Processes"}, {"job": "net", "label": "Network"}]);
+        let mut all = w.pulse(&pulse(80, Value::Array(urgent), blind)).toasts;
+        let t0 = Instant::now();
+        w.unreachable(t0);
+        all.extend(w.unreachable(t0 + OUTAGE_AFTER).toasts);
+        all.extend(w.pulse(&pulse(80, json!([]), json!([]))).toasts);
+        // findings (3 + "more"), checks, score, outage, back
+        assert_eq!(all.len(), 8, "{all:?}");
+        for t in &all {
+            assert_plain(t);
+        }
+        let lines = [w.pulse(&pulse(80, json!([{"id": "z", "severity": "high", "title": "t"}]), json!([{"job": "a", "label": "A"}]))).line,
+                     w.unreachable(Instant::now()).line];
+        for l in lines {
+            for j in JARGON {
+                assert!(!l.to_lowercase().contains(j), "jargon {j:?} in tray line {l:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn plain_popups_keep_the_reported_facts() {
+        let mut w = Watch::default();
+        w.pulse(&pulse(95, json!([]), json!([])));
+        let urgent = json!([{"id": "r", "severity": "high", "title": "RDP open to 0.0.0.0", "category": "remote"}]);
+        let blind = json!([{"job": "scan", "label": "Processes"}]);
+        let v = w.pulse(&pulse(70, urgent, blind));
+        let f = v.toasts.iter().find(|t| t.kind == Kind::Finding).unwrap();
+        // What it is, what to do, then exactly what was seen.
+        let expect = format!("{} {} What it saw:", plain_means("remote").unwrap(), plain_next("remote").unwrap());
+        assert!(f.body.starts_with(&expect), "{}", f.body);
+        assert!(f.body.ends_with("What it saw: RDP open to 0.0.0.0"), "{}", f.body);
+        let c = v.toasts.iter().find(|t| t.kind == Kind::Collector).unwrap();
+        assert!(c.body.starts_with("This check stopped working: Processes."), "{}", c.body);
+        let sc = v.toasts.iter().find(|t| t.kind == Kind::Score).unwrap();
+        assert!(sc.title.contains("70 out of 100") && sc.body.contains("below 90"), "{sc:?}");
+        assert!(v.line.contains("1 thing to look at") && v.line.contains("1 check not working"), "{}", v.line);
+    }
+
+    #[test]
+    fn unknown_category_still_says_what_was_seen_and_long_titles_are_clipped() {
+        let mut w = Watch::default();
+        w.pulse(&pulse(95, json!([]), json!([])));
+        let long = "x".repeat(400);
+        let v = w.pulse(&pulse(95, json!([{"id": "l", "severity": "high", "title": long, "category": "no-such-kind"}]), json!([])));
+        let b = &v.toasts[0].body;
+        assert!(b.starts_with("What it saw: xxx") && b.contains("…") && b.chars().count() < 260, "{b}");
+    }
+
+    #[test]
+    fn every_guide_category_has_a_plain_sentence() {
+        let t: Value = serde_json::from_str(GUIDE).unwrap();
+        let cats = t.as_object().unwrap();
+        assert!(cats.len() > 10);
+        for k in cats.keys() {
+            assert!(plain_means(k).is_some_and(|m| m.ends_with('.')), "{k}");
+            assert!(plain_next(k).is_some_and(|m| m.ends_with('.')), "{k}");
+        }
     }
 }

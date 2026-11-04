@@ -7,8 +7,8 @@
   import Segmented from "../components/Segmented.svelte";
   import Select from "../components/Select.svelte";
   import { app } from "../lib/store.svelte";
-  import { tr, sev as sevLabel, agoT } from "../lib/i18n";
-  import { t } from "../lib/words";
+  import { tr, agoT } from "../lib/i18n";
+  import { sevWord, t } from "../lib/words";
   import { plainFinding } from "../lib/plain";
   import { filterFindings, sentence, severityCounts, SEVERITIES, type Finding } from "../lib/model";
 
@@ -25,7 +25,7 @@
   $effect(() => { sev = app.severity ?? ""; });
   $effect(() => { app.severity = sev || null; });
   const sevItems = $derived([{ value: "", label: tr("All"), count: all.length },
-    ...SEVERITIES.map((s) => ({ value: s, label: sevLabel(s), count: counts[s], tone: s === "critical" && counts[s] ? "text-amber-900" : undefined }))]);
+    ...SEVERITIES.map((s) => ({ value: s, label: sevWord(s), count: counts[s], tone: s === "critical" && counts[s] ? "text-amber-900" : undefined }))]);
   const hostItems = $derived( [{ value: "", label: tr("Both hosts") }, { value: "win", label: "Windows" }, { value: "wsl", label: "WSL" }]);
   const jobItems = $derived([{ value: "", label: tr("All collectors") }, ...jobs.map((j) => ({ value: j, label: j }))]);
   // Simple groups the list by kind, so a long list reads as a few plain sentences.
@@ -82,8 +82,13 @@
           <button class="row row-click w-full items-start text-left {app.selected === f ? 'bg-gray-100' : ''}" onclick={() => (app.selected = f)}>
             <span class="w-[76px] shrink-0 pt-px"><Pill severity={f.severity} /></span>
             <span class="min-w-0 flex-1">
-              <span class="block truncate text-label-13">{f.title}</span>
-              <span class="block truncate text-copy-13 text-gray-900">{app.mode === "simple" ? tr(plainFinding(f).means) : f.detail}</span>
+              {#if app.mode === "simple"}
+                <span class="block truncate text-label-13">{tr(plainFinding(f).means)}</span>
+                <span class="block truncate text-copy-13 text-gray-900">{brand(f.title)}</span>
+              {:else}
+                <span class="block truncate text-label-13">{f.title}</span>
+                <span class="block truncate text-copy-13 text-gray-900">{f.detail}</span>
+              {/if}
             </span>
             {#if app.mode === "expert"}<span class="flex shrink-0 items-center gap-1.5 pt-px"><span class="tag">{f.job}</span><span class="tag">{f.host}</span></span>{/if}
           </button>

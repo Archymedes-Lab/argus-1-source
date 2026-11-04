@@ -13,7 +13,7 @@
   import { api, type Autopilot } from "../lib/api";
   import { app, go } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
-  import { collectorSummary, distinct, groupQuestions, severityCounts, type Finding } from "../lib/model";
+  import { collectorSummary, distinct, groupQuestions, isReminder, problemCounts, type Finding } from "../lib/model";
   import { greeting, headline, plainFinding } from "../lib/plain";
 
   let ap = $state<(Autopilot & { health?: { okay: string; monitoring_line: string } }) | null>(null);
@@ -23,11 +23,11 @@
 
   const d = $derived(app.data);
   const findings = $derived((d?.findings ?? []) as Finding[]);
-  const counts = $derived(severityCounts(findings));
+  const counts = $derived(problemCounts(findings));
   const coll = $derived(collectorSummary(d?.jobs ?? []));
   const look = $derived(counts.critical + counts.high);
   const h = $derived(headline(d?.security?.score, counts.critical, counts.high, coll.stale + coll.error));
-  const top = $derived(distinct(findings.filter((f) => f.severity === "critical" || f.severity === "high"), 3));
+  const top = $derived(distinct(findings.filter((f) => !isReminder(f) && (f.severity === "critical" || f.severity === "high")), 3));
   const waiting = $derived(groupQuestions(d?.questions ?? []).length + (d?.fix ?? []).length + (ap?.needs_me?.length ?? 0));
   const score = $derived(d?.security?.score as number | undefined);
   const C = 2 * Math.PI * 52;
@@ -57,7 +57,7 @@
         <div class="min-w-0">
           <p class="text-label-13 text-gray-900">{tr(greeting())}</p>
           <h2 class="mt-1 text-heading-32">{tr(h.title, h.vars)}</h2>
-          <p class="mt-2 text-copy-14 text-gray-900">{tr(h.body, h.vars)}</p>
+          <p class="mt-2 text-copy-14 text-gray-900">{tr(h.body, h.vars)}{#if h.partial} {tr(h.partial)}{/if}</p>
           {#if ap?.health}<p class="mt-3 flex items-center gap-1.5 text-copy-13 text-gray-900"><Sparkles size={14} />{ap.health.okay} {ap.health.monitoring_line}</p>{/if}
         </div>
       </div>

@@ -89,6 +89,8 @@ def build(db_path, scheduler, stamp=None):
                 acked = acknowledge.is_acknowledged(acks, f, name, now=stamp)
                 urgent.append({"id": acknowledge.finding_id(f, name), "job": name,
                                "severity": sev, "title": str(f.get("title", ""))[:200],
+                               # Lets a client explain the kind of thing in plain words.
+                               "category": str(f.get("category") or "")[:40],
                                "acknowledged": bool(acked)})
     # A release without the administrator sensor must not read as full coverage:
     # name every job it affects, with the same reason everywhere (platform/admin_sensor.py).

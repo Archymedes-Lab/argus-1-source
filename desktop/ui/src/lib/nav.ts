@@ -12,6 +12,10 @@ import Cpu from "@lucide/svelte/icons/cpu";
 import Smartphone from "@lucide/svelte/icons/smartphone";
 import type { View } from "./store.svelte";
 
+/** Views Simple leaves out of the sidebar: technical detail, or not about this computer.
+ *  They stay one switch away (Settings, Detail level), and links can still open them. */
+export const EXPERT_ONLY: View[] = ["collectors", "coverage", "world"];
+
 export type NavGroup = "main" | "explore" | "bottom";
 
 export const NAV: { view: View; label: string; icon: typeof LayoutGrid; group: NavGroup }[] = [

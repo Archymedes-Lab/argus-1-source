@@ -24,9 +24,9 @@ export function plainFinding(f: Finding): Plain {
   };
 }
 
-export interface Headline { tone: "ok" | "warn" | "bad" | "unknown"; title: string; body: string; vars: Record<string, number> }
+export interface Headline { tone: "ok" | "warn" | "bad" | "unknown"; title: string; body: string; vars: Record<string, number>; partial?: string }
 
-const PARTIAL = " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.";
+export const PARTIAL = "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.";
 
 /** One calm sentence about the whole computer, from the numbers the daemon reports.
  *  `title` and `body` are English keys with {n} placeholders; the view translates them. */
@@ -34,16 +34,16 @@ export function headline(score: number | null | undefined, critical: number, hig
   if (score === null || score === undefined) {
     return { tone: "unknown", title: "ARGUS-INSTINCT is still getting a look at your computer", body: "Check back in a minute.", vars: {} };
   }
-  const watch = notReporting ? PARTIAL : "";
+  const partial = notReporting ? PARTIAL : undefined;
   if (critical) {
     return { tone: "bad", title: critical === 1 ? "1 thing needs your attention" : "{n} things need your attention",
-      body: "Start with the most urgent one below. This is not proof that something is wrong, only that it is worth a look." + watch, vars: { n: critical } };
+      body: "Start with the most urgent one below. This is not proof that something is wrong, only that it is worth a look.", vars: { n: critical }, partial };
   }
   if (high) {
     return { tone: "warn", title: "Nothing urgent, but a few things are worth a look",
-      body: (high === 1 ? "1 item could use your attention when you have a minute." : "{n} items could use your attention when you have a minute.") + watch, vars: { n: high } };
+      body: high === 1 ? "1 item could use your attention when you have a minute." : "{n} items could use your attention when you have a minute.", vars: { n: high }, partial };
   }
-  return { tone: "ok", title: "Your computer looks fine", body: "Nothing needs you right now." + watch, vars: {} };
+  return { tone: "ok", title: "Your computer looks fine", body: "Nothing needs you right now.", vars: {}, partial };
 }
 
 /** A friendly opener for the time of day. */

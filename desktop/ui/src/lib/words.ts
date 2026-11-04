@@ -2,7 +2,7 @@
 // says the same thing in everyday words. Only wording differs: every number,
 // path and severity stays what the daemon reported.
 import { app } from "./store.svelte";
-import { tr } from "./i18n";
+import { sev, tr } from "./i18n";
 
 export const W = {
   // navigation
@@ -18,6 +18,11 @@ export const W = {
   "nav.phone": ["Alerts on my phone", "Phone"],
   "nav.pricing": ["Plan", "Pricing"],
   "nav.settings": ["Settings", "Settings"],
+  // severity: Simple says how soon, Expert keeps the daemon's level
+  "sev.critical": ["Urgent", "Critical"],
+  "sev.high": ["Look soon", "High"],
+  "sev.medium": ["Worth a look", "Medium"],
+  "sev.low": ["For your info", "Low"],
   // findings
   "findings.filter": ["Search what I found", "Filter findings"],
   "findings.none": ["Nothing to show.", "No findings."],
@@ -63,4 +68,10 @@ export type Key = keyof typeof W;
 export function t(key: Key): string {
   const [simple, expert] = W[key];
   return tr(app.mode === "simple" ? simple : expert || simple);
+}
+
+/** A severity label in the current register; unknown levels keep their own name. */
+export function sevWord(severity: string): string {
+  const k = `sev.${severity}` as Key;
+  return k in W ? t(k) : sev(severity);
 }

@@ -26,7 +26,7 @@ export const app = $state({
   loading: false,
   error: "",
   daemon: "connecting" as "connecting" | "live" | "down",
-  status: { phase: "starting", message: "Starting ARGUS-1", detail: "" } as AppStatus,
+  status: { phase: "starting", message: "Starting ARGUS-INSTINCT", detail: "" } as AppStatus,
   updatedAt: 0,
   view: "overview" as View,
   query: "",

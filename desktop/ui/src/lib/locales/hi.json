@@ -1,5 +1,4 @@
 {
- " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": " ARGUS-INSTINCT की कुछ जाँचें अभी रिपोर्ट नहीं कर रही हैं, इसलिए यह तस्वीर अधूरी हो सकती है।",
  "1 critical finding needs attention": "1 गंभीर खोज पर आपका ध्यान चाहिए",
  "1 hour": "1 घंटा",
  "1 item could use your attention when you have a minute.": "1 आइटम पर समय मिलने पर ध्यान देना अच्छा रहेगा।",
@@ -120,6 +119,7 @@
  "Findings": "खोजें",
  "Fix proposal · {status}": "सुधार प्रस्ताव · {status}",
  "Fix proposals": "सुधार प्रस्ताव",
+ "For your info": "आपकी जानकारी के लिए",
  "Forensics": "फ़ॉरेंसिक",
  "Fresh": "अद्यतन",
  "GeoSecurity": "जियोसिक्योरिटी",
@@ -166,6 +166,7 @@
  "Location": "स्थान",
  "Location unavailable": "लोकेशन उपलब्ध नहीं",
  "Look closer": "और ध्यान से देखें",
+ "Look soon": "जल्द देखें",
  "Low": "निम्न",
  "Malware protection (Windows Defender)": "मैलवेयर सुरक्षा (Windows Defender)",
  "Medium": "मध्यम",
@@ -306,10 +307,12 @@
  "Show critical": "गंभीर दिखाएँ",
  "Show high": "उच्च दिखाएँ",
  "Show {n} more": "{n} और दिखाएँ",
+ "Showing the last state it reported.": "इसने जो आख़िरी स्थिति बताई थी, वही दिखाई जा रही है।",
  "Simple": "सरल",
  "Simple explains things in everyday words and hides identifiers. Expert shows collectors, paths and evidence.": "सरल मोड रोज़मर्रा के शब्दों में समझाता है और पहचान-चिह्न छिपाता है। विशेषज्ञ मोड कलेक्टर, पाथ और सबूत दिखाता है।",
  "Simple uses everyday words and hides technical details. Expert shows everything ARGUS-INSTINCT knows.": "सरल मोड रोज़मर्रा के शब्द इस्तेमाल करता है और तकनीकी ब्योरे छिपाता है। विशेषज्ञ मोड वह सब दिखाता है जो ARGUS-INSTINCT जानता है।",
  "Skip for now": "अभी छोड़ें",
+ "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": "ARGUS-INSTINCT की कुछ जाँचें अभी रिपोर्ट नहीं कर रही हैं, इसलिए यह तस्वीर अधूरी हो सकती है।",
  "Source": "स्रोत",
  "Sources": "स्रोत",
  "Sources working": "काम कर रहे स्रोत",
@@ -346,6 +349,7 @@
  "Unavailable": "अनुपलब्ध",
  "Up to date": "अद्यतन",
  "Updated {when}": "अपडेट: {when}",
+ "Urgent": "तुरंत",
  "Virus protection": "वायरस सुरक्षा",
  "Waiting for payment to complete in your browser…": "आपके ब्राउज़र में भुगतान पूरा होने की प्रतीक्षा…",
  "Waiting for your phone… {time} left": "आपके फ़ोन की प्रतीक्षा… {time} बाकी",
@@ -376,6 +380,7 @@
  "Windows' virus protection is on, but its virus list is {n} days old. Run Windows Update.": "Windows की वायरस सुरक्षा चालू है, पर उसकी वायरस सूची {n} दिन पुरानी है। Windows Update चलाएँ।",
  "World": "दुनिया",
  "World events": "दुनिया की घटनाएँ",
+ "Worth a look": "एक बार देखें",
  "Worth a look first": "पहले देखने लायक",
  "Yes": "हाँ",
  "Yes, that was me": "हाँ, वह मैं था",
@@ -422,6 +427,5 @@
  "{n}h ago": "{n} घंटे पहले",
  "{n}m ago": "{n} मिनट पहले",
  "{n}s ago": "{n} सेकंड पहले",
- "“{name}” wants to receive alerts from this computer.": "“{name}” इस कंप्यूटर से अलर्ट पाना चाहता है।",
- "Showing the last state it reported.": "इसने जो आख़िरी स्थिति बताई थी, वही दिखाई जा रही है।"
+ "“{name}” wants to receive alerts from this computer.": "“{name}” इस कंप्यूटर से अलर्ट पाना चाहता है।"
 }

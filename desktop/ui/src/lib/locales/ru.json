@@ -1,5 +1,4 @@
 {
- " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": " Некоторые проверки ARGUS-INSTINCT сейчас не отвечают, поэтому картина может быть неполной.",
  "1 critical finding needs attention": "1 критическая находка требует внимания",
  "1 hour": "1 час",
  "1 item could use your attention when you have a minute.": "1 пункт стоит проверить, когда будет минутка.",
@@ -120,6 +119,7 @@
  "Findings": "Находки",
  "Fix proposal · {status}": "Предложение исправления · {status}",
  "Fix proposals": "Предложения исправлений",
+ "For your info": "Для сведения",
  "Forensics": "Криминалистика",
  "Fresh": "Актуально",
  "GeoSecurity": "ГеоБезопасность",
@@ -166,6 +166,7 @@
  "Location": "Расположение",
  "Location unavailable": "Местоположение недоступно",
  "Look closer": "Посмотреть внимательнее",
+ "Look soon": "Скоро посмотреть",
  "Low": "Низкий",
  "Malware protection (Windows Defender)": "Защита от вредоносного ПО (Windows Defender)",
  "Medium": "Средний",
@@ -306,10 +307,12 @@
  "Show critical": "Показать критические",
  "Show high": "Показать высокие",
  "Show {n} more": "Показать ещё {n}",
+ "Showing the last state it reported.": "Показано последнее сообщённое состояние.",
  "Simple": "Простой",
  "Simple explains things in everyday words and hides identifiers. Expert shows collectors, paths and evidence.": "Простой режим объясняет повседневными словами и скрывает идентификаторы. Режим эксперта показывает сборщики, пути и данные.",
  "Simple uses everyday words and hides technical details. Expert shows everything ARGUS-INSTINCT knows.": "Простой режим использует повседневные слова и скрывает технические подробности. Режим эксперта показывает всё, что знает ARGUS-INSTINCT.",
  "Skip for now": "Пропустить пока",
+ "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": "Некоторые проверки ARGUS-INSTINCT сейчас не отвечают, поэтому картина может быть неполной.",
  "Source": "Источник",
  "Sources": "Источники",
  "Sources working": "Работающие источники",
@@ -346,6 +349,7 @@
  "Unavailable": "Недоступно",
  "Up to date": "Актуально",
  "Updated {when}": "Обновлено {when}",
+ "Urgent": "Срочно",
  "Virus protection": "Защита от вирусов",
  "Waiting for payment to complete in your browser…": "Ожидание завершения оплаты в браузере…",
  "Waiting for your phone… {time} left": "Ожидание телефона… осталось {time}",
@@ -376,6 +380,7 @@
  "Windows' virus protection is on, but its virus list is {n} days old. Run Windows Update.": "Защита Windows включена, но её база вирусов устарела на {n} дн. Запустите Центр обновления Windows.",
  "World": "Мир",
  "World events": "События в мире",
+ "Worth a look": "Стоит взглянуть",
  "Worth a look first": "Стоит посмотреть в первую очередь",
  "Yes": "Да",
  "Yes, that was me": "Да, это был я",
@@ -422,6 +427,5 @@
  "{n}h ago": "{n} ч назад",
  "{n}m ago": "{n} мин назад",
  "{n}s ago": "{n} с назад",
- "“{name}” wants to receive alerts from this computer.": "«{name}» хочет получать оповещения с этого компьютера.",
- "Showing the last state it reported.": "Показано последнее сообщённое состояние."
+ "“{name}” wants to receive alerts from this computer.": "«{name}» хочет получать оповещения с этого компьютера."
 }

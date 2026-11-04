@@ -1,5 +1,4 @@
 {
- " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": " ARGUS-INSTINCT의 일부 점검이 지금 응답하지 않아 이 현황이 완전하지 않을 수 있습니다.",
  "1 critical finding needs attention": "심각한 발견 1건에 주의가 필요합니다",
  "1 hour": "1시간",
  "1 item could use your attention when you have a minute.": "시간 날 때 확인해 볼 항목이 1개 있습니다.",
@@ -120,6 +119,7 @@
  "Findings": "발견 항목",
  "Fix proposal · {status}": "수정 제안 · {status}",
  "Fix proposals": "수정 제안",
+ "For your info": "참고",
  "Forensics": "포렌식",
  "Fresh": "최신",
  "GeoSecurity": "지오시큐리티",
@@ -166,6 +166,7 @@
  "Location": "위치",
  "Location unavailable": "위치를 알 수 없음",
  "Look closer": "자세히 보기",
+ "Look soon": "곧 확인",
  "Low": "낮음",
  "Malware protection (Windows Defender)": "악성 코드 방어(Windows Defender)",
  "Medium": "보통",
@@ -306,10 +307,12 @@
  "Show critical": "심각 항목 보기",
  "Show high": "높음 항목 보기",
  "Show {n} more": "{n}개 더 보기",
+ "Showing the last state it reported.": "마지막으로 보고된 상태를 표시합니다.",
  "Simple": "간단",
  "Simple explains things in everyday words and hides identifiers. Expert shows collectors, paths and evidence.": "간단 모드는 일상적인 말로 설명하고 식별자를 숨깁니다. 전문가 모드는 수집기, 경로, 증거를 보여줍니다.",
  "Simple uses everyday words and hides technical details. Expert shows everything ARGUS-INSTINCT knows.": "간단 모드는 일상적인 말을 쓰고 기술적 세부 정보를 숨깁니다. 전문가 모드는 ARGUS-INSTINCT이 아는 모든 것을 보여줍니다.",
  "Skip for now": "나중에 하기",
+ "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": "ARGUS-INSTINCT의 일부 점검이 지금 응답하지 않아 이 현황이 완전하지 않을 수 있습니다.",
  "Source": "출처",
  "Sources": "출처",
  "Sources working": "정상 작동 출처",
@@ -346,6 +349,7 @@
  "Unavailable": "사용할 수 없음",
  "Up to date": "최신",
  "Updated {when}": "업데이트: {when}",
+ "Urgent": "긴급",
  "Virus protection": "바이러스 방어",
  "Waiting for payment to complete in your browser…": "브라우저에서 결제가 끝나기를 기다리는 중…",
  "Waiting for your phone… {time} left": "휴대폰을 기다리는 중… {time} 남음",
@@ -376,6 +380,7 @@
  "Windows' virus protection is on, but its virus list is {n} days old. Run Windows Update.": "Windows 바이러스 방어는 켜져 있지만 바이러스 목록이 {n}일 전 것입니다. Windows 업데이트를 실행하세요.",
  "World": "세계",
  "World events": "세계 사건",
+ "Worth a look": "확인해 볼 만함",
  "Worth a look first": "먼저 살펴볼 것",
  "Yes": "예",
  "Yes, that was me": "예, 제가 한 것입니다",
@@ -422,6 +427,5 @@
  "{n}h ago": "{n}시간 전",
  "{n}m ago": "{n}분 전",
  "{n}s ago": "{n}초 전",
- "“{name}” wants to receive alerts from this computer.": "“{name}”이(가) 이 컴퓨터의 알림을 받으려고 합니다.",
- "Showing the last state it reported.": "마지막으로 보고된 상태를 표시합니다."
+ "“{name}” wants to receive alerts from this computer.": "“{name}”이(가) 이 컴퓨터의 알림을 받으려고 합니다."
 }

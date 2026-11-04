@@ -1,7 +1,7 @@
 <script lang="ts">
   import Shield from "@lucide/svelte/icons/shield";
   import { app, go, type View } from "../lib/store.svelte";
-  import { NAV } from "../lib/nav";
+  import { EXPERT_ONLY, NAV } from "../lib/nav";
   import { t, type Key } from "../lib/words";
   import { tr } from "../lib/i18n";
   import { collectorSummary, groupQuestions, problemCounts } from "../lib/model";
@@ -33,11 +33,11 @@
     <span class="text-heading-16">ARGUS-INSTINCT</span>
   </div>
   <nav class="flex flex-col gap-0.5 px-2 pt-2" aria-label={tr("Sections")}>
-    {#each NAV.filter((n) => n.group === "main" && (app.mode === "expert" || n.view !== "collectors")) as n (n.view)}{@render item(n)}{/each}
+    {#each NAV.filter((n) => n.group === "main" && (app.mode === "expert" || !EXPERT_ONLY.includes(n.view))) as n (n.view)}{@render item(n)}{/each}
   </nav>
   <p class="px-4.5 pt-4 pb-1 text-label-12 text-gray-700">{tr("Explore")}</p>
   <nav class="flex flex-col gap-0.5 px-2" aria-label={tr("Explore")}>
-    {#each NAV.filter((n) => n.group === "explore") as n (n.view)}{@render item(n)}{/each}
+    {#each NAV.filter((n) => n.group === "explore" && (app.mode === "expert" || !EXPERT_ONLY.includes(n.view))) as n (n.view)}{@render item(n)}{/each}
   </nav>
   <div class="mt-auto flex flex-col gap-0.5 px-2 pb-2">
     {#each NAV.filter((n) => n.group === "bottom") as n (n.view)}{@render item(n)}{/each}

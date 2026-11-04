@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { sev } from "../lib/i18n";
+  import { sevWord } from "../lib/words";
   let { severity }: { severity: string } = $props();
   const known = ["critical", "high", "medium", "low", "ok"];
 </script>
-<span class="pill pill-{known.includes(severity) ? severity : 'low'}">{sev(severity)}</span>
+<span class="pill pill-{known.includes(severity) ? severity : 'low'}">{sevWord(severity)}</span>

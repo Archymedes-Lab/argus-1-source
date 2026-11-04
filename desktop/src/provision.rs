@@ -103,7 +103,7 @@ fn run_pair(cmd: &PairCommand) -> Result<String, String> {
         use std::os::windows::process::CommandExt;
         c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flash for the user
     }
-    let mut child = c.spawn().map_err(|e| format!("could not start the ARGUS-1 program ({e})"))?;
+    let mut child = c.spawn().map_err(|e| format!("could not start the ARGUS-INSTINCT program ({e})"))?;
     let mut out = child.stdout.take().ok_or("no output pipe")?;
     // Read on a thread so a stalled child cannot hang the app past the timeout.
     let (tx, rx) = std::sync::mpsc::channel();
@@ -116,14 +116,14 @@ fn run_pair(cmd: &PairCommand) -> Result<String, String> {
         Ok(s) => s,
         Err(_) => {
             let _ = child.kill();
-            return Err("ARGUS-1 did not answer the pairing request in time".into());
+            return Err("ARGUS-INSTINCT did not answer the pairing request in time".into());
         }
     };
     let status = child.wait().map_err(|e| e.to_string())?;
     if !status.success() {
-        return Err("ARGUS-1 refused to pair this app".into());
+        return Err("ARGUS-INSTINCT refused to pair this app".into());
     }
-    token_from_output(&stdout).ok_or_else(|| "ARGUS-1 did not return a client token".to_string())
+    token_from_output(&stdout).ok_or_else(|| "ARGUS-INSTINCT did not return a client token".to_string())
 }
 
 /// Store `token` at `path`: exclusive temp file, owner-only, then rename.
@@ -200,7 +200,7 @@ pub fn provision_with(path: &Path, issue: &dyn Fn() -> Result<String, String>) -
 }
 
 fn missing_runtime() -> String {
-    "ARGUS-1's monitoring program is not installed on this computer. Run the ARGUS-1 installer, \
+    "The part of ARGUS-INSTINCT that checks your computer is not installed. Run the ARGUS-INSTINCT installer, \
      or install the server edition for a Linux machine."
         .into()
 }

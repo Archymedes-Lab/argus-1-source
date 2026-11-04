@@ -30,7 +30,7 @@ export function collectKeys(root = "src"): string[] {
     "Nothing urgent, but a few things are worth a look",
     "1 item could use your attention when you have a minute.", "{n} items could use your attention when you have a minute.",
     "Your computer looks fine", "Nothing needs you right now.",
-    " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.",
+    "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.",
   ];
   for (const k of extra) keys.add(k);
   return [...keys].sort();

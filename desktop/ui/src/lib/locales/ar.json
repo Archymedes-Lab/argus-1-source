@@ -1,5 +1,4 @@
 {
- " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": " بعض فحوصات ARGUS-INSTINCT لا تُبلِغ حالياً، لذا قد تكون هذه الصورة غير مكتملة.",
  "1 critical finding needs attention": "هناك نتيجة حرجة واحدة تحتاج إلى انتباهك",
  "1 hour": "ساعة واحدة",
  "1 item could use your attention when you have a minute.": "عنصر واحد يستحق انتباهك عندما يتوفر لديك وقت.",
@@ -120,6 +119,7 @@
  "Findings": "النتائج",
  "Fix proposal · {status}": "اقتراح إصلاح · {status}",
  "Fix proposals": "اقتراحات الإصلاح",
+ "For your info": "للعلم",
  "Forensics": "التحليل الجنائي",
  "Fresh": "محدَّث",
  "GeoSecurity": "الأمن الجغرافي",
@@ -166,6 +166,7 @@
  "Location": "الموقع",
  "Location unavailable": "الموقع غير متاح",
  "Look closer": "ألقِ نظرة أدق",
+ "Look soon": "انظر قريبًا",
  "Low": "منخفض",
  "Malware protection (Windows Defender)": "الحماية من البرمجيات الخبيثة (Windows Defender)",
  "Medium": "متوسط",
@@ -306,10 +307,12 @@
  "Show critical": "عرض الحرجة",
  "Show high": "عرض المرتفعة",
  "Show {n} more": "عرض {n} أخرى",
+ "Showing the last state it reported.": "يُعرض آخر وضع أبلغ عنه.",
  "Simple": "مبسّط",
  "Simple explains things in everyday words and hides identifiers. Expert shows collectors, paths and evidence.": "يشرح الوضع المبسّط بكلمات يومية ويُخفي المعرّفات. ويعرض وضع الخبير المجمّعات والمسارات والأدلة.",
  "Simple uses everyday words and hides technical details. Expert shows everything ARGUS-INSTINCT knows.": "يستخدم الوضع المبسّط كلمات يومية ويُخفي التفاصيل التقنية. ويعرض وضع الخبير كل ما يعرفه ARGUS-INSTINCT.",
  "Skip for now": "تخطَّ الآن",
+ "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": "بعض فحوصات ARGUS-INSTINCT لا تُبلِغ حالياً، لذا قد تكون هذه الصورة غير مكتملة.",
  "Source": "المصدر",
  "Sources": "المصادر",
  "Sources working": "المصادر العاملة",
@@ -346,6 +349,7 @@
  "Unavailable": "غير متاح",
  "Up to date": "محدَّث",
  "Updated {when}": "آخر تحديث {when}",
+ "Urgent": "عاجل",
  "Virus protection": "الحماية من الفيروسات",
  "Waiting for payment to complete in your browser…": "في انتظار إتمام الدفع في متصفحك…",
  "Waiting for your phone… {time} left": "بانتظار هاتفك… بقي {time}",
@@ -376,6 +380,7 @@
  "Windows' virus protection is on, but its virus list is {n} days old. Run Windows Update.": "حماية Windows مفعّلة لكن قائمة الفيروسات عمرها {n} يوماً. شغّل Windows Update.",
  "World": "العالم",
  "World events": "أحداث العالم",
+ "Worth a look": "يستحق نظرة",
  "Worth a look first": "يستحق النظر أولاً",
  "Yes": "نعم",
  "Yes, that was me": "نعم، كنت أنا",
@@ -422,6 +427,5 @@
  "{n}h ago": "قبل {n} ساعة",
  "{n}m ago": "قبل {n} دقيقة",
  "{n}s ago": "قبل {n} ثانية",
- "“{name}” wants to receive alerts from this computer.": "\"{name}\" يريد استلام التنبيهات من هذا الحاسوب.",
- "Showing the last state it reported.": "يُعرض آخر وضع أبلغ عنه."
+ "“{name}” wants to receive alerts from this computer.": "\"{name}\" يريد استلام التنبيهات من هذا الحاسوب."
 }

@@ -72,6 +72,13 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([u["title"] for u in pulse["urgent"]], ["odd listener", "ransom note"])
         self.assertTrue(pulse["urgent"][1]["acknowledged"])
 
+    def test_urgent_items_carry_their_category_for_plain_wording(self):
+        self._save("hunt", [{"severity": "high", "title": "odd listener", "category": "remote"},
+                            {"severity": "critical", "title": "no category"}])
+        by = {u["title"]: u for u in stream.build(self.db, None)["urgent"]}
+        self.assertEqual(by["odd listener"]["category"], "remote")
+        self.assertEqual(by["no category"]["category"], "")   # absent: empty, never invented
+
     def test_version_ignores_timestamp_but_tracks_content(self):
         a = stream.build(self.db, None, stamp=1_000_000)
         b = stream.build(self.db, None, stamp=1_000_000)

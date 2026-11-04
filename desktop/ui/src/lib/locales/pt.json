@@ -1,5 +1,4 @@
 {
- " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": " Algumas verificações do ARGUS-INSTINCT não estão respondendo agora, então este panorama pode estar incompleto.",
  "1 critical finding needs attention": "1 achado crítico precisa da sua atenção",
  "1 hour": "1 hora",
  "1 item could use your attention when you have a minute.": "1 item merece sua atenção quando você tiver um momento.",
@@ -120,6 +119,7 @@
  "Findings": "Achados",
  "Fix proposal · {status}": "Proposta de correção · {status}",
  "Fix proposals": "Propostas de correção",
+ "For your info": "Para sua informação",
  "Forensics": "Forense",
  "Fresh": "Atualizado",
  "GeoSecurity": "GeoSegurança",
@@ -166,6 +166,7 @@
  "Location": "Local",
  "Location unavailable": "Localização indisponível",
  "Look closer": "Olhar mais de perto",
+ "Look soon": "Veja em breve",
  "Low": "Baixo",
  "Malware protection (Windows Defender)": "Proteção contra malware (Windows Defender)",
  "Medium": "Médio",
@@ -306,10 +307,12 @@
  "Show critical": "Mostrar críticos",
  "Show high": "Mostrar altos",
  "Show {n} more": "Mostrar mais {n}",
+ "Showing the last state it reported.": "Mostrando o último estado informado.",
  "Simple": "Simples",
  "Simple explains things in everyday words and hides identifiers. Expert shows collectors, paths and evidence.": "O modo Simples explica com palavras do dia a dia e oculta identificadores. O modo Especialista mostra coletores, caminhos e evidências.",
  "Simple uses everyday words and hides technical details. Expert shows everything ARGUS-INSTINCT knows.": "O modo Simples usa palavras do dia a dia e oculta detalhes técnicos. O modo Especialista mostra tudo o que o ARGUS-INSTINCT sabe.",
  "Skip for now": "Pular por agora",
+ "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": "Algumas verificações do ARGUS-INSTINCT não estão respondendo agora, então este panorama pode estar incompleto.",
  "Source": "Fonte",
  "Sources": "Fontes",
  "Sources working": "Fontes funcionando",
@@ -346,6 +349,7 @@
  "Unavailable": "Indisponível",
  "Up to date": "Atualizado",
  "Updated {when}": "Atualizado {when}",
+ "Urgent": "Urgente",
  "Virus protection": "Proteção contra vírus",
  "Waiting for payment to complete in your browser…": "Aguardando a conclusão do pagamento no seu navegador…",
  "Waiting for your phone… {time} left": "Aguardando seu telefone… faltam {time}",
@@ -376,6 +380,7 @@
  "Windows' virus protection is on, but its virus list is {n} days old. Run Windows Update.": "A proteção antivírus do Windows está ativa, mas a lista de vírus tem {n} dias. Execute o Windows Update.",
  "World": "Mundo",
  "World events": "Eventos no mundo",
+ "Worth a look": "Vale uma olhada",
  "Worth a look first": "Vale olhar primeiro",
  "Yes": "Sim",
  "Yes, that was me": "Sim, fui eu",
@@ -422,6 +427,5 @@
  "{n}h ago": "há {n} h",
  "{n}m ago": "há {n} min",
  "{n}s ago": "há {n} s",
- "“{name}” wants to receive alerts from this computer.": "“{name}” quer receber alertas deste computador.",
- "Showing the last state it reported.": "Mostrando o último estado informado."
+ "“{name}” wants to receive alerts from this computer.": "“{name}” quer receber alertas deste computador."
 }

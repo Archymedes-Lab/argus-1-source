@@ -76,7 +76,7 @@ fn blind_reason(b: &Value) -> String {
     }
     match b.get("freshness").and_then(Value::as_str) {
         Some("STALE") => "it has not reported recently".into(),
-        _ => "no reason reported".into(),
+        _ => "no reason given".into(),
     }
 }
 
@@ -84,7 +84,7 @@ fn blind_reason(b: &Value) -> String {
 /// that cannot run; each is named so the limitation is explained, not hidden.
 pub fn classify_pulse(p: &Value) -> Status {
     if p.get("ok").and_then(Value::as_bool) != Some(true) {
-        return Status::new(Phase::Degraded, "ARGUS-1 is running but did not report its state", "Its last report was incomplete.");
+        return Status::new(Phase::Degraded, "ARGUS-INSTINCT is running, but its latest report did not come through", "It tries again by itself in a moment.");
     }
     let blind: Vec<String> = p
         .get("blind")
@@ -92,21 +92,25 @@ pub fn classify_pulse(p: &Value) -> Status {
         .map(|a| {
             a.iter()
                 .map(|b| {
-                    let name = b.get("label").or_else(|| b.get("job")).and_then(Value::as_str).unwrap_or("a collector");
+                    let name = b.get("label").or_else(|| b.get("job")).and_then(Value::as_str).unwrap_or("a check");
                     format!("{name}: {}", blind_reason(b))
                 })
                 .collect()
         })
         .unwrap_or_default();
     if p.get("healthy").and_then(Value::as_bool) != Some(true) {
-        return Status::new(Phase::Degraded, "ARGUS-1 is running but reports a problem with itself", blind.join("; "));
+        return Status::new(Phase::Degraded, "ARGUS-INSTINCT is running, but says part of it is not working", blind.join("; "));
     }
     if !blind.is_empty() {
         let n = blind.len();
-        let msg = format!("Monitoring is partial: {n} area{} cannot be fully watched", if n == 1 { "" } else { "s" });
+        let msg = if n == 1 {
+            "ARGUS-INSTINCT can't fully check 1 part of your computer right now".to_string()
+        } else {
+            format!("ARGUS-INSTINCT can't fully check {n} parts of your computer right now")
+        };
         return Status::new(Phase::Degraded, &msg, blind.join("; "));
     }
-    Status::new(Phase::Live, "Monitoring is active", "")
+    Status::new(Phase::Live, "ARGUS-INSTINCT is watching your computer", "")
 }
 
 /// Restart budget: at most `MAX_STARTS` starts per `WINDOW`.
@@ -199,14 +203,14 @@ fn start_task() -> Result<bool, String> {
     r.args(["/Run", "/TN", TASK_NAME]).stdout(Stdio::null()).stderr(Stdio::null());
     match hidden(&mut r).status() {
         Ok(s) if s.success() => Ok(true),
-        _ => Err("Windows would not start the ARGUS-1 background task".into()),
+        _ => Err("Windows would not start the ARGUS-INSTINCT background task".into()),
     }
 }
 
 /// Start the daemon directly, detached from this app (closing the app must not
 /// stop monitoring). Only used when the installer's task does not exist.
 fn start_direct(env: &dyn Fn(&str) -> Option<String>, port: u16) -> Result<(), String> {
-    let home = runtime_home(env).ok_or("ARGUS-1's monitoring program was not found")?;
+    let home = runtime_home(env).ok_or("The part of ARGUS-INSTINCT that checks your computer was not found")?;
     let port_s = port.to_string();
     let mut c = match (env("JARVIS_PYTHON").filter(|p| !p.is_empty()), packaged_exe(&home, &|p| p.exists())) {
         (Some(py), _) => {
@@ -234,7 +238,7 @@ fn start_direct(env: &dyn Fn(&str) -> Option<String>, port: u16) -> Result<(), S
         use std::os::windows::process::CommandExt;
         c.creation_flags(0x0800_0000 | 0x0000_0008); // no window, detached from this app
     }
-    c.spawn().map(|_| ()).map_err(|e| format!("could not start ARGUS-1 ({e})"))
+    c.spawn().map(|_| ()).map_err(|e| format!("could not start ARGUS-INSTINCT ({e})"))
 }
 
 /// Make sure the daemon answers, starting it when it does not. Returns the
@@ -245,18 +249,18 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
     if !installed(&env, &|p| p.exists()) {
         return Status::new(
             Phase::NotInstalled,
-            "ARGUS-1's monitoring program is not installed on this computer",
-            "Run the ARGUS-1 installer to add it. Nothing is being monitored until then.",
+            "The part of ARGUS-INSTINCT that checks your computer is not installed",
+            "Run the ARGUS-INSTINCT installer to add it. Nothing is being checked until then.",
         );
     }
     if listening(port) {
-        return Status::new(Phase::Starting, "Connecting to ARGUS-1", "");
+        return Status::new(Phase::Starting, "Connecting to ARGUS-INSTINCT", "");
     }
     if !governor.allow(Instant::now()) {
         return Status::new(
             Phase::Stopped,
-            "ARGUS-1 monitoring has stopped and could not be restarted",
-            "It was restarted several times in the last ten minutes and stopped each time. Nothing is being monitored. Restart the computer, or reinstall ARGUS-1 if this continues.",
+            "ARGUS-INSTINCT has stopped and could not be started again",
+            "It was restarted several times in the last ten minutes and stopped each time. Nothing is being checked. Restart the computer, or reinstall ARGUS-INSTINCT if this keeps happening.",
         );
     }
     // The task is the supported way. If Windows will not run it (no interactive
@@ -268,18 +272,18 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
         Err(task_err) => start_direct(&env, port).map_err(|e| format!("{task_err}; {e}")),
     };
     if let Err(e) = started {
-        return Status::new(Phase::Stopped, "ARGUS-1 monitoring is not running and could not be started", e);
+        return Status::new(Phase::Stopped, "ARGUS-INSTINCT is not running and could not be started", e);
     }
     let end = Instant::now() + START_WAIT;
     while Instant::now() < end {
         if listening(port) {
-            return Status::new(Phase::Starting, "ARGUS-1 started; connecting", "");
+            return Status::new(Phase::Starting, "ARGUS-INSTINCT started; connecting", "");
         }
         std::thread::sleep(Duration::from_millis(500));
     }
     Status::new(
         Phase::Stopped,
-        "ARGUS-1 was started but is not answering",
+        "ARGUS-INSTINCT was started but is not answering",
         format!("It did not open its local port within {} seconds.", START_WAIT.as_secs()),
     )
 }
@@ -298,15 +302,15 @@ pub fn current() -> Status {
         .lock()
         .ok()
         .and_then(|g| g.clone())
-        .unwrap_or_else(|| Status::new(Phase::Starting, "Starting ARGUS-1", ""))
+        .unwrap_or_else(|| Status::new(Phase::Starting, "Starting ARGUS-INSTINCT", ""))
 }
 
 /// The status after a failed token fetch or refused request.
 pub fn from_error(e: &str) -> Status {
     if e.contains("not paired") || e.contains("refused this app") {
-        Status::new(Phase::NotAuthorised, "This app is not authorised to talk to ARGUS-1", e)
+        Status::new(Phase::NotAuthorised, "This app is not allowed to talk to ARGUS-INSTINCT yet", e)
     } else {
-        Status::new(Phase::Stopped, "ARGUS-1 is not reachable", e)
+        Status::new(Phase::Stopped, "ARGUS-INSTINCT is not reachable", e)
     }
 }
 
@@ -344,7 +348,7 @@ mod tests {
             "blind": [{"job": "sysmon", "label": "Windows event log", "reason": "needs administrator rights"}]});
         let s = classify_pulse(&p);
         assert_eq!(s.phase, Phase::Degraded);
-        assert!(s.message.contains("1 area cannot be fully watched"), "{}", s.message);
+        assert!(s.message.contains("can't fully check 1 part of"), "{}", s.message);
         assert!(s.detail.contains("Windows event log") && s.detail.contains("needs administrator rights"));
     }
 
@@ -355,10 +359,10 @@ mod tests {
             {"job": "net", "label": "Network", "freshness": "FRESH", "error": true},
             {"job": "x"}]});
         let s = classify_pulse(&p);
-        assert!(s.message.contains("3 areas"));
+        assert!(s.message.contains("3 parts"));
         assert!(s.detail.contains("Processes: it has not reported recently"));
         assert!(s.detail.contains("Network: it failed the last time it ran"));
-        assert!(s.detail.contains("x: no reason reported"));
+        assert!(s.detail.contains("x: no reason given"));
     }
 
     #[test]
@@ -391,8 +395,8 @@ mod tests {
 
     #[test]
     fn errors_map_to_a_reason_the_person_can_act_on() {
-        assert_eq!(from_error("ARGUS-1 is not paired with this app. ...").phase, Phase::NotAuthorised);
-        assert_eq!(from_error("could not reach ARGUS-1").phase, Phase::Stopped);
+        assert_eq!(from_error("ARGUS-INSTINCT is not paired with this app. ...").phase, Phase::NotAuthorised);
+        assert_eq!(from_error("could not reach ARGUS-INSTINCT").phase, Phase::Stopped);
     }
 
     #[test]

@@ -1,5 +1,4 @@
 {
- " Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": " ARGUS-INSTINCT の一部のチェックが現在応答していないため、この状況は不完全かもしれません。",
  "1 critical finding needs attention": "重大な検出が 1 件あり、確認が必要です",
  "1 hour": "1 時間",
  "1 item could use your attention when you have a minute.": "手が空いたときに確認したい項目が 1 件あります。",
@@ -120,6 +119,7 @@
  "Findings": "検出",
  "Fix proposal · {status}": "修正案 · {status}",
  "Fix proposals": "修正案",
+ "For your info": "参考情報",
  "Forensics": "フォレンジック",
  "Fresh": "最新",
  "GeoSecurity": "ジオセキュリティ",
@@ -166,6 +166,7 @@
  "Location": "場所",
  "Location unavailable": "位置情報を取得できません",
  "Look closer": "詳しく見る",
+ "Look soon": "早めに確認",
  "Low": "低",
  "Malware protection (Windows Defender)": "マルウェア対策（Windows Defender）",
  "Medium": "中",
@@ -306,10 +307,12 @@
  "Show critical": "重大を表示",
  "Show high": "高を表示",
  "Show {n} more": "さらに {n} 件を表示",
+ "Showing the last state it reported.": "最後に報告された状態を表示しています。",
  "Simple": "かんたん",
  "Simple explains things in everyday words and hides identifiers. Expert shows collectors, paths and evidence.": "かんたんモードは日常の言葉で説明し識別子を隠します。上級モードではコレクター、パス、証拠を表示します。",
  "Simple uses everyday words and hides technical details. Expert shows everything ARGUS-INSTINCT knows.": "かんたんモードは日常の言葉を使い、技術的な詳細を隠します。上級モードでは ARGUS-INSTINCT が把握するすべてを表示します。",
  "Skip for now": "いったんスキップ",
+ "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.": "ARGUS-INSTINCT の一部のチェックが現在応答していないため、この状況は不完全かもしれません。",
  "Source": "ソース",
  "Sources": "ソース",
  "Sources working": "動作中のソース",
@@ -346,6 +349,7 @@
  "Unavailable": "利用不可",
  "Up to date": "最新",
  "Updated {when}": "更新：{when}",
+ "Urgent": "緊急",
  "Virus protection": "ウイルス対策",
  "Waiting for payment to complete in your browser…": "ブラウザーでの支払いの完了を待っています…",
  "Waiting for your phone… {time} left": "スマートフォンを待っています… 残り {time}",
@@ -376,6 +380,7 @@
  "Windows' virus protection is on, but its virus list is {n} days old. Run Windows Update.": "Windows のウイルス対策は有効ですが、定義ファイルが {n} 日前のものです。Windows Update を実行してください。",
  "World": "世界",
  "World events": "世界の出来事",
+ "Worth a look": "確認する価値あり",
  "Worth a look first": "最初に確認したいこと",
  "Yes": "はい",
  "Yes, that was me": "はい、私です",
@@ -422,6 +427,5 @@
  "{n}h ago": "{n} 時間前",
  "{n}m ago": "{n} 分前",
  "{n}s ago": "{n} 秒前",
- "“{name}” wants to receive alerts from this computer.": "「{name}」がこのコンピューターのアラートを受け取ろうとしています。",
- "Showing the last state it reported.": "最後に報告された状態を表示しています。"
+ "“{name}” wants to receive alerts from this computer.": "「{name}」がこのコンピューターのアラートを受け取ろうとしています。"
 }
