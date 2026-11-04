@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from jarvis.collectors.host import storage
@@ -147,6 +148,82 @@ class HousekeepingTests(unittest.TestCase):
 
     def test_windows_disabled_is_flagged(self):
         self.assertEqual(storage.audit(None, hosts=("wsl",))[0]["category"], "visibility")
+
+
+class MetaOnly:
+    def __init__(self):
+        self.meta = {}
+
+    def get_meta(self, key, default=None):
+        return self.meta.get(key, default)
+
+    def set_meta(self, key, value):
+        self.meta[key] = value
+
+
+class ReclaimWalkReuse(unittest.TestCase):
+    """The reclaim walks are reused only while they may stand (perf, 2026-11-04)."""
+
+    def setUp(self):
+        self.store = MetaOnly()
+        self.walks = 0
+        self.sizes = [("uv package cache", 3 * GIB, True, "uv cache clean")]
+
+    def walk(self):
+        self.walks += 1
+        return list(self.sizes)
+
+    def sizes_at(self, now, free):
+        return storage.reclaim_sizes(self.store, now, free, walk_all=self.walk)
+
+    def test_reused_within_the_age_bound_while_headroom_is_fine(self):
+        first = self.sizes_at(NOW, 50 * GIB)
+        again = self.sizes_at(NOW + 1800, 49 * GIB)
+        self.assertEqual(self.walks, 1)
+        self.assertEqual(first, again)
+
+    def test_walks_again_after_the_age_bound(self):
+        self.sizes_at(NOW, 50 * GIB)
+        self.sizes[0] = ("uv package cache", 9 * GIB, True, "uv cache clean")
+        out = self.sizes_at(NOW + storage.RECLAIM_MAX_AGE_S + 1, 50 * GIB)
+        self.assertEqual(self.walks, 2)
+        self.assertEqual(out[0][1], 9 * GIB)
+
+    def test_low_headroom_walks_every_run(self):
+        self.sizes_at(NOW, storage.HIGH_FREE - 1)
+        self.sizes_at(NOW + 60, storage.HIGH_FREE - 1)
+        self.assertEqual(self.walks, 2)
+
+    def test_a_falling_drive_walks_again(self):
+        self.sizes_at(NOW, 50 * GIB)
+        self.sizes_at(NOW + 60, 50 * GIB - storage.RECLAIM_FREE_DROP)
+        self.assertEqual(self.walks, 2)
+
+    def test_unmeasured_drive_future_stamp_or_damaged_record_walks(self):
+        self.sizes_at(NOW, None)
+        self.sizes_at(NOW + 60, None)
+        self.assertEqual(self.walks, 2)
+        self.sizes_at(NOW, 50 * GIB)
+        self.sizes_at(NOW - 600, 50 * GIB)                  # clock stepped back
+        self.assertEqual(self.walks, 4)
+        self.store.meta[storage.RECLAIM_META] = "{not json"
+        self.sizes_at(NOW, 50 * GIB)
+        self.store.meta[storage.RECLAIM_META] = json.dumps({"at": NOW, "free": 50 * GIB, "sizes": [["x"]]})
+        self.sizes_at(NOW + 1, 50 * GIB)
+        self.assertEqual(self.walks, 6)
+
+    def test_audit_walks_once_and_reuses_on_the_next_comfortable_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "s.db"))
+            try:
+                with unittest.mock.patch.object(storage, "walk_reclaimables", self.walk):
+                    for i in range(3):
+                        out = storage.audit(store, now=NOW + i * 1800, host=host(), guest=(223 * GIB, 1000 * GIB),
+                                            docker=0, stages=[], syslog=0)
+                self.assertEqual(self.walks, 1)
+                self.assertIn("reclaimable: uv package cache", titles(out))
+            finally:
+                store.close()
 
 
 if __name__ == "__main__":
