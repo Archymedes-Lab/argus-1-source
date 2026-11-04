@@ -155,6 +155,32 @@ fn app_dir_with_engine() -> Option<PathBuf> {
 /// The released Windows engine's file name (release/build_windows.py, EXE).
 pub const ENGINE_EXE: &str = "argus-instinct.exe";
 
+/// The daemon's own state folder (`~/.jarvis`, renamed in releases): where it keeps its
+/// stop marker and the note explaining a refused restart. `JARVIS_STATE_DIR` overrides it (tests).
+pub fn state_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    if let Some(d) = env("JARVIS_STATE_DIR").filter(|d| !d.is_empty()) {
+        return Some(PathBuf::from(d));
+    }
+    env("USERPROFILE").or_else(|| env("HOME")).map(|h| Path::new(&h).join(".jarvis"))
+}
+
+/// True when someone ran `jarvis stop`: monitoring is off on purpose, so the app must not undo it.
+pub fn stopped_on_purpose(env: &dyn Fn(&str) -> Option<String>, exists: &dyn Fn(&Path) -> bool) -> bool {
+    state_dir(env).is_some_and(|d| exists(&d.join("stopped-on-purpose")))
+}
+
+/// Why the supervisor refused to restart the daemon (a crash loop), if it said so in the last 15 minutes.
+pub fn refusal_note(env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
+    let path = state_dir(env)?.join("start-refused.txt");
+    let age = std::fs::metadata(&path).ok()?.modified().ok()?.elapsed().ok()?;
+    if age > Duration::from_secs(900) {
+        return None;
+    }
+    let text = std::fs::read_to_string(&path).ok()?;
+    let text: String = text.trim().chars().take(600).collect();
+    (!text.is_empty()).then_some(text)
+}
+
 /// The packaged program (a compiled `jarvis.exe` that is both the CLI and the
 /// daemon) when the installer put one in `home`.
 pub fn packaged_exe(home: &Path, exists: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
@@ -263,17 +289,17 @@ fn start_direct(env: &dyn Fn(&str) -> Option<String>, port: u16) -> Result<(), S
     let mut c = match (env("JARVIS_PYTHON").filter(|p| !p.is_empty()), packaged_exe(&home, &|p| p.exists())) {
         (Some(py), _) => {
             let mut c = Command::new(py);
-            c.args(["-m", "jarvis", "serve", "--port", &port_s]);
+            c.args(["-m", "jarvis", "serve", "--port", &port_s, "--supervised"]);
             c
         }
         (None, Some(exe)) => {
             let mut c = Command::new(exe);
-            c.args(["serve", "--port", &port_s]).current_dir(&home);
+            c.args(["serve", "--port", &port_s, "--supervised"]).current_dir(&home);
             c
         }
         (None, None) => {
             let mut c = Command::new(home.join("python").join("python.exe"));
-            c.args(["-m", "jarvis", "serve", "--port", &port_s]);
+            c.args(["-m", "jarvis", "serve", "--port", &port_s, "--supervised"]);
             c
         }
     };
@@ -311,6 +337,13 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
             "Someone paused it on purpose, so nothing is being started or restarted until the pause ends. This app will not start it meanwhile.",
         );
     }
+    if stopped_on_purpose(&env, &|p| p.exists()) {
+        return Status::new(
+            Phase::Stopped,
+            "ARGUS-1 monitoring was stopped on purpose",
+            "Someone ran `jarvis stop`. Nothing is being monitored until `jarvis start` is run; this app will not turn it back on.",
+        );
+    }
     if !governor.allow(Instant::now()) {
         return Status::new(
             Phase::Stopped,
@@ -337,11 +370,8 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
-    Status::new(
-        Phase::Stopped,
-        "ARGUS-INSTINCT was started but is not answering",
-        format!("It did not open its local port within {} seconds.", START_WAIT.as_secs()),
-    )
+    let why = refusal_note(&env).unwrap_or_else(|| format!("It did not open its local port within {} seconds.", START_WAIT.as_secs()));
+    Status::new(Phase::Stopped, "ARGUS-INSTINCT was started but is not answering", why)
 }
 
 /// The last status, for the interface to read.
@@ -504,5 +534,50 @@ mod tests {
         assert!(paused_for_maintenance(&env, &|p| p == pause));
         assert!(!paused_for_maintenance(&env, &|_| false));
         assert!(!paused_for_maintenance(&|_: &str| None, &|_| true));
+    }
+
+    fn temp_state(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("argus-life-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn the_state_folder_is_the_daemons_own_unless_overridden() {
+        let env = |k: &str| (k == "USERPROFILE").then(|| "C-profile".to_string());
+        assert_eq!(state_dir(&env), Some(Path::new("C-profile").join(".jarvis")));
+        let over = |k: &str| match k {
+            "JARVIS_STATE_DIR" => Some("elsewhere".to_string()),
+            "USERPROFILE" => Some("C-profile".to_string()),
+            _ => None,
+        };
+        assert_eq!(state_dir(&over), Some(PathBuf::from("elsewhere")));
+        assert_eq!(state_dir(&|_: &str| None), None);
+    }
+
+    #[test]
+    fn an_intentional_stop_is_seen_through_the_marker_file() {
+        let env = |k: &str| (k == "USERPROFILE").then(|| "P".to_string());
+        let marker = Path::new("P").join(".jarvis").join("stopped-on-purpose");
+        assert!(stopped_on_purpose(&env, &|p| p == marker));
+        assert!(!stopped_on_purpose(&env, &|_| false), "no marker: a stopped daemon is restarted");
+        assert!(!stopped_on_purpose(&|_: &str| None, &|_| true), "no state folder: nothing to read");
+    }
+
+    #[test]
+    fn the_refusal_reason_is_shown_while_fresh_and_dropped_when_old() {
+        let dir = temp_state("refusal");
+        let env = {
+            let d = dir.display().to_string();
+            move |k: &str| (k == "JARVIS_STATE_DIR").then(|| d.clone())
+        };
+        assert_eq!(refusal_note(&env), None, "no note: no reason invented");
+        let note = dir.join("start-refused.txt");
+        std::fs::write(&note, "  started 5 times in the last 60 minutes  \n").unwrap();
+        assert_eq!(refusal_note(&env).as_deref(), Some("started 5 times in the last 60 minutes"));
+        let old = std::time::SystemTime::now() - Duration::from_secs(3 * 3600);
+        std::fs::File::options().write(true).open(&note).unwrap().set_modified(old).unwrap();
+        assert_eq!(refusal_note(&env), None, "an old note describes a different problem");
     }
 }
