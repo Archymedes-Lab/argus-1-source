@@ -14,7 +14,7 @@ set -euo pipefail
 
 RUN=${1:?usage: release/publish_dry_run.sh RUN_ID (a green release-test run of release.yml)}
 [[ "$RUN" =~ ^[0-9]+$ ]] || { echo "run id must be digits only, got: $RUN"; exit 2; }
-REPO=${ARGUS_REPO:-chrisnkuno/Argus-1}
+REPO=${ARGUS_REPO:-Archymedes-Lab/argus-1}
 SRC=$(cd "$(dirname "$0")/.." && pwd)                       # this checkout: gate, check, publish
 D=${ARGUS_PUBLISH_DIR:-$HOME/.cache/argus-instinct-publish}  # working folder, outside the checkout
 OUT=$D/release-out

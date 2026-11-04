@@ -143,13 +143,13 @@ artifact you did not expect, is a reason to stop.
 Publish:
 
 ```sh
-gh release edit v2026.11.01 --draft=false -R chrisnkuno/Argus-1
+gh release edit v2026.11.01 --draft=false -R Archymedes-Lab/argus-1
 ```
 
 The **Publish release** workflow checks the signature against the pinned keys,
 commits exactly the release files to the site, the site's deploy job checks
 them again, and the workflow reads the live site back. Watch it to the end:
-`gh run watch -R chrisnkuno/Argus-1`.
+`gh run watch -R Archymedes-Lab/argus-1`.
 
 ## The Windows installer
 
@@ -184,7 +184,7 @@ is in place (none is configured yet).
 ## Rolling back
 
 ```sh
-gh workflow run publish.yml -R chrisnkuno/Argus-1 -f tag=v2026.10.31
+gh workflow run publish.yml -R Archymedes-Lab/argus-1 -f tag=v2026.10.31
 ```
 
 This republishes an earlier signed release through the same checks. To take

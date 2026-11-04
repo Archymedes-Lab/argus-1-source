@@ -32,7 +32,7 @@ sys.path.insert(0, str(HERE))
 import gate  # noqa: E402
 import signers  # noqa: E402
 
-REPO = os.environ.get("ARGUS_RELEASE_REPO", "chrisnkuno/Argus-1")
+REPO = os.environ.get("ARGUS_RELEASE_REPO", "Archymedes-Lab/argus-1")
 KEY = Path(os.environ.get("ARGUS_RELEASE_KEY", "~/.config/argus-release/signing_key")).expanduser()
 
 
