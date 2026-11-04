@@ -275,7 +275,7 @@ if (-not $Once) {
 
 $st = @{ healthy = $null; firstFailure = 0; lastAction = ''; lastActionAt = 0; lastResult = '';
          restarts = @(); gaveUp = $false; kicked = @{}; kickWait = @{}; gapSince = 0; graceNoted = 0;
-         startedAt = (Now); pid = $PID }
+         startedAt = (Now); pid = $PID; silentSince = 0 }
 if (Test-Path -LiteralPath $statePath) {
     try {
         $old = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -335,6 +335,11 @@ while ($true) {
     $st.paused = $paused
 
     if ($h.answered -and $h.live) {
+        # Any live answer ends a silence. Silence has its own clock: before
+        # 2026-11-04 it shared firstFailure with "alive but degraded", so one missed
+        # probe after hours of a degraded-but-live daemon read as "silent for
+        # 7817s" and restarted it at once (5 restarts 17:24-18:05).
+        $st.silentSince = 0
         if ($h.healthy) {
             if ($st.healthy -eq $false) {
                 $down = $now - [long]$st.firstFailure
@@ -364,9 +369,10 @@ while ($true) {
             }
         }
     } else {
-        if ($st.healthy -ne $false) { $st.firstFailure = $now; Say "JARVIS not answering$(if ($h.answered) { ' (scheduler stalled)' })" }
+        if ($st.healthy -ne $false) { $st.firstFailure = $now }
+        if (-not [long]$st.silentSince) { $st.silentSince = $now; Say "JARVIS not answering$(if ($h.answered) { ' (scheduler stalled)' })" }
         $st.healthy = $false
-        $age = $now - [long]$st.firstFailure
+        $age = $now - [long]$st.silentSince
         $settling = ($now - [long]$st.lastActionAt) -lt 45   # give the last fix time to land
         if ($age -ge 10 -and -not $settling -and -not $st.gaveUp -and -not $paused) {
             $running = Test-DistroRunning

@@ -42,3 +42,17 @@ class HealthProbeCap(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviverSilenceClock(unittest.TestCase):
+    """2026-11-04: five restarts (17:24-18:05) of a live daemon. "Alive but degraded"
+    and "silent" shared firstFailure, so after hours degraded a single missed probe
+    counted as hours of silence and restarted at once."""
+
+    def test_silence_has_its_own_clock_reset_by_any_live_answer(self):
+        text = (ROOT / "jarvis-reviver.ps1").read_text(encoding="utf-8-sig")
+        alive = text.index("if ($h.answered -and $h.live) {")
+        silent_age = text.index("$age = $now - [long]$st.silentSince")
+        self.assertIn("$st.silentSince = 0", text[alive:alive + 600])
+        self.assertLess(alive, silent_age)
+        self.assertNotIn("$age = $now - [long]$st.firstFailure", text)
