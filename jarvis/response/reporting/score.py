@@ -419,7 +419,7 @@ def summary_lines(result, delta=None):
                 a["open"].items(), key=lambda kv: WEIGHT.get(kv[0], 0), reverse=True)
                 if WEIGHT.get(s, 0))
             note = f"  {opened}" if opened else ""
-            blind = f"  ({len(a['blind'])} collector(s) not reporting)" if a["blind"] else ""
+            blind = f"  ({len(a['blind'])} check(s) not reporting)" if a["blind"] else ""
             lines.append(f"  {a['name']:<22} {bar(a['score'], 10)} {a['score']:>3}%{note}{blind}")
     if result["next_steps"]:
         lines.append("  biggest gains:")

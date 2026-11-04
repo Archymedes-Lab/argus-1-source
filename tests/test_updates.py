@@ -313,7 +313,7 @@ class CategoryTests(unittest.TestCase):
     def test_phone_payload_has_category_and_unknown_is_system(self):
         from jarvis.response.notify import channel
         p = channel.payload("t", "b", "high", "h", 1, category="monitoring", counts={"monitoring": 2, "x": 9})
-        self.assertEqual((p["category"], p["category_label"], p["counts"]), ("monitoring", "Monitoring",
+        self.assertEqual((p["category"], p["category_label"], p["counts"]), ("monitoring", "Not being checked",
                                                                              {"monitoring": 2}))
         self.assertEqual(channel.payload("t", "b", "high", "h", 1, category="bogus")["category"], "system")
         self.assertEqual(channel.payload("t", "b", "ok", "h", 1, kind="test")["category"], "test")

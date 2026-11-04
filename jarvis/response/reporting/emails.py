@@ -8,7 +8,7 @@ the same structure for clients that do not render HTML.
 
 import time
 
-from jarvis.response import acknowledge, alert, protocols
+from jarvis.response import acknowledge, alert, plainalert, protocols
 
 from . import email_ui as ui
 from . import score, triage, voice
@@ -33,7 +33,7 @@ def _text_group(owner, entries, limit=25):
         if f.get("detail"):
             lines.append(f"   {f['detail'][:300]}")
         if f.get("forensics"):
-            lines.append("   forensic reconstruction:")
+            lines.append("   what happened, step by step:")
             lines.extend(f"     {line}" for line in f["forensics"])
         lines.append(f"   → {t['action']}")
         if t.get("command"):
@@ -84,19 +84,43 @@ def _related_chains(active):
         return []
 
 
+def _intro(items, need, urgent):
+    """The opening plain sentence: how much this needs you, never a verdict."""
+    first = ("Something new needs you now." if urgent and need else
+             "Something changed that you should know about right away." if urgent else
+             f"{need} thing{'s' if need != 1 else ''} need{'s' if need == 1 else ''} you." if need else
+             "Nothing here needs you right now.")
+    threat = any(plainalert.kind(f, job) == "threat" for f, job, tag in items if tag != "RESOLVED")
+    return first + (" This is not proof that something is wrong, only that it is worth a look."
+                    if threat else "")
+
+
+def _text_leads(items, limit=5):
+    lines = []
+    for n, (f, job, tag) in enumerate(items[:limit], 1):
+        sentence, *facts = plainalert.lead(f, job, tag)
+        lines += ["", f"{n}. {sentence}", *[f"   {x}" for x in facts]]
+    if len(items) > limit:
+        lines += ["", f"... and {len(items) - limit} more in the details below."]
+    return lines
+
+
 def digest(ordered, urgent, health, delta, now, conf=None, store=None):
-    """ordered: [(key, queue item)] -> (subject, text, html)."""
+    """ordered: [(key, queue item)] -> (subject, text, html).
+
+    The message opens in plain words (plainalert.py): how much it needs you, and
+    for each item what it is, what to do and exactly what was seen. The full
+    details follow unchanged."""
     active = [(item["finding"], item["job"], item["tag"]) for _key, item in ordered
               if item["tag"] != "RESOLVED"]
     resolved = [item for _key, item in ordered if item["tag"] == "RESOLVED"]
+    everything = active + [(i["finding"], i["job"], "RESOLVED") for i in resolved]
     grouped = _grouped(active)
     counts = _counts(grouped)
 
-    kind = "priority interrupt" if urgent else "change digest"
     need = _needs_you(counts)
-    headline = (f"{need} need{'s' if need == 1 else ''} you" if need
-                else "nothing needs you")
-    subject = f"[JARVIS] {kind}: {len(ordered)} update(s) — {headline}"
+    subject = plainalert.subject(everything, need)
+    intro = _intro(everything, need, urgent)
     line, by_model = voice.opener(conf, voice.facts_for(
         "change digest", counts, urgent, health, delta, len(resolved),
         [f.get("title") for f, _job, _tag in active]),
@@ -106,9 +130,9 @@ def digest(ordered, urgent, health, delta, now, conf=None, store=None):
     mood = ("These need you now." if urgent else
             f"{need} need you — the rest is handled or listed below." if need else
             "All quiet — nothing needs you. Splendid.")
-    text = ["JARVIS PRIORITY INTERRUPT" if urgent else "JARVIS CHANGE DIGEST",
-            f"{need} need you · {counts[triage.JARVIS]} handled by JARVIS"
-            + (f" · {len(resolved)} no longer observed" if resolved else ""),
+    text = [intro, *_text_leads(everything), "", RULE, "DETAILS", RULE,
+            f"{need} need you · {counts[triage.JARVIS]} handled by ARGUS-INSTINCT"
+            + (f" · {len(resolved)} no longer seen" if resolved else ""),
             mood, "", line, ""]
     if health:
         text += _text_health(health, delta)
@@ -116,20 +140,19 @@ def digest(ordered, urgent, health, delta, now, conf=None, store=None):
     if chains:
         text += ["", RULE, f"RELATED ACTIVITY ({len(chains)} "
                            f"{'story' if len(chains) == 1 else 'stories'})",
-                 "  Correlated across collectors; each story is one narrative, "
+                 "  Linked across several checks; each story is one sequence of events, "
                  "not separate alerts."]
         text += [f"- {c['headline']}" for c in chains]
     for owner in triage.ORDER:
         text += _text_group(owner, grouped[owner])
     if resolved:
-        text += ["", RULE, f"NO LONGER OBSERVED ({len(resolved)})",
-                 "  Absent from the latest collector result; this alone does not prove "
-                 "remediation.", RULE]
+        text += ["", RULE, f"NO LONGER SEEN ({len(resolved)})",
+                 "  Not in the latest results; that alone does not prove it was fixed.", RULE]
         text += [f"- {item['finding'].get('title', '')} ({item['job']})" for item in resolved]
-    text += ["", ("Interrupts are only for something new or worsening; everything else waits "
-                  "for the next briefing." if urgent else
-                  "Unchanged findings stay on the dashboard and in the daily advisory; "
-                  "they do not generate repeat emails.")]
+    text += ["", ("Urgent messages are only for something new or getting worse; everything else "
+                  "waits for the next summary." if urgent else
+                  "Things that have not changed stay on the dashboard and in the daily summary; "
+                  "they do not cause repeat emails.")]
 
     for owner in triage.ORDER:
         for f, job, t, tag in grouped[owner]:
@@ -137,20 +160,24 @@ def digest(ordered, urgent, health, delta, now, conf=None, store=None):
             if tag == "ESCALATED":
                 hours = (now - item["first"]) // 3600
                 grouped[owner][grouped[owner].index((f, job, t, tag))] = (
-                    f, job, t, f"escalated · {hours}h open")
+                    f, job, t, f"reminder · {hours}h open")
 
-    inner = ui.header("JARVIS · " + ("priority interrupt" if urgent else "change digest"),
-                      headline[0].upper() + headline[1:],
+    inner = ui.header("ARGUS-INSTINCT · " + ("needs you now" if urgent else "what changed"),
+                      subject.removeprefix(plainalert.PREFIX).strip(),
                       time.strftime("%A %d %B, %H:%M", time.localtime(now)), tone=tone)
+    inner += ui.section(f'<div {ui.tw("text-base text-slate-800 leading-relaxed")}>{ui.esc(intro)}</div>',
+                        "px-6 pt-5 pb-1")
+    inner += ui.plain_leads(everything)
+    inner += ui.section(ui.heading("Details"), "px-6 pt-6 pb-0")
     inner += ui.section(ui.hero([(need, "need you"),
-                                 (counts[triage.JARVIS], "handled by JARVIS"),
-                                 (len(resolved), "no longer observed")]), "px-6 pt-5 pb-1")
+                                 (counts[triage.JARVIS], "handled by ARGUS-INSTINCT"),
+                                 (len(resolved), "no longer seen")]), "px-6 pt-5 pb-1")
     inner += ui.voice(line, by_model)
     inner += ui.section(ui.owner_summary(counts), "px-5 pt-5 pb-1")
     if chains:
         inner += ui.section(
             ui.heading(f"Related activity ({len(chains)})",
-                       "Correlated across collectors; one narrative, not separate alerts.")
+                       "Linked across several checks; one sequence of events, not separate alerts.")
             + "".join(ui.story_card(c) for c in chains))
     for owner in triage.ORDER:
         inner += ui.owner_section(owner, grouped[owner])
@@ -158,14 +185,14 @@ def digest(ordered, urgent, health, delta, now, conf=None, store=None):
         rows = "".join(
             f'<div {ui.tw("text-sm text-slate-700 py-1")}>&#10003; {ui.esc(i["finding"].get("title"))} '
             f'<span {ui.tw("text-slate-400")}>({ui.esc(i["job"])})</span></div>' for i in resolved)
-        inner += ui.section(ui.heading("No longer observed",
-                                       "Absent from the latest result; that alone does not prove a fix.")
+        inner += ui.section(ui.heading("No longer seen",
+                                       "Not in the latest results; that alone does not prove a fix.")
                             + f'<div {ui.tw("mt-2")}>{rows}</div>')
     if health:
         inner += ui.section(ui.health_panel(health, delta), "px-6 py-5 bg-slate-50")
-    inner += ui.footer("Unchanged findings stay on the dashboard and in the daily advisory; "
-                       "they do not generate repeat emails. Credential values are never included.")
-    html = ui.document(subject, line, inner)
+    inner += ui.footer("Things that have not changed stay on the dashboard and in the daily summary; "
+                       "they do not cause repeat emails. Passwords and keys are never included.")
+    html = ui.document(subject, intro, inner)
     return subject, "\n".join(text) + "\n", html
 
 
@@ -211,7 +238,7 @@ def _custody_lines(state):
     if sysmon == "match":
         out.append("Sysmon: running the reviewed baseline.")
     elif sysmon == "drift":
-        out.append("Sysmon: NOT running the reviewed baseline — see the findings.")
+        out.append("Sysmon: NOT running the reviewed baseline — see the details on the dashboard.")
     return out
 
 
@@ -275,9 +302,11 @@ def briefing(pending, result, delta, snapshots, now, store=None, conf=None,
     reminders = sum(1 for _f, _j, tag in changes if tag == "ESCALATED")
 
     part_title = part.capitalize()
-    score_bit = f" · {result['score']}%" if result else ""
-    subject = (f"[JARVIS] {part_title} briefing — condition {code}{score_bit} · "
-               + (f"{need} for you" if need else "nothing for you"))
+    subject = (f"[JARVIS] {part_title} briefing: "
+               + (f"{need} thing{'s' if need != 1 else ''} need{'s' if need == 1 else ''} you"
+                  if need else "nothing needs you")
+               + (f" · security score {result['score']}%" if result else "")
+               + f" · condition {code}")
     facts = voice.facts_for("security briefing", counts, False, result, delta,
                             len(resolved), [f.get("title") for f, _j, _t in current])
     facts["part_of_day"] = part
@@ -311,8 +340,8 @@ def briefing(pending, result, delta, snapshots, now, store=None, conf=None,
         text += ["", "EVIDENCE CUSTODY:", *[f"- {c}" for c in custody_lines]]
     if result:
         text += [""] + _text_health(result, delta)
-    footer = ("Briefings arrive on schedule; between them JARVIS interrupts only for something "
-              "new and critical, or an outage that lasts. Every finding and its history: the "
+    footer = ("Briefings arrive on schedule; between them JARVIS writes only about something "
+              "new and critical, or a stop that lasts. Everything it saw and its history: the "
               "local JARVIS dashboard.")
     text += ["", footer]
 
@@ -388,8 +417,8 @@ def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=
     if brief_lines:
         text += ["", RULE, "TODAY'S PROTOCOL", RULE]
         text += [(f"[local model] {plan}" if plan_by_model else plan), "", *brief_lines]
-    text += ["", f"Plus {lower} medium-severity findings on the dashboard.",
-             "Every finding and its history: the local JARVIS dashboard."]
+    text += ["", f"Plus {lower} medium-severity items on the dashboard.",
+             "Everything it saw and its history: the local JARVIS dashboard."]
 
     inner = ui.header("JARVIS · daily security health",
                       f"Your system is {result['score']}% of the way to secure",
@@ -408,9 +437,9 @@ def health(result, delta, snapshots, now, store=None, conf=None, protocol_state=
             model_note=plan_by_model)
     if lower:
         inner += ui.section(f'<div {ui.tw("text-sm text-slate-500")}>Plus {lower} medium-severity '
-                            f'findings, listed on the dashboard rather than here.</div>', "px-6 pb-5")
+                            f'items, listed on the dashboard rather than here.</div>', "px-6 pb-5")
     inner += ui.footer("Fixing items under “Needs you — action” raises the score the most. "
-                       "Every finding and its history: the local JARVIS dashboard. "
+                       "Everything it saw and its history: the local JARVIS dashboard. "
                        "Set health_email_enabled to false to stop this email.")
     return subject, "\n".join(text) + "\n", ui.document(subject, line, inner)
 
@@ -450,7 +479,8 @@ def action_plan(result, protocol_state, snapshots, now, store=None, conf=None, d
     others = _grouped(others)[triage.YOU_DO]
 
     total = len(tasks) + len(others)
-    subject = f"[JARVIS] your action plan — {total} thing{'s' if total != 1 else ''} need your hands"
+    subject = (f"[JARVIS] your action plan — {total} thing{'s' if total != 1 else ''} "
+               f"need{'s' if total == 1 else ''} your hands")
     day = time.strftime("%Y-%m-%d", time.localtime(now))
     line, by_model = voice.opener(conf, voice.facts_for(
         "action plan", {triage.YOU_DO: total}, False, result, delta,

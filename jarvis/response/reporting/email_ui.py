@@ -230,9 +230,9 @@ def hero(stats):
 
 def story_card(chain):
     """One correlated narrative: headline, size, and causal honesty."""
-    note = ("one causal edge links these observations"
+    note = ("one of these led directly to the next"
             if chain.get("causal") else
-            "grouped by host and subject; causality unverified")
+            "grouped by computer and subject; not proven to be connected")
     over = (f" · +{chain['member_overflow']} more on the dashboard"
             if chain.get("member_overflow") else "")
     jobs = ", ".join(str(j) for j in (chain.get("jobs") or [])[:4])
@@ -241,7 +241,7 @@ def story_card(chain):
         f'<div {tw("text-base font-semibold text-slate-900 leading-snug")}>'
         f"&#9670; {esc(chain.get('headline', ''))}</div>"
         f'<div {tw("text-sm text-slate-600 mt-1")}>{chain.get("count", 0)} '
-        f'observation{"s" if chain.get("count", 0) != 1 else ""}'
+        f'event{"s" if chain.get("count", 0) != 1 else ""}'
         f"{(' · ' + esc(jobs)) if jobs else ''}{esc(over)}</div>"
         f'<div {tw("text-xs text-slate-400 mt-1")}>{esc(note)}</div></div>')
 
@@ -254,6 +254,25 @@ def voice(line, by_model=False):
         f'<div {tw("text-base text-slate-800 leading-relaxed", "font-style:italic")}>{esc(line)}</div>'
         f'<div {tw("text-xs text-slate-500 mt-1")}>— {esc(credit)}</div></div>',
         "px-6 pt-5 pb-1")
+
+
+def plain_leads(items, limit=5):
+    """The plain-words part at the top of an alert: for each item, what it is and
+    what to do, then exactly what was seen. items: [(finding, job, tag)]."""
+    from jarvis.response import plainalert
+    if not items:
+        return ""
+    cards = []
+    for f, job, tag in items[:limit]:
+        sentence, *facts = plainalert.lead(f, job, tag)
+        cards.append(
+            f'<div {tw("rounded-xl border border-slate-200 bg-white p-4 mt-3")}>'
+            f'<div {tw("text-base text-slate-900 leading-relaxed")}>{esc(sentence)}</div>'
+            + "".join(f'<div {tw("text-sm text-slate-600 mt-1 break-words")}>{esc(x)}</div>' for x in facts)
+            + "</div>")
+    more = (f'<div {tw("text-sm text-slate-500 mt-3")}>+ {len(items) - limit} more in the details below</div>'
+            if len(items) > limit else "")
+    return section(heading("What happened") + "".join(cards) + more, "px-6 pt-5 pb-1")
 
 
 def section(inner, classes="px-6 py-5"):
@@ -305,7 +324,7 @@ def owner_summary(counts, confirmed=0):
             f'<div {tw("rounded-xl p-3 border-l-4 " + style["accent"] + " " + style["tint"])}>'
             f'<div {tw("text-2xl font-bold text-slate-900")}>{counts.get(owner, 0)}</div>'
             f'<div {tw("text-xs font-semibold text-slate-600")}>{esc(LABEL[owner])}</div></div></td>')
-    note = (f'<div {tw("text-xs text-slate-500 mt-2 px-1")}>{confirmed} finding(s) you confirmed '
+    note = (f'<div {tw("text-xs text-slate-500 mt-2 px-1")}>{confirmed} item(s) you confirmed '
             f'as expected are not counted. List them with jarvis ack list.</div>') if confirmed else ""
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
             f'<tr>{"".join(cells)}</tr></table>{note}')
@@ -323,7 +342,7 @@ def forensics_block(lines):
         f'<div {tw("font-mono text-xs text-slate-800 leading-snug break-words", "white-space:pre-wrap")}>'
         f"{esc(line)}</div>" for line in lines)
     return (f'<div {tw("rounded-lg border border-slate-200 bg-slate-50 p-3 mt-3")}>'
-            f'<div {tw("text-xs font-semibold text-slate-600 mb-1")}>Forensic reconstruction</div>'
+            f'<div {tw("text-xs font-semibold text-slate-600 mb-1")}>What happened, step by step</div>'
             f"{rows}</div>")
 
 
