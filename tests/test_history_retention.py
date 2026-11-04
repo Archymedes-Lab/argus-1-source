@@ -191,6 +191,34 @@ class Policy(unittest.TestCase):
         self.assertEqual(retention.keep_reason(start, match=lambda *a: [("rule", "x")]), "detection rule")
 
 
+class LineageAndSummary(Base):
+    def test_a_kept_events_process_start_and_its_parent_start_stay(self):
+        parent = ev(1, category="process", action="start",
+                    process={"pid": 1, "guid": "P", "image": "C:\\Windows\\explorer.exe"})
+        child = ev(2, category="process", action="start",
+                   process={"pid": 2, "guid": "C", "image": "C:\\Windows\\cmd.exe"}, )
+        child = dict(child, parent={"guid": "P", "pid": 1, "image": "C:\\Windows\\explorer.exe"})
+        bad = ev(3, process={"pid": 2, "guid": "C", "image": "C:\\Windows\\cmd.exe"},
+                 target={"type": "endpoint", "ip": "6.6.6.6"})
+        noise = normal(4)
+        self.segment([parent, child, bad, noise])
+        self.segment([normal(5)])
+        s = retention.run(FakeStore(indicators=[("ipv4", "6.6.6.6")]), self.log, now=NOW)
+        self.assertEqual(self.seqs(), [2, 3, 5])                 # the child start and the bad connection
+        self.assertEqual(s["reasons"].get("process lineage of a kept event"), 1)
+
+    def test_dropped_events_leave_a_bounded_summary(self):
+        h = self.segment([normal(i) for i in range(1, 40)])
+        self.segment([normal(99)])
+        retention.run(FakeStore(), self.log, now=NOW)
+        rec = [json.loads(x) for x in Path(self.log.pruned_path).read_text().splitlines()][-1]
+        summ = rec["dropped_summary"]
+        self.assertEqual(rec["segment"], h["segment"])
+        self.assertEqual(summ["events"], 39)
+        self.assertEqual(summ["destinations"], {"151.101.1.1": 39})
+        self.assertLessEqual(len(summ["programs"]), retention.SUMMARY_TOP)
+
+
 class Run(Base):
     def test_window_bound_indicators_and_cited_findings(self):
         old = self.segment([normal(1), ev(2, target={"type": "endpoint", "ip": "6.6.6.6"}), normal(3)])
@@ -233,6 +261,7 @@ if __name__ == "__main__":
 class ReleaseCommand(Base):
     def run_cli(self, *argv, tty=True, answer="release"):
         from unittest import mock
+
         from jarvis.cli.parser import build_parser
         args = build_parser().parse_args(["timeline", *argv, "--log", str(self.root)])
         self.log.close()

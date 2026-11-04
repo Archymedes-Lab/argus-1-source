@@ -695,7 +695,7 @@ class EventLog:
             raise LogError("event log opened read-only")
         return []
 
-    def compact(self, n, keep, reason):
+    def compact(self, n, keep, reason, summary=None):
         """Rewrite sealed segment `n` to hold only the events `keep(event)` accepts
         (plus every event inside an active hold). Returns a summary dict.
 
@@ -713,7 +713,7 @@ class EventLog:
             raise LogError(f"segment {n} was already reduced")
         held = self.holds()
         path = self._segment_path(n)
-        kept_lines, kept, dropped = [], 0, 0
+        kept_lines, kept, dropped, dropped_events = [], 0, 0, []
         with gzip.open(path, "rb") as fh:
             stored = json.loads(inflate.readline(fh, MAX_HEADER_LINE))
             if stored != header:
@@ -731,6 +731,8 @@ class EventLog:
                     kept += 1
                 else:
                     dropped += 1
+                    if summary:
+                        dropped_events.append(obj)
         if hasher.hexdigest() != header.get("payload_sha256"):
             raise LogError(f"segment {n}: payload does not match its header; not touching it")
         before = path.stat().st_size
@@ -739,7 +741,8 @@ class EventLog:
         now = time.time()
         if not kept:
             _append_line(self.pruned_path, {"segment": n, "at": now, "reason": str(reason)[:200],
-                                            "dropped": dropped})
+                                            "dropped": dropped,
+                                            "dropped_summary": summary(dropped_events) if summary else None})
             path.unlink()
             _fsync_dir(self.segdir)
             with self.db:
@@ -759,7 +762,8 @@ class EventLog:
         _append_line(self.compacted_path, {
             "segment": n, "at": now, "reason": str(reason)[:200], "kept": kept,
             "dropped": dropped, "original_payload_sha256": header.get("payload_sha256"),
-            "payload_sha256": hashlib.sha256(payload).hexdigest(), "payload_bytes": len(payload)})
+            "payload_sha256": hashlib.sha256(payload).hexdigest(), "payload_bytes": len(payload),
+            "dropped_summary": summary(dropped_events) if summary else None})
         os.replace(tmp, path)
         _fsync_dir(self.segdir)
         after = path.stat().st_size
