@@ -31,6 +31,7 @@ mod provision;
 mod pulse;
 mod settings;
 mod startmenu;
+mod update;
 mod watch;
 
 use std::thread;
@@ -271,6 +272,9 @@ fn main() {
             api::phone_pair_cancel,
             api::phone_revoke,
             api::phone_test,
+            update::app_version,
+            update::check_update,
+            update::open_download_page,
         ])
         .setup(move |app| {
             if let Ok(dir) = app.path().app_config_dir() {

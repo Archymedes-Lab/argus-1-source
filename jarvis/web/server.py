@@ -38,7 +38,7 @@ from jarvis.response import (
     remediation,
 )
 from jarvis.response.reporting import score, voice
-from jarvis.service import attackmap, autopilot, avguard, detectorhealth, sdnotify
+from jarvis.service import attackmap, autopilot, avguard, detectorhealth, sdnotify, selfupdate
 from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
@@ -1232,6 +1232,10 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/state":
             return self._send(200, json.dumps(
                 build_state(self.db_path, self.scheduler), default=str))
+
+        if url.path == "/api/update":
+            # The newest published release, for the desktop app's update notice. Cached; never raises.
+            return self._send(200, json.dumps(selfupdate.latest()))
 
         if url.path == "/api/pulse":
             return self._send(200, json.dumps(self._hub().latest(), default=str))

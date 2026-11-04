@@ -160,6 +160,8 @@ export type PairState = "waiting" | "claimed" | "confirming" | "paired" | "rejec
 export type Pairing = { session: string; state: PairState; code: string; relay: string; expires: number; remaining: number; device?: string; name?: string; sas?: string; message?: string; notice?: string; warning?: boolean };
 export type ProcsSnapshot = { snaps: Record<string, any[][]>; status: any };
 
+export type UpdateInfo = { current: string; latest: string | null; newer: boolean; enabled: boolean; checked: number; error: string };
+
 export const api = {
   state: () => call<any>("daemon_state"),
   status: () => call<AppStatus>("app_status"),
@@ -197,6 +199,9 @@ export const api = {
   pairCancel: (session: string) => call<Pairing>("phone_pair_cancel", { session }),
   phoneRevoke: (device: string) => call<Reply>("phone_revoke", { device }),
   phoneTest: () => call<Reply>("phone_test"),
+  // Only inside the app: the page itself never reaches the network, and a browser has no build version to compare.
+  checkUpdate: () => call<UpdateInfo>("check_update"),
+  openDownloadPage: () => call<void>("open_download_page"),
 };
 
 /** Pulses: from the shell's stream thread in the app, from the daemon's own

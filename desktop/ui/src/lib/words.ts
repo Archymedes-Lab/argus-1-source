@@ -12,7 +12,7 @@ export const W = {
   "nav.review": ["Needs you", "Review"],
   "nav.assistant": ["Ask ARGUS-INSTINCT", "Assistant"],
   "nav.geo": ["Where am I", "GeoSecurity"],
-  "nav.coverage": ["What ARGUS-INSTINCT can see", "Coverage"],
+  "nav.coverage": ["What Argus can see", "What Argus can see"],
   "nav.world": ["World events", "World"],
   "nav.procs": ["Running programs", "Processes"],
   "nav.phone": ["Alerts on my phone", "Phone"],

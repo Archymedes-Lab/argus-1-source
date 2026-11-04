@@ -166,7 +166,7 @@ fn refused_token(r: &Response, v: &Value) -> bool {
     r.status == 403 && v.get("error").and_then(Value::as_str).is_some_and(|m| m.contains("token"))
 }
 
-fn get_json(path: &str, timeout: Duration) -> Result<Value, String> {
+pub(crate) fn get_json(path: &str, timeout: Duration) -> Result<Value, String> {
     let t = pairing::client_token()?;
     let r = request("GET", path, Some(&t), None, timeout).map_err(|e| unreachable(&e))?;
     if r.status != 200 {
@@ -223,7 +223,7 @@ pub fn valid_fix_decision(d: &str) -> bool {
     matches!(d, "approve" | "retry" | "reject")
 }
 
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+pub(crate) async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(f).await.map_err(|e| format!("worker failed: {e}"))?
 }
 
