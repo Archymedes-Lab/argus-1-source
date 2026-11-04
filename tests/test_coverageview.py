@@ -432,7 +432,6 @@ class RouteTests(unittest.TestCase):
     def test_leaflet_as_the_release_build_ships_it_is_still_served(self):
         """The build removes leaflet's sourceMappingURL comment (the release policy denies it),
         which changes the file's hash; the shipped copy must still pass the pin or /geo has no map."""
-        import re
         route = "/static/vendor/leaflet/leaflet.js"
         name, ctype, _digest = server.COVERAGE_ASSETS[route]
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
