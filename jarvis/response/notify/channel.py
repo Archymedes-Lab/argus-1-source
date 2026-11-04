@@ -27,7 +27,8 @@ def ready(conf=None):
     return True
 
 
-def payload(subject, text, severity, host=None, now=None, kind="alert", category=None, counts=None):
+def payload(subject, text, severity, host=None, now=None, kind="alert", category=None, counts=None,
+            extra=None):
     from jarvis.response import categories
     cat = category if category in categories.LABELS else ("test" if kind == "test" else "system")
     from jarvis.core.brand import brand
@@ -36,19 +37,24 @@ def payload(subject, text, severity, host=None, now=None, kind="alert", category
            "host": host or socket.gethostname(), "at": int(time.time() if now is None else now)}
     if counts:
         out["counts"] = {k: int(v) for k, v in counts.items() if k in categories.LABELS}
+    if extra:
+        # Fixed fields win: an extra can add (approval_id, challenge ...) but never rewrite what an alert is.
+        out = {**extra, **out}
     return out
 
 
 def send(conf, subject, text, severity="high", kind="alert", now=None, opener=None, store=None,
-         category=None, counts=None):
-    """'' when the relay accepted the envelopes, else a short reason."""
+         category=None, counts=None, extra=None, only=None):
+    """'' when the relay accepted the envelopes, else a short reason.
+
+    `extra` adds payload fields (approval requests); `only` limits the devices (a predicate)."""
     now = time.time() if now is None else now
     try:
         ident = crypto.Identity.load()
-        targets = devices.active()
+        targets = [d for d in devices.active() if only is None or only(d)]
         if ident is None or not targets:
             return "no paired device"
-        body = payload(subject, text, severity, conf.get("notify_label"), now, kind, category, counts)
+        body = payload(subject, text, severity, conf.get("notify_label"), now, kind, category, counts, extra)
         envelopes = [crypto.seal(ident, d, body, now) for d in targets]
         kw = {"opener": opener} if opener else {}
         relay.call(conf, ident, "POST", f"/v1/mailbox/{ident.mailbox}/envelopes", envelopes, now=now, **kw)

@@ -42,5 +42,20 @@
    "X-Notify-Nonce": "AAECAwQFBgcICQoLDA0ODw",
    "X-Notify-Sig": "bx80e7gna9zsjJTxTFsjuATT2xCxMSQV4v0YlwhGsmfNzfVz38l70PTUM2gO66EieL16lwZeZfOgXEdnUtHQDw"
   }
+ },
+ "approval": {
+  "approval_id": "AAAAAAAAAAAAAAAAAAAAAA",
+  "eid": "e1",
+  "action": "quarantine",
+  "target": "{'path': '/tmp/é'}",
+  "expires": 1800000600,
+  "challenge": "Ky-zavCjy9iYdCtyx9X8t4hlPcMc_jaBImqW1BF0Gos"
+ },
+ "qr_proof": {
+  "secret": "AAECAwQFBgcICQoLDA0ODw",
+  "d_sig": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "d_enc": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+  "passkey": "ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1-f4CBgoOEhYaHiImKi4yNjo-QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vg",
+  "proof": "T0WWrT3r2YGSq9wg8IutoM2CwBaenitJtfRNcddtkkQ"
  }
 }

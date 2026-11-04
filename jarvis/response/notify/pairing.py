@@ -114,11 +114,17 @@ def activate(conf, ident, dev, code, tries=ACTIVATE_TRIES, wait=ACTIVATE_WAIT_S,
     return err
 
 
-def accept(conf, ident, claim, code, name, activate_fn=None):
+def accept(conf, ident, claim, code, name, activate_fn=None, passkey=None):
     """Record the confirmed phone, then activate it on the relay; '' or the
-    activation error (the device then stays visibly 'not activated')."""
-    devices.add({"dev": claim["dev"], "d_sig": claim["d_sig"], "d_enc": claim["d_enc"], "name": name,
-                 "relay_pending": True})
+    activation error (the device then stays visibly 'not activated').
+
+    `passkey` only for a phone whose claim proved it scanned the QR (notify
+    pair): it is what lets that phone approve reversible actions."""
+    device = {"dev": claim["dev"], "d_sig": claim["d_sig"], "d_enc": claim["d_enc"], "name": name,
+              "relay_pending": True}
+    if passkey:
+        device["passkey"] = passkey
+    devices.add(device)
     err = (activate_fn or activate)(conf, ident, claim["dev"], code)
     if not err:
         devices.mark_active(claim["dev"])

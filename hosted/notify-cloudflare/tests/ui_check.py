@@ -61,6 +61,8 @@ def main():
             page.wait_for_selector("text=No servers yet")
             page.screenshot(path=f"{OUT}/1-empty.png")
             page.click("text=Add a server")
+            # "Add a server" opens the QR scanner (or the install guide); the typed code is one link away.
+            page.click("a[href='#/add-typed']")
             page.fill("#code", crypto.format_code(code).lower())
             page.screenshot(path=f"{OUT}/2-add.png")
             page.click("button[type=submit]")

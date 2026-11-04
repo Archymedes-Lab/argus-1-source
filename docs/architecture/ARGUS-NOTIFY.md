@@ -164,3 +164,51 @@ iOS delivers Web Push only to a PWA added to the home screen (16.4+).
 bounded), `devices.py` (local registry), `channel.py` (`send(subject, text, severity)` used by
 `alert.deliver`). CLI: `notify pair | devices | revoke | test | status`. The relay URL defaults to
 `https://argus.archymedes.xyz` and is set by `notify_url` in the alert config.
+
+## Home-Screen app and QR pairing (v1.1, 2026-11-04)
+
+The phone app is a web app added to the Home Screen from the relay's address; nothing is installed from a store.
+iPhone (16.4+) delivers web push only to a Home-Screen app and keeps that app's storage apart from Safari's, so the
+app is added first and **pairing happens inside it**. Android/Chrome works from the browser or the installed app.
+
+`notify pair` now shows a QR (terminal) holding `https://<relay>/#/pair?c=CODE&k=SECRET&mb=MAILBOX`, and still prints
+the code. In the app: Add a server -> scan -> allow notifications -> set up Face ID / fingerprint -> the server asks
+"Add it? [y/N]". There are no digits to compare. What replaces the comparison:
+
+- the phone checks that the offer's keys hash to `mb` from the QR (the server is pinned from the camera, not the relay);
+- the claim carries `proof = HMAC-SHA256(k, "notify-qr/1" | d_sig | d_enc | passkey_spki)`. `k` is only in the QR, so the
+  relay (which knows the code) cannot inject a device. A claim without a valid proof falls back to the 6-digit
+  comparison and the phone gets **alerts only**.
+
+This closes the SAS-grinding gap noted under N3 for QR pairing. The relay still serves the app code (same limit as before).
+
+## Approvals from the phone (v1.1)
+
+Scope: a phone may approve **one reversible defense proposal** that this server offered (`defense.pending`, actions with
+`reversible = True`, `jarvis/response/actions/base.py`), and undo what a phone approved. Irreversible actions, spend, identity,
+fix-apply and config changes are not reachable from a phone. A phone paired without the QR (no proof) cannot approve.
+
+```
+server: defense.process queues -> scheduler tick -> replies.offer -> sealed envelope kind "approval"
+        {approval_id, eid, action, target, expires<=10min, challenge = SHA-256(canonical{ctx, approval_id, eid, action, target, expires})}
+phone:  recomputes the challenge from what it shows; Approve = WebAuthn assertion (userVerification required) over that challenge
+        reply = {type:"approval", approval_id, decision, counter, assertion}  sealed to S_enc, signed by D_sig   (notify-rep/1)
+        POST /v1/device/{dev}/replies   ->  relay stores ciphertext (<=8 KiB, <=50 pending, 15 min)
+server: polls GET /v1/mailbox/{mb}/replies (never listens), then ACK
+```
+
+The server checks, in order: known active device, device signature, timestamp window (15 min), counter greater than the last
+seen (replay), request offered by this server and not expired, this phone was asked, WebAuthn (origin and relying-party id from
+`notify_url`, challenge, user-present and user-verified flags, ES256 signature, signature counter), and that the proposal is still
+`proposed`, still reversible, with the same action and target. Then `defense.approve(..., by="phone:<dev>")`. The request is single
+use. Every outcome goes to the append-only audit list (`notify_approvals` meta) and a result envelope goes to every paired phone;
+phones that can approve also get an **Undo** offer (valid 1 hour, only for entries a phone approved, passkey required).
+
+Relay additions: `replies` table, `POST /v1/device/{dev}/replies`, `GET /v1/mailbox/{mb}/replies`, `POST .../replies/ack`;
+claim fields `passkey` and `proof` are stored and forwarded unread. The relay's `Permissions-Policy` allows the camera and
+WebAuthn for its own origin only.
+
+Known limits: iOS web push has no action buttons (the tap opens the app); a Home-Screen web app is served by the relay, so a
+hostile relay operator could change what the screen shows (the challenge check and the server-side re-validation bound what
+that can do, but a signed app bundle remains future work); the main scheduler lane handles replies between collector runs,
+so an answer can wait for a running collector (seconds, within the 10-minute request lifetime).

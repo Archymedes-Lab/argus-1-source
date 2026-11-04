@@ -136,3 +136,47 @@ export async function supported() {
     return true;
   } catch { return false; }
 }
+
+// --- approvals from the phone (ARGUS-NOTIFY.md, "Approvals") ----------------------------
+
+export const REPLY_CONTEXT = "notify-rep/1";
+export const REPLY_INFO = enc.encode("notify-reply/1");
+export const PROOF_CONTEXT = enc.encode("notify-qr/1");
+export const APPROVAL_CONTEXT = "notify-approval/1";
+
+// The 32 bytes the passkey signs. The server computes the same from the same fields, so the
+// biometric check is bound to exactly the action the phone showed.
+export async function approvalChallenge(approvalId, eid, action, target, expires) {
+  return sha256(enc.encode(canonical({ ctx: APPROVAL_CONTEXT, approval_id: approvalId, eid, action,
+    target: String(target), expires: Number(expires) })));
+}
+
+// A reply to the server, sealed to the server's X25519 key and signed by this phone's Ed25519 key:
+// the envelope, reversed. The relay stores it without being able to read it.
+export async function sealReply(sigPriv, dev, mb, sEncPubRaw, payload, now, ttl = 900) {
+  const plain = enc.encode(canonical(payload));
+  if (plain.length > 4096) throw new Error("reply too large");
+  const id = crypto.getRandomValues(new Uint8Array(16));
+  const eph = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+  const sEnc = await crypto.subtle.importKey("raw", sEncPubRaw, { name: "X25519" }, false, []);
+  const shared = await crypto.subtle.deriveBits({ name: "X25519", public: sEnc }, eph.privateKey, 256);
+  const ikm = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: id, info: REPLY_INFO }, ikm,
+    { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
+  const sent = Math.floor(now);
+  const header = { v: 1, id: b64u(id), mb, dev, sent, expires: sent + ttl,
+    epk: b64u(new Uint8Array(await crypto.subtle.exportKey("raw", eph.publicKey))) };
+  const aad = canonical(header);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: enc.encode(aad) }, key, plain));
+  const signed = enc.encode([REPLY_CONTEXT, aad, b64u(iv), b64u(ct)].join("\n"));
+  const sig = new Uint8Array(await crypto.subtle.sign("Ed25519", sigPriv, signed));
+  return { ...header, iv: b64u(iv), ct: b64u(ct), sig: b64u(sig) };
+}
+
+// Proof, from the QR's secret (which the relay never sees), that a pairing claim is from the phone
+// that scanned the QR. The server checks it; without it a phone cannot approve anything.
+export async function qrProof(secret, dSig, dEnc, passkeySpki = new Uint8Array()) {
+  const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return b64u(new Uint8Array(await crypto.subtle.sign("HMAC", key, concat(PROOF_CONTEXT, dSig, dEnc, passkeySpki))));
+}

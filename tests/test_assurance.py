@@ -76,11 +76,13 @@ class AssuranceTests(unittest.TestCase):
         # 2026-11-01: +1 unverified sensor_positive_control (sensorprobe job);
         # source-tested and measured by hand once, never run in the daemon.
         # Recomputed on the merged release tree (release/argus-instinct, 2026-11-03).
-        self.assertEqual(gaps['implementation_unverified'], 34)
+        # 2026-11-04: +1 unverified phone_approvals (scheduler housekeeping, no job;
+        # local end to end only, never against the deployed relay or a real phone).
+        self.assertEqual(gaps['implementation_unverified'], 35)
         self.assertEqual(gaps['implementation_partial'], 25)
-        self.assertEqual(gaps['observation_mapping_missing'], 23)
-        self.assertEqual(gaps['containment_not_validated'], 59)
-        self.assertEqual(gaps['validation_date_missing'], 59)
+        self.assertEqual(gaps['observation_mapping_missing'], 24)   # +1 phone_approvals (2026-11-04)
+        self.assertEqual(gaps['containment_not_validated'], 60)   # +1 phone_approvals (2026-11-04)
+        self.assertEqual(gaps['validation_date_missing'], 60)   # +1 phone_approvals (2026-11-04)
         self.assertFalse(result['complete'])
 
     def test_bruteforce_deterrence_claims_no_live_ban(self):

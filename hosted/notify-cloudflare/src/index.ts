@@ -16,7 +16,8 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  // camera: the app scans the pairing QR in-app; nothing else may use it. publickey-credentials-*: the passkey (Face ID / fingerprint).
+  "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), publickey-credentials-create=(self), publickey-credentials-get=(self)",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-origin",
 };
@@ -110,7 +111,8 @@ async function api(req: Request, url: URL, env: Env): Promise<Response> {
       const v = await signed();
       const c = parse(body);
       if (!v.ok) return fail(401, v.reason || "unauthorized");
-      if (!c || c.dev !== v.id || c.d_sig !== b64u(v.key) || !b32(c.d_enc) || typeof c.name !== "string")
+      if (!c || c.dev !== v.id || c.d_sig !== b64u(v.key) || !b32(c.d_enc) || typeof c.name !== "string"
+          || (c.passkey !== undefined && typeof c.passkey !== "string") || (c.proof !== undefined && typeof c.proof !== "string"))
         return fail(400, "bad claim");
       const offer = await slot.claim(c.dev, t);
       if (!offer) return fail(404, "unknown, expired or already claimed code");
@@ -157,6 +159,13 @@ async function api(req: Request, url: URL, env: Env): Promise<Response> {
       await mailbox.remove(dev);
       return json({ ok: true });
     }
+    if (req.method === "GET" && parts[3] === "replies" && parts.length === 4) return json(await mailbox.replies(t));
+    if (req.method === "POST" && parts[3] === "replies" && parts[4] === "ack" && parts.length === 5) {
+      const ids = parse(body)?.ids;
+      if (!Array.isArray(ids)) return fail(400, "bad ack");
+      await mailbox.ackReplies(ids.filter((x: unknown) => typeof x === "string"));
+      return json({ ok: true });
+    }
     if (req.method === "POST" && parts[3] === "envelopes" && parts.length === 4) {
       const list = parse(body);
       if (!Array.isArray(list) || !list.length || list.length > LIMITS.postBatch) return fail(400, "bad batch");
@@ -184,6 +193,12 @@ async function api(req: Request, url: URL, env: Env): Promise<Response> {
       if (!Array.isArray(ids)) return fail(400, "bad ack");
       await mailbox.ack(dev, ids.filter((x: unknown) => typeof x === "string"));
       return json({ ok: true });
+    }
+    if (req.method === "POST" && parts[3] === "replies" && parts.length === 4) {
+      const reply = parse(body);
+      if (!reply || typeof reply !== "object") return fail(400, "bad reply");
+      const r = await mailbox.postReply(dev, reply, t);
+      return r.error ? fail(400, r.error) : json({ ok: true });
     }
     if (req.method === "PUT" && parts[3] === "push") {
       return (await mailbox.setPush(dev, parse(body))) ? json({ ok: true }) : fail(400, "push endpoint not allowed");

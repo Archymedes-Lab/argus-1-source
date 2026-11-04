@@ -85,3 +85,8 @@ input:focus-visible, .button:focus-visible, a:focus-visible { outline: 3px solid
   text-decoration: none; font-size: 13px; white-space: nowrap; }
 .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text, #fff); }
 .kindtag { display: inline-block; margin-left: 8px; font-size: 12px; opacity: .8; }
+
+/* pairing: scanner and install steps */
+.scanner { width: 100%; max-width: 420px; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius); background: #000; border: 1px solid var(--line); }
+.steps { text-align: left; padding-left: 1.2em; display: flex; flex-direction: column; gap: 10px; line-height: 1.45; }
+.detail.stack { padding: 20px var(--gutter); }
