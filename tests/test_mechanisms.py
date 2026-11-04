@@ -29,6 +29,7 @@ GOLDEN = json.loads((ROOT / "tests/data/mechanisms-golden-2026-10-23.json").read
 # compare the views with these taken out, so they still prove the refactor
 # changed nothing for the collectors that existed before it.
 ADDED_AFTER_GOLDEN = {
+    "retention": "event history retention: 30 days whole, then suspicious events only (owner, 2026-11-04)",
     "fwaudit": "HP firmware audit log via the elevated broker (2026-10-23)",
     "netflow": "incoming packet windows from the server packet sensor (ARGUS-SERVER.md W5, 2026-10-24)",
     "logins": "successful SSH logins, new networks and keys (ARGUS-SERVER.md W3, 2026-10-24)",

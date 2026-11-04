@@ -482,6 +482,11 @@ COLLECTORS = (
     _c("history_verify", 86400, "Event history verification", MO, 8, 4, "low", 300,
        command="timeline status",
        lane="bulk", governed=True, cost_s=75.0),
+    # Owner retention policy (2026-11-04): after 30 days, keep only the suspicious
+    # events of older history segments (collectors/telemetry/retention.py).
+    _c("retention", 1800, "Event history retention", MO, 10, 3, "low", 180,
+       command="timeline status",
+       lane="bulk", governed=True, cost_s=60.0),
     # The in-tree verification ladder over the installed code, under 1 s CPU.
     _c("verify", 86400, "Code verification (properties and models)", MO, 9, 4, "low", 300,
        command="status",

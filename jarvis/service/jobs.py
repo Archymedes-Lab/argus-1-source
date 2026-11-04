@@ -60,6 +60,7 @@ from jarvis.collectors.telemetry import (
     sysmon_policy,
     sysmon_pressure,
 )
+from jarvis.collectors.telemetry import retention as history_retention
 from jarvis.core import collection, historybook, retention
 from jarvis.core import mlworker as mlworker_mod
 from jarvis.core.eventlog import LogError
@@ -558,6 +559,7 @@ RUNNERS = {
     "native": _with_store(native.audit),
     "rust_mirror": _with_store(mirror.audit),
     "history_verify": _with_store(history_verify.verify_history),
+    "retention": _with_store(history_retention.retention),
     "verify": _with_store(verifyjob.audit),
     "evidence": _with_store(evidence.audit),
     "canary": _canary,
