@@ -61,6 +61,7 @@ from .commands import (
     cmd_toolchain,
     cmd_watch,
     cmd_webshell,
+    cmd_wslmanifest,
 )
 from .commands import defend as defend_cli
 from .commands import desktop as desktop_cli
@@ -72,6 +73,7 @@ from .commands import impersonation as impersonation_cli
 from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
 from .commands import mesh as mesh_cli
+from .commands import native as native_cli
 from .commands import notify as notify_cli
 from .commands import pixel as pixel_cli
 from .commands import privacy as privacy_cli
@@ -82,7 +84,9 @@ from .commands import retention as retention_cli
 from .commands import sensor as sensor_cli
 from .commands import server as server_cli
 from .commands import timeline as timeline_cli
+from .commands import update as update_cli
 from .commands import veil as veil_cli
+from .commands import welcome as welcome_cli
 
 
 def build_parser():
@@ -110,6 +114,7 @@ def build_parser():
     canary_cli.add_parser(sub)
     server_cli.add_parser(sub)
     notify_cli.add_parser(sub)
+    update_cli.add_parser(sub)
     privacy_cli.add_parser(sub)
     timeline_cli.add_parser(sub)
     history_cli.add_parser(sub)
@@ -304,6 +309,17 @@ def build_parser():
     iw.add_argument("--json", action="store_true")
     iw.set_defaults(fn=cmd_inputwatch)
 
+    wm = sub.add_parser("wslmanifest",
+                        help="what WSL runs, by owner, against the approved manifest")
+    wm.add_argument("--approve", action="store_true",
+                    help="approve everything running now as the expected set")
+    wm.add_argument("--partial", action="store_true",
+                    help="with --approve: accept a view that cannot read every process")
+    wm.add_argument("--severity", choices=["critical", "high", "medium", "low"])
+    wm.add_argument("-v", "--verbose", action="store_true")
+    wm.add_argument("--json", action="store_true")
+    wm.set_defaults(fn=cmd_wslmanifest)
+
     bd = sub.add_parser("backdoor",
                         help="SSH keys, sudo grants, autostart units, accounts")
     bd.add_argument("--severity", choices=["critical", "high", "medium", "low"])
@@ -478,10 +494,35 @@ def build_parser():
     impersonation_cli.add_parser(sub)
     retention_cli.add_parser(sub)
     provenance_cli.add_parser(sub)
+    welcome_cli.add_parser(sub)
+    native_cli.add_parser(sub)
     return p
 
 
+def safe_streams(streams=None):
+    """Make printing never fail on the encoding. A redirected stdout on Windows
+    (the service's daemon.out.log) is cp1252, and one arrow in a status line
+    stopped the whole daemon: redirected output becomes UTF-8, and a console
+    keeps its encoding but replaces what it cannot show."""
+    names = ("stdout", "stderr")
+    for name, stream in zip(names, streams or [getattr(sys, n) for n in names]):
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            tty = stream.isatty()
+        except (OSError, ValueError):
+            tty = False
+        try:
+            if tty:
+                stream.reconfigure(errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main(argv=None):
+    safe_streams()
     args = build_parser().parse_args(argv)
     if (args.cmd == 'mesh' or getattr(args, 'no_store', False)
             or (args.cmd == 'desktop' and args.action == 'save')):
@@ -497,7 +538,9 @@ def main(argv=None):
         return 2
     store = Store(args.db)
     try:
-        args.fn(args, store)
+        rc = args.fn(args, store)
     finally:
         store.close()
-    return 0
+    # A command's integer result is the exit code (installers and scripts read it);
+    # None, a bool or anything else is success, as before.
+    return rc if isinstance(rc, int) and not isinstance(rc, bool) else 0

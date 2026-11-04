@@ -22,9 +22,10 @@ installed from it.
 """
 
 import hashlib
-import os
 import re
 from dataclasses import dataclass, replace
+
+from jarvis.core import paths
 
 POWERSHELL_PREFIX = ("-NoProfile -NonInteractive -WindowStyle Hidden "
                      "-ExecutionPolicy Bypass ")
@@ -179,7 +180,7 @@ def normalized_text_hash(path):
 def expected_hash(task, code_root):
     if task.fixed_hash:
         return task.fixed_hash
-    return normalized_text_hash(os.path.join(str(code_root), task.release_script))
+    return normalized_text_hash(str(paths.shipped_script(task.release_script, code_root)))
 
 
 def expected_arguments(task, local, checkout_root):

@@ -32,6 +32,8 @@ STATE_CHANGING = (
     "/api/run?job=secrets", "/api/ask", "/api/assistant/action", "/api/score-coach",
     "/api/voice", "/api/brief", "/api/geo/here", "/api/geo/zone", "/api/answer",
     "/api/fix/approve", "/api/fix/authorize", "/api/fix/retry", "/api/fix/reject",
+    "/api/phone/pair/start", "/api/phone/pair/poll", "/api/phone/pair/confirm",
+    "/api/phone/pair/cancel", "/api/phone/revoke", "/api/phone/test",
 )
 
 
@@ -152,9 +154,15 @@ class StateChangingRoutesTests(_Base):
             self.assertIn("frame-ancestors 'self'", csp)
 
 
+PAGE = "/ui/" if (server.UI_DIR / "index.html").is_file() else "/"
+
+
 class DashboardCookieTests(_Base):
+    # The dashboard is served at /ui/ ("/" redirects there, query kept); the
+    # guarded cookie rides on the page and on the redirect, never to a peer of
+    # another account.
     def test_page_cookie_is_httponly_strict_and_carries_the_token(self):
-        status, headers, _ = self.srv.request("GET", "/")
+        status, headers, _ = self.srv.request("GET", PAGE)
         self.assertEqual(status, 200)
         cookie = headers.get("Set-Cookie", "")
         self.assertTrue(cookie.startswith(f"{api_token.COOKIE}={self.token};"))
@@ -170,29 +178,41 @@ class DashboardCookieTests(_Base):
             seen.append(real(client, srv_addr, tables))
             return seen[-1]
         with mock.patch.object(api_token, "peer_uid", spy):
-            _, headers, _ = self.srv.request("GET", "/")
+            _, headers, _ = self.srv.request("GET", PAGE)
         if os.path.exists("/proc/net/tcp"):
             self.assertEqual(seen, [os.geteuid()])
         self.assertIn("Set-Cookie", headers)
 
     def test_another_local_account_gets_the_page_but_not_the_token(self):
         with mock.patch.object(api_token, "peer_uid", return_value=os.geteuid() + 4242):
-            status, headers, body = self.srv.request("GET", "/")
+            status, headers, body = self.srv.request("GET", PAGE)
         self.assertEqual(status, 200)
         self.assertNotIn("Set-Cookie", headers)
         self.assertNotIn(self.token.encode(), body)
 
     def test_root_keeps_the_cookie_and_an_unattributable_peer_does_not(self):
         with mock.patch.object(api_token, "peer_uid", return_value=0):
-            _, headers, _ = self.srv.request("GET", "/")
+            _, headers, _ = self.srv.request("GET", PAGE)
             self.assertIn("Set-Cookie", headers)
         # Fail closed: a peer whose owner cannot be determined (a Windows
         # program across WSL networking) pairs explicitly instead.
         with mock.patch.object(api_token, "peer_uid", return_value=None):
-            status, headers, body = self.srv.request("GET", "/")
+            status, headers, body = self.srv.request("GET", PAGE)
             self.assertEqual(status, 200)
             self.assertNotIn("Set-Cookie", headers)
             self.assertNotIn(self.token.encode(), body)
+
+    def test_the_redirect_to_the_page_guards_the_cookie_the_same_way(self):
+        status, headers, _ = self.srv.request("GET", "/")
+        self.assertIn(status, (200, 302))
+        if status == 302:
+            self.assertTrue(headers.get("Location", "").startswith("/ui/"))
+        self.assertIn("Set-Cookie", headers)
+        for uid in (os.geteuid() + 4242, None):
+            with self.subTest(uid=uid), mock.patch.object(api_token, "peer_uid", return_value=uid):
+                _, headers, body = self.srv.request("GET", "/")
+                self.assertNotIn("Set-Cookie", headers)
+                self.assertNotIn(self.token.encode(), body)
 
     def test_the_token_is_not_in_any_response_body_or_error(self):
         for method, path in (("GET", "/api/defender"), ("GET", "/nope"),

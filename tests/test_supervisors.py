@@ -194,3 +194,25 @@ class ReviverAuditTests(unittest.TestCase):
     def test_a_fresh_loop_is_ok(self):
         self.assertEqual(self._audit(checkedAt=self.now - 4, healthy=True),
                          {"the instant reviver is watching JARVIS": "ok"})
+
+
+class TornReadTests(unittest.TestCase):
+    def test_a_torn_write_is_retried_before_it_counts_as_unreadable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "state.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write('{"checkedAt": 1')                    # half written
+
+            def finish(_delay):
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump({"checkedAt": 1800000000}, fh)
+
+            self.assertEqual(supervisors.read_state(path, sleep=finish), {"checkedAt": 1800000000})
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("{broken")
+            slept = []
+            self.assertIsNone(supervisors.read_state(path, sleep=slept.append))
+            self.assertEqual(len(slept), 2)                      # bounded: two short retries
+            self.assertIsNone(supervisors.read_state(os.path.join(tmp, "absent.json"),
+                                                     sleep=slept.append))
+            self.assertEqual(len(slept), 2)                      # a missing file is not retried

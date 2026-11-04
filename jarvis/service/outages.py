@@ -265,6 +265,18 @@ class OutageRecorder:
                 "transition": transition, "at": float(at), "noted": time.time(),
                 **{k: v for k, v in attrs.items() if v is not None}}
 
+    def note(self, subject, transition, at, **attrs):
+        """Record one event from another plane (link transitions and
+        reconnect attempts). Durable like every other record; never raises."""
+        try:
+            with self.lock:
+                records = [self._record(subject, transition, at, **attrs)]
+                self._spool(records)
+                return records
+        except Exception as exc:
+            self.status["last_error"] = f"note: {type(exc).__name__}"
+            return []
+
     # -- detection -----------------------------------------------------------
 
     def observe(self, specs, snapshots, now=None):

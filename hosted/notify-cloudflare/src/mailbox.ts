@@ -21,7 +21,7 @@ export interface Env {
 }
 
 type Device = { dev: string; d_sig: string; d_enc: string; name: string; state: string; code: string;
-  push: string | null; added: number };
+  push: string | null; added: number; last_seen?: number | null };
 
 export class Mailbox extends DurableObject<Env> {
   sql: SqlStorage;
@@ -35,6 +35,16 @@ export class Mailbox extends DurableObject<Env> {
       CREATE TABLE IF NOT EXISTS envelopes (id TEXT PRIMARY KEY, dev TEXT, body TEXT, created INTEGER, expires INTEGER);
       CREATE INDEX IF NOT EXISTS envelopes_dev ON envelopes (dev, expires);
       CREATE TABLE IF NOT EXISTS nonces (sig TEXT PRIMARY KEY, at INTEGER);`);
+    // Added after v1: when each device last fetched its inbox (liveness the server may read).
+    const cols = this.sql.exec("PRAGMA table_info(devices)").toArray().map((r) => r.name);
+    if (!cols.includes("last_seen")) this.sql.exec("ALTER TABLE devices ADD COLUMN last_seen INTEGER");
+  }
+
+  // Metadata for the server: never keys, never envelopes.
+  devices() {
+    return this.sql.exec("SELECT dev, name, state, added, last_seen, push IS NOT NULL AS push FROM devices")
+      .toArray().map((r) => ({ dev: r.dev, name: r.name, state: r.state, added: r.added,
+        last_seen: r.last_seen ?? null, push: Boolean(r.push) }));
   }
 
   // A request signature may be used once: replays inside the time window are refused.
@@ -124,6 +134,7 @@ export class Mailbox extends DurableObject<Env> {
   }
 
   inbox(dev: string, now: number) {
+    this.sql.exec("UPDATE devices SET last_seen = ? WHERE dev = ?", now, dev);
     return this.sql.exec("SELECT body FROM envelopes WHERE dev = ? AND expires > ? ORDER BY created LIMIT 100", dev, now)
       .toArray().map((r) => JSON.parse(r.body as string));
   }

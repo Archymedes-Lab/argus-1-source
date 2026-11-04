@@ -31,6 +31,7 @@ from .audit import (
     cmd_sysmon_linux,
     cmd_toolchain,
     cmd_webshell,
+    cmd_wslmanifest,
 )
 from .data import (
     cmd_approve,
@@ -66,6 +67,7 @@ __all__ = [
     "cmd_hunt",
     "cmd_implant",
     "cmd_inputwatch",
+    "cmd_wslmanifest",
     "cmd_intel",
     "cmd_intrusion",
     "cmd_investigate",

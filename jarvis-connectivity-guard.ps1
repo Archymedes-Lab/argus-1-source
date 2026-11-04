@@ -1,5 +1,8 @@
 # Runs independently of WSL; never disables an adapter or changes DNS/firewall rules.
+# -Loop: one process probes every IntervalSeconds for LoopMinutes, then exits;
+# the task (every 5 minutes, IgnoreNew) starts the next. Without -Loop: one probe.
 param([switch]$Install, [switch]$ProbeOnly, [switch]$LibraryOnly,
+      [switch]$Loop, [int]$LoopMinutes = 10, [int]$IntervalSeconds = 60,
       [string]$InterfaceName = 'Wi-Fi', [string]$ProfileName = '',
       [string]$StateRoot = (Join-Path $env:LOCALAPPDATA 'Jarvis\Connectivity'))
 $ErrorActionPreference = 'Stop'
@@ -68,11 +71,11 @@ if ($Install) {
     }
     # conhost --headless: -WindowStyle Hidden alone still flashes a console window each run.
     $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument (
-        '--headless "' + "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" + '" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script + '" -StateRoot "' + $StateRoot + '"')
+        '--headless "' + "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" + '" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script + '" -StateRoot "' + $StateRoot + '" -Loop')
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
     $triggers = @((New-ScheduledTaskTrigger -AtLogOn -User $principal.UserId),
-        (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)))
-    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
+        (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)))
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
     [void](Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force)
     Start-ScheduledTask -TaskName $taskName
     Write-Output 'Connectivity guard installed and started.'
@@ -93,6 +96,17 @@ $locked = $false
 try {
     try { $locked = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $locked = $true }
     if (-not $locked) { return }
+    $loopUntil = (Get-Date).AddMinutes([Math]::Max(1, $LoopMinutes))
+    $first = $true
+    while ($true) {
+    if (-not $first) {
+        Start-Sleep -Seconds ([Math]::Max(15, $IntervalSeconds))
+        $cfg = Get-Content -LiteralPath (Join-Path $StateRoot 'config.json') -Raw | ConvertFrom-Json
+        $adapter = Get-NetAdapter -Name $cfg.interface
+        $reachable = Test-InternetTcp
+        $application = Get-ApplicationConnectivity
+    }
+    $first = $false
     $state = @{failures=0; firstFailure=0; lastAttempt=0; attempts=0; lastHealthy=0; error=''}
     $saved = Join-Path $StateRoot 'state.json'
     if (Test-Path -LiteralPath $saved) {
@@ -128,7 +142,9 @@ try {
         # An accepted request is not proof of connectivity; the next probe verifies it.
     }
     Save-ConnectivityState $state
-    $state | ConvertTo-Json -Compress
+    if (-not $Loop) { $state | ConvertTo-Json -Compress }
+    if (-not $Loop -or (Get-Date) -ge $loopUntil) { break }
+    }
 } finally {
     if ($locked) { $mutex.ReleaseMutex() }
     $mutex.Dispose()

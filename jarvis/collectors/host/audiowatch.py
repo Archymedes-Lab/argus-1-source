@@ -409,6 +409,24 @@ def compare(current, previous, sealed=False, listener=None):
     return findings
 
 
+def _presence_findings(store, data, now=None):
+    """For each beep in the last 24 h: was the person at the computer, nobody,
+    or possibly someone else (beepcheck.py)? Never raises."""
+    from jarvis.collectors.host import beepcheck
+    now = time.time() if now is None else now
+    try:
+        beeps = store.db.execute(
+            "SELECT ts, app, fg, idle_s, sys, caller FROM sound_events WHERE ts >= ? AND sound = 'beep' "
+            "ORDER BY ts DESC LIMIT 200", (int(now - _SOUND_WINDOW_S),)).fetchall()
+        present = beepcheck.presence(data.get("presence")) if isinstance(data, dict) else None
+        cols = ("ts", "app", "fg", "idle_s", "sys", "caller")
+        return beepcheck.findings(store, [dict(zip(cols, tuple(b))) for b in beeps], present, now,
+                                  finding=lambda sev, title, detail, where, category="audio":
+                                  _finding(sev, title, detail, category))
+    except Exception as exc:  # noqa: BLE001 - a presence fault must not hide the audio findings
+        return [_finding("low", "beep presence check unavailable this pass", type(exc).__name__, "visibility")]
+
+
 def audit(store, hosts=("wsl", "win")):
     if "win" not in hosts:
         collection.failed("audio", "Windows collection disabled")
@@ -443,6 +461,7 @@ def audit(store, hosts=("wsl", "win")):
     sealed = bool(seal and "microphone" in seal.get("caps", {}))
     findings = compare(data, previous, sealed=sealed,
                        listener=beat if live else None) + sounds
+    findings += _presence_findings(store, data)
     store.set_meta(_STATE_KEY, json.dumps(dict(data, schema=1, ts=time.time())))
     if meter_errors:
         # Routes and sessions are valid and kept; only beep visibility is partial.

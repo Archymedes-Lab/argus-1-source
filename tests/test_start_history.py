@@ -71,7 +71,7 @@ class CollectorTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.store = Store(str(Path(tmp.name) / "jarvis.db"))
         self.addCleanup(self.store.close)
-        for name, value in (("state", lambda: (True, True)), ("_raw", lambda since: ""),
+        for name, value in (("state", lambda: (True, True)), ("read_since", lambda since: ("", True, "")),
                             ("_parse", lambda text: [start("/usr/bin/date", at="2027-01-15 08:00:00.000")])):
             patcher = mock.patch.object(sysmon_run, name, value)
             patcher.start()

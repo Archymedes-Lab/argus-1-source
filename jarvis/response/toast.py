@@ -17,6 +17,7 @@ critical until mail works too.
 import json
 import time
 
+from jarvis.core import brand
 from jarvis.platform.windows import ps_json, stdin_text  # noqa: F401  (stdin contract)
 from jarvis.response import alert
 
@@ -100,7 +101,7 @@ def deliver(store, job, findings, now=None, runner=None):
         chosen, state = select(findings, _load(store), now)
         shown = 0
         for _key, f in chosen:
-            title, body = text(f, job)
+            title, body = (brand.brand(x) for x in text(f, job))
             if show(title, body, runner):
                 shown += 1
         if chosen:

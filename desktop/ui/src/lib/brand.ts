@@ -1,23 +1,25 @@
-// brand:begin -- the same rule as jarvis/web/static/dashboard.html; tests/test_ui_brand.py keeps the copies equal.
-// The product is ARGUS-1. Server text can still say JARVIS (finding titles keep their
-// identity for acknowledgements and history), so it is re-branded at display time.
-// Real Windows objects keep their spelling so they can be found in Task Scheduler
-// and Services; lowercase commands (jarvis ..., jarvis.service) are never touched.
-// Idempotent: a name already followed by -1 is left alone.
-const BRAND = "ARGUS-1";
+// The product is ARGUS-INSTINCT. Same rule as the web pages (brand:begin in jarvis/web/static)
+// and the daemon (jarvis/core/brand.py); tests/test_ui_brand.py keeps the copies equal.
+// Daemon text can say JARVIS where the word is an identity (finding titles match
+// acknowledgements), so it is re-branded here, where it is shown.
+const BRAND = "ARGUS-INSTINCT";
 const BRAND_KEEP = /^ (input hook|independent health monitor|connectivity guard|native sensor|Jarvis)/;
-export const brand = (s: unknown): string => String(s ?? "").replace(/\bJARVIS\b(?!-1)/g,
-  (m, i, all) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
-// brand:end
 
-/** Every string value in a reply, branded once where it enters the interface;
- *  structure and keys unchanged. */
-export function brandDeep<T>(value: T): T {
-  if (typeof value === "string") return brand(value) as T;
-  if (Array.isArray(value)) return value.map(brandDeep) as T;
+export const brand = (s: unknown): string => String(s ?? "").replace(/\bJARVIS\b(?!-(?:1|INSTINCT)\b)/g,
+  (m: string, i: number, all: string) => (BRAND_KEEP.test(all.slice(i + m.length)) ? m : BRAND));
+
+// Fields the app sends back to the daemon to act on one thing: never rewritten,
+// or an action would name something that does not exist.
+const IDENTITY = new Set(["key", "id", "fp", "guid", "job", "name", "where", "host", "kind",
+  "command", "category", "token", "path", "exe", "url"]);
+
+/** A copy of `value` with every displayed string branded; identity fields kept. */
+export function brandDeep<T>(value: T, field = ""): T {
+  if (typeof value === "string") return (IDENTITY.has(field) ? value : brand(value)) as T;
+  if (Array.isArray(value)) return value.map((v) => brandDeep(v, field)) as T;
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = brandDeep(v);
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = brandDeep(v, k);
     return out as T;
   }
   return value;

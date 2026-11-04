@@ -1,0 +1,112 @@
+{
+ "data at rest": [
+  "A file appears to contain a credential, such as an API key or password.",
+  "If it is a real, active credential and the file can be read by others, it could be misused.",
+  "Review the affected file and decide whether the credential is real. If it is, revoke or rotate it using the service's own process."
+ ],
+ "persistence": [
+  "Something is set up to start automatically or run on a trigger, such as a scheduled task or a WMI subscription.",
+  "Legitimate software does this, but so can malware that wants to survive a restart.",
+  "Check whether you recognise the item and the program it runs. If you do not, investigate before removing anything."
+ ],
+ "staging": [
+  "A new, unsigned program was recently written to a place where programs are often dropped.",
+  "Installers and developer tools do this too, but unexpected unsigned programs are a common way malware arrives.",
+  "Check whether you installed or built something just before this appeared."
+ ],
+ "rules": [
+  "A firewall rule allows connections in a permissive way.",
+  "Broad rules can let other computers reach programs on this one.",
+  "Review who the rule allows and whether the program needs it."
+ ],
+ "remote": [
+  "A rule or setting allows connections into this computer.",
+  "Remote access you did not set up could let someone else in.",
+  "Confirm you expect this remote access."
+ ],
+ "access": [
+  "An app is using or can use a sensitive device such as the camera or microphone.",
+  "That is normal during a call, but unexpected if you are not using it.",
+  "Check which app it is and whether you started it."
+ ],
+ "internet": [
+  "A program is listening for connections beyond this computer, or traffic monitoring is limited.",
+  "Programs reachable from the network are a way in if they have flaws.",
+  "Check whether you want this program reachable from other devices."
+ ],
+ "impersonation": [
+  "Credentials stored on this computer could be used to sign in as you.",
+  "Anyone who can run programs as you could use them.",
+  "Review which stored sign-ins you still need."
+ ],
+ "accounts": [
+  "An account is hidden from the sign-in screen or looks unusual.",
+  "Hidden accounts are sometimes used to keep access, though some are created by software on purpose.",
+  "Identify what created the account before changing anything."
+ ],
+ "interception": [
+  "A trusted root certificate that is not a standard one was found.",
+  "A trusted certificate can let its owner read protected web traffic.",
+  "Check that the certificate belongs to software you installed on purpose."
+ ],
+ "injected code": [
+  "A program has executable memory that is not backed by a file on disk.",
+  "Some software does this legitimately; malware uses it to hide.",
+  "See whether the program is one you know and run."
+ ],
+ "clickfix": [
+  "The Run dialog history shows commands that may have been pasted from a website.",
+  "Fake 'fix it' pages trick people into running commands themselves.",
+  "Check whether you ran these commands on purpose."
+ ],
+ "av": [
+  "Windows Defender reported a detection.",
+  "Defender has already flagged this item, so it deserves a look.",
+  "Open Windows Security to see what it found and what it did."
+ ],
+ "posture": [
+  "A Windows protection setting is off or could not be read.",
+  "Protections that are off leave less between you and an attack.",
+  "Open the details to see which setting and whether you want it on."
+ ],
+ "malware defense": [
+  "A malware protection feature is not enabled.",
+  "That feature would otherwise help block threats.",
+  "Decide whether you want it enabled."
+ ],
+ "defense": [
+  "A Windows Defender setting could not be read.",
+  "ARGUS-INSTINCT cannot confirm protection it cannot read.",
+  "Open the details to see which setting."
+ ],
+ "mitigations": [
+  "A program runs without a hardening feature that limits what attackers can do.",
+  "This makes that program easier to exploit if it has a flaw.",
+  "Usually informational; keep the program updated."
+ ],
+ "screen": [
+  "An app may capture the screen without showing a capture border.",
+  "Screen capture can reveal anything on your display.",
+  "Check whether you use a screen-sharing or recording app."
+ ],
+ "extension": [
+  "A browser extension is installed.",
+  "Extensions can read pages you visit, so each one is trusted with that.",
+  "Keep only extensions you recognise."
+ ],
+ "daemon": [
+  "ARGUS-INSTINCT's own monitor or one of its services is not running as expected.",
+  "While it is not running, ARGUS-INSTINCT cannot watch that area.",
+  "Open Monitoring to see the reason and the steps to restore it."
+ ],
+ "collectors": [
+  "One of ARGUS-INSTINCT's checks could not complete.",
+  "ARGUS-INSTINCT cannot currently confirm the security of that area.",
+  "Open Monitoring to see the reason."
+ ],
+ "visibility": [
+  "ARGUS-INSTINCT has limited visibility into part of this computer.",
+  "It cannot report on what it cannot see.",
+  "Open Monitoring to see what is limited and why."
+ ]
+}

@@ -15,7 +15,7 @@ async function pair(token, fetchImpl) {
     body: JSON.stringify({ token: String(token || '').trim() }),
   });
   if (res.ok) return { ok: true };
-  let message = 'ARGUS-1 refused this token.';
+  let message = 'ARGUS-INSTINCT refused this token.';
   try { const body = await res.json(); if (body && body.error) message = String(body.error); } catch (e) { /* not JSON */ }
   return { ok: false, message };
 }
@@ -32,7 +32,7 @@ if (typeof document !== 'undefined' && document.getElementById('pair')) {
       const result = await pair(input.value, fetch.bind(window));
       input.value = '';
       if (result.ok) {
-        out.textContent = 'Paired. Opening ARGUS-1…';
+        out.textContent = 'Paired. Opening ARGUS-INSTINCT…';
         location.replace(safeNext(new URLSearchParams(location.search).get('next')));
       } else {
         out.className = 'bad';
@@ -40,7 +40,7 @@ if (typeof document !== 'undefined' && document.getElementById('pair')) {
       }
     } catch (e) {
       out.className = 'bad';
-      out.textContent = 'ARGUS-1 did not answer.';
+      out.textContent = 'ARGUS-INSTINCT did not answer.';
     }
   });
 }

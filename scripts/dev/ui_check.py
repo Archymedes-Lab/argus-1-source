@@ -5,7 +5,7 @@
 Serves the checkout's pages on 127.0.0.1:8790 and forwards GET /api/* to the
 live daemon on 127.0.0.1:8787; anything else is refused, so the check cannot
 change state. One synthetic finding is added to /api/state so the brand rule
-is exercised on server text every run: product prose must read ARGUS-1, real
+is exercised on server text every run: product prose must read ARGUS-INSTINCT, real
 Windows object names must keep their spelling. Uses Playwright's Linux
 chromium-headless-shell (Windows policy blocks headless Chrome/Edge here).
 Exit status 0 only when every page passes.
@@ -113,8 +113,8 @@ def check(shots):
                         failures.append(f"{label}: script errors: {errors[:3]}")
                     if overflow > 1:
                         failures.append(f"{label}: horizontal overflow {overflow}px")
-                    if "ARGUS-1" not in text:
-                        failures.append(f"{label}: brand ARGUS-1 not shown")
+                    if "ARGUS-INSTINCT" not in text:
+                        failures.append(f"{label}: brand ARGUS-INSTINCT not shown")
                     if route == "/" and "JARVIS input hook" not in text:
                         failures.append(f"{label}: real task name was rewritten or not shown")
                     if shots:

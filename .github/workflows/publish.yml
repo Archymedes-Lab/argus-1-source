@@ -54,6 +54,10 @@ jobs:
           ref: master
           path: site
           ssh-key: ${{ secrets.SITE_DEPLOY_KEY }}
+      - name: 7-Zip (the gate opens the Windows Setup with 7z)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q 7zip
       - name: Check and publish to the site
         run: python3 release/publish.py --release "$RUNNER_TEMP/release-assets" --site site --tag "$TAG" ${{ inputs.rollback && '--rollback' || '' }}
       - name: Read the live site back

@@ -235,7 +235,13 @@ def classify_intent(q):
         return "score_meaning"
     if has("like i'm not technical", "like im not technical", "not technical", "plain english",
            "simple terms", "in simple", "eli5", "explain simply"):
-        return "plain"
+        # A general-knowledge question ("explain what ransomware is in simple words") is for the
+        # model; only a question about this computer or ARGUS gets the canned walkthrough.
+        about_us = has("argus", "my computer", "my pc", "this finding", "this warning", "this alert",
+                       "my score", "the score", "my system", "my security")
+        general = re.search(r"\b(what is|what are|what's|explain what|explain how|tell me about|how does|how do)\b", q)
+        if about_us or not general:
+            return "plain"
     if has("what can you do", "what are you able", "what do you do", "your capabilities",
            "can you help", "what can i ask") or q in ("help", "help me", "?"):
         return "capabilities"
@@ -458,7 +464,7 @@ def score_meaning(store, jobs, now=None):
     result = score.compute(store.get_snapshots(), jobs, now, acknowledge.load(store))
     blind = _blind(result)
     secs = [_section("verified", f"Your security score is {result['score']}% ({result['grade']}), with "
-                                 f"{result['coverage']}% of ARGUS-1's monitoring coverage reporting."),
+                                 f"{result['coverage']}% of ARGUS-INSTINCT's monitoring coverage reporting."),
             _section("say", "How it works: each protection area loses points for its open findings, "
                             "more for critical and high ones. Low-severity items are inventory and do not "
                             "lower it."),
@@ -470,7 +476,7 @@ def score_meaning(store, jobs, now=None):
                                          "not reporting, so part of this score reflects missing "
                                          "visibility rather than known problems."))
     secs.append(_section("assumption", "A low score is not proof of an attack, and a high score is not "
-                                       "proof of safety. The score only reflects what ARGUS-1 could check."))
+                                       "proof of safety. The score only reflects what ARGUS-INSTINCT could check."))
     offer = {"action": "score_plan", "target": {}}
     secs.append(_section("say", "Want me to show what would raise it?"))
     return reply(secs, [_act("score_plan", label="How do I raise my score?")], offer)
@@ -485,7 +491,7 @@ def _tally(store, now=None):
 
 
 def changes_summary(store):
-    """What ARGUS-1 has changed on this computer, from the audit trail and the response ledger."""
+    """What ARGUS-INSTINCT has changed on this computer, from the audit trail and the response ledger."""
     executed = sum(1 for e in audit_log(store) if e.get("op") == "approve" and e.get("outcome") == "queued")
     try:
         from jarvis.response import defense
@@ -493,15 +499,15 @@ def changes_summary(store):
     except Exception:
         automatic = None
     if executed == 0 and automatic == 0:
-        text = "No changes have been made to your computer by ARGUS-1."
+        text = "No changes have been made to your computer by ARGUS-INSTINCT."
     elif automatic == 0:
-        text = (f"The only thing ARGUS-1 has done on your approval is {executed} read-only re-run"
+        text = (f"The only thing ARGUS-INSTINCT has done on your approval is {executed} read-only re-run"
                 f"{'s' if executed != 1 else ''} of its own checks. It has not changed any setting or file.")
     elif automatic is None:
-        text = (f"ARGUS-1 has queued {executed} approved read-only check{'s' if executed != 1 else ''}. "
+        text = (f"ARGUS-INSTINCT has queued {executed} approved read-only check{'s' if executed != 1 else ''}. "
                 "Whether any automatic response ran could not be read.")
     else:
-        text = (f"ARGUS-1 has applied {automatic} automatic response action{'s' if automatic != 1 else ''}. "
+        text = (f"ARGUS-INSTINCT has applied {automatic} automatic response action{'s' if automatic != 1 else ''}. "
                 "They are listed in its response ledger, with undo information.")
     return {"assistant_executed": executed, "automatic_applied": automatic, "text": text}
 
@@ -516,16 +522,16 @@ def found(store, jobs, now=None):
     result = score.compute(store.get_snapshots(), jobs, now, acknowledge.load(store))
     blind = _blind(result)
     if review:
-        simple = (f"ARGUS-1 found {len(review)} item{'s' if len(review) != 1 else ''} to review, including "
+        simple = (f"ARGUS-INSTINCT found {len(review)} item{'s' if len(review) != 1 else ''} to review, including "
                   f"{len(serious)} marked as serious. Some items may have legitimate explanations.")
     else:
-        simple = "ARGUS-1 found no items to review in the checks that are reporting."
+        simple = "ARGUS-INSTINCT found no items to review in the checks that are reporting."
     if info:
         simple += f" It also recorded {info} informational observation{'s' if info != 1 else ''}."
     secs = [_section("simple", simple + " " + changes_summary(store)["text"])]
     if review:
         secs.append(_section("observed", "The most important:\n" + _list(serious or review)))
-    secs.append(_section("why", "Serious means ARGUS-1 rates the possible impact as high if the item is real. "
+    secs.append(_section("why", "Serious means ARGUS-INSTINCT rates the possible impact as high if the item is real. "
                                 "It does not mean harm has been confirmed."))
     if blind:
         secs.append(_section("why", f"{len(blind)} check{'s are' if len(blind) != 1 else ' is'} not reporting, "
@@ -541,20 +547,20 @@ def worry(store, jobs, now=None):
     items, serious, review, info = _tally(store, now)
     blind = _blind(score.compute(store.get_snapshots(), jobs, now, acknowledge.load(store)))
     if serious:
-        simple = (f"Take it seriously but calmly. ARGUS-1 marked {len(serious)} item"
+        simple = (f"Take it seriously but calmly. ARGUS-INSTINCT marked {len(serious)} item"
                   f"{'s' if len(serious) != 1 else ''} as serious. That means they deserve a look, not that "
                   "your computer is compromised.")
     elif review:
-        simple = "Not urgently. ARGUS-1 found some items worth reviewing, none marked serious."
+        simple = "Not urgently. ARGUS-INSTINCT found some items worth reviewing, none marked serious."
     elif blind:
-        simple = (f"ARGUS-1 found nothing to review, but {len(blind)} of its checks are not reporting, so it "
+        simple = (f"ARGUS-INSTINCT found nothing to review, but {len(blind)} of its checks are not reporting, so it "
                   "cannot promise everything is fine.")
     else:
-        simple = "ARGUS-1 found nothing serious in the checks it ran. No tool can promise a computer is clean."
+        simple = "ARGUS-INSTINCT found nothing serious in the checks it ran. No tool can promise a computer is clean."
     secs = [_section("simple", simple),
             _section("observed", (_list(serious or review) if review else "No items to review right now.")),
             _section("why", "Many flagged items are normal software doing things attackers also do, such as "
-                            "starting automatically. ARGUS-1 does not know your intent, so it reports and explains."),
+                            "starting automatically. ARGUS-INSTINCT does not know your intent, so it reports and explains."),
             _section("next", "Open the first item, read what was observed, and decide whether you expect it. "
                              "You do not need to change anything yet."),
             _section("technical", changes_summary(store)["text"])]
@@ -568,10 +574,10 @@ def why_serious(store, jobs, now=None):
         return reply([_section("simple", "Nothing is marked serious right now.")])
     f, job = top
     secs = [_section("simple", f"“{_clean(f.get('title'), 100)}” is marked {f.get('severity')} because of what it "
-                               "could do if it is real, not because ARGUS-1 has proof that it is."),
+                               "could do if it is real, not because ARGUS-INSTINCT has proof that it is."),
             _section("observed", f"{_clean(f.get('detail') or 'No detail was recorded.', 200)} "
                                  f"(reported by the {_clean(job, 40)} collector)"),
-            _section("why", _sev_why(f.get("severity")) + " Severity is about potential impact. ARGUS-1 does not "
+            _section("why", _sev_why(f.get("severity")) + " Severity is about potential impact. ARGUS-INSTINCT does not "
                             "score how likely an item is to be malicious, so a serious item may still be harmless."),
             _section("next", "Compare it with software you know you installed, then ask me to explain it."),
             _section("technical", f"severity={f.get('severity')} category={f.get('category')} job={job}")]
@@ -604,9 +610,9 @@ def approve_effect(store, jobs, now=None):
             open_fixes = 0
         if open_fixes:
             secs.append(_section("observed", f"{open_fixes} fix proposal{'s are' if open_fixes != 1 else ' is'} in "
-                                             "the review queue. Approving one only drafts a patch to ARGUS-1's own "
+                                             "the review queue. Approving one only drafts a patch to ARGUS-INSTINCT's own "
                                              "code. Nothing is applied from this page."))
-        secs.append(_section("why", "Before you approve anything, ARGUS-1 shows what it would do, why, the exact "
+        secs.append(_section("why", "Before you approve anything, ARGUS-INSTINCT shows what it would do, why, the exact "
                                     "target, the risk, whether it can be undone and what happens if you do nothing."))
         secs.append(_section("next", "You can always decline. Declining, closing the box or letting a proposal "
                                      "expire changes nothing."))
@@ -614,10 +620,10 @@ def approve_effect(store, jobs, now=None):
 
 
 def damage(store, now=None):
-    secs = [_section("simple", "Looking at findings cannot damage your computer. Nothing ARGUS-1 shows here "
+    secs = [_section("simple", "Looking at findings cannot damage your computer. Nothing ARGUS-INSTINCT shows here "
                                "changes it."),
             _section("observed", "From this page the assistant can only queue a read-only re-run of one of "
-                                 "ARGUS-1's own checks, and only after you approve. " + changes_summary(store)["text"]),
+                                 "ARGUS-INSTINCT's own checks, and only after you approve. " + changes_summary(store)["text"]),
             _section("why", "Deleting files, stopping programs and changing settings are not available from "
                             "this page. Any proposal that could change something shows its risk and whether "
                             "it can be undone before you decide."),
@@ -630,7 +636,7 @@ def damage(store, now=None):
 
 def investigate_safely(store, jobs, now=None):
     secs = [_section("simple", "Look first, change nothing. Everything below is read-only."),
-            _section("next", "1. Open the finding and read what ARGUS-1 observed and where.\n"
+            _section("next", "1. Open the finding and read what ARGUS-INSTINCT observed and where.\n"
                              "2. Ask whether you recognise the program, folder or account, for example because "
                              "you installed or built something recently.\n"
                              "3. Compare the name and location with the software you know.\n"
@@ -649,11 +655,11 @@ def not_checked(store, jobs, now=None):
     if blind:
         lines = "\n".join(f"- {_jobs_label(jobs, b['job'])}: {_STATE_WORDS.get(b['state'], 'not reporting')}"
                           for b in blind[:12])
-        secs = [_section("simple", f"{len(blind)} of ARGUS-1's checks are not reporting, so those areas are "
+        secs = [_section("simple", f"{len(blind)} of ARGUS-INSTINCT's checks are not reporting, so those areas are "
                                    "unchecked right now."),
                 _section("observed", lines + (f"\n…and {len(blind) - 12} more." if len(blind) > 12 else ""))]
     else:
-        secs = [_section("simple", "Every check ARGUS-1 counts has reported recently."),
+        secs = [_section("simple", "Every check ARGUS-INSTINCT counts has reported recently."),
                 _section("observed", "That only covers what each check looks at. It is not a promise that "
                                      "nothing else exists.")]
     secs += [_section("why", "A check that is not reporting is not counted as safe, and having no alerts from "
@@ -667,7 +673,8 @@ def not_checked(store, jobs, now=None):
 def clarify(store, jobs, model_note=True, now=None):
     secs = [_section("say", "I'm not sure I understood that, and I don't want to guess about your "
                             "security. Are you asking about your overall status, a specific warning, "
-                            "or how to improve your score?")]
+                            "or how to improve your score? You can also ask about everyday safety, "
+                            "such as phishing, passwords, backups or updates.")]
     return reply(secs, suggestions=suggestions(store, jobs, now))
 
 
@@ -724,7 +731,7 @@ def _check_monitor(store, jobs, target, runner_available, now):
                   else "A stored result tells you what the check saw last time, not what it would see now.")],
         certainty="Based only on the stored result. The check was not run again.",
         recommendation=["Re-run the check (it needs your approval) to get a fresh result."
-                        if actions else "Start the ARGUS-1 service, then re-run the check."],
+                        if actions else "Start the ARGUS-INSTINCT service, then re-run the check."],
         unchecked=["The check itself was not re-run, so its behaviour right now is unknown"],
         technical=json.dumps({"job": job, "last_result": snap.get("ts") if snap else None,
                               "error": (snap or {}).get("error", "")}, default=str),
@@ -752,8 +759,8 @@ def _explain_finding(store, target):
         found=[_clean(finding.get("detail") or "No detail was recorded.", 200),
                f"Reported by the {_clean(job, 40)} collector at {_clean(finding.get('where') or 'an unspecified place', 120)}."],
         meaning=[_sev_why(finding.get("severity")),
-                 "It may have a legitimate explanation. ARGUS-1 has not confirmed that it is harmful."],
-        certainty="Not scored. One collector reported this; ARGUS-1 does not rate how likely it is to be real.",
+                 "It may have a legitimate explanation. ARGUS-INSTINCT has not confirmed that it is harmful."],
+        certainty="Not scored. One collector reported this; ARGUS-INSTINCT does not rate how likely it is to be real.",
         recommendation=["Review the details and decide whether you expect this on your computer."],
         unchecked=["Whether you installed or expect this item", "The item itself was not opened or run"],
         technical=json.dumps({k: finding.get(k) for k in ("category", "severity", "host", "where")}, default=str),
@@ -948,15 +955,15 @@ def proposal_details(store, jobs, cap, target, now, token=""):
     return {
         "title": f"Re-run the “{label}” check once",
         "proposes": f"Queue one extra run of the “{label}” audit so its stored result is refreshed.",
-        "why": f"The stored result is the evidence ARGUS-1 has for this area, and the check {basis}.",
+        "why": f"The stored result is the evidence ARGUS-INSTINCT has for this area, and the check {basis}.",
         "target": {"kind": "collector", "id": job, "label": label},
-        "expected": "A newer stored result for this check. ARGUS-1 will call it recovered only when that "
+        "expected": "A newer stored result for this check. ARGUS-INSTINCT will call it recovered only when that "
                     "result is newer than your approval and has no error.",
         "risks": cap.risks,
         "reversible": "Nothing to undo: the audit only reads state and changes no setting or file.",
         "if_nothing": f"Nothing runs. The proposal expires in {PROPOSAL_TTL_S // 60} minutes and the check "
                       "stays on its normal schedule.",
-        "elevated": "No elevated permissions are needed. The ARGUS-1 service must be running.",
+        "elevated": "No elevated permissions are needed. The ARGUS-INSTINCT service must be running.",
         "exact": f"The scheduler queues one read-only run of the “{job}” audit. Nothing else.",
         "evidence": [f"The “{label}” check {basis}."],
         "confirm_label": f"Approve: run “{label}” once",
@@ -1019,7 +1026,7 @@ def _resolve_proposal(store, jobs, op, token, runner, now):
             word = {"approved": "approved", "cancelled": "cancelled"}.get(used.get("state"), "used")
             return _refuse(store, op, "", {}, f"That proposal was already {word}. Each proposal works once, "
                                               "so nothing was changed.", now, "already_used", used.get("state", "denied"))
-        return _refuse(store, op, "", {}, "ARGUS-1 has no proposal with that code, so nothing was changed.",
+        return _refuse(store, op, "", {}, "ARGUS-INSTINCT has no proposal with that code, so nothing was changed.",
                        now, "unknown_token", "denied")
     if prop.get("expires", 0) <= now:
         _record_used(store, token, "expired", now)

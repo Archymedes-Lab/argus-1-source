@@ -668,8 +668,8 @@ SCRIPT_CHILDREN = ("cmd", "powershell", "pwsh", "wscript", "cscript", "mshta", "
 # PowerShell on the event stream (2026-10-27 coverage audit). The most common
 # living-off-the-land procedure was caught only by the 2-minute process
 # snapshot or an unusual parent. Measured over 3 days (16581 PowerShell
-# starts): no download-and-execute or remote transfer outside ARGUS-1's own
-# loopback calls to its local model, and 5 encoded commands, all ARGUS-1's own
+# starts): no download-and-execute or remote transfer outside ARGUS-INSTINCT's own
+# loopback calls to its local model, and 5 encoded commands, all ARGUS-INSTINCT's own
 # tooling via WSL. Encoded is therefore medium (obfuscation, not proof); the
 # parent cannot lower it safely because anything from WSL looks the same.
 _PS = S32 + "WindowsPowerShell\\v1.0\\powershell.exe"

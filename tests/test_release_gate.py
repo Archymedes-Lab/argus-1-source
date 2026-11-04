@@ -139,7 +139,9 @@ class RefusesLeaks(GateCase):
                              (b"/home/runner/work/Argus-1/x.py", "home-path"),
                              (b"/Users/someone/dev/x", "macos-home-path"),
                              (b"C:\\Users\\runneradmin\\.cargo\\x", "windows-home-path"),
-                             (b"C:\\Users\\Sonia\\AppData\\x", "windows-home-path")):
+                             (b"C:\\Users\\Sonia\\AppData\\x", "windows-home-path"),
+                             (b"/mnt/c/Users/chris/AppData/Local/Argus", "wsl-windows-home-path"),
+                             (b"/mnt/D/Users/Sonia/x", "wsl-windows-home-path")):
             with self.subTest(path=path):
                 self.publish({"argus-desktop-windows-x64.exe": b"MZ\0" + path + b"\0"})
                 self.assertRefused(f"contains {marker}")
@@ -157,6 +159,7 @@ class RefusesLeaks(GateCase):
         # third-party libraries carry their maintainers' CI paths, which are not homes.
         body = (b"cp /home/u/.ssh/id_ed25519 /dev/shm/k\0C:\\Users\\x\\AppData\\Local\\Temp\\a.exe\0"
                 b"C:\\Users\\Public\\u.ps1\0/github/home/.cargo/registry/x.rs\0/opt/_internal/cpython/x\0"
+                b"/mnt/c/Users/Public/Desktop/x\0/mnt/c/Users/x/AppData/y\0"
                 b"rx -----BEGIN ((?:RSA )?PRIVATE KEY)-----\0")
         self.publish({"argus-desktop-windows-x64.exe": b"MZ\0" + body})
         self.assertEqual(self.problems(), [])

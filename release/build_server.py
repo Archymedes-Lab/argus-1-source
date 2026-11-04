@@ -28,6 +28,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -48,10 +49,51 @@ DEB_SUGGESTS = "nftables, curl"
 # PowerShell payloads, notes) stays out. Patterns are relative to argus/.
 DATA_KEEP = ("web/static/**", "web/styles/*.css", "intel/data/*.json", "lab/scenarios/*.json")
 # Repository-level files the code reads through REPO_ROOT on a server.
-REPO_DATA = ("systemd/capabilities.conf", "systemd/hardening.conf", "systemd/service-user.conf",
+# systemd/service-user.conf is the developer workstation's WSL drop-in (its paths name one
+# Windows account); no server reads it, and the content gate refuses its path, so it stays out.
+REPO_DATA = ("systemd/capabilities.conf", "systemd/hardening.conf",
              "systemd/journald-sysmon.conf", "systemd/rsyslog-sysmon.conf",
              "systemd/argus-selfcheck.service", "systemd/argus-selfcheck.timer", "sysmon/config.xml")
 
+
+
+SOURCE_MAP_COMMENT = re.compile(rb"\r?\n?[ \t]*(?://|/\*)[#@] sourceMappingURL=[^\r\n]*")
+
+
+def data_files(tree, clean_dir):
+    """[(source path, path inside the program)] for the package data that ships.
+
+    The same on every Python: `Path.glob("dir/**")` returns only directories up
+    to Python 3.12 and files as well from 3.13, so a 3.12 build shipped no
+    web/static file at all (found by the windows-installer branch, 2026-11-03;
+    the published 2026.11.03-0 server and Windows engine have none). A pattern
+    ending in /** is every file below the directory.
+
+    Vendored web libraries end with a `sourceMappingURL` comment pointing at a
+    map that is not shipped. The release policy denies that marker, so the
+    comment (not the code) is removed from a copy; the build stops if it survives.
+    """
+    pkg = Path(tree) / "argus"
+    out = []
+    for pattern in DATA_KEEP:
+        if pattern.endswith("/**"):
+            found = sorted(p for p in (pkg / pattern[:-3]).rglob("*") if p.is_file())
+        else:
+            found = sorted(p for p in pkg.glob(pattern) if p.is_file())
+        for f in found:
+            rel = f.relative_to(tree).as_posix()
+            data = f.read_bytes()
+            if f.suffix in (".js", ".css") and b"sourceMappingURL=" in data:
+                data = SOURCE_MAP_COMMENT.sub(b"", data)
+                if b"sourceMappingURL=" in data:
+                    sys.exit(f"{rel}: a sourceMappingURL reference remains after cleaning")
+                f = Path(clean_dir) / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(data)
+            out.append((f, rel))
+    if not any(rel.startswith("argus/web/static/") for _f, rel in out):
+        sys.exit("no web/static file found: the dashboard would ship empty")
+    return out
 
 def nuitka(tree, work, jobs):
     """Compile tree/release/launcher.py; returns the standalone folder."""
@@ -69,12 +111,8 @@ def nuitka(tree, work, jobs):
            "--no-deployment-flag=self-execution",
            # C accelerators the daemon leans on (Nuitka's anti-bloat drops them).
            "--include-module=_json", "--include-module=_bisect"]
-    pkg = tree / "argus"
-    for pattern in DATA_KEEP:
-        for f in sorted(pkg.glob(pattern)):
-            if f.is_file():
-                rel = f.relative_to(tree).as_posix()
-                cmd.append(f"--include-data-files={f}={rel}")
+    for f, rel in data_files(tree, Path(work) / "data-clean"):
+        cmd.append(f"--include-data-files={f}={rel}")
     for rel in REPO_DATA:
         if (tree / rel).is_file():
             cmd.append(f"--include-data-files={tree / rel}={rel}")

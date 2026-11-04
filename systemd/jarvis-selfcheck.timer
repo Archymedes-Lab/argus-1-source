@@ -7,7 +7,7 @@
 # so in the common case the gap in coverage is under a minute.
 
 [Unit]
-Description=Run the JARVIS self-check every two minutes
+Description=Run the ARGUS-INSTINCT self-check every two minutes
 
 [Timer]
 # A wall-clock schedule, deliberately NOT OnUnitInactiveSec=.

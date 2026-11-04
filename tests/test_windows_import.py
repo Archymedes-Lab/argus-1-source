@@ -1,4 +1,4 @@
-"""Every module ARGUS-1 ships must import on Windows Python.
+"""Every module ARGUS-INSTINCT ships must import on Windows Python.
 
 2026-10-27, measured with a real download: the Windows package failed its own
 install check because collectors/host/storage.py used `os.statvfs` as a default
@@ -28,7 +28,7 @@ for name in ("subprocess", "shutil", "pathlib", "tempfile", "socket", "ssl", "sq
              "getpass", "platform", "signal", "selectors", "threading", "zipfile", "gzip",
              "email", "uuid", "ctypes", "concurrent.futures"):
     importlib.import_module(name)
-# Then the APIs Windows Python does not have. Anything ARGUS-1 itself touches
+# Then the APIs Windows Python does not have. Anything ARGUS-INSTINCT itself touches
 # at import time (a default argument, a module-level call or import) now fails.
 for name in ("statvfs", "fstatvfs", "getuid", "geteuid", "getgid", "getegid", "getpgid",
              "getloadavg", "sched_getaffinity", "killpg", "setpgid", "getpgrp"):

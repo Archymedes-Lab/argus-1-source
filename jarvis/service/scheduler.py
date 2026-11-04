@@ -17,8 +17,8 @@ must never be able to make JARVIS look dead.
 """
 
 import json
+import os
 import subprocess
-import sys
 import threading
 import time
 import traceback
@@ -27,7 +27,7 @@ from jarvis.core import collection, incidents, mechanisms
 from jarvis.core.store import Store
 from jarvis.response import alert, defense, remediation
 from jarvis.response.reporting import notifications
-from jarvis.service import reliability, sdnotify
+from jarvis.service import links, reliability, sdnotify
 from jarvis.service.jobs import run_job
 from jarvis.service.schedule import JOBS
 
@@ -91,6 +91,29 @@ def reports_backlog(findings):
                for f in findings or () if isinstance(f, dict))
 
 
+# The last isolated child's (cpu seconds, peak RSS KiB), per lane thread.
+_CHILD_COST = threading.local()
+
+
+def _rss_kib():
+    """This process's resident memory, from /proc (cheap; 0 when unknown)."""
+    try:
+        with open("/proc/self/statm", "rb") as fh:
+            return int(fh.read().split()[1]) * (os.sysconf("SC_PAGE_SIZE") // 1024)
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def _children_cpu():
+    """CPU of reaped child processes; 0 where `resource` does not exist (Windows)."""
+    try:
+        import resource
+    except ImportError:
+        return 0.0
+    usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return usage.ru_utime + usage.ru_stime
+
+
 def _isolated_job(name, hosts, db_path, timeout):
     """Run a fixed collector beyond the scheduler's process boundary.
 
@@ -98,11 +121,11 @@ def _isolated_job(name, hosts, db_path, timeout):
     thread timeout cannot recover it. A child process gives the scheduler a
     real deadline and releases the event-log writer lock when terminated.
     """
-    command = [sys.executable, "-m", "jarvis.service.collector_worker",
+    from jarvis.core.paths import PACKAGE_DIR, self_executable
+    command = [self_executable(), "-m", "jarvis.service.collector_worker",
                name, db_path, *hosts]
     # From the package root: `-m` resolves against the working directory, and
     # the Argus unit runs from "/" (found 2026-10-29), where it would not import.
-    from jarvis.core.paths import PACKAGE_DIR
     try:
         done = subprocess.run(command, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True,
@@ -116,6 +139,7 @@ def _isolated_job(name, hosts, db_path, timeout):
         return [], f"isolated collector failed: {detail}", "unavailable"
     try:
         result = json.loads(done.stdout)
+        _CHILD_COST.value = (float(result.get("cpu_s") or 0.0), int(result.get("max_rss_kib") or 0))
         findings = result["findings"]
         error = str(result.get("error") or "")[:800]
         status = result.get("status")
@@ -249,9 +273,15 @@ class Scheduler(threading.Thread):
         # recovery attempts. Leases stay in memory: a dead process loses them
         # and the next process judges by persisted snapshots, while a hung
         # worker keeps its expired lease visible until it is escalated.
+        self.job_cost = {}               # name -> last run's cpu_s / rss growth (run_once)
         self.specs = reliability.build_specs(JOBS)
         self.reliability = reliability.ReliabilityState(self.specs)
         self._worker_seq = 0
+        # Link Plane (links.py): the connections the jobs stand on. Ticked
+        # from supervise_once; actions run one at a time off the supervisor
+        # thread; state persists in one meta key and seeds the next process.
+        self.links = links.LinkPlane().load(self._seed_meta(links.META))
+        self._link_busy = threading.Lock()
 
     def _cold_start_gate(self):
         """Jobs whose persisted result coverage would call missing, failing
@@ -273,6 +303,17 @@ class Scheduler(threading.Thread):
                  and now - float(snaps[name]["ts"]) <= max(
                      JOBS[name][0] * 2, JOBS[name][0] + 300)}
         return pending - fresh
+
+    def _seed_meta(self, key):
+        """One persisted meta value at start, or "". Never raises."""
+        try:
+            store = Store(self.db_path)
+            try:
+                return store.get_meta(key, "") or ""
+            finally:
+                store.close()
+        except Exception:
+            return ""
 
     def _seed_evidence(self):
         """{job: persisted evidence time} at start. Never raises."""
@@ -417,6 +458,64 @@ class Scheduler(threading.Thread):
         return bool(self.cold_start_pending) and \
             now - self.started_at < COLD_START_HOLD_S
 
+    # --- owner pause -----------------------------------------------------
+    # A bounded break from collecting, for the owner who wants the computer
+    # quiet. It is never indefinite: it ends by itself (PAUSE_MAX_S at most),
+    # survives a restart only until that deadline, is recorded, and the lanes
+    # keep their heartbeats so the watchdogs do not mistake it for a hang.
+    PAUSE_META = "scheduler.paused_until"
+    PAUSE_LOG = "scheduler.pause_log"
+    PAUSE_MAX_S = 24 * 3600
+
+    def paused_until(self, now=None):
+        now = time.time() if now is None else now
+        until = getattr(self, "_paused_until", None)
+        if until is None:
+            until = self._paused_until = self._load_pause()
+        return until if until > now else 0
+
+    def is_paused(self, now=None):
+        return self.paused_until(now) > 0
+
+    def _load_pause(self):
+        try:
+            store = Store(self.db_path)
+            try:
+                return float(store.get_meta(self.PAUSE_META, "") or 0)
+            finally:
+                store.close()
+        except Exception:
+            return 0.0
+
+    def pause(self, seconds, now=None):
+        """-> epoch the pause ends. Clamped to (0, PAUSE_MAX_S]."""
+        now = time.time() if now is None else now
+        seconds = max(60, min(int(seconds), self.PAUSE_MAX_S))
+        self._paused_until = now + seconds
+        self._record_pause("pause", now, self._paused_until)
+        return self._paused_until
+
+    def resume(self, now=None):
+        now = time.time() if now is None else now
+        self._paused_until = 0.0
+        self._record_pause("resume", now, 0)
+
+    def _record_pause(self, kind, now, until):
+        try:
+            store = Store(self.db_path)
+            try:
+                store.set_meta(self.PAUSE_META, str(until))
+                try:
+                    log = json.loads(store.get_meta(self.PAUSE_LOG, "") or "[]")
+                except ValueError:
+                    log = []
+                log = (log if isinstance(log, list) else [])[-19:] + [{"ts": int(now), "event": kind, "until": int(until)}]
+                store.set_meta(self.PAUSE_LOG, json.dumps(log))
+            finally:
+                store.close()
+        except Exception:
+            pass
+
     def force(self, name):
         """Queue a job to run soon. Repeated requests collapse into one."""
         if name in JOBS:
@@ -536,6 +635,7 @@ class Scheduler(threading.Thread):
                             "boot": self.boot_readiness(snapshots)},
                 "resume": resume,
                 "outages": outage,
+                "links": self.links.summary(time.time()),
             }
         except Exception:
             return {"statuses": {}, "summary": {"levels": {}, "stale_collectors": [],
@@ -604,7 +704,130 @@ class Scheduler(threading.Thread):
                 self.outages.observe(self.specs, snapshots, now)
             except Exception:
                 pass
+        try:
+            self._tick_links(snapshots, now)
+        except Exception:
+            pass
         return queued
+
+    # --- the Link Plane --------------------------------------------------
+    def _links_hold(self, now):
+        """No reconnect during the cold-start hold, the resume grace or an
+        owner pause: ages measured across a freeze are not silence (L6)."""
+        with self.lock:
+            resumed = self.resumed_at
+        if self._cold_start_holding(now):
+            return True
+        if resumed and now - resumed < links.RESUME_GRACE_S:
+            return True
+        try:
+            return bool(self.is_paused(now))
+        except Exception:
+            return False
+
+    def _tick_links(self, snapshots, now):
+        store = None
+        try:
+            store = Store(self.db_path)
+        except Exception:
+            store = None
+        try:
+            evidence = links.gather_evidence(snapshots, now, store=store, scheduler=self,
+                                             plane=self.links, windows="win" in self.hosts)
+            result = self.links.tick(evidence, now, hold=self._links_hold(now))
+            for name, old, new, reason in result["transitions"]:
+                self._note_link(f"link:{name}", "transition", now, state=new, previous=old, cause=reason)
+            # A degraded feed that is losing events between reads runs sooner.
+            for name, st in self.links.statuses.items():
+                if st.get("tighten"):
+                    job = links.BY_NAME[name].job
+                    if job in JOBS:
+                        with self.lock:
+                            self.retry_soon.add(job)
+            if self.links.dirty and store is not None:
+                store.set_meta(links.META, self.links.dump())
+                self.links.dirty = False
+            if result["actions"] and self._link_busy.acquire(blocking=False):
+                threading.Thread(target=self._perform_link_actions, args=(result["actions"],),
+                                 name="jarvis-links", daemon=True).start()
+        finally:
+            if store is not None:
+                store.close()
+
+    def _note_link(self, subject, transition, at, **attrs):
+        if self.outages is None:
+            return
+        try:
+            self.outages.note(subject, transition, at, **attrs)
+        except Exception:
+            pass
+
+    def _perform_link_actions(self, actions):
+        """Run decided reconnects one at a time, record every outcome (L3).
+        Holds _link_busy, acquired by the caller."""
+        try:
+            for link, action in actions:
+                now = time.time()
+                try:
+                    error = self._link_action(link, action)
+                except Exception as exc:  # noqa: BLE001 - one action must not stop the rest
+                    error = f"{type(exc).__name__}"
+                self.links.attempted(link.name, action, error, now)
+                self._note_link(f"link:{link.name}", "reconnect", now, action=action,
+                                outcome=error or "ok")
+            try:
+                store = Store(self.db_path)
+                try:
+                    store.set_meta(links.META, self.links.dump())
+                    self.links.dirty = False
+                finally:
+                    store.close()
+            except Exception:
+                pass
+        finally:
+            self._link_busy.release()
+
+    def _link_action(self, link, action):
+        """The bounded primitives. '' on success, else a short reason. None of
+        these restart the daemon, elevate, change policy or delete."""
+        if action == links.QUEUE:
+            return "" if self.force(link.job) else "unknown job"
+        if action == links.INTEROP:
+            import os
+
+            from jarvis.platform import windows as collect_windows
+            # Drop the cached socket so ensure_interop() rescans /run/WSL,
+            # exactly what ps_json does on an empty reply; then re-verify.
+            os.environ.pop("WSL_INTEROP", None)
+            if not collect_windows.ensure_interop():
+                self.force(link.job)
+                return "no live interop socket under /run/WSL"
+            self.force(link.job)
+            return ""
+        if action == links.TASK:
+            from jarvis.platform import windows as collect_windows
+            name = links.TASK_LINKS.get(link.name, "")
+            if not name or "'" in name:
+                return "no task name"
+            # A task shown Running is stopped first only when its state file
+            # has been silent for twice the link's budget: a long-running
+            # loop that is merely late (right after a resume, say) is left
+            # alone and only asked to start, which is a no-op while it runs.
+            age = (self.links.statuses.get(link.name) or {}).get("age")
+            stop = "$true" if age is None or age > 2 * link.max_silence else "$false"
+            script = (
+                f"$n='{name}'; $stop={stop}; $t=Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue; "
+                "if(-not $t){ $r=@{ok=$false;error='task not registered'} } else { "
+                "if($stop -and $t.State -eq 'Running'){ Stop-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue; "
+                "Start-Sleep -Milliseconds 500 }; "
+                "try { Start-ScheduledTask -TaskName $n -ErrorAction Stop; $r=@{ok=$true;was=[string]$t.State} } "
+                "catch { $r=@{ok=$false;error=[string]$_.Exception.Message} } }; "
+                "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($r|ConvertTo-Json -Compress)))")
+            out = collect_windows.ps_json(script, timeout=60)
+            if not isinstance(out, dict):
+                return "PowerShell gave no answer"
+            return "" if out.get("ok") else str(out.get("error") or "task did not start")[:120]
+        return "unknown action"
 
     def run(self):
         self.fast_thread = threading.Thread(target=self._lane, args=("fast",),
@@ -664,6 +887,9 @@ class Scheduler(threading.Thread):
                 self._note_resume()
                 if lane == "main":
                     self._sweep_expiry(store)
+                if self.is_paused():
+                    time.sleep(1)
+                    continue
                 name = self._due(lane)
                 if name is None:
                     time.sleep(1)
@@ -733,10 +959,24 @@ class Scheduler(threading.Thread):
             except Exception:
                 lease = None
         findings, err, status = [], "", "unavailable"
+        # What this run costs the machine: CPU of this lane thread (and of the
+        # isolated child, when there is one) and how much resident memory the
+        # daemon grew by. Cheap reads; shown in the Monitoring view.
+        cpu0, rss0, kids0 = time.thread_time(), _rss_kib(), _children_cpu()
+        _CHILD_COST.value = (0.0, 0)
         try:
             findings, err, status = self._collect(name, timeout)
         except Exception:
             err = traceback.format_exc()[-800:]
+        child_cpu, child_rss = getattr(_CHILD_COST, "value", (0.0, 0))
+        # Subprocesses (journalctl, PowerShell through /init) are reaped into
+        # the process-wide children total; when lanes overlap this is an
+        # upper bound for the job, hence "estimate".
+        kids = max(0.0, _children_cpu() - kids0 - child_cpu)
+        self.job_cost[name] = {"cpu_s": round(time.thread_time() - cpu0 + child_cpu + kids, 3),
+                               "subprocess_cpu_s_estimate": round(kids, 3),
+                               "rss_growth_kib": max(0, _rss_kib() - rss0),
+                               "child_peak_kib": child_rss, "at": time.time()}
 
         try:
             receipt = store.record_observation(name, findings, coverage=status, error=err)

@@ -86,7 +86,27 @@ def run_child(module, args):
     return 2
 
 
+def never_die_on_output():
+    """Console output must not be able to stop the program.
+
+    On Windows a redirected stdout (the logon task, the desktop app starting
+    the daemon) uses the ANSI code page, and the daemon's startup banner holds
+    an arrow: the compiled program exited with UnicodeEncodeError before it
+    served anything. Unencodable text is replaced instead. Standard library
+    only, like the rest of this file, and the same guard as jarvis/__main__.py,
+    which the compiled program does not run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
 def main():
+    never_die_on_output()
     root = os.path.dirname(os.path.realpath(sys.executable))
     if sys.platform.startswith("linux"):
         try:

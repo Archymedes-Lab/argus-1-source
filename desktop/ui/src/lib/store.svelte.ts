@@ -1,11 +1,23 @@
 // Application state. The daemon owns the truth; this holds the last copy the
 // shell fetched and refreshes it when the pulse stream says something changed.
-import { api, onDaemon } from "./api";
+import { api, onDaemon, type AppStatus } from "./api";
+import { tr } from "./i18n";
 
-export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "settings";
+export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "settings";
+export type Mode = "simple" | "expert";
 export type Theme = "auto" | "light" | "dark";
 
 const THEME_KEY = "jarvis.theme";
+const MODE_KEY = "jarvis.mode";
+const LANG_KEY = "jarvis.lang";
+const LANG_CODES = ["en", "fr", "de", "es", "zh", "ja", "ko", "pt", "hi", "ru", "ar"];
+const RTL = ["ar"];
+
+/** Language and reading direction go on <html>, so the whole page follows. */
+function applyLang() {
+  document.documentElement.setAttribute("lang", app.lang);
+  document.documentElement.setAttribute("dir", RTL.includes(app.lang) ? "rtl" : "ltr");
+}
 const MIN_GAP_MS = 4000;       // pulses can arrive in bursts; one refetch covers them
 const FALLBACK_MS = 60000;     // if the stream is quiet, still refresh once a minute
 
@@ -14,6 +26,7 @@ export const app = $state({
   loading: false,
   error: "",
   daemon: "connecting" as "connecting" | "live" | "down",
+  status: { phase: "starting", message: "Starting ARGUS-1", detail: "" } as AppStatus,
   updatedAt: 0,
   view: "overview" as View,
   query: "",
@@ -23,12 +36,46 @@ export const app = $state({
   selected: null as any,
   palette: false,
   theme: readTheme(),
+  mode: readMode(),
+  lang: readLang(),
   toasts: [] as { id: number; text: string; tone: "ok" | "bad" | "info" }[],
 });
 
 function readTheme(): Theme {
   try { const t = localStorage.getItem(THEME_KEY); return t === "light" || t === "dark" ? t : "auto"; }
   catch { return "auto"; }
+}
+
+function readLang(): string {
+  try {
+    const saved = localStorage.getItem(LANG_KEY);
+    if (saved && LANG_CODES.includes(saved)) return saved;
+    // First run: follow the system language when it is one we have.
+    const sys = (navigator.language || "en").slice(0, 2).toLowerCase();
+    return LANG_CODES.includes(sys) ? sys : "en";
+  } catch { return "en"; }
+}
+
+export function setLang(code: string) {
+  if (!LANG_CODES.includes(code)) return;
+  app.lang = code;
+  try { localStorage.setItem(LANG_KEY, code); } catch { /* per-viewer convenience only */ }
+  applyLang();
+}
+
+function readMode(): Mode {
+  try { return localStorage.getItem(MODE_KEY) === "expert" ? "expert" : "simple"; }
+  catch { return "simple"; }
+}
+
+export function applyMode() {
+  document.documentElement.setAttribute("data-mode", app.mode);
+}
+
+export function setMode(m: Mode) {
+  app.mode = m;
+  applyMode();
+  try { localStorage.setItem(MODE_KEY, m); } catch { /* per-viewer convenience only */ }
 }
 
 export function setTheme(t: Theme) {
@@ -43,6 +90,11 @@ export function applyTheme() {
   else root.setAttribute("data-theme", app.theme);
 }
 
+/** The shell's own account of the daemon: running, degraded, stopped, not installed. */
+export async function refreshStatus() {
+  try { app.status = await api.status(); } catch { /* the shell is the source; keep the last */ }
+}
+
 let inFlight = false, last = 0, queued = 0 as any;
 
 export async function refresh() {
@@ -51,9 +103,11 @@ export async function refresh() {
   try {
     app.data = await api.state();
     app.error = ""; app.daemon = "live"; app.updatedAt = Date.now();
+    await refreshStatus();
   } catch (e) {
     app.error = String((e as Error)?.message ?? e);
     app.daemon = "down";
+    await refreshStatus();
   } finally {
     inFlight = false; app.loading = false;
   }
@@ -65,10 +119,23 @@ function schedule() {
   queued = setTimeout(refresh, wait);
 }
 
+/** Stripe sends the browser back to /?session_id=...; the daemon asks Stripe whether it was paid. */
+async function confirmReturnFromCheckout() {
+  const id = new URLSearchParams(location.search).get("session_id");
+  if (!id) return;
+  history.replaceState(null, "", location.pathname);
+  app.view = "pricing";
+  try { await api.billingConfirm(id); toast(tr("Payment confirmed. Thank you."), "ok"); }
+  catch (e) { toast(String((e as Error).message ?? e), "bad"); }
+}
+
 export async function start() {
+  applyLang();
   applyTheme();
+  applyMode();
   await refresh();
-  await onDaemon(() => schedule(), () => { app.daemon = "down"; });
+  void confirmReturnFromCheckout();
+  await onDaemon(() => { refreshStatus(); schedule(); }, () => { app.daemon = "down"; refreshStatus(); });
   setInterval(() => { if (Date.now() - last > FALLBACK_MS) refresh(); }, 10000);
 }
 

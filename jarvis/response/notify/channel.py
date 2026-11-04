@@ -27,12 +27,20 @@ def ready(conf=None):
     return True
 
 
-def payload(subject, text, severity, host=None, now=None, kind="alert"):
-    return {"kind": kind, "title": str(subject)[:LOCK_SCREEN_TITLE], "body": str(text)[:BODY],
-            "severity": severity, "host": host or socket.gethostname(), "at": int(time.time() if now is None else now)}
+def payload(subject, text, severity, host=None, now=None, kind="alert", category=None, counts=None):
+    from jarvis.response import categories
+    cat = category if category in categories.LABELS else ("test" if kind == "test" else "system")
+    from jarvis.core.brand import brand
+    out = {"kind": kind, "title": brand(subject)[:LOCK_SCREEN_TITLE], "body": brand(text)[:BODY],
+           "severity": severity, "category": cat, "category_label": categories.label(cat),
+           "host": host or socket.gethostname(), "at": int(time.time() if now is None else now)}
+    if counts:
+        out["counts"] = {k: int(v) for k, v in counts.items() if k in categories.LABELS}
+    return out
 
 
-def send(conf, subject, text, severity="high", kind="alert", now=None, opener=None, store=None):
+def send(conf, subject, text, severity="high", kind="alert", now=None, opener=None, store=None,
+         category=None, counts=None):
     """'' when the relay accepted the envelopes, else a short reason."""
     now = time.time() if now is None else now
     try:
@@ -40,7 +48,7 @@ def send(conf, subject, text, severity="high", kind="alert", now=None, opener=No
         targets = devices.active()
         if ident is None or not targets:
             return "no paired device"
-        body = payload(subject, text, severity, conf.get("notify_label"), now, kind)
+        body = payload(subject, text, severity, conf.get("notify_label"), now, kind, category, counts)
         envelopes = [crypto.seal(ident, d, body, now) for d in targets]
         kw = {"opener": opener} if opener else {}
         relay.call(conf, ident, "POST", f"/v1/mailbox/{ident.mailbox}/envelopes", envelopes, now=now, **kw)

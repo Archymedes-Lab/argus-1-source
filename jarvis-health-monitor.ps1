@@ -1,5 +1,10 @@
 # Independent Windows health monitor: all runtime files live in LocalAppData.
+# -Loop: one process checks every IntervalSeconds for LoopMinutes, then exits;
+# the task (every 5 minutes, IgnoreNew) starts the next one. Starting PowerShell
+# every minute cost ~50 process starts an hour and their Sysmon image-load
+# events (measured 2026-11-02). Without -Loop it runs one check, as before.
 param([switch]$Install, [switch]$ProbeOnly, [switch]$TestNotification,
+      [switch]$Loop, [int]$LoopMinutes = 10, [int]$IntervalSeconds = 60,
       [string]$StateRoot = (Join-Path $env:LOCALAPPDATA 'Jarvis\HealthMonitor'),
       # Where monitors installed before the rename kept their state. -Install
       # copies it forward once; the old folder stays as the rollback copy.
@@ -12,7 +17,13 @@ function Save-State($state) {
     $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $StateRoot 'state.json.new') -Encoding UTF8
     Move-Item -LiteralPath (Join-Path $StateRoot 'state.json.new') -Destination (Join-Path $StateRoot 'state.json') -Force
 }
+# The product is ARGUS-INSTINCT (jarvis/core/brand.py has the same rule): the word
+# JARVIS is shown as ARGUS-INSTINCT except in the names of real Windows objects.
+function Format-Brand([string]$s) {
+    return [regex]::Replace($s, '\bJARVIS\b(?!-(?:1|INSTINCT)\b)(?! (input hook|independent health monitor|connectivity guard|native sensor|Jarvis))', 'ARGUS-INSTINCT')
+}
 function Show-JarvisToast([string]$title,[string]$body) {
+    $title=Format-Brand $title; $body=Format-Brand $body
     [void][Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime]
     [void][Windows.Data.Xml.Dom.XmlDocument,Windows.Data.Xml.Dom.XmlDocument,ContentType=WindowsRuntime]
     $xml=New-Object Windows.Data.Xml.Dom.XmlDocument
@@ -22,6 +33,7 @@ function Show-JarvisToast([string]$title,[string]$body) {
     [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
 }
 function Send-JarvisMail([string]$title,[string]$body) {
+    $title=Format-Brand $title; $body=Format-Brand $body
     # Raw HttpWebRequest for the same reason as the health probe below:
     # Invoke-RestMethod can block on proxy and first-run state under Task
     # Scheduler. TLS 1.2 is required by the mail API and is not guaranteed to
@@ -160,14 +172,17 @@ if ($Install) {
     Copy-LegacyState
     $registry="HKCU:\Software\Classes\AppUserModelId\$appId"
     [void](New-Item -Path $registry -Force)
-    [void](New-ItemProperty -Path $registry -Name DisplayName -Value 'JARVIS' -PropertyType String -Force)
+    [void](New-ItemProperty -Path $registry -Name DisplayName -Value 'ARGUS-INSTINCT' -PropertyType String -Force)
     [void](New-ItemProperty -Path $registry -Name ShowInSettings -Value 1 -PropertyType DWord -Force)
     $script=Join-Path $StateRoot 'jarvis-health-monitor.ps1'
     if ($MyInvocation.MyCommand.Path -ne $script) {Copy-Item -LiteralPath $MyInvocation.MyCommand.Path -Destination $script -Force}
     # conhost --headless: -WindowStyle Hidden alone still flashes a console window each run.
-    $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument ('--headless "'+"$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"+'" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$script+'"')
+    $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument ('--headless "'+"$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"+'" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$script+'" -Loop')
+    # The loop lives 10 minutes and is killed at 15 (a hung loop while WSL is down
+    # cannot be restarted from WSL); the 5-minute repeat (IgnoreNew) starts a new
+    # one when none is running, so a crashed loop is replaced within minutes.
     $triggers=@((New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME),
-        (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)))
+        (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)))
     $principal=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
     # The limit must exceed the one-minute repeat, not equal it. At PT1M a
     # run that is merely slow -- PowerShell start-up plus a WinRT load on a
@@ -175,7 +190,7 @@ if ($Install) {
     # SCHED_S_TASK_TERMINATED (0x41306), which hides a genuine failure
     # behind a result code that is always the same. IgnoreNew already stops
     # slow runs from piling up.
-    $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+    $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
     [void](Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force)
     Write-Output 'Independent Windows health monitor installed. Stage mail credentials with DPAPI if none were carried over.'
     return
@@ -186,6 +201,9 @@ if ($TestNotification) {
     Write-Output 'Test toast submitted to Windows.';return
 }
 
+$loopUntil=(Get-Date).AddMinutes([Math]::Max(1,$LoopMinutes))
+while ($true) {
+try {
 [void](New-Item -ItemType Directory -Path $StateRoot -Force)
 $state=@{failures=0;firstFailure=0;emailLevel=-1;toastLevel=-1;lastMailAttempt=0;lastToastAttempt=0;lastHealthy=0}
 $saved=Join-Path $StateRoot 'state.json'
@@ -264,3 +282,10 @@ if ($health.healthy) {
     }
 }
 Save-State $state
+} catch {
+    # One failed check must not end the loop; a single run still fails loudly.
+    if (-not $Loop) { throw }
+}
+if (-not $Loop -or (Get-Date) -ge $loopUntil) { break }
+Start-Sleep -Seconds ([Math]::Max(15,$IntervalSeconds))
+}

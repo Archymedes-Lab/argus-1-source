@@ -127,6 +127,24 @@ class VaultTests(Base):
         titles = [f["title"] for f in self.run_job(vault_job=job)]
         self.assertIn("Evidence vault contents do not verify", titles)
 
+    def test_rolling_recheck_catches_an_old_payload_altered_after_it_was_verified(self):
+        for first in range(1, 13, 2):
+            self.seal(first, first + 1)                 # six sealed segments
+        self.run_job(now=1_000_000)
+        job = self.vault_job()
+        self.run_job(vault_job=job, now=1_000_100)      # first run hashes all six
+        self.assertEqual(evidence.summary(self.store)["verified_through"], 6)
+        seg = self.vault / "eventlog" / "segments" / evidence._name(2)
+        seg.write_bytes(seg.read_bytes()[:-5] + b"xxxxx")   # altered after verification
+        caught_at = None
+        for i in range(1, 97):                          # one day of 15-minute runs
+            titles = [f["title"] for f in self.run_job(vault_job=job, now=1_000_100 + i * 900)]
+            if "Evidence vault contents do not verify" in titles:
+                caught_at = i
+                break
+        self.assertIsNotNone(caught_at, "an altered vaulted payload must be found within a day")
+        self.assertLess(caught_at * 900, evidence.FULL_VERIFY_EVERY)
+
     def test_forged_pruned_claim_is_reported(self):
         self.seal(1, 2)
         self.run_job()
@@ -263,3 +281,20 @@ class VaultScriptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecheckSliceTests(unittest.TestCase):
+    def test_a_day_of_runs_covers_every_segment(self):
+        seen, cursor = set(), 1
+        for _ in range(96):
+            picks, cursor = evidence.recheck_slice(2997, cursor, 900)
+            seen.update(picks)
+        self.assertEqual(seen, set(range(1, 2998)))
+
+    def test_a_long_absence_takes_a_bigger_bounded_slice(self):
+        picks, _ = evidence.recheck_slice(2997, 1, 8 * 3600)
+        self.assertEqual(len(picks), min(999, evidence.MAX_RECHECK))
+        self.assertEqual(len(evidence.recheck_slice(10, 9, 10 * 86400)[0]), 10)
+        self.assertEqual(evidence.recheck_slice(0, 1, 900), ([], 1))
+        picks, nxt = evidence.recheck_slice(10, 9, 3 * 86400 / 10)
+        self.assertEqual((picks, nxt), ([9, 10, 1], 2))
