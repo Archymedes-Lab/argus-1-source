@@ -13,8 +13,11 @@ candidate is checked against them, but a candidate itself must be a tag version.
 import datetime
 import re
 
-TAG = re.compile(r"^v?(20\d{2})\.(\d{2})\.(\d{2})(?:-(0|[1-9]\d*))?$")
-LEGACY = re.compile(r"^(20\d{2})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?$")
+# ASCII digits only and \Z, not $: "$" also matches before a trailing newline and
+# \d matches every Unicode digit, so "v2026.11.04\n" and "v2026.11.0\u0664" were
+# accepted as tags (FZ-05). A tag becomes a git ref, a file name and a URL path.
+TAG = re.compile(r"^v?(20\d{2})\.(\d{2})\.(\d{2})(?:-(0|[1-9]\d*))?\Z", re.ASCII)
+LEGACY = re.compile(r"^(20\d{2})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?\Z", re.ASCII)
 
 
 class VersionError(Exception):

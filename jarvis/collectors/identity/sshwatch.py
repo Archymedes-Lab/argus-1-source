@@ -186,14 +186,25 @@ def parse_sshd_config(path, root="/"):
                         pattern = os.path.join(root, pattern.lstrip("/"))
                     elif not pattern.startswith("/"):
                         pattern = os.path.join(etc_ssh, pattern)
-                    for inc in sorted(glob.glob(pattern)):
+                    try:
+                        found = sorted(glob.glob(pattern))
+                    except ValueError:          # a NUL in the pattern (FZ-07)
+                        problems.append(f"{where}: Include {pattern!r} is not a usable path")
+                        continue
+                    for inc in found:
                         walk(inc, depth + 1)
                 continue
             target = current[0]
             if key in MULTI:
                 target.setdefault(key, []).append((value, where))
-            elif key == "subsystem" and len(toks) >= 3:
-                target.setdefault("subsystem", {}).setdefault(toks[1], (" ".join(toks[2:]), where))
+            elif key == "subsystem":
+                # "Subsystem name" without a command is refused by sshd; it used to be
+                # stored as a plain value, and the next Subsystem line or the policy
+                # check then crashed the whole SSH audit (FZ-07).
+                if len(toks) >= 3:
+                    target.setdefault("subsystem", {}).setdefault(toks[1], (" ".join(toks[2:]), where))
+                else:
+                    problems.append(f"{where}: Subsystem without a command; sshd refuses this line")
             elif key not in target:
                 target[key] = (value, where)
 

@@ -202,6 +202,13 @@ def _ar_members(data):
         header = data[pos:pos + 60]
         name = header[:16].decode().strip().rstrip("/")
         size = int(header[48:58].decode().strip())
+        # A negative size moved pos backwards and looped for ever (FZ-01). A
+        # repeated name was overwritten here while dpkg-deb unpacks the first
+        # one, so the gate checked a different data.tar than dpkg installs (FZ-02).
+        if size < 0 or pos + 60 + size > len(data):
+            raise ValueError(f"ar member {name!r}: size {size} is outside the archive")
+        if name in out:
+            raise ValueError(f"ar member {name!r} appears twice")
         out[name] = data[pos + 60:pos + 60 + size]
         pos += 60 + size + (size % 2)
     return out

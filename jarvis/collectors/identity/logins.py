@@ -42,8 +42,13 @@ IDENTIFIERS = ("sshd", "sshd-session")     # OpenSSH 9.8+ logs sessions as sshd-
 ACCEPTED = re.compile(
     r"Accepted (?P<method>[\w/-]+) for (?P<user>\S+) from (?P<ip>\S+) port \d+"
     r"(?: ssh2)?(?:: (?P<ktype>\S+) (?P<fp>SHA256:\S+|[0-9a-f:]{47}))?")
+# The user name is chosen by the remote client and may hold spaces and " from <ip>"
+# (sshd logs it as sent, at most 100 characters): the source is the address in sshd's
+# own trailing " from IP port N", so the line is anchored at its end (FZ-03; the same
+# rule bruteforce._LINUX_FAIL applies). Failed publickey lines end in ": TYPE FP".
 FAILED = re.compile(
-    r"(?:Failed \S+ for (?:invalid user )?\S+|Invalid user \S+) from (?P<ip>\S+)")
+    r"(?:Failed \S+ for (?:invalid user )?.*?|Invalid user .*?) from (?P<ip>\S+) port \d+"
+    r"(?: ssh2)?(?:: \S+ \S+)?(?: \[preauth\])?\]?\s*$")
 
 
 def network_of(ip):
@@ -76,12 +81,14 @@ def read_journal(cursor, run=subprocess.Popen, max_lines=MAX_LINES):
                 rec = json.loads(line)
             except ValueError:
                 continue
+            if not isinstance(rec, dict):      # one odd line lost the whole read (FZ-15)
+                continue
             msg = rec.get("MESSAGE")
             if isinstance(msg, list):           # journald encodes non-UTF-8 as bytes
-                msg = bytes(msg).decode("utf-8", "replace")
+                msg = bytes(b for b in msg if isinstance(b, int) and 0 <= b < 256).decode("utf-8", "replace")
             try:
                 ts = int(rec.get("__REALTIME_TIMESTAMP", 0)) / 1e6
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 ts = 0.0
             if isinstance(msg, str):
                 records.append((ts, msg))

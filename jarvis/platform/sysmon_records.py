@@ -19,19 +19,42 @@ _TYPE_ID = {
 }
 
 
+_EVENT_START = re.compile(r"<Event\b")
+_EVENT_END = "</Event>"
+
+
+def _event_blobs(text):
+    """Each "<Event ...</Event>" span, as re.finditer(r"<Event\\b.*?</Event>", re.S) did,
+    in linear time: that pattern rescanned to the end of the text from every unclosed
+    "<Event", so text full of them (syslog lines any account can write) took
+    quadratic time, 7 s for 56 KB and hours for the 8 MB syslog tail (FZ-06)."""
+    pos = 0
+    while True:
+        m = _EVENT_START.search(text, pos)
+        if not m:
+            return
+        end = text.find(_EVENT_END, m.end())
+        if end < 0:
+            return          # no later "<Event" can close either
+        yield text[m.start():end + len(_EVENT_END)]
+        pos = end + len(_EVENT_END)
+
+
 def parse(text):
     """List of {id, ...fields}. Handles the XML form and the key/value form."""
     events = []
 
-    for m in re.finditer(r"<Event\b.*?</Event>", text, re.S):
-        blob = re.sub(r'\sxmlns(:\w+)?="[^"]*"', "", m.group(0))
+    for blob in _event_blobs(text):
+        blob = re.sub(r'\sxmlns(:\w+)?="[^"]*"', "", blob)
         try:
             root = ET.fromstring(blob)
         except ET.ParseError:
             continue
         sysd, data = root.find("System"), root.find("EventData")
-        ev = {"id": int((sysd.findtext("EventID") or 0)) if sysd is not None
-              else 0}
+        # A non-numeric EventID (syslog fallback lines are written by anyone) raised
+        # ValueError and lost every event in the window (FZ-06); skip that record only.
+        raw_id = (sysd.findtext("EventID") or "0").strip() if sysd is not None else "0"
+        ev = {"id": int(raw_id) if raw_id.isascii() and raw_id.isdigit() else 0}
         # UtcTime in EventData is the process/event timestamp reported by
         # Sysmon. It can lag journal ingestion substantially while Sysmon is
         # draining its own queue, so retain TimeCreated separately for journal
