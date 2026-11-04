@@ -470,6 +470,23 @@ class Workflow(unittest.TestCase):
         self.assertIn("if (-not $p.ExecutablePath -or $p.ExecutablePath -ne $Engine) { return $null }", text)
         self.assertIn("[string]$Engine = ''", text)
 
+    def test_stop_and_reinstall_end_the_running_loop_not_just_the_task(self):
+        # Clean windows-2025 run 41801062950: the loop outlived Stop-ScheduledTask and
+        # still held the single-instance lock after `native stop`.
+        text = (ROOT / "jarvis-native-service.ps1").read_text(encoding="utf-8")
+        block = text[text.index("if ($Install -or $Remove) {"):text.index("if ($Remove) { Say")]
+        stop = block.index("Stop-ScheduledTask")
+        kill = block.index("Stop-Process -Id $_.ProcessId")
+        self.assertLess(stop, kill)
+        self.assertIn("$_.ProcessId -ne $PID", block)            # never itself
+        self.assertIn("$staged = Join-Path $StateRoot", block)   # only this service's own loop
+        self.assertLess(kill, block.index("Stop-Daemon ([int]$old.pid)"))
+
+    def test_lifting_a_pause_lets_it_supervise_again_within_budget(self):
+        text = (ROOT / "jarvis-native-service.ps1").read_text(encoding="utf-8")
+        self.assertIn("if (-not $paused -and $st.gaveUp) { $st.gaveUp = $false", text)
+        self.assertIn("if ($st.restarts.Count -ge $RestartBudget) {", text)   # budget unchanged
+
 class OutputEncoding(unittest.TestCase):
     """The service's stdout is a cp1252 file on Windows; an arrow in the start-up
     line stopped the daemon (run 41663851546)."""

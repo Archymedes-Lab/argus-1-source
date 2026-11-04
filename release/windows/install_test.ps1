@@ -152,6 +152,178 @@ try {
 }
 Check (-not (Probe-Seen)) 'gone once removed'
 
+Write-Host "== recovery and supervision (the service's supervisor loop; app closed, then open)"
+# What is checked, and why in this order: the supervisor restarts at most 3 times in 15
+# minutes (the install's own start counts), so scenarios that need a restart are spaced by
+# Wait-Budget, and the last one spends the budget on purpose to show a crashing daemon is
+# not restarted forever. Token and history are checked after every recovery.
+$tokenFile = Join-Path $appDir 'client.token'
+$tokenBefore = (Get-Content -LiteralPath $tokenFile -Raw)
+$histDir = Join-Path $env:USERPROFILE '.argus'
+New-Item -ItemType Directory -Force -Path $histDir | Out-Null
+$marker = Join-Path $histDir 'recovery-marker'
+Set-Content -LiteralPath $marker -Value 'kept'
+$appExe = Join-Path $install 'argus-desktop.exe'
+$pauseFile = Join-Path $state 'pause'
+
+function Skip([string]$what, [string]$why) { Write-Host "SKIP  $what  [$why]" }
+# The leading comma keeps the array: PowerShell unrolls a returned array, and on 5.1 a single
+# CIM object has no .Count, so "exactly one" read as "()" and failed (run 41801062950).
+function Daemon-Procs {
+    return ,@(Get-CimInstance Win32_Process -Filter "Name='argus-instinct.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match ' serve ' })
+}
+function Supervisor-Procs {
+    return ,@(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'native-service' })
+}
+function Kill-Tree([int]$id) {
+    Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\taskkill.exe') -ArgumentList '/F', '/T', '/PID', "$id" `
+        -Wait -WindowStyle Hidden | Out-Null
+}
+function Kill-Daemon { foreach ($p in (Daemon-Procs)) { Kill-Tree $p.ProcessId } }
+# What the supervisor itself saw, printed whenever a recovery check fails: a red check
+# without the service log cannot be told apart from a test mistake.
+$script:shownAt = 0
+function Show-Service([string]$label) {
+    if ($script:failed -le $script:shownAt) { return }
+    $script:shownAt = $script:failed
+    Write-Host "----- after '$label': supervisor log, state, daemon errors"
+    foreach ($n in @('service.log', 'state.json', 'daemon.err.log')) {
+        $f = Join-Path $state $n
+        if (Test-Path -LiteralPath $f) { Write-Host "--- $n"; Get-Content -LiteralPath $f -Tail 40 | ForEach-Object { Write-Host "    $_" } }
+    }
+    Write-Host ("--- processes: daemons {0}, supervisor loops {1}; task state {2}" -f (Daemon-Procs).Count, (Supervisor-Procs).Count,
+        $((Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State))
+    Write-Host "-----"
+}
+function Wait-Until([scriptblock]$cond, [int]$seconds, [int]$every = 2) {
+    $end = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $end) { if (& $cond) { return $true }; Start-Sleep -Seconds $every }
+    return [bool](& $cond)
+}
+function Up { $hh = Health $port; return [bool]($hh -and $hh.live -eq $true) }
+function Down { return -not (Health $port) }
+function Authed-Code {
+    try {
+        $req = [Net.HttpWebRequest]::Create("http://127.0.0.1:$port/api/pulse")
+        $req.Proxy = $null; $req.Timeout = 20000
+        $req.Headers.Add('X-ARGUS-Token', (Get-Content -LiteralPath $tokenFile -Raw).Trim())
+        try { $resp = $req.GetResponse() } catch [Net.WebException] { $resp = $_.Exception.Response }
+        if (-not $resp) { return 0 }
+        $code = [int]$resp.StatusCode
+        $resp.Dispose()
+        return $code
+    } catch { return 0 }
+}
+function Restarts-In-Window {
+    try {
+        $s = Get-Content -LiteralPath (Join-Path $state 'state.json') -Raw | ConvertFrom-Json
+        $nowUnix = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        return @($s.restarts | Where-Object { $_ -and $_ -gt $nowUnix - 900 }).Count
+    } catch { return 0 }
+}
+function Wait-Budget {
+    # Let restarts age out of the supervisor's 15-minute window so the next scenario is allowed one.
+    Write-Host "      (waiting for the supervisor's restart window: $(Restarts-In-Window) restart(s) in the last 15 min)"
+    [void](Wait-Until { (Restarts-In-Window) -le 1 } 960 15)
+}
+function Intact([string]$label) {
+    Check ((Get-Content -LiteralPath $tokenFile -Raw) -eq $tokenBefore -and (Authed-Code) -eq 200) "$label`: the same token still works"
+    Check (Test-Path -LiteralPath $marker) "$label`: history is intact"
+}
+function App-Check {
+    $a = Start-Process -FilePath $appExe -ArgumentList '--check' -Wait -PassThru -WindowStyle Hidden
+    return $a.ExitCode
+}
+
+Check ((Daemon-Procs).Count -eq 1) "one daemon process before the scenarios ($((Daemon-Procs).Count))"
+Check ((Supervisor-Procs).Count -ge 1) "the supervisor loop is running ($((Supervisor-Procs).Count) process(es))"
+
+# 1. App closed: the supervisor alone brings a killed daemon back.
+$t0 = Get-Date
+Kill-Daemon
+Check (Wait-Until { Down } 30) 'supervisor (app closed): the daemon is really down'
+$back = Wait-Until { Up } 150 3
+Check $back "supervisor (app closed): the daemon is back after $([int]((Get-Date) - $t0).TotalSeconds) s"
+Check ((Daemon-Procs).Count -eq 1) "supervisor (app closed): exactly one daemon ($((Daemon-Procs).Count))"
+Intact 'supervisor (app closed)'
+Show-Service 'supervisor (app closed)'
+
+# 2. The supervisor itself dies, the daemon lives on: the repeating trigger revives the loop (at most ~5 min).
+# Only the loop's own process: taskkill /T would take its child, the daemon, with it.
+foreach ($p in (Supervisor-Procs)) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 3
+Check ((Supervisor-Procs).Count -eq 0) 'watchdog: the supervisor loop was killed'
+Check (Up) 'watchdog: the daemon keeps answering without its supervisor'
+$revived = Wait-Until { (Supervisor-Procs).Count -ge 1 } 420 5
+Check $revived 'watchdog: the task starts the supervisor loop again (repeating trigger)'
+Check ((Supervisor-Procs).Count -eq 1) "watchdog: exactly one supervisor loop ($((Supervisor-Procs).Count))"
+Check ((Daemon-Procs).Count -eq 1 -and (Up)) 'watchdog: still exactly one daemon, and it answers'
+Intact 'watchdog (supervisor revived)'
+Show-Service 'watchdog (supervisor revived)'
+
+# 3. Maintenance pause: nothing is started while it exists, by the supervisor or by the app.
+Set-Content -LiteralPath $pauseFile -Value ''
+Start-Sleep -Seconds 8
+Kill-Daemon
+Check (Wait-Until { Down } 30) 'pause: the daemon is down'
+Start-Sleep -Seconds 75
+Check ((Down) -and (Daemon-Procs).Count -eq 0) 'pause: the supervisor leaves it down for more than a minute'
+$code = App-Check
+Check ($code -eq 3 -and (Down) -and (Daemon-Procs).Count -eq 0) "pause: the app does not start it either (app check exit $code)"
+Remove-Item -LiteralPath $pauseFile -Force
+Check (Wait-Until { Up } 180 3) 'pause: lifting it brings the daemon back'
+Check ((Daemon-Procs).Count -eq 1) "pause: exactly one daemon ($((Daemon-Procs).Count))"
+Intact 'pause'
+Show-Service 'pause'
+
+# 4. App open: the real app window process is running while the daemon dies.
+Wait-Budget
+$proc = Start-Process -FilePath $appExe -ArgumentList '--hidden' -PassThru
+Start-Sleep -Seconds 25
+if ($proc.HasExited) {
+    Skip 'recovery (app open)' "the app exited with $($proc.ExitCode) within 25 s: this host may have no usable desktop session or WebView2, so the window itself was not exercised"
+} else {
+    Write-Host "NOTE  the app window process stayed up for 25 s here (WebView2 and a desktop session exist)"
+    $t0 = Get-Date
+    Kill-Daemon
+    Check (Wait-Until { Down } 30) 'recovery (app open): the daemon is really down'
+    Check (Wait-Until { Up } 200 3) "recovery (app open): monitoring resumes after $([int]((Get-Date) - $t0).TotalSeconds) s"
+    Check (Wait-Until { (Daemon-Procs).Count -eq 1 } 30) "recovery (app open): exactly one daemon, the app and the supervisor did not both start one ($((Daemon-Procs).Count))"
+    Intact 'recovery (app open)'
+    Show-Service 'recovery (app open)'
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+}
+
+# 5. A daemon that keeps dying is not restarted forever: the budget is spent on purpose.
+Wait-Budget
+$stopped = $false
+for ($i = 1; $i -le 5 -and -not $stopped; $i++) {
+    Kill-Daemon
+    Check (Wait-Until { Down } 30) "budget: kill $i - the daemon is down"
+    if (-not (Wait-Until { Up } 150 3)) { $stopped = $true }
+}
+Check $stopped 'budget: after a few restarts the supervisor stops restarting a daemon that keeps dying'
+$svcLog = ''
+if (Test-Path -LiteralPath (Join-Path $state 'service.log')) { $svcLog = (Get-Content -LiteralPath (Join-Path $state 'service.log') -Tail 300 | Out-String) }
+Check ($svcLog -match 'restart budget spent') 'budget: the supervisor says why in its log'
+Check ((Supervisor-Procs).Count -ge 1) 'budget: the supervisor itself is still running'
+Check ((Daemon-Procs).Count -eq 0) 'budget: no restart loop - nothing was started past the budget'
+Show-Service 'budget: no restart loop - nothing was started past the budget'
+
+# 6. `native stop` (what an upgrade or removal runs) leaves it stopped, and the app does not undo it.
+$o = Run-Engine native stop
+Write-Host $o
+Check (-not (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue)) 'stop: the service task is gone'
+Check ((Supervisor-Procs).Count -eq 0) 'stop: the supervisor loop is gone'
+$code = App-Check
+Start-Sleep -Seconds 20
+Check ($code -eq 3 -and (Down) -and (Daemon-Procs).Count -eq 0) "stop: the app does not start a second copy (app check exit $code)"
+Check ((Test-Path -LiteralPath $tokenFile) -and ((Get-Content -LiteralPath $tokenFile -Raw) -eq $tokenBefore)) 'stop: the pairing is kept'
+Check (Test-Path -LiteralPath $marker) 'stop: history is intact'
+Show-Service 'stop: history is intact'
+
 Write-Host "== uninstall (silent)"
 $u = Start-Process -FilePath (Join-Path $install 'Uninstall.exe') -ArgumentList '/S', "_?=$install" -Wait -PassThru
 Check ($u.ExitCode -eq 0) "uninstaller exit code 0 (was $($u.ExitCode))"

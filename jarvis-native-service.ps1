@@ -137,6 +137,21 @@ if ($Install -or $Remove) {
     [void](New-Item -ItemType Directory -Path $StateRoot -Force)
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    # Stopping the task does not end the loop it started (measured on a clean
+    # windows-2025 host: the PowerShell loop outlived Stop-ScheduledTask). A
+    # loop left running keeps the single-instance lock, so after an upgrade the
+    # new task's loop would exit at once and the old one would go on supervising
+    # with the old program, and after a removal it could start the daemon
+    # again. End exactly the loops that run this service's staged script.
+    $staged = Join-Path $StateRoot 'jarvis-native-service.ps1'
+    Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and
+                       $_.CommandLine.IndexOf($staged, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+                       $_.CommandLine -notmatch '\s-(Install|Remove|Once)\b' } |
+        ForEach-Object {
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            Say "stopped the supervisor loop (pid $($_.ProcessId))"
+        }
     $old = $null
     try { $old = Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json } catch { }
     $oldConfig = $null
@@ -331,7 +346,12 @@ while ($true) {
     $now = Now
     $st.checkedAt = $now
     $paused = Test-Paused
-    if ($paused -ne [bool]$st.paused) { Say $(if ($paused) { 'paused for maintenance -- checking only' } else { 'maintenance pause lifted' }) }
+    if ($paused -ne [bool]$st.paused) {
+        Say $(if ($paused) { 'paused for maintenance -- checking only' } else { 'maintenance pause lifted' })
+        # Lifting a pause is a person acting: if the budget had run out before,
+        # supervise again. The restart budget itself still applies.
+        if (-not $paused -and $st.gaveUp) { $st.gaveUp = $false; Say 'supervising again after the pause (restart budget still applies)' }
+    }
     $st.paused = $paused
 
     $running = [bool](Get-DaemonProcess $st.pid $Python)

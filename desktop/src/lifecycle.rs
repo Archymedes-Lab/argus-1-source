@@ -176,6 +176,54 @@ pub fn listening(port: u16) -> bool {
     TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), Duration::from_secs(2)).is_ok()
 }
 
+/// The native service's own folder (`%LOCALAPPDATA%/Jarvis/NativeService`, renamed in releases):
+/// its supervisor keeps its state there, and a `pause` file there means maintenance.
+pub fn service_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    env("LOCALAPPDATA").map(|l| Path::new(&l).join("Jarvis").join("NativeService"))
+}
+
+/// True while the supervisor is paused for maintenance: it checks but starts and stops nothing,
+/// and this app must not start the daemon behind its back either.
+pub fn paused_for_maintenance(env: &dyn Fn(&str) -> Option<String>, exists: &dyn Fn(&Path) -> bool) -> bool {
+    service_dir(env).is_some_and(|d| exists(&d.join("pause")))
+}
+
+/// True when the installer's service owns the daemon: the engine is installed and this is not a
+/// development run (`JARVIS_PYTHON`). Then the supervisor, not this app, starts and restarts it.
+pub fn managed_by_service(env: &dyn Fn(&str) -> Option<String>, exists: &dyn Fn(&Path) -> bool) -> bool {
+    env("JARVIS_PYTHON").filter(|p| !p.is_empty()).is_none()
+        && runtime_home(env).is_some_and(|h| packaged_exe(&h, exists).is_some())
+}
+
+/// What to do about a daemon that is not answering.
+#[derive(Debug, PartialEq, Eq)]
+pub enum StartPlan {
+    /// Ask the service's scheduled task to run (it is already supervising; an extra run is ignored).
+    RunTask,
+    /// Development and bare installs only: start the program directly.
+    StartDirect,
+    /// Leave it alone and say why.
+    Refuse(String),
+}
+
+/// A daemon the service supervises is never started a second way: a copy started here would run
+/// outside the supervisor's restart budget and logs, and would undo `native stop` (which removes
+/// the task on purpose, for an upgrade or a removal). With the task absent or not runnable, the
+/// honest answer is that the service is not running, with what to do about it.
+pub fn plan_start(managed: bool, task: &Result<bool, String>) -> StartPlan {
+    match (managed, task) {
+        (_, Ok(true)) => StartPlan::RunTask,
+        (true, Ok(false)) => StartPlan::Refuse(
+            "The part of ARGUS-INSTINCT that checks your computer was turned off, usually for an update or a removal. Nothing is being checked until it is set up again: run the ARGUS-INSTINCT installer. This app does not start it a second way, so nothing runs twice."
+                .into(),
+        ),
+        (true, Err(e)) => StartPlan::Refuse(format!(
+            "Windows would not start the part of ARGUS-INSTINCT that checks your computer ({e}). This app does not start it a second way, so nothing runs twice."
+        )),
+        (false, _) => StartPlan::StartDirect,
+    }
+}
+
 #[cfg(windows)]
 fn hidden(c: &mut Command) -> &mut Command {
     use std::os::windows::process::CommandExt;
@@ -256,6 +304,13 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
     if listening(port) {
         return Status::new(Phase::Starting, "Connecting to ARGUS-INSTINCT", "");
     }
+    if paused_for_maintenance(&env, &|p| p.exists()) {
+        return Status::new(
+            Phase::Stopped,
+            "ARGUS-INSTINCT is paused for maintenance",
+            "Someone paused it on purpose, so nothing is being started or restarted until the pause ends. This app will not start it meanwhile.",
+        );
+    }
     if !governor.allow(Instant::now()) {
         return Status::new(
             Phase::Stopped,
@@ -263,13 +318,14 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
             "It was restarted several times in the last ten minutes and stopped each time. Nothing is being checked. Restart the computer, or reinstall ARGUS-INSTINCT if this keeps happening.",
         );
     }
-    // The task is the supported way. If Windows will not run it (no interactive
-    // session, a disabled task) a direct start is still better than no monitoring;
-    // the single-instance port check above keeps it from becoming a second daemon.
-    let started = match start_task() {
-        Ok(true) => Ok(()),
-        Ok(false) => start_direct(&env, port),
-        Err(task_err) => start_direct(&env, port).map_err(|e| format!("{task_err}; {e}")),
+    // The service's task is the supported way, and where one exists it is the only way (plan_start).
+    let task = start_task();
+    let started = match plan_start(managed_by_service(&env, &|p| p.exists()), &task) {
+        StartPlan::RunTask => Ok(()),
+        StartPlan::StartDirect => start_direct(&env, port),
+        StartPlan::Refuse(why) => {
+            return Status::new(Phase::Stopped, "ARGUS-INSTINCT is not watching your computer", why);
+        }
     };
     if let Err(e) = started {
         return Status::new(Phase::Stopped, "ARGUS-INSTINCT is not running and could not be started", e);
@@ -406,5 +462,47 @@ mod tests {
         assert!(listening(port));
         drop(l);
         assert!(!listening(port));
+    }
+
+    #[test]
+    fn a_supervised_install_is_never_started_a_second_way() {
+        // The service owns the daemon: with its task gone (native stop) or not runnable, do nothing.
+        assert!(matches!(plan_start(true, &Ok(false)), StartPlan::Refuse(m) if m.contains("turned off")));
+        assert!(matches!(plan_start(true, &Err("denied".into())), StartPlan::Refuse(m) if m.contains("denied")));
+        // The task, when it exists, is asked: running it again is harmless (the supervisor ignores a repeat).
+        assert_eq!(plan_start(true, &Ok(true)), StartPlan::RunTask);
+        assert_eq!(plan_start(false, &Ok(true)), StartPlan::RunTask);
+    }
+
+    #[test]
+    fn a_development_run_may_still_start_the_program_directly() {
+        assert_eq!(plan_start(false, &Ok(false)), StartPlan::StartDirect);
+        assert_eq!(plan_start(false, &Err("x".into())), StartPlan::StartDirect);
+    }
+
+    #[test]
+    fn the_engine_layout_means_managed_and_a_development_override_means_not() {
+        let home = Path::new("H");
+        let engine = home.join("engine").join(ENGINE_EXE);
+        let env = |k: &str| (k == "JARVIS_HOME").then(|| "H".to_string());
+        if cfg!(windows) {
+            assert!(managed_by_service(&env, &|p| p == engine));
+            assert!(!managed_by_service(&env, &|_| false), "no engine: nothing for a service to own");
+        }
+        let dev = |k: &str| match k {
+            "JARVIS_PYTHON" => Some("py.exe".to_string()),
+            "JARVIS_HOME" => Some("H".to_string()),
+            _ => None,
+        };
+        assert!(!managed_by_service(&dev, &|p| p == engine), "a development override is never managed");
+    }
+
+    #[test]
+    fn a_maintenance_pause_is_seen_in_the_services_own_folder() {
+        let env = |k: &str| (k == "LOCALAPPDATA").then(|| "L".to_string());
+        let pause = Path::new("L").join("Jarvis").join("NativeService").join("pause");
+        assert!(paused_for_maintenance(&env, &|p| p == pause));
+        assert!(!paused_for_maintenance(&env, &|_| false));
+        assert!(!paused_for_maintenance(&|_: &str| None, &|_| true));
     }
 }
