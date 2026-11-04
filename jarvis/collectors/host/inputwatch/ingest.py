@@ -5,7 +5,18 @@ import os
 
 from jarvis.core.util import now
 
-from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, READ_CAP, SOUND_META
+from .common import (
+    _M_DUPES,
+    _M_OVERSIZE,
+    _M_SESSION,
+    HOST_META,
+    OWN_PIDS_KEEP_S,
+    OWN_PIDS_META,
+    READ_CAP,
+    SOUND_META,
+    STATES_KEEP,
+    STATES_META,
+)
 from .helper import _paths
 
 _BEAT_COLS = ("real_keys", "injected_keys", "real_clicks", "injected_clicks",
@@ -161,6 +172,8 @@ def ingest(store):
     sound_beat = None
     session = None
     controls = []
+    host = None
+    states = []
     for line in body.splitlines():
         line = line.strip()
         if not line:
@@ -183,6 +196,14 @@ def ingest(store):
             if "session" in rec:
                 session = f"{int(rec['session'])}:{int(rec.get('desktop', -1))}"
             sound_beat = _sound_beat(rec, ts) or sound_beat
+            if isinstance(rec.get("hook"), dict):
+                host = dict(_clean(rec["hook"]), ts=ts)
+        elif rec.get("kind") == "hook-state":
+            # The resident host's watchdog: Windows dropped the hook, or it
+            # stayed deaf after a reinstall. Not an input event.
+            states.append([int(rec.get("ts") or now()), str(rec.get("state") or "")[:16],
+                           int(rec.get("unseen_ms") or 0), str(rec.get("fg") or "")[:64],
+                           int(rec.get("kb_quiet_ms") or -1), int(rec.get("mouse_quiet_ms") or -1)])
         elif rec.get("kind") == "sound":
             row = _sound_row(rec)
             if row:
@@ -256,6 +277,26 @@ def ingest(store):
         store.set_meta(SOUND_META, sound_beat)
     if session is not None:
         store.set_meta(_M_SESSION, session)
+    if host is not None:
+        store.set_meta(HOST_META, json.dumps(host))
+    if beat_pids:
+        # Every pid that wrote a heartbeat into OUR output file is our helper.
+        # The watcher audit used only the current pid, so after each restart
+        # the previous JARVIS hook was reported as an unknown keylogger.
+        try:
+            own = {int(k): int(v) for k, v in json.loads(store.get_meta(OWN_PIDS_META, "{}") or "{}").items()}
+        except (ValueError, TypeError, AttributeError):
+            own = {}
+        stamp = now()
+        own.update({p: stamp for p in beat_pids})
+        own = {p: t for p, t in own.items() if stamp - t < OWN_PIDS_KEEP_S}
+        store.set_meta(OWN_PIDS_META, json.dumps({str(p): t for p, t in own.items()}))
+    if states:
+        try:
+            kept = json.loads(store.get_meta(STATES_META, "[]") or "[]")
+        except ValueError:
+            kept = []
+        store.set_meta(STATES_META, json.dumps((kept + states)[-STATES_KEEP:]))
     # Heartbeats from more than one PID in a single drain means two helpers are
     # writing to the same file and double-counting. Cheap and local — no
     # interop — so the healthy path can check it too.

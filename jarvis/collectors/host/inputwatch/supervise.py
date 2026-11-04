@@ -8,7 +8,17 @@ from jarvis.core.util import iso, now
 from jarvis.platform import windows as collect_windows
 
 from .analysis import _latency_findings, _typing_findings, sort_findings
-from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, HOOK_PS1, READ_CAP, _mget_int, _sha256
+from .common import (
+    _M_DUPES,
+    _M_OVERSIZE,
+    _M_SESSION,
+    HOOK_PS1,
+    HOST_META,
+    READ_CAP,
+    STATES_META,
+    _mget_int,
+    _sha256,
+)
 from .helper import (
     _alive_mtime,
     _alive_path,
@@ -18,6 +28,10 @@ from .helper import (
     _staged_matches_source,
     _stop_all,
     helper_count,
+    owner,
+    owner_hook_verified,
+    owner_output_size,
+    owner_pulse_mtime,
     running,
     start,
     stop,
@@ -168,6 +182,111 @@ def _flap_finding(store):
         "Note what holds focus when it dies", "input_beats")]
 
 
+STATE_WINDOW = 24 * 3600
+
+OWNER_STALE_S = 180    # the owner's pulse frozen this long: run our own hook
+
+OWNER_UNREAD_S = 900   # the owner's output not drained this long: nobody reads it, run ours
+
+OWNER_VERIFY_S = 300   # how often the owner's pulse pid is checked to be a real hook
+
+_M_OWNER = "input_hook_owner_probe"    # {"mtime": owner pulse mtime, "seen": local ts it last moved}
+
+
+def deferral(store):
+    """(owner path, seconds its pulse has been frozen) when another install owns
+    the machine's hook, else None. Decided by motion, not by comparing a
+    Windows file time with this clock (the two have disagreed by an hour)."""
+    other = owner()
+    win_out = _paths()[0]
+    if not other or other.lower() == win_out.lower():
+        return None
+    mtime = owner_pulse_mtime(other)
+    try:
+        prev = json.loads(store.get_meta(_M_OWNER, "") or "{}")
+    except ValueError:
+        prev = {}
+    t = now()
+    seen = t if (mtime is not None and mtime != prev.get("mtime")) or not prev else int(prev.get("seen") or t)
+    # Drained: the owner's consumer truncates the file after each read, so a
+    # size that only grows means its hook runs and nothing reads it (the WSL
+    # daemon down while Windows is up).
+    size = owner_output_size(other)
+    drained = t if (size is not None and (size == 0 or size < int(prev.get("size") or 0))) or not prev \
+        else int(prev.get("drained") or t)
+    verified, checked = prev.get("verified"), int(prev.get("checked") or 0)
+    if mtime is not None and t - checked >= OWNER_VERIFY_S:
+        result = owner_hook_verified(other)
+        if result is not None:
+            verified, checked = result, t
+    store.set_meta(_M_OWNER, json.dumps({"mtime": mtime, "seen": seen, "size": size,
+                                         "drained": drained, "verified": verified, "checked": checked}))
+    frozen = t - seen if mtime is not None else OWNER_STALE_S + 1
+    if verified is False:
+        frozen = max(frozen, OWNER_STALE_S + 1)
+    elif t - drained > OWNER_UNREAD_S:
+        frozen = max(frozen, OWNER_STALE_S + 1)
+    return other, frozen, verified is False, t - drained
+
+
+def host_findings(store, clock=None):
+    """What the resident host says about itself (2026-10-31): hooks Windows
+    dropped and the watchdog reinstalled, deafness a reinstall did not cure,
+    output lines dropped at the queue cap, and tasks that threw."""
+    t = clock if clock is not None else now()
+    out = []
+    try:
+        states = [s for s in json.loads(store.get_meta(STATES_META, "[]") or "[]")
+                  if isinstance(s, list) and len(s) >= 4 and t - int(s[0]) < STATE_WINDOW]
+    except (ValueError, TypeError):
+        states = []
+    drops = [s for s in states if s[1] == "reinstalling"]
+    deaf = [s for s in states if s[1] == "still-deaf"]
+    # Unconfirmed until soaked (2026-11-01): on this machine the watchdog fired
+    # about every 7 minutes at ~3 s gaps while the owner typed, with no
+    # confirmed drop. Low and medium until the kb/mouse split explains it.
+    def _which(s):
+        if len(s) >= 6 and s[4] >= 0 and s[5] >= 0:
+            return f"; keyboard hook quiet {s[4] // 1000} s, mouse hook quiet {s[5] // 1000} s"
+        return ""
+    if drops:
+        last = drops[-1]
+        out.append(_finding(
+            "input", "low",
+            f"input reached the desktop {len(drops)} time(s) in 24 h without a hook callback; reinstalled",
+            f"{int(last[2]) // 1000} s of input with no callback (last at {iso(int(last[0]))}, "
+            f"foreground {last[3] or '?'}{_which(last)}). Unconfirmed: Windows dropping the "
+            f"hook, a hook installed after this one swallowing input, or touch/pen input the "
+            f"hooks never see all look like this. The hook was reinstalled either way",
+            "inputwatch"))
+    if deaf:
+        out.append(_finding(
+            "input", "medium", "input kept arriving without a hook callback after a reinstall",
+            f"{len(deaf)} time(s) in 24 h (last at {iso(int(deaf[-1][0]))}{_which(deaf[-1])}). "
+            f"A hook that cannot be re-established cannot see injection; until the keyboard/"
+            f"mouse split shows which input is missed this is not a verdict",
+            "inputwatch"))
+    try:
+        host = json.loads(store.get_meta(HOST_META, "") or "{}")
+    except ValueError:
+        host = {}
+    if isinstance(host, dict) and host:
+        dropped = int(host.get("out_dropped") or 0)
+        if dropped:
+            out.append(_finding(
+                "input", "medium", f"the input hook dropped {dropped} output line(s)",
+                "its output queue reached its cap; the counters still count every event, "
+                "but the dropped lines' detail is lost", "inputwatch"))
+        faults = int(host.get("task_faults") or 0)
+        if faults:
+            out.append(_finding(
+                "input", "low", f"{faults} input-hook task fault(s) since it started",
+                f"a periodic task (audio, brightness, sound, heartbeat, watchdog) threw and "
+                f"was skipped; the hook itself keeps running. Last: "
+                f"{str(host.get('last_fault') or '?')[:160]}", "inputwatch"))
+    return out
+
+
 def supervise(store, deep=False):
     """Keep the hook alive; make repeated failure loud. Returns (pids, findings).
 
@@ -192,6 +311,40 @@ def supervise(store, deep=False):
 
     last_try = _mget_int(store, _M_LASTTRY)
     fails = _mget_int(store, _M_FAILS)
+
+    # One hook per machine (owner decision 2026-10-31): when the marker names
+    # another install, defer to it while its pulse moves, and take over only
+    # when it has been frozen for OWNER_STALE_S, so a stale or forged marker
+    # can never leave the machine with no hook.
+    deferred = deferral(store)
+    if deferred:
+        other, frozen, fake, unread = deferred
+        where = other.rsplit("\\", 2)[1]
+        if frozen <= OWNER_STALE_S:
+            if os.path.exists(_pid_path()) or os.path.exists(_alive_path()):
+                _stop_all()
+                out.append(_finding(
+                    "input", "low", f"stopped this install's input hook: {where} owns it",
+                    "the owner's hook is back (pulse moving); ours was stopped so one "
+                    "hook runs, as the owner marker in %LOCALAPPDATA% says", "inputwatch"))
+            # Low, not ok: standing down is a state worth seeing, because a
+            # forged marker is how a same-user program would ask for it.
+            out.append(_finding(
+                "input", "low", f"the input hook is provided by the {where} install",
+                f"this machine's owner marker names {other}; its pulse moved "
+                f"{frozen}s ago. If it freezes for {OWNER_STALE_S // 60} min, this "
+                f"install runs its own", "inputwatch"))
+            return [], sort_findings(out)
+        why = ("its pulse file names a process that is not that install's hook; a touched "
+               "file must not make every install stand down" if fake else
+               f"its output has not been read for {unread}s, so its hook runs and nothing "
+               f"consumes it" if unread > OWNER_UNREAD_S else
+               f"its pulse has not moved for {frozen}s")
+        out.append(_finding(
+            "input", "high" if fake else "medium",
+            f"the {where} install's input hook is not usable; running ours",
+            f"the owner marker names {other}, but {why}. This install supervises its "
+            f"own hook until the owner's is back", "inputwatch"))
 
     # Two helpers writing the same file. Reconcile before anything else: stop
     # every hook, start exactly one.
@@ -251,6 +404,7 @@ def supervise(store, deep=False):
         latest = store.db.execute(
             "SELECT * FROM input_beats ORDER BY ts DESC LIMIT 1").fetchone()
         out += _latency_findings(store, latest, probe_registry=deep)
+        out += host_findings(store)
         out += _typing_findings(store, latest)
         pid = _pidfile_pid()
         embedded = _newest_beat(store)

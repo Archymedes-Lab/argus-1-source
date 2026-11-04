@@ -2,6 +2,7 @@
 paths and pids that describe it."""
 
 import os
+import re
 import subprocess
 
 from jarvis.core.util import now
@@ -52,6 +53,99 @@ def _paths():
     return pair
 
 
+OWNER_FILE = "input-hook-owner.txt"   # in %LOCALAPPDATA%, shared by every install on the machine
+
+
+def _owner_marker():
+    """WSL path of the per-user marker naming the install that owns the hook."""
+    _win_out, wsl_out = _paths()
+    return os.path.join(os.path.dirname(os.path.dirname(wsl_out)), OWNER_FILE)
+
+
+def owner():
+    """The owning install's output file (Windows path) from the marker, or "".
+
+    Data, not code: the Argus build rewrites product names in its copy of this
+    module, so a literal "defer to JARVIS" would name itself there. Only a path
+    under the same %LOCALAPPDATA% ending in \\input.jsonl is accepted.
+    """
+    win_out, _wsl_out = _paths()
+    base = win_out.rsplit("\\", 2)[0]
+    try:
+        with open(_owner_marker(), encoding="utf-8", errors="replace") as fh:
+            value = fh.read(400).strip()
+    except OSError:
+        return ""
+    parts = value.rsplit("\\", 2)
+    # One plain folder directly under %LOCALAPPDATA%: no "..", no separators.
+    if len(parts) != 3 or parts[0].lower() != base.lower() or parts[2].lower() != "input.jsonl" \
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}", parts[1]):
+        return ""
+    return value
+
+
+def claim_owner():
+    """Make this install the owner of the machine's input hook. Returns its path."""
+    win_out, _wsl_out = _paths()
+    tmp = _owner_marker() + ".new"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(win_out)
+    os.replace(tmp, _owner_marker())
+    return win_out
+
+
+def _owner_file(owner_win, name):
+    win_out, wsl_out = _paths()
+    base_win = win_out.rsplit("\\", 2)[0]
+    if not owner_win.lower().startswith(base_win.lower()):
+        return None
+    return os.path.join(os.path.dirname(os.path.dirname(wsl_out)), owner_win.rsplit("\\", 2)[1], name)
+
+
+def owner_output_size(owner_win):
+    """Size of the owning install's output file; its consumer truncates it after each read."""
+    path = _owner_file(owner_win, "input.jsonl")
+    try:
+        return os.path.getsize(path) if path else None
+    except OSError:
+        return None
+
+
+def owner_hook_verified(owner_win):
+    """True when the pid in the owner's pulse file is a live powershell.exe whose
+    command line runs inputhook.ps1 with that -OutFile. A touched file alone
+    must not make every install stand down. None when it cannot be asked."""
+    path = _owner_file(owner_win, "input.alive")
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            pid = int(fh.read(40).split(":", 1)[0])
+    except (OSError, ValueError, TypeError):
+        return False
+    out = owner_win.replace("'", "''")
+    d = ps_json(
+        "$ok = 0; $p = Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" -EA SilentlyContinue;"
+        "if ($p -and $p.Name -eq 'powershell.exe' -and $p.CommandLine -like '*inputhook.ps1*' -and "
+        "$p.CommandLine.IndexOf('%s', [StringComparison]::OrdinalIgnoreCase) -ge 0) { $ok = 1 };"
+        "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json @{ok=$ok})))"
+        % (pid, out), timeout=30)
+    if not d:
+        return None
+    return bool(d.get("ok"))
+
+
+def owner_pulse_mtime(owner_win):
+    """mtime of the owning install's .alive pulse, or None if absent."""
+    win_out, wsl_out = _paths()
+    base_win = win_out.rsplit("\\", 2)[0]
+    base_wsl = os.path.dirname(os.path.dirname(wsl_out))
+    folder = owner_win.rsplit("\\", 2)[1]
+    try:
+        return os.path.getmtime(os.path.join(base_wsl, folder, "input.alive")) \
+            if owner_win.lower().startswith(base_win.lower()) else None
+    except OSError:
+        return None
+
+
 def _stage_helper():
     """Copy the hook script somewhere powershell.exe can actually reach."""
     win_out, wsl_out = _paths()
@@ -93,6 +187,23 @@ def running():
     return [pid] if (d or {}).get("ok") else []
 
 
+def _own_helper_clause():
+    """PowerShell condition for "this install's hook helper": a powershell.exe
+    whose command line names our own output file.
+
+    Matching only `inputhook.ps1` counted every product's hook as ours. With
+    the installed Argus app supervising its own hook (AppData\\Local\\Argus)
+    beside this daemon's (AppData\\Local\\Jarvis), each supervisor took the
+    other's helper for a duplicate and stopped both, and `start()` refused to
+    launch while the other's ran (measured 2026-10-31 20:13-20:26). The
+    duplicate rule exists to stop two hooks writing one file, so the output
+    file is the identity.
+    """
+    win_out = _paths()[0].replace("'", "''")
+    return ("$_.CommandLine -and $_.CommandLine -like '*inputhook.ps1*' -and "
+            f"$_.CommandLine.IndexOf('{win_out}', [StringComparison]::OrdinalIgnoreCase) -ge 0")
+
+
 def helper_count():
     """How many hook helpers are running on Windows right now; -1 if unknown.
 
@@ -103,7 +214,7 @@ def helper_count():
     """
     d = ps_json(
         "$n = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\""
-        " | Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and "
+        " | Where-Object { (" + _own_helper_clause() + ") -and "
         "$_.ProcessId -ne $PID }).Count;"
         "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("
         "(ConvertTo-Json @{n=$n})))", timeout=60)
@@ -259,7 +370,7 @@ def _stop_all(pids=()):
     collect_windows.run_in_every_session(
         f"Stop-ScheduledTask -TaskName '{TASK_NAME}' -EA SilentlyContinue;"
         "$targets = @(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
-        "Where-Object { $_.CommandLine -like '*inputhook.ps1*' -and $_.ProcessId -ne $PID } | "
+        "Where-Object { (" + _own_helper_clause() + ") -and $_.ProcessId -ne $PID } | "
         "ForEach-Object { $_.ProcessId });"
         f"$targets += @({explicit}) | Where-Object {{ $_ -gt 0 -and $_ -ne $PID -and "
         "(Get-Process -Id $_ -EA SilentlyContinue).ProcessName -eq 'powershell' };"

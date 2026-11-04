@@ -142,6 +142,10 @@ function Get-Health {
     # Raw HttpWebRequest with the proxy off: the same reason as the health monitor --
     # Invoke-RestMethod can block past its timeout in a hidden task session.
     try {
+        # A non-200 reply is cut at DefaultMaximumErrorResponseLength (64 KB) and the
+        # health body is 72-76 KB: a live 503 parsed as silence (2026-10-31). Bounded
+        # at 4 MB (the unit is KB).
+        [Net.HttpWebRequest]::DefaultMaximumErrorResponseLength = 4096
         $req = [Net.HttpWebRequest]::Create($HealthUrl)
         Add-JarvisToken $req
         $req.Proxy = $null; $req.Timeout = 4000; $req.ReadWriteTimeout = 4000; $req.KeepAlive = $false

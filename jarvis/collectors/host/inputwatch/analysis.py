@@ -10,6 +10,7 @@ from jarvis.core.util import iso, now
 from jarvis.platform.windows import ps_json
 
 from . import watchers
+from .common import OWN_PIDS_META
 from .forensics import explain
 from .helper import running
 from .ingest import ingest
@@ -31,6 +32,15 @@ BENIGN_INJECTORS = {
 CONTROL_VK = {0xB3: "media-play-pause"}
 
 
+def _recent_own_pids(store):
+    """Pids that wrote JARVIS heartbeats in the last 24 h (see ingest)."""
+    try:
+        own = json.loads(store.get_meta(OWN_PIDS_META, "{}") or "{}")
+        return tuple(int(p) for p in own)
+    except (ValueError, TypeError, AttributeError):
+        return ()
+
+
 def audit(store, hours=24, pids=None, supervised=False):
     out = []
     ingest(store)
@@ -48,7 +58,7 @@ def audit(store, hours=24, pids=None, supervised=False):
     # Win32k audit trace. JARVIS's own hook is known by its supervised pids.
     if pids is None and not supervised:
         pids = running()
-    out.extend(watchers.audit(own_pids=pids or ()))
+    out.extend(watchers.audit(own_pids=tuple(pids or ()) + _recent_own_pids(store)))
 
     # When the supervisor has already run it owns the liveness and latency
     # narrative; audit adds only what it alone produces — the injected-event
