@@ -29,6 +29,10 @@ MAX_PENDING = 50
 AUDIT_KEEP = 200
 TARGET_MAX = 200             # the target text shown to the phone and bound into the challenge
 MAX_REPLIES = 50
+# Only proposals for serious findings are pushed to a phone for approval: the ledger can hold hundreds of
+# low-severity proposals (on the owner's machine, 399 on 2026-11-04), and a stream of "Approve?" prompts
+# trains a reflex tap. The same threshold defense.py uses before a reversible action may run unasked.
+OFFER_SEVERITIES = defense.AUTO_MIN_SEVERITY
 
 
 def _state(store):
@@ -59,6 +63,12 @@ def audit(st, now, **fields):
     st["audit"].append({"at": int(now), **{k: (str(v)[:200] if isinstance(v, str) else v) for k, v in fields.items()}})
 
 
+def worth_a_phone_prompt(entry):
+    """Whether a proposal is serious enough to push to a phone (the desktop and CLI still list all)."""
+    finding = entry.get("finding") if isinstance(entry, dict) and isinstance(entry.get("finding"), dict) else {}
+    return finding.get("severity") in OFFER_SEVERITIES
+
+
 def phone_can_approve(entry):
     """The allowlist: a proposal that is still waiting and whose action is reversible."""
     if not isinstance(entry, dict) or entry.get("status") != "proposed":
@@ -85,7 +95,7 @@ def offer(store, conf, eid, entry, now=None, opener=None):
     """Ask paired phones to approve proposal `eid`. Returns the approval id, or '' when nothing was offered
     (no phone with a passkey, not allowed from a phone, already offered, relay unreachable)."""
     now = time.time() if now is None else now
-    if store is None or not phone_can_approve(entry):
+    if store is None or not phone_can_approve(entry) or not worth_a_phone_prompt(entry):
         return ""
     if not any(_has_passkey(d) for d in devices.active()):
         return ""
@@ -100,7 +110,7 @@ def offer(store, conf, eid, entry, now=None, opener=None):
     extra = _extra(approval_id, "approve", eid, entry["action"], target, expires)
     extra["preview"] = str(entry.get("preview") or "")[:600]
     finding = entry.get("finding") if isinstance(entry.get("finding"), dict) else {}
-    severity = finding.get("severity") if finding.get("severity") in ("critical", "high", "medium", "low") else "high"
+    severity = finding["severity"]                    # critical or high (worth_a_phone_prompt)
     text = "Tap to see what will happen. You can undo it afterwards."
     kw = {"opener": opener} if opener else {}
     err = channel.send(conf, f"Approve: {entry.get('title') or entry['action']}", text, severity=severity,
@@ -285,6 +295,15 @@ def queue_offer(store, eid):
         return True
     except Exception:
         return False
+
+
+def register():
+    """Hear about new defense proposals (idempotent). The scheduler calls it before its first collection."""
+    if queue_offer not in defense.PROPOSAL_LISTENERS:
+        defense.PROPOSAL_LISTENERS.append(queue_offer)
+
+
+register()
 
 
 def flush_offers(store, conf, now=None, opener=None):

@@ -38,6 +38,7 @@ import threading
 import time
 
 from jarvis.core.store import Store
+from jarvis.platform import admin_sensor
 from jarvis.response import acknowledge
 from jarvis.response.reporting import score
 from jarvis.service import reliability as reliability_mod
@@ -88,7 +89,12 @@ def build(db_path, scheduler, stamp=None):
                 acked = acknowledge.is_acknowledged(acks, f, name, now=stamp)
                 urgent.append({"id": acknowledge.finding_id(f, name), "job": name,
                                "severity": sev, "title": str(f.get("title", ""))[:200],
+                               # Lets a client explain the kind of thing in plain words.
+                               "category": str(f.get("category") or "")[:40],
                                "acknowledged": bool(acked)})
+    # A release without the administrator sensor must not read as full coverage:
+    # name every job it affects, with the same reason everywhere (platform/admin_sensor.py).
+    admin_sensor.merge_blind(blind, {n: lbl for n, (_iv, lbl) in JOBS.items()})
     urgent.sort(key=lambda u: (u["acknowledged"], _RANK.get(u["severity"], 9), u["job"]))
     worst = min(totals, key=lambda s: _RANK.get(s, 9)) if totals else "ok"
 

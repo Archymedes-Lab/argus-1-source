@@ -66,9 +66,9 @@ class OverviewHonestyTests(unittest.TestCase):
         none = self.m(model(findings=[F_CRIT], healthy=3))
         self.assertNotIn("No changes have been made", none["detail"])
         st = model(findings=[F_CRIT], healthy=3)
-        st["assistant"] = {"changes": {"text": "No changes have been made to your computer by ARGUS-1."}, "pending": [], "audit": []}
-        self.assertTrue(self.m(st)["detail"].endswith("No changes have been made to your computer by ARGUS-1."))
-        st["assistant"]["changes"]["text"] = "ARGUS-1 has applied 2 automatic response actions."
+        st["assistant"] = {"changes": {"text": "No changes have been made to your computer by ARGUS-INSTINCT."}, "pending": [], "audit": []}
+        self.assertTrue(self.m(st)["detail"].endswith("No changes have been made to your computer by ARGUS-INSTINCT."))
+        st["assistant"]["changes"]["text"] = "ARGUS-INSTINCT has applied 2 automatic response actions."
         self.assertIn("applied 2 automatic", self.m(st)["detail"])
         self.assertNotIn("No changes have been made", self.m(st)["detail"])
 
@@ -118,7 +118,7 @@ class FindingExplanationTests(unittest.TestCase):
 
     def test_every_part_is_present_and_in_plain_language(self):
         e = self.ex(F())
-        self.assertEqual(e["what"], "ARGUS-1 found a scheduled task that runs a program automatically.")
+        self.assertEqual(e["what"], "ARGUS-INSTINCT found a scheduled task that runs a program automatically.")
         self.assertIn("System32", e["where"])
         for key in ("whyFlagged", "facts", "risks", "benign", "unknown", "confidence", "steps", "next"):
             self.assertTrue(e[key], key)
@@ -423,7 +423,7 @@ class NotificationMarkupTests(unittest.TestCase):
     def test_the_panel_says_what_notifications_can_and_cannot_do(self):
         self.assertIn("Pop-ups on this computer use the Notify me button and work only while this page is open", HTML)
         self.assertIn("Dismissing a notification never changes a finding", HTML)
-        self.assertIn("ARGUS-1 has no background notifier", HTML)
+        self.assertIn("ARGUS-INSTINCT has no background notifier", HTML)
 
     def test_critical_findings_are_not_announced_twice(self):
         self.assertIn('!(x.type === "finding" && x.sev === "critical")', HTML)
@@ -465,7 +465,7 @@ class DetailLevelAndAccessibilityTests(unittest.TestCase):
         self.assertIn("navigator.clipboard.writeText", HTML)
 
     def test_the_finding_card_has_every_section_a_beginner_needs(self):
-        for heading in ("What was found", "Where", "Why ARGUS-1 flagged it", "What it could mean", "How confident is ARGUS-1?",
+        for heading in ("What was found", "Where", "Why ARGUS-INSTINCT flagged it", "What it could mean", "How confident is ARGUS-INSTINCT?",
                         "What you can do", "Technical details", "Ordinary explanations", "Not known"):
             self.assertIn(heading, HTML, heading)
 

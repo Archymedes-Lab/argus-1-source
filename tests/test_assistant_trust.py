@@ -235,7 +235,7 @@ class BeginnerQuestionTests(Base):
         text = r["answer"]
         self.assertIn("found 6 items to review, including 4 marked as serious", text)
         self.assertIn("Some items may have legitimate explanations", text)
-        self.assertIn("No changes have been made to your computer by ARGUS-1.", text)
+        self.assertIn("No changes have been made to your computer by ARGUS-INSTINCT.", text)
         kinds = [s["kind"] for s in r["sections"]]
         self.assertEqual(kinds[0], "simple")
         self.assertIn("why", kinds)

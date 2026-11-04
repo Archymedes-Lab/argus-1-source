@@ -35,21 +35,44 @@ def _owner(proc):
     return "other"
 
 
-def _database_profile(store):
-    result = {"bytes": 0, "tables": []}
+# The per-table breakdown walks every page of the database (dbstat). On an
+# 882 MB store that cost 6.8 s of CPU and pulled ~330 MB into the process
+# through the memory map, every five minutes (measured 2026-11-02). The total
+# size stays fresh each run; the breakdown is rebuilt daily, or sooner when
+# the file has grown or shrunk by a tenth, and says when it was taken.
+TABLES_MAX_AGE_S = 86400
+TABLES_CHANGE = 0.10
+
+
+def _database_profile(store, previous=None, now_ts=None):
+    """{bytes, tables, tables_at, tables_bytes}: size now, breakdown as of tables_at."""
+    now_ts = time.time() if now_ts is None else now_ts
+    size = 0
     try:
-        result["bytes"] = os.path.getsize(store.path)
+        size = os.path.getsize(store.path)
     except OSError:
         pass
+    prev = previous if isinstance(previous, dict) else {}
+    tables, at, at_bytes = prev.get("tables") or [], prev.get("tables_at"), prev.get("tables_bytes") or 0
+    fresh = (tables and isinstance(at, (int, float)) and now_ts - at < TABLES_MAX_AGE_S
+             and at_bytes and abs(size - at_bytes) / at_bytes < TABLES_CHANGE)
+    if not fresh:
+        try:
+            rows = store.db.execute(
+                "SELECT name, SUM(pgsize) AS bytes FROM dbstat "
+                "GROUP BY name ORDER BY bytes DESC LIMIT 8").fetchall()
+            tables = [{"name": row[0], "bytes": int(row[1] or 0)} for row in rows]
+            at, at_bytes = now_ts, size
+        except Exception:
+            tables, at, at_bytes = [], None, 0
+    return {"bytes": size, "tables": tables, "tables_at": at, "tables_bytes": at_bytes}
+
+
+def _previous_database_profile(store):
     try:
-        rows = store.db.execute(
-            "SELECT name, SUM(pgsize) AS bytes FROM dbstat "
-            "GROUP BY name ORDER BY bytes DESC LIMIT 8").fetchall()
-        result["tables"] = [{"name": row[0], "bytes": int(row[1] or 0)}
-                            for row in rows]
-    except Exception:
-        pass
-    return result
+        return (json.loads(store.get_meta(PROFILE_META, "") or "{}") or {}).get("database")
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def _finding(severity, title, detail, where="", host=LOCAL_HOST):
@@ -596,7 +619,7 @@ def audit(store, hosts=("wsl", "win")):
         "at": sampled_at,
         "owners": dict(sorted(owners.items(),
                               key=lambda item: item[1]["rss_bytes"], reverse=True)),
-        "database": _database_profile(store),
+        "database": _database_profile(store, _previous_database_profile(store), sampled_at),
         "attribution": _attribution(owners),
         "governor": _governor_advice(owners, processes),
         "host_memory": host_memory,

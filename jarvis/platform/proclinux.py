@@ -26,6 +26,10 @@ import re
 import subprocess
 
 SYSMON_IDENTIFIER = "sysmon"
+# Records journald attributes to the root sysmon unit; the identifier alone is
+# client-set and forgeable (`logger -t sysmon`). Equal to
+# collectors.telemetry.sysmon_linux.journal.TRUSTED_MATCH (tests/test_sensorprobe.py).
+SYSMON_TRUSTED_MATCH = ("_SYSTEMD_UNIT=sysmon.service", "_UID=0", "-t", SYSMON_IDENTIFIER)
 MAX_LINE = 64 << 10
 _START = "<EventID>1</EventID>"
 _FIELD = re.compile(r"<Data Name=\"(ProcessId|ParentProcessId|Image|Hashes)\">([^<]*)</Data>")
@@ -147,7 +151,7 @@ class StartFollower:
     @staticmethod
     def _journalctl():
         return subprocess.Popen(
-            ["journalctl", "-f", "-n", "0", "-o", "cat", "-t", SYSMON_IDENTIFIER, "--no-pager"],
+            ["journalctl", "-f", "-n", "0", "-o", "cat", *SYSMON_TRUSTED_MATCH, "--no-pager"],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
     def open(self):

@@ -1,7 +1,8 @@
 """Release version order, by the project's own rule rather than by string.
 
 A release is tagged vYYYY.MM.DD, or vYYYY.MM.DD-N for the Nth one that day (a
-tag without a suffix is the first). So 2026.10.31 < 2026.10.31-2 < 2026.11.01,
+tag without a suffix is the first). A dry run published straight to the site
+(owner decision 2026-11-03) carries -0 (the 2026-11-03 builds) or -<run number>. So 2026.10.31 < 2026.10.31-2 < 2026.11.01,
 and 2026.10.31-10 > 2026.10.31-9, which a string compare gets wrong.
 
 Releases published before tagging existed carry dotted versions such as
@@ -12,7 +13,7 @@ candidate is checked against them, but a candidate itself must be a tag version.
 import datetime
 import re
 
-TAG = re.compile(r"^v?(20\d{2})\.(\d{2})\.(\d{2})(?:-([1-9]\d*))?$")
+TAG = re.compile(r"^v?(20\d{2})\.(\d{2})\.(\d{2})(?:-(0|[1-9]\d*))?$")
 LEGACY = re.compile(r"^(20\d{2})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?$")
 
 

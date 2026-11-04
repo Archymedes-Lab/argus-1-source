@@ -1,4 +1,4 @@
-//! ARGUS-1 desktop: an always-open window, tray and notifications over the
+//! ARGUS-INSTINCT desktop: an always-open window, tray and notifications over the
 //! local daemon (docs/architecture/DESKTOP-APP.md).
 //!
 //! The app is a client, never the monitor. `jarvis serve` collects, scores
@@ -25,8 +25,11 @@ compile_error!("release builds need `--features custom-protocol` (see docs/archi
 
 mod api;
 mod brand;
+mod lifecycle;
 mod pairing;
+mod provision;
 mod pulse;
+mod settings;
 mod startmenu;
 mod watch;
 
@@ -72,7 +75,7 @@ fn dot(level: Level) -> Image<'static> {
     let (r, g, b) = match level {
         Level::Good => (34, 197, 94),
         Level::Attention => (245, 158, 11),
-        Level::Alarm => (239, 68, 68),
+        Level::Alarm => (214, 112, 76),
         Level::Unknown => (100, 116, 139),
     };
     const N: usize = 32;
@@ -100,7 +103,8 @@ fn apply(app: &AppHandle, view: View, last: &mut Option<Level>) {
             *last = Some(view.level);
         }
     }
-    for t in view.toasts {
+    let prefs = settings::current();
+    for t in view.toasts.into_iter().filter(|t| prefs.allows(t.kind)) {
         let _ = app.notification().builder().title(&brand::brand(&t.title)).body(&brand::brand(&t.body)).show();
     }
 }
@@ -109,10 +113,12 @@ fn pulse_loop(app: AppHandle) {
     let mut watch = Watch::default();
     let mut last = None;
     let mut backoff = Duration::from_secs(1);
+    let mut governor = lifecycle::Governor::default();
     loop {
         let mut got = false;
         let end = pulse::stream(&mut |p| {
             got = true;
+            lifecycle::set(lifecycle::classify_pulse(&p));
             // The interface refetches state when the daemon says it changed.
             let _ = app.emit_to(MAIN, "pulse", &p);
             apply(&app, watch.pulse(&p), &mut last);
@@ -123,10 +129,12 @@ fn pulse_loop(app: AppHandle) {
                 // poll the same summary instead of going dark.
                 match pulse::poll() {
                     Ok(p) => {
+                        lifecycle::set(lifecycle::classify_pulse(&p));
                         let _ = app.emit_to(MAIN, "pulse", &p);
                         apply(&app, watch.pulse(&p), &mut last)
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        lifecycle::set(lifecycle::from_error(&e.to_string()));
                         let _ = app.emit_to(MAIN, "daemon-down", ());
                         apply(&app, watch.unreachable(Instant::now()), &mut last)
                     }
@@ -135,6 +143,9 @@ fn pulse_loop(app: AppHandle) {
             }
             _ if got => backoff = Duration::from_secs(1), // stream ended normally
             _ => {
+                // Nothing answered. Start the daemon if it is installed and not
+                // running (within the restart budget), and say what is true.
+                lifecycle::set(lifecycle::ensure_running(&mut governor, pulse::port()));
                 let _ = app.emit_to(MAIN, "daemon-down", ());
                 apply(&app, watch.unreachable(Instant::now()), &mut last);
                 thread::sleep(backoff);
@@ -145,14 +156,14 @@ fn pulse_loop(app: AppHandle) {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let status = MenuItem::with_id(app, "status", "ARGUS-1 — connecting", false, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", "Open ARGUS-1", true, None::<&str>)?;
+    let status = MenuItem::with_id(app, "status", "ARGUS-INSTINCT — connecting", false, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open ARGUS-INSTINCT", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Close this app (monitoring continues)", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&status, &sep, &open, &quit])?;
     let icon = TrayIconBuilder::with_id("jarvis")
         .icon(dot(Level::Unknown))
-        .tooltip("ARGUS-1 — connecting")
+        .tooltip("ARGUS-INSTINCT — connecting")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -185,6 +196,41 @@ fn main() {
         }
         return;
     }
+    // `--install-shortcut`: write the Start menu entry without opening the app
+    // (the Setup's silent install); the ID is the app identifier its toasts use.
+    if std::env::args().any(|a| a == "--install-shortcut") {
+        match startmenu::ensure(pairing::APP_DIR) {
+            Ok(true) => println!("wrote the Start menu entry"),
+            Ok(false) => println!("the Start menu entry was already there"),
+            Err(e) => {
+                eprintln!("could not write the Start menu entry: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+    // `--check`: headless self-test for installers and release tests. Pairs if
+    // needed, asks the daemon for its pulse, reports by exit code only (this
+    // is a windowless program): 0 monitoring answers, 2 cannot pair, 3 daemon
+    // not answering.
+    if std::env::args().any(|a| a == "--check") {
+        let st = lifecycle::ensure_for_check();
+        if matches!(st.phase, lifecycle::Phase::NotInstalled | lifecycle::Phase::Stopped) {
+            eprintln!("{} {}", st.message, st.detail);
+            std::process::exit(3);
+        }
+        if let Err(e) = pairing::client_token() {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+        match pulse::poll() {
+            Ok(_) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(3);
+            }
+        }
+    }
     // `--hidden`: start in the tray (used by the logon task).
     let hidden = std::env::args().any(|a| a == "--hidden");
     tauri::Builder::default()
@@ -193,16 +239,46 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             api::daemon_state,
             api::daemon_status,
+            api::app_status,
             api::run_collector,
             api::answer_question,
             api::ask_jarvis,
             api::score_coach,
             api::decide_fix,
+            api::billing_status,
+            api::billing_checkout,
+            api::autopilot_status,
+            api::autopilot_decide,
+            api::autopilot_policy,
+            settings::get_settings,
+            settings::set_settings,
+            api::pause_monitoring,
+            api::resume_monitoring,
+            api::protection_status,
+            api::protection_scan,
+            api::geo_state,
+            api::coverage_state,
+            api::world_state,
+            api::procs_baseline,
+            api::procs_snapshot,
+            api::open_page,
+            api::phone_status,
+            api::phone_devices,
+            api::phone_pair_current,
+            api::phone_pair_start,
+            api::phone_pair_poll,
+            api::phone_pair_confirm,
+            api::phone_pair_cancel,
+            api::phone_revoke,
+            api::phone_test,
         ])
         .setup(move |app| {
+            if let Ok(dir) = app.path().app_config_dir() {
+                settings::load(dir);
+            }
             build_tray(app)?;
             WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
-                .title("ARGUS-1")
+                .title("ARGUS-INSTINCT")
                 .inner_size(1440.0, 920.0)
                 .min_inner_size(720.0, 480.0)
                 .visible(!hidden)
@@ -233,7 +309,7 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("ARGUS-1 desktop failed to start");
+        .expect("ARGUS-INSTINCT desktop failed to start");
 }
 
 #[cfg(test)]

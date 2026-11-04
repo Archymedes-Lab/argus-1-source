@@ -53,9 +53,16 @@ class Ordering(unittest.TestCase):
         self.ok("2026.10.31", None)
 
     def test_malformed_candidates_are_refused(self):
-        for bad in ("", "latest", "2026.10", "2026.13.01", "2026.02.30", "2026.10.31-0",
+        for bad in ("", "latest", "2026.10", "2026.13.01", "2026.02.30", "2026.10.31-00", "2026.10.31-01",
                     "2026.10.31.1", "2026-10-31", "v2026.1.5"):
             self.refused(bad, "2026.10.30")
+
+    def test_dry_run_versions(self):
+        # A dry run's -0 sorts before the day's first tag; -<run number> after it.
+        self.ok("2026.11.03-0", "2026.10.30-2")
+        self.refused("2026.10.31-0", "2026.10.31")
+        self.ok("2026.11.04-412", "2026.11.04-411")
+        self.ok("2026.11.04-412", "2026.11.03-0")
 
     def test_unorderable_live_version_fails_closed(self):
         self.refused("2026.11.01", "banana")
@@ -105,3 +112,16 @@ class PublishRefuses(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublishAuthor(unittest.TestCase):
+    """Vercel blocked the 2026.11.03-0 deployment: its commit author was the
+    made-up "argus-release", which has no Git account."""
+
+    def test_the_site_commit_is_not_given_a_made_up_author(self):
+        import publish
+        src = Path(publish.__file__).read_text()
+        self.assertNotIn("user.name=argus-release", src)
+        self.assertNotIn("user.email=releases@", src)
+        self.assertIn('"config", "user.email"', src)
+

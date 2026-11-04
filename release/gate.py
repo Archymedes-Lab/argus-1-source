@@ -54,13 +54,75 @@ CHUNK = 8 * 1024 * 1024
 OVERLAP = 4096
 
 
-def load_policy(path=POLICY):
+def load_policy(path=POLICY, proposals=()):
+    """The policy at `path`. `proposals` are changes under review (release/proposals/),
+    loaded only by dry runs (release-test/* branches) and never by a tagged build:
+
+      * `artifacts`: new artifact rules (a name that already has a rule is refused);
+      * `deny_markers`: a replacement regex for a marker that already exists, by id
+        (a marker cannot be added or removed this way).
+
+    Nothing else can be touched: not the suffix, folder or bytecode lists, and not
+    the other markers. Each active proposal is recorded in policy["_proposals"] so
+    the caller can print it."""
     policy = json.loads(Path(path).read_text())
+    policy["_proposals"] = []
+    for prop in proposals:
+        extra = json.loads(Path(prop).read_text())
+        stray = sorted(k for k in extra if k not in ("artifacts", "deny_markers", "marker_exemptions")
+                       and not k.startswith("_"))
+        if stray:
+            raise ValueError(f"{prop}: a proposal may only add artifact rules, replace named markers or add "
+                             f"marker exemptions, not {', '.join(stray)}")
+        known = {r["name"] for r in policy["artifacts"]}
+        for rule in extra.get("artifacts", []):
+            if rule["name"] in known:
+                raise ValueError(f"{prop}: {rule['name']} already has a rule; a proposal cannot replace it")
+            policy["artifacts"].append(rule)
+            policy["_proposals"].append(f"{Path(prop).name}: adds artifact rule {rule['name']}")
+        for ex in extra.get("marker_exemptions", []):
+            policy.setdefault("marker_exemptions", []).append(ex)
+            policy["_proposals"].append(f"{Path(prop).name}: exempts {ex['marker']} in {ex['member']} (sha256 pinned)")
+        by_id = {m["id"]: i for i, m in enumerate(policy["deny_markers"])}
+        for marker in extra.get("deny_markers", []):
+            if marker["id"] not in by_id:
+                raise ValueError(f"{prop}: marker {marker['id']} does not exist; a proposal cannot add one")
+            policy["deny_markers"][by_id[marker["id"]]] = {**policy["deny_markers"][by_id[marker["id"]]], **marker}
+            policy["_proposals"].append(f"{Path(prop).name}: REPLACES marker {marker['id']}")
     policy["_markers"] = [(m["id"], re.compile(m["regex"].encode())) for m in policy["deny_markers"]
                           if m["id"] != "python-source-header"]
     policy["_magic"] = [bytes.fromhex(h) for h in policy["deny_bytecode_magic"]]
+    policy["_third_party"] = [(t["marker"], t["text"].encode(), tuple(t["members"]))
+                              for t in policy.get("third_party_markers", [])]
     return policy
 
+
+def _exempt(policy, member, marker_id, found):
+    """True when `found` is a reviewed upstream build path inside exactly this
+    third-party file (policy third_party_markers): the marker, the exact text and
+    the member must all match. Never for an artifact-level binary (member None)."""
+    if member is None:
+        return False
+    return any(marker_id == mid and found == text and any(glob_match(member, g) for g in members)
+               for mid, text, members in policy.get("_third_party", ()))
+
+
+
+def exempt(label, marker_id, data, policy):
+    """True when this exact file is exempted from this marker by its SHA-256.
+
+    A `marker_exemptions` entry names a member path, one marker and the SHA-256 of
+    the file's bytes; it applies to those bytes only. Stricter than
+    `third_party_markers` (which pins the matched text): use it for a vendor's
+    signed binary that cannot be altered.
+    """
+    for ex in policy.get("marker_exemptions", ()):
+        member = ex["member"]
+        if ex["marker"] == marker_id and (label == member or label.endswith(":" + member)
+                                          or label.endswith("/" + member)):
+            if hashlib.sha256(data).hexdigest() == ex["sha256"]:
+                return True
+    return False
 
 def glob_match(path, pattern):
     """fnmatch where * stays inside one path segment and ** spans segments."""
@@ -211,8 +273,20 @@ def members_of(path, kind):
     raise ValueError(f"unknown artifact kind {kind!r}")
 
 
-def scan_bytes(label, data, policy):
-    """Problems found in one file's bytes, whatever the file is."""
+def marker_texts(data, policy):
+    """Every distinct marker match in the bytes, as {marker: [evidence]} (build diagnostics)."""
+    found = {}
+    for mid, rx in policy["_markers"]:
+        texts = sorted({m.group(0) for m in rx.finditer(data)})
+        if texts:
+            found[mid] = [evidence(mid, t) for t in texts[:20]]
+    return found
+
+
+def scan_bytes(label, data, policy, member=None):
+    """Problems found in one file's bytes, whatever the file is. `member` is the
+    file's path inside its artifact, for the reviewed third-party exemptions:
+    every match is checked, and the first one that is not exempt is reported."""
     problems = []
     for magic in policy["_magic"]:
         if data.startswith(magic):
@@ -223,10 +297,16 @@ def scan_bytes(label, data, policy):
     for start in range(0, max(len(data), 1), CHUNK):
         window = data[max(0, start - OVERLAP):start + CHUNK]
         for mid, rx in policy["_markers"]:
-            m = rx.search(window) if mid not in seen else None
-            if m:
+            if mid in seen:
+                continue
+            for m in rx.finditer(window):
+                if _exempt(policy, member, mid, m.group(0)):
+                    continue
                 seen.add(mid)
+                if exempt(label, mid, data, policy):
+                    continue
                 problems.append(f"{label}: contains {mid} ({evidence(mid, m.group(0))})")
+                break
     # A zip appended to or embedded in a binary (PyInstaller, a self-extractor).
     if b"PK\x01\x02" in data and not data.startswith(b"PK\x03\x04"):
         problems += [f"{label}: embedded archive member {n}" for n in embedded_zip_names(data)
@@ -244,15 +324,52 @@ def evidence(marker_id, found):
     return f"{head.decode('ascii', 'replace')}... {len(found)} bytes, redacted"
 
 
-def embedded_zip_names(data):
-    """File names from every zip central-directory header found in the bytes."""
-    names, pos = [], data.find(b"PK\x01\x02")
-    while pos != -1 and pos + 46 <= len(data):
+def _walk_central_directory(data, end, entries, size):
+    """Names listed by the central directory of `entries` records and `size` bytes that
+    ends at `end`, or None when the bytes there are not a consistent directory."""
+    start = end - size
+    if entries <= 0 or start < 0 or data[start:start + 4] != b"PK\x01\x02":
+        return None
+    names, pos = [], start
+    for _ in range(entries):
+        if data[pos:pos + 4] != b"PK\x01\x02" or pos + 46 > end:
+            return None
         n_len = int.from_bytes(data[pos + 28:pos + 30], "little")
-        name = data[pos + 46:pos + 46 + n_len].decode("utf-8", "replace")
-        if name:
-            names.append(_norm(name))
-        pos = data.find(b"PK\x01\x02", pos + 4)
+        extra = int.from_bytes(data[pos + 30:pos + 32], "little")
+        comment = int.from_bytes(data[pos + 32:pos + 34], "little")
+        names.append(_norm(data[pos + 46:pos + 46 + n_len].decode("utf-8", "replace")))
+        pos += 46 + n_len + extra + comment
+    return names if pos == end else None
+
+
+def embedded_zip_names(data):
+    """File names of every real zip archive appended to or embedded in the bytes.
+
+    A real archive has a central directory that is consistent with its
+    end-of-directory record. Finding the four bytes `PK\x01\x02` is not enough: a
+    Python runtime (python3*.dll) carries those bytes, and the end-record and
+    zip64 signatures too, as constants in its built-in zipimport code, and decoding
+    what follows them reported garbage as "archive members". The check stays strict
+    for what it is for: a zip after or inside a binary (the PyInstaller pattern) is
+    found wherever it sits, in the classic layout and in zip64 (whose sizes are in the
+    zip64 end record, not the classic one).
+    """
+    names = []
+    pos = data.find(b"PK\x05\x06")
+    while pos != -1:
+        if pos + 22 <= len(data):
+            entries = int.from_bytes(data[pos + 10:pos + 12], "little")
+            size = int.from_bytes(data[pos + 12:pos + 16], "little")
+            if entries != 0xFFFF and size != 0xFFFFFFFF:
+                names += _walk_central_directory(data, pos, entries, size) or []
+        pos = data.find(b"PK\x05\x06", pos + 4)
+    pos = data.find(b"PK\x06\x06")
+    while pos != -1:
+        if pos + 56 <= len(data):
+            entries = int.from_bytes(data[pos + 32:pos + 40], "little")
+            size = int.from_bytes(data[pos + 40:pos + 48], "little")
+            names += _walk_central_directory(data, pos, entries, size) or []
+        pos = data.find(b"PK\x06\x06", pos + 4)
     return names
 
 
@@ -293,7 +410,7 @@ def check_artifact(path, rule, policy):
         if m.mode & 0o111 and m.path not in rule.get("executables", []) \
                 and not m.path.endswith((".so",)) and ".so." not in m.path:
             problems.append(f"{label}: executable but not listed as one")
-        problems += scan_bytes(label, m.data, policy)
+        problems += scan_bytes(label, m.data, policy, member=m.path)
     return problems, count
 
 
@@ -341,12 +458,23 @@ def check_release(folder, policy, previous=None):
         if not (folder / "SHA256SUMS").exists():
             problems.append("SHA256SUMS is missing")
     if previous:
-        prev = json.loads(Path(previous).read_text()).get("member_counts") or {}
+        def unversioned(n):
+            return re.sub(r"_\d[\w.]*?_", "_*_", n)
+        # Both sides without their version: a versioned name (the .deb) was
+        # never compared while only the new side was normalised.
+        prev = {unversioned(k): v for k, v in
+                (json.loads(Path(previous).read_text()).get("member_counts") or {}).items()}
         growth = policy["max_file_count_growth"]
+        explained = {(e["artifact"], e["previous"]): e for e in policy.get("explained_growth", ())}
         for name, n in counts.items():
-            key = re.sub(r"_\d[\w.]*?_", "_*_", name)
-            before = prev.get(key) or prev.get(name)
+            key = unversioned(name)
+            before = prev.get(key)
             if before and n > before * (1 + growth):
+                # An explanation names the artifact, the exact previous count it
+                # applies to and the most files it allows: it covers one jump only.
+                ex = explained.get((key, before))
+                if ex and n <= ex["max"]:
+                    continue
                 problems.append(f"{name}: {n} files, up from {before} in the previous release "
                                 f"(more than {growth:.0%}); explain it in the policy or the build")
     return problems, counts

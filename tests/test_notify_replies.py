@@ -13,7 +13,7 @@ from unittest import mock
 
 from jarvis.response import defense
 from jarvis.response.actions import base
-from jarvis.response.notify import channel, crypto, devices, relay, replies
+from jarvis.response.notify import crypto, devices, replies
 
 try:
     from cryptography.hazmat.primitives import hashes, serialization
@@ -186,6 +186,28 @@ class OfferTests(PhoneTestCase):
         devices.update(self.dev, passkey="")
         self.assertEqual(replies.offer(self.store, {}, "e4", entry(), now=NOW, opener=op), "")
         self.assertEqual(op.requests, [])
+
+    def test_defense_hears_of_phones_only_through_its_listener_list(self):
+        import ast
+        import inspect
+        tree = ast.parse(inspect.getsource(defense))
+        names = [a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
+                 for a in n.names] + [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
+        self.assertFalse([x for x in names if "notify" in x or "replies" in x], names)
+        replies.register()
+        replies.register()
+        self.assertEqual(defense.PROPOSAL_LISTENERS.count(replies.queue_offer), 1)
+
+    def test_only_serious_proposals_are_pushed_to_a_phone(self):
+        op = FakeOpener()
+        for i, sev in enumerate(("medium", "low", None)):
+            e = entry()
+            e["finding"] = {"severity": sev, "title": "x"} if sev else {"title": "x"}
+            self.assertEqual(replies.offer(self.store, {}, f"m{i}", e, now=NOW, opener=op), "", sev)
+        self.assertEqual(op.requests, [])
+        crit = entry()
+        crit["finding"] = {"severity": "critical", "title": "x"}
+        self.assertTrue(replies.offer(self.store, {}, "c1", crit, now=NOW, opener=op))
 
     def test_the_same_proposal_is_not_offered_twice(self):
         self.offered()

@@ -2,17 +2,21 @@
 //!
 //! The released Windows app is a single exe with no installer, so nothing else
 //! would put it in the Start menu. On every start it makes sure
-//! `<Start menu>\Programs\ARGUS-1.lnk` exists and points at this exe (it is
+//! `<Start menu>\Programs\ARGUS-INSTINCT.lnk` exists and points at this exe (it is
 //! rewritten when the exe has moved), with the app's AppUserModelID on the
 //! shortcut: Windows shows an unpackaged app's toasts only for an ID that a
 //! Start menu shortcut carries. Current user only, no administrator rights.
 //! `--remove-shortcut` takes it away again, which is how a bare exe uninstalls.
 //! The installers create the same file, so there is never a second entry.
+//! `--install-shortcut` writes it without opening the app (the Setup's silent
+//! install). A shortcut of the old name (ARGUS-1.lnk) is removed only when it
+//! points at this same exe; one pointing elsewhere is another install's.
 
 use std::path::{Path, PathBuf};
 
-pub const SHORTCUT: &str = "ARGUS-1.lnk";
-pub const DESCRIPTION: &str = "ARGUS-1 security monitor (window, tray and notifications)";
+pub const SHORTCUT: &str = "ARGUS-INSTINCT.lnk";
+pub const LEGACY_SHORTCUTS: &[&str] = &["ARGUS-1.lnk"];
+pub const DESCRIPTION: &str = "ARGUS-INSTINCT security monitor (window, tray and notifications)";
 
 /// What `ensure` should do, given where the exe is and what the shortcut holds now.
 #[derive(Debug, PartialEq, Eq)]
@@ -139,7 +143,14 @@ mod imp {
         let aumid = aumid.to_string();
         with_com(move || {
             let exe = std::env::current_exe().map_err(|e| format!("own path: {e}"))?;
-            let link = shortcut_in(&programs()?);
+            let dir = programs()?;
+            for old in LEGACY_SHORTCUTS {
+                let legacy = dir.join(old);
+                if legacy.exists() && target(&legacy).is_some_and(|t| same_path(&t, &exe)) {
+                    let _ = std::fs::remove_file(&legacy);
+                }
+            }
+            let link = shortcut_in(&dir);
             let current = if link.exists() { target(&link) } else { None };
             match plan(&exe, current.as_deref()) {
                 Plan::Keep => Ok(false),
@@ -149,7 +160,21 @@ mod imp {
     }
 
     pub fn remove() -> Result<bool, String> {
-        let link = shortcut_in(&programs()?);
+        let dir = programs()?;
+        if let Ok(exe) = std::env::current_exe() {
+            for old in LEGACY_SHORTCUTS {
+                let legacy = dir.join(old);
+                let ours = with_com({
+                    let legacy = legacy.clone();
+                    let exe = exe.clone();
+                    move || legacy.exists() && target(&legacy).is_some_and(|t| same_path(&t, &exe))
+                });
+                if ours.unwrap_or(false) {
+                    let _ = std::fs::remove_file(&legacy);
+                }
+            }
+        }
+        let link = shortcut_in(&dir);
         match std::fs::remove_file(&link) {
             Ok(()) => Ok(true),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -205,7 +230,7 @@ mod tests {
         let programs = Path::new(r"C:\Users\u\AppData\Roaming\Microsoft\Windows\Start Menu\Programs");
         let link = shortcut_in(programs);
         assert_eq!(link.parent(), Some(programs));
-        assert_eq!(link.file_name().unwrap(), "ARGUS-1.lnk");
+        assert_eq!(link.file_name().unwrap(), "ARGUS-INSTINCT.lnk");
     }
 
     #[test]

@@ -36,7 +36,8 @@ problem instead of allowing only known-good content).
 ## Version order
 
 A tag is `vYYYY.MM.DD`, or `vYYYY.MM.DD-N` for the Nth release that day (no suffix is the
-first). Order is by that rule, not by string: `2026.10.31-10` is newer than `2026.10.31-9`.
+first). A dry run (below) is versioned `YYYY.MM.DD-<run number>`, so a later dry run is always
+newer; the 2026-11-03 dry runs carry `-0`, which sorts before that day's first tag. Order is by that rule, not by string: `2026.10.31-10` is newer than `2026.10.31-9`.
 `release/publish.py` reads the version the site serves now (the site checkout's
 `public/downloads/argus/manifest.json`) and **refuses** a candidate that is equal, older, or
 not a valid tag version (for example the dotted `2026.10.29.1`), before the site is touched.
@@ -55,6 +56,49 @@ tag whose attestation is missing, unsigned by a pinned releaser, incomplete, or 
 Adding a second releaser, a lost or compromised key, revocation and rotation:
 `docs/guides/RELEASER-KEYS.md`.
 
+## Publishing a dry run (the current method)
+
+Owner decision 2026-11-03: a green dry run is published straight to the site,
+without a tag, draft or `publish.yml`. The checks are the same: the content
+gate, `SHA256SUMS`, the releaser's signature against the pinned keys, the
+version order, the site copy's own check and the live read-back.
+
+1. Push the commit to a `release-test/*` branch of Argus-1. The **Release
+   build** workflow runs every stage (builds, both install tests, assembly and
+   gate) and hands the assembled release folder over as the `release-out`
+   artifact, kept 7 days. A newer push to the same branch cancels the run in
+   progress. About 15-20 minutes with warm caches.
+2. When the run is green, on the releaser's machine (it needs `gh`, `7z`,
+   `bun`, the Vercel CLI linked to the site, and the release key):
+
+   ```sh
+   bash release/publish_dry_run.sh <run id>
+   ```
+
+   It checks the run is green, downloads `release-out`, gates every file again
+   (the Setup opened with 7z) and checks `SHA256SUMS`, signs it (the
+   passphrase is asked again on a typo, up to 5 times), lays the downloads out
+   in a fresh worktree of the site's `master` (`release/publish.py`, which
+   refuses a version not newer than the live one), commits and pushes, deploys
+   to production with the Vercel CLI and reads the live site back.
+
+   If it stops after signing, run the same command again: it resumes at the
+   site without downloading or asking for the passphrase, provided the folder
+   still matches its signature.
+
+The site commit is made with the site checkout's own git identity: it must be
+an account Vercel can match to Git (your GitHub email), or Vercel blocks the
+production deployment ("couldn't find a Git account for the commit author").
+
+Paths can be overridden: `ARGUS_PUBLISH_DIR` (working folder, default
+`~/.cache/argus-instinct-publish`), `ARGUS_SITE_REPO` (default
+`~/archymedes-site`), `ARGUS_RELEASE_KEY`, `ARGUS_7Z_DIR`.
+
+What a dry run does not have that a tag does: the commit need not be on
+`main`, the host-bound tests' signed attestation is not checked, and the
+builds use the compiler caches kept between dry runs (a tag builds cold). The
+manifest records the run and the commit either way.
+
 ## Making a release
 
 Anyone with write access to Argus-1 who is a releaser:
@@ -65,11 +109,24 @@ git tag -a v2026.11.01 -m "Argus 2026.11.01"     # vYYYY.MM.DD, -2 for a second 
 git push origin v2026.11.01
 ```
 
-The **Release build** workflow then runs (about 40 minutes): static gate and
-unit suite, native server build, desktop builds for Linux and Windows, a real
-install-run-remove test of both server packages on a systemd host, assembly
-(manifest, `SHA256SUMS`, a report of what changed since the last release, an
-SBOM) and the content gate. It ends with a **draft** release. Nothing is public.
+The **Release build** workflow then runs (about an hour): static gate and
+unit suite, native server build, the native Windows engine
+(`release/build_windows.py`, PowerShell payloads compiled in), desktop builds
+for Linux and Windows, the Windows Setup made from the engine and the desktop
+app (`release/build_setup.py`), a real install-run-remove test of both server
+packages on a systemd host and of the Setup on a clean Windows host without
+WSL (`release/windows/install_test.ps1`, with a planted-autostart positive
+control), assembly (manifest, `SHA256SUMS`, a report of what changed since the
+last release, an SBOM) and the content gate. It ends with a **draft** release.
+Nothing is public.
+
+The downloads are: `argus-server-linux-x86_64.tar.gz`, `argus-server_<v>_amd64.deb`,
+`argus-desktop_<v>_amd64.deb`, `argus-desktop-windows-x64.exe`,
+`argus-instinct-windows-x64.zip` and `ARGUS-INSTINCT-Setup-windows-x64.exe`
+(docs/architecture/WINDOWS-EDITION.md says who downloads which). The gate opens
+the Setup with 7-Zip, so `release/sign.py` and `release/check.py` need `7z` on
+the releaser's machine (`sudo apt install 7zip`); without it the Setup is
+refused, never passed.
 
 Sign it on your own machine:
 
@@ -86,18 +143,48 @@ artifact you did not expect, is a reason to stop.
 Publish:
 
 ```sh
-gh release edit v2026.11.01 --draft=false -R chrisnkuno/Argus-1
+gh release edit v2026.11.01 --draft=false -R Archymedes-Lab/argus-1
 ```
 
 The **Publish release** workflow checks the signature against the pinned keys,
 commits exactly the release files to the site, the site's deploy job checks
 them again, and the workflow reads the live site back. Watch it to the end:
-`gh run watch -R chrisnkuno/Argus-1`.
+`gh run watch -R Archymedes-Lab/argus-1`.
+
+## The Windows installer
+
+Windows customers get `ARGUS-INSTINCT-Setup-windows-x64.exe`: the compiled
+engine (`engine\argus-instinct.exe`, Nuitka, no Python, bytecode or script;
+`release/build_windows.py`) and the desktop app, installed for the signed-in
+user by `release/build_setup.py` + `release/windows/setup.nsi`. The engine's
+`native install` registers the logon task, waits for the service to answer and
+pairs the app. The app manages the engine from then on (`desktop/src/lifecycle.rs`,
+from the windows-installer branch): it starts it through the task when nothing
+answers, restarts it within a budget, pairs itself on first run when it has no
+token (`provision.rs`), and shows the engine's real state, never "monitoring"
+unless it answers healthy. `windows-source-smoke` checks the service path from
+source in minutes; `windows-install-test` (`release/windows/install_test.ps1`)
+installs the Setup on a fresh Windows runner and checks the task, health,
+pairing, a planted-autostart positive control and the uninstall.
+
+The app on its own (`argus-desktop-windows-x64.exe`) is still published because
+the download page links it; `release/assemble.py` `INTERNAL_INPUTS` drops it
+once the page offers only the Setup.
+
+**Not in this edition:** the elevated native sensor and the read-only broker.
+Jobs that need them are reported as needing the administrator sensor
+(`jarvis/platform/admin_sensor.py`), never as full coverage.
+
+**Before the first public Windows release**, once, on a real clean Windows PC
+(not a CI runner): download the Setup, run it, open ARGUS-INSTINCT from the
+Start menu, and confirm monitoring data appears with no terminal step. Windows
+SmartScreen warns about an unsigned installer until a code-signing certificate
+is in place (none is configured yet).
 
 ## Rolling back
 
 ```sh
-gh workflow run publish.yml -R chrisnkuno/Argus-1 -f tag=v2026.10.31
+gh workflow run publish.yml -R Archymedes-Lab/argus-1 -f tag=v2026.10.31
 ```
 
 This republishes an earlier signed release through the same checks. To take

@@ -36,13 +36,22 @@ def load_marker(path=MARKER):
     return value if isinstance(value, dict) and value.get("state_dir") else None
 
 
-def private_problems(state_dir, uid=None):
+WINDOWS_NOTE = ("Windows does not use these permission bits; the folder is private through "
+                "your user profile's access list, which this check does not read")
+
+
+def private_problems(state_dir, uid=None, os_name=None):
     """Human-readable problems that expose `state_dir` to other accounts.
 
     Checked: the directory itself (owner, no group/other bits) and every
     sensitive file directly inside it (owner, no group/other bits, not a link).
     An empty list means private. A missing directory is one problem.
     """
+    if (os_name or os.name) == "nt":
+        # POSIX modes read 0777/0666 on every Windows file: reporting them would
+        # be noise, and calling the folder private would be a claim not checked.
+        return [f"{state_dir}: {WINDOWS_NOTE}"] if os.path.isdir(state_dir) else \
+            [f"{state_dir}: not a real directory"]
     uid = os.geteuid() if uid is None and hasattr(os, "geteuid") else uid
     problems = []
     try:
@@ -99,7 +108,7 @@ def cli_refusal(db, default_db, argv, marker_path=MARKER):
     user = str(marker.get("user") or "jarvis")
     cli = str(marker.get("cli") or f"sudo -u {user} -H jarvis")
     args = " ".join(shlex.quote(a) for a in argv)
-    return (f"ARGUS-1 runs as its own account ({user}); its store is {state_dir}, not this "
+    return (f"ARGUS-INSTINCT runs as its own account ({user}); its store is {state_dir}, not this "
             f"account's ~/.jarvis, so this command would show the wrong state.\n"
             f"  run it as the daemon's account:  {cli} {args}\n"
             f"  or use the dashboard or the desktop app (pair them with "

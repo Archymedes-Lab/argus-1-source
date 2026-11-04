@@ -75,8 +75,9 @@ def _remote_summary(p, enrich):
 def scan(store, hosts=("wsl", "win"), enrich=False, learn=False, record=True):
     """One full pass. `learn` folds everything seen into the approved baseline."""
     procs = collect_all(hosts)
-    known = store.known_fps()
-    approved = {r["fp"] for r in store.list_procs(approved=1, limit=100000)}
+    # Only the fingerprints running now are looked up (detect.assess tests
+    # membership of each process's own fp); the full tables are never loaded.
+    known, approved = store.fp_status(p["fp"] for p in procs)
 
     findings, new_peers = [], []
     ts = now()

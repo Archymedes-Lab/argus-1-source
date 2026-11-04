@@ -155,6 +155,22 @@ class Store:
     def known_fps(self):
         return {r["fp"] for r in self.db.execute("SELECT fp FROM procs")}
 
+    def fp_status(self, fps, chunk=500):
+        """(known, approved): which of `fps` are in procs, and which of those are approved.
+
+        A scan needs these answers for the processes running now only; loading every
+        fingerprint ever seen (and every approved row) each minute grew with history."""
+        known, approved = set(), set()
+        fps = list(dict.fromkeys(fps))
+        for i in range(0, len(fps), chunk):
+            part = fps[i:i + chunk]
+            marks = ",".join("?" * len(part))
+            for r in self.db.execute(f"SELECT fp, approved FROM procs WHERE fp IN ({marks})", part):
+                known.add(r["fp"])
+                if r["approved"] == 1:
+                    approved.add(r["fp"])
+        return known, approved
+
     def get_proc(self, fp):
         return self.db.execute("SELECT * FROM procs WHERE fp=?", (fp,)).fetchone()
 

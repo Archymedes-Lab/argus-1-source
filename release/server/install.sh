@@ -233,6 +233,7 @@ cat <<EOF
   Argus is installed and starts with the server.
 
   status:      systemctl status argus        logs: journalctl -u argus -f
+  first run:   argus welcome server  what Argus looks at, and its limits
   first look:  argus investigate
   dashboard:   bound to 127.0.0.1 only. From your own machine:
                  ssh -L $PORT:127.0.0.1:$PORT $(hostname -f 2>/dev/null || hostname)

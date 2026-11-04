@@ -55,6 +55,14 @@ ANCHOR_EVERY = 6 * 3600          # a new anchor at most this often, if the head 
 UPGRADE_AFTER = 2 * 3600         # calendars need a few blocks before a Bitcoin proof exists
 UPGRADES_PER_RUN = 4
 FULL_VERIFY_EVERY = 86400        # re-hash every vaulted payload daily; new ones every run
+# The daily re-hash used to run as one pass over the whole vault (1.8 GB read
+# back over the Windows drive: 25 minutes on 2026-11-02, the bulk lane blocked
+# and the page cache filled). It now runs as a rolling slice: each run
+# re-hashes a share of the already verified segments proportional to the time
+# since the previous run, so every vaulted segment is still re-hashed within
+# FULL_VERIFY_EVERY, whatever the cadence or a missed run. MAX_RECHECK bounds
+# one run after a long absence; the next runs continue from the cursor.
+MAX_RECHECK = 400
 
 
 def _canonical(obj):
@@ -135,7 +143,23 @@ def stage(root, inbox, vault, anchors, pruned):
 
 # -- vault verification --------------------------------------------------------
 
-def verify_vault(live_chain, vault, verified_through=0, full=False, pruned=()):
+def recheck_slice(verified_through, cursor, elapsed, every=FULL_VERIFY_EVERY, cap=MAX_RECHECK):
+    """(segment numbers to re-hash this run, next cursor). Pure.
+
+    Walks 1..verified_through cyclically from `cursor`, taking
+    ceil(verified_through * elapsed / every) segments (at least one, at most
+    `cap` and the whole range)."""
+    total = int(verified_through or 0)
+    if total <= 0:
+        return [], 1
+    want = -(-total * max(0.0, float(elapsed)) // every) if every > 0 else total
+    count = int(max(1, min(total, cap, want)))
+    start = int(cursor) if 1 <= int(cursor or 0) <= total else 1
+    picks = [((start - 1 + i) % total) + 1 for i in range(count)]
+    return picks, (picks[-1] % total) + 1
+
+
+def verify_vault(live_chain, vault, verified_through=0, full=False, pruned=(), recheck=()):
     """Compare the vault with the live chain and hash vaulted payloads.
 
     Returns {"problems": [...], "divergent": [...], "verified_through": n,
@@ -144,6 +168,8 @@ def verify_vault(live_chain, vault, verified_through=0, full=False, pruned=()):
     the vault was altered by an administrator; anchors tell which).
     """
     problems, divergent = [], []
+    recheck = frozenset(recheck)
+    rechecked = 0
     vchain = _jsonl(vault / "eventlog" / "chain.jsonl")
     live = {h.get("segment"): h for h in live_chain}
     unvaulted = set()
@@ -178,7 +204,7 @@ def verify_vault(live_chain, vault, verified_through=0, full=False, pruned=()):
         if not path.exists():
             problems.append(f"vaulted segment {n}: payload missing from the vault")
             continue
-        if n <= through:
+        if n <= through and n not in recheck:
             continue
         try:
             with open(path, "rb") as raw, gzip.open(raw, "rb") as fh:
@@ -197,8 +223,9 @@ def verify_vault(live_chain, vault, verified_through=0, full=False, pruned=()):
             problems.append(f"vaulted segment {n}: payload or header does not match its chain entry")
             continue
         through = n if through == n - 1 else through
+        rechecked = rechecked + 1 if n in recheck else rechecked
     return {"problems": problems, "divergent": divergent,
-            "verified_through": through, "vaulted": len(vchain)}
+            "verified_through": through, "vaulted": len(vchain), "rechecked": rechecked}
 
 
 # -- anchors ---------------------------------------------------------------------
@@ -407,12 +434,20 @@ def audit(store, hosts=("win",), root=DEFAULT_ROOT, inbox=INBOX, vault=VAULT,
 
     # Independent read-only verification of the vault's contents.
     if windows and (vault / "eventlog" / "chain.jsonl").exists():
-        full = now - previous.get("full_verify_at", 0) >= FULL_VERIFY_EVERY
-        result = verify_vault(live_chain, vault, previous.get("verified_through", 0), full,
-                              pruned=pruned)
+        done = int(previous.get("verified_through", 0) or 0)
+        # A first run (nothing verified yet) hashes everything; afterwards the
+        # daily re-hash is spread over the runs (recheck_slice).
+        full = done == 0
+        elapsed = now - float(previous.get("at") or (now - FULL_VERIFY_EVERY))
+        picks, cursor = recheck_slice(done, previous.get("recheck_cursor", 1), elapsed)
+        result = verify_vault(live_chain, vault, done, full, pruned=pruned, recheck=picks)
         state["verified_through"] = result["verified_through"]
         state["vaulted"] = result["vaulted"]
-        state["full_verify_at"] = now if full else previous.get("full_verify_at", 0)
+        state["recheck_cursor"] = cursor
+        state["rechecked"] = len(picks)
+        # The moment the rolling re-check last completed a whole cycle.
+        wrapped = full or (picks and cursor <= picks[0])
+        state["full_verify_at"] = now if wrapped else previous.get("full_verify_at", 0)
         if result["divergent"]:
             out.append(finding(
                 "tampering", "critical", "Event history differs from its vaulted copy",

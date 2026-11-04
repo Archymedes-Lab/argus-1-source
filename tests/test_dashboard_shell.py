@@ -32,7 +32,7 @@ SHELL_CSS = ROOT / "jarvis" / "web" / "styles" / "shell.css"
 # The page and its script (no inline script under the CSP): tests read both.
 SCRIPT = ROOT / "jarvis" / "web" / "static" / "dashboard.js"
 HTML = PAGE.read_text(encoding="utf-8") + "\n" + SCRIPT.read_text(encoding="utf-8")
-VIEWS = ("overview", "security", "accounts", "network", "monitoring", "assistant", "settings")
+VIEWS = ("overview", "security", "accounts", "network", "monitoring", "assistant", "pricing", "settings")
 NODE = shutil.which("node")
 
 
@@ -56,12 +56,12 @@ def run_node(expr):
 
 
 class SidebarMarkupTests(unittest.TestCase):
-    def test_eight_destinations_each_with_an_icon_and_a_text_label(self):
+    def test_nine_destinations_each_with_an_icon_and_a_text_label(self):
         nav = re.search(r'<nav id="sidenav".*?</nav>', HTML, re.S).group(0)
         links = re.findall(r"<a [^>]*>.*?</a>", nav, re.S)
         labels = [re.sub(r"<[^>]+>", "", a).strip() for a in links]
         self.assertEqual(labels, ["Overview", "Security", "Processes", "Accounts", "Network",
-                                  "Monitoring", "Assistant", "Settings"])
+                                  "Monitoring", "Assistant", "Pricing", "Settings"])
         for a in links:
             self.assertIn('<svg class="ico" aria-hidden="true">', a)          # icon, hidden from readers
             self.assertRegex(a, r'title="[^"]{8,}"')                          # tooltip with a description
@@ -275,7 +275,7 @@ class OverviewStatusTests(unittest.TestCase):
         ok = self.m(model(healthy=4, score=96, grade="secure"))
         self.assertEqual(ok["level"], "ok")
         self.assertIn("No issues found in the checks performed", ok["headline"])
-        self.assertIn("only what ARGUS-1 can check", ok["detail"])
+        self.assertIn("only what ARGUS-INSTINCT can check", ok["detail"])
         for bad in ("never_ran", "stale", "failing", "malformed", "permission_restricted", "missing_dependency", "unsupported"):
             self.assertNotEqual(self.m(model(detectors=[det(bad)], healthy=9, score=99))["level"], "ok", bad)
 

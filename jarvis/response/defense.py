@@ -215,14 +215,19 @@ def _propose(store, conf, finding, job, action, target, now=None):
     return eid, entry, True
 
 
+# Called with (store, eid) for each new proposal. The phone-approval module registers
+# itself here when the scheduler loads it (notify/replies.py), so this module never
+# imports the notify layer (no import cycle). Listeners must be local and cheap.
+PROPOSAL_LISTENERS = []
+
+
 def _queue_for_phone(store, eid):
-    """Ask the scheduler to offer this proposal to paired phones that can approve it. Local and cheap
-    (no network here); a failure never touches the ladder."""
-    try:
-        from jarvis.response.notify import replies
-        replies.queue_offer(store, eid)
-    except Exception:
-        pass
+    """Tell listeners (phone approvals) about a new proposal. A failure never touches the ladder."""
+    for listener in list(PROPOSAL_LISTENERS):
+        try:
+            listener(store, eid)
+        except Exception:
+            pass
 
 
 def _active(ledger, action_id):

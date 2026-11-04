@@ -40,10 +40,13 @@ ADDED_AFTER_GOLDEN = {
     "pkgverify": "dpkg --verify / rpm -V of intruder-targeted packages (ARGUS-SERVER.md W3, 2026-10-24)",
     "heartbeat": "off-box dead-man ping (ARGUS-SERVER.md W10, 2026-10-25)",
     "patches": "fixable CVEs, pending updates and reboots (ARGUS-SERVER.md W11, 2026-10-25)",
+    "wslmanifest": "WSL processes by cgroup owner against an owner-approved manifest (2026-10-31)",
+    "updates": "outdated software on every package manager; opt-in bounded auto-update (2026-11-02)",
     "distrovuln": "daily distribution OVAL security data (ARGUS-SERVER.md W11, 2026-10-25)",
     "appcode": "codebases, dependency CVEs, code rules, secrets and web-root leaks (ARGUS-SERVER.md W12, 2026-10-28)",
     "osv": "daily public OSV dumps for the ecosystems found (ARGUS-SERVER.md W12, 2026-10-28)",
     "selfguard": "tamper evidence that survives source disclosure (DETECTION-CONTENT.md, 2026-10-30)",
+    "sensorprobe": "positive control of the Linux process sensor, trusted journal origin (2026-11-01)",
 }
 
 
@@ -331,6 +334,10 @@ ALLOWED_NAME_LISTS = {
                                 "test_assurance_evidence_names_real_sources checks every name",
     "jarvis/cli/output.py": "SECTION headings are finding categories that share some words with "
                             "job names, not a list of collectors",
+    "jarvis/service/autopilot.py": "MONITORING_CATEGORIES are finding categories (intel, auditd, "
+                                   "model upkeep findings) that share names with jobs; deriving "
+                                   "them from the registry would turn missing-fix findings into "
+                                   "monitoring and stop autopilot investigating them",
 }
 
 

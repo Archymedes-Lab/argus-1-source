@@ -250,7 +250,10 @@ class GeoCSPTests(unittest.TestCase):
         self.assertNotRegex(csp, r"['\s]unsafe-eval['\s;]")
 
     def test_dashboard_keeps_the_strict_policy(self):
-        csp = self._served_csp("/")
+        # The dashboard page is /ui/ ("/" only redirects there).
+        from jarvis.web import server as web_server
+        page = "/ui/" if (web_server.UI_DIR / "index.html").is_file() else "/"
+        csp = self._served_csp(page)
         self.assertNotIn("'wasm-unsafe-eval'", csp)
         self.assertNotIn("cdn.jsdelivr.net", csp)
         self.assertNotIn("arcgisonline", csp)

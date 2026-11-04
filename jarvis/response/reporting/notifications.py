@@ -174,7 +174,14 @@ def flush(store, conf):
     subject, text, html = emails.digest(
         ordered, urgent, health, score.change_since(store, 86400, now) if health else None, now,
         conf, store=store)
-    err = alert.deliver(conf, subject, text, html=html)
+    # File the digest under its most pressing category, and tell the channels
+    # how many items of each kind it carries (response/categories.py).
+    from jarvis.response import categories
+    kinds = [categories.of_finding(v['finding'], v.get('job', '')) for _k, v in ordered]
+    worst = ordered[0][1]['finding'].get('severity') if ordered else None
+    err = alert.deliver(conf, subject, text, html=html, category=categories.dominant(kinds),
+                        severity=worst if worst in ('critical', 'high', 'medium', 'low') else None,
+                        counts=categories.counts(kinds))
     if err:
         store.set_meta('alert_last_error',f'{now}: {err}'[:300])
         store.set_meta(RETRY_AT,now + 300)

@@ -31,17 +31,78 @@ def active():
     return installed and running
 
 
-def _raw(since_ts):
-    """All sysmon journal text since `since_ts`, journal first then syslog."""
-    out, rc = _run(["journalctl", "-t", "sysmon", "-o", "cat", "--no-pager",
-                    "--since", f"@{int(since_ts)}"], timeout=40)
-    if rc == 0 and out.strip():
-        return out
+# Only records journald itself attributes to the sysmon unit running as root.
+# `-t sysmon` alone matches SYSLOG_IDENTIFIER, which any account sets freely:
+# `logger -t sysmon ...` from uid 1000 was returned beside real events on
+# 2026-11-01. Trusted (underscore) fields are written by journald, not the
+# client, and journalctl ANDs matches on different fields.
+TRUSTED_MATCH = ("_SYSTEMD_UNIT=sysmon.service", "_UID=0", "-t", "sysmon")
+
+
+def trusted_text(since_ts, until_ts=None, timeout=40):
+    """Trusted sysmon journal text in [since, until]; '' if journalctl failed."""
+    args = ["journalctl", *TRUSTED_MATCH, "-o", "cat", "--no-pager", "--since", f"@{int(since_ts)}"]
+    if until_ts is not None:
+        args += ["--until", f"@{int(until_ts)}"]
+    out, rc = _run(args, timeout=timeout)
+    return out if rc == 0 else ""
+
+
+JOURNAL_TIMEOUT_S = 40
+SYSLOG = "/var/log/syslog"
+# Syslog is read only when journalctl could not answer (its lines carry no
+# trusted origin); it is not time-filtered, so only its tail can hold events the
+# journal does not. Reading all of it each pass (rsyslog copies reached 9 GB on
+# one host) is unbounded; the tail is enough.
+SYSLOG_CAP = 8 * 1024 * 1024     # bytes read from the end of syslog, at most
+
+
+def _syslog(path=SYSLOG, cap=SYSLOG_CAP):
+    """(sysmon lines from the last `cap` bytes of syslog, capped?) or (None, False) without one."""
     try:
-        with open("/var/log/syslog", encoding="utf-8", errors="replace") as fh:
-            return "\n".join(ln for ln in fh if "sysmon" in ln.lower())
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - cap))
+            data = fh.read(cap)
     except OSError:
-        return ""
+        return None, False
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if size > cap and lines:
+        lines = lines[1:]            # the first line is cut mid-way
+    return "\n".join(ln for ln in lines if "sysmon" in ln.lower()), size > cap
+
+
+def read_since(since_ts, run=subprocess.run, syslog=_syslog):
+    """(text, ok, why): the trusted sysmon journal text since `since_ts`; syslog only
+    when journalctl failed or is missing.
+
+    ok is False when nothing could be read for that window (journalctl timed out
+    or failed and there is no syslog): the caller must not move its cursor past
+    it (evidence continuity). why says what happened, or names a capped read."""
+    try:
+        r = run(["journalctl", *TRUSTED_MATCH, "-o", "cat", "--no-pager", "--since", f"@{int(since_ts)}"],
+                capture_output=True, text=True, errors="replace", timeout=JOURNAL_TIMEOUT_S)
+        out, rc, failure = r.stdout, r.returncode, f"journalctl failed (exit {r.returncode})"
+    except subprocess.TimeoutExpired:
+        return None, False, f"journalctl did not answer within {JOURNAL_TIMEOUT_S} s"
+    except OSError:
+        out, rc, failure = "", None, "journalctl is not available"
+    except subprocess.SubprocessError as exc:
+        return None, False, f"journalctl could not run ({type(exc).__name__})"
+    if rc == 0:
+        # A quiet trusted journal is an answer: syslog lines carry no trusted
+        # origin, so they are read only when journalctl itself failed.
+        return out, True, ""
+    text, capped = syslog()
+    if text is None:
+        return None, False, failure
+    return text, True, (f"syslog read limited to its last {SYSLOG_CAP // (1024 * 1024)} MB" if capped else "")
+
+
+def _raw(since_ts):
+    """All sysmon journal text since `since_ts` ("" when nothing could be read)."""
+    return read_since(since_ts)[0] or ""
 
 
 _TYPE_ID = {

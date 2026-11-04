@@ -142,6 +142,7 @@ async function api(req: Request, url: URL, env: Env): Promise<Response> {
     if (!byDevice && !(await mailbox.pinServer(b64u(v.key)))) return fail(403, "mailbox key mismatch");
     if (!(await mailbox.fresh(v.sig, t))) return fail(409, "replayed request");
 
+    if (req.method === "GET" && parts[3] === "devices" && parts.length === 4) return json(await mailbox.devices());
     if (req.method === "GET" && parts[3] === "claims") {
       const code = normalizeCode(url.searchParams.get("code") || "");
       return validCode(code) ? json(await mailbox.claims(code, t)) : fail(400, "bad code");

@@ -62,8 +62,21 @@ class Collector:
     this collector's evidence is older than the limit; "optional" reports its
     freshness in /api/health without making it a dependency.
     elevated: the broker script that runs this collector's elevated half, if any.
+    admin_sensor: "unavailable" when this collector produces nothing without the
+    administrator sensor (the native sensor, the elevated broker), "limited" when
+    it still checks what an unprivileged account can see. Without the sensor the
+    daemon reports such a job as blind with NEEDS_ADMIN_SENSOR, never as
+    complete coverage (platform/admin_sensor.py). Derived from the collector code:
+    each of these calls broker.result or reads the sensor's spool.
     servers: False for workstation features (a news globe, a local model) that a
     plain Linux server neither has nor wants; there they are not applicable.
+    requires: names from REQUIREMENTS that the host must satisfy for this
+    collector to have anything to observe (platform/facts.py measures them).
+    A requirement names the thing observed (a package database, a boot chain
+    of its own, a container engine), never the sensor: an absent audit sensor
+    is a visibility gap the collector must still report, not a reason to skip
+    it. Unmet means "not applicable on this host" with the reason, never
+    failing and never healthy (docs/architecture/AGNOSTIC-DEPLOYMENT.md).
     boot_scoped: its evidence describes state a reboot activates or resets
     (startup entries, services, drivers, boot chain, live processes, firewall),
     so a result taken before the current boot does not describe this machine
@@ -90,8 +103,42 @@ class Collector:
     health: str = ""
     health_limit_s: int = 0
     elevated: str = ""
+    admin_sensor: str = ""
     servers: bool = True
     boot_scoped: bool = False
+    requires: tuple = ()
+
+
+# Host requirements a collector may declare (Collector.requires). Each is
+# (what it means, predicate over platform/facts.py facts). A predicate returns
+# False when the fact is unknown: unknown is unmet, so the collector is listed
+# not applicable with the reason, never run blind and never counted healthy.
+REQUIREMENTS = {
+    "package-db": ("a dpkg or rpm package database to verify against",
+                   lambda f: bool({"dpkg", "rpm"} & set(f.get("package_dbs") or ()))),
+    "systemd": ("systemd as the init system",
+                lambda f: f.get("init") == "systemd"),
+    "own-kernel": ("a boot chain and kernel of its own (not a container)",
+                   lambda f: f.get("os") == "linux" and f.get("container") is None and f.get("kernel") is not None),
+    "container-engine": ("a container engine (Docker or Podman) installed",
+                         lambda f: bool(f.get("container_engines"))),
+    "oval-source": ("a distribution with published OVAL security data (Ubuntu or Debian)",
+                    lambda f: f.get("distro") in ("ubuntu", "debian")),
+}
+
+
+def unmet(collector, facts):
+    """Reasons `collector` has nothing to observe on a host with `facts` ([] = applicable)."""
+    out = []
+    for name in collector.requires:
+        meaning, test = REQUIREMENTS[name]
+        try:
+            ok = bool(test(facts))
+        except (TypeError, AttributeError):
+            ok = False
+        if not ok:
+            out.append(f"needs {meaning}")
+    return out
 
 
 def _c(name, interval, label, area, rank, tier, crit, timeout, **kw):
@@ -115,11 +162,13 @@ COLLECTORS = (
        command="coverage", health="required", health_limit_s=135,
        lane="fast", domain="windows", depends_on=("scheduler",)),
     _c("input_hook", 45, "Input monitor watchdog", AT, 10, 1, "high", 30,
+       admin_sensor="limited",
        command="inputwatch",
        lane="fast", domain="windows", depends_on=("windows-bridge",)),
     # Drains the native Windows sensor's spool into the event log: local file
     # reads only, no PowerShell, and ahead of sysmon, which reads its output.
     _c("native", 60, "Native sensor ingestion", MO, 3, 0, "critical", 45,
+       admin_sensor="unavailable",
        command="timeline status", health="required", health_limit_s=180,
        lane="fast", domain="windows", isolated=True, depends_on=("native-sensor",), cost_s=1.5),
     # The other half of mutual supervision: jarvis-selfcheck.timer restarts
@@ -131,6 +180,7 @@ COLLECTORS = (
        command="status", health="optional", health_limit_s=900,
        unscored="performance and resource pressure, not evidence of compromise"),
     _c("internet", 120, "Internet apps & incoming traffic", NW, 0, 2, "medium", 60,
+       admin_sensor="limited",
        command="netwatch", health="optional", health_limit_s=300, elevated="internetwatch.ps1",
        domain="windows"),
     _c("controls", 300, "Brightness & control devices", None, 0, 2, "medium", 60,
@@ -165,6 +215,7 @@ COLLECTORS = (
     # Reads the elevated broker's copy of the HP Sure Start audit log (the
     # broker refreshes it every 15 min); local file reads only.
     _c("fwaudit", 1800, "HP firmware audit log", None, 0, 3, "medium", 60,
+       admin_sensor="unavailable",
        command="status", elevated="hp_firmware_audit.ps1",
        domain="windows", cost_s=0.1,
        unscored="firmware audit records are reported, not yet scored (unsoaked; owner decision pending)"),
@@ -176,6 +227,7 @@ COLLECTORS = (
        command="firewall",
        depends_on=("windows-bridge",), cost_s=18.0, boot_scoped=True),
     _c("control", 1800, "Control surfaces", PA, 0, 3, "high", 180,
+       admin_sensor="limited",
        command="control",
        depends_on=("windows-bridge",), cost_s=16.0, boot_scoped=True),
     # One registry/environment read, about 1 s: CLR profiler, startup-hook,
@@ -238,6 +290,7 @@ COLLECTORS = (
        command="netwatch", domain="windows",
        depends_on=("scheduler",), cost_s=10.0),
     _c("posture", 7200, "Windows security posture", OS, 0, 3, "high", 300,
+       admin_sensor="limited",
        command="posture", elevated="posture.ps1",
        domain="windows", governed=True, depends_on=("windows-bridge",), cost_s=14.0, boot_scoped=True),
     _c("backdoor", 3600, "Backdoors & access grants", PA, 3, 3, "high", 300,
@@ -255,10 +308,12 @@ COLLECTORS = (
     # The helper does the watching; this drains its output and runs the
     # injected-event audit. input_hook keeps the helper alive.
     _c("input", 300, "Synthetic input", AT, 9, 2, "high", 60,
+       admin_sensor="limited",
        command="inputwatch",
        domain="windows", depends_on=("windows-bridge",)),
     # Walks every readable process's address space; expensive, so rare.
     _c("memscan", 7200, "Memory & instruction level", AT, 3, 3, "medium", 300,
+       admin_sensor="limited",
        command="memscan", elevated="memscan.ps1",
        domain="windows", governed=True, cost_s=90.0, boot_scoped=True),
     # Walks the home directory; secrets do not appear by the minute.
@@ -282,9 +337,15 @@ COLLECTORS = (
     _c("sysmon_linux", 600, "Sysmon for Linux (eBPF)", AT, 2, 0, "critical", 45,
        command="sysmon-linux",
        domain="linux"),
+    # Positive control for it: one harmless labelled process start per run, looked
+    # for in the trusted journal. Proves the sensor sees, not just that a job ran.
+    _c("sensorprobe", 900, "Process sensor positive control", None, 0, 3, "high", 60,
+       command="sysmon-linux", domain="linux", cost_s=0.3,
+       unscored="a self-test of the process sensor; scored after it has soaked on real hosts"),
     # The interception layer: frequent, because its value is catching things
     # that start and exit between sampling passes. Incremental, 1.5 s.
     _c("sysmon", 600, "Sysmon telemetry", AT, 1, 0, "critical", 45,
+       admin_sensor="unavailable",
        command="sysmon", health="required", health_limit_s=1500,
        domain="windows", depends_on=("windows-bridge", "native-sensor"), cost_s=1.5),
     # ATT&CK coverage, validated by probing the real detectors.
@@ -306,7 +367,7 @@ COLLECTORS = (
        unscored="news about conflicts elsewhere says nothing about this machine"),
     # `docker inspect` per container, read-only.
     _c("containers", 900, "Container privilege and exposure inventory", None, 0, 3, "medium", 90,
-       command="containers",
+       command="containers", requires=("container-engine",),
        domain="linux", unscored="inventory pending its own scoring decision", boot_scoped=True),
     # Linux servers (ARGUS-SERVER.md, 2026-10-24). Unscored until soaked on a
     # real internet-facing server: their thresholds are unmeasured there.
@@ -325,19 +386,24 @@ COLLECTORS = (
        unscored="source-tested only; never run against a real internet-facing sshd"),
     # The daily checks operators most want automated (Exa research 2026-10-28):
     # failed units, TLS certificate expiry, kernel OOM kills, unclean reboots.
+    # What WSL (or any systemd host) runs against the owner-approved manifest:
+    # owners from cgroups, drift per owner (owner request 2026-10-31).
+    _c("wslmanifest", 300, "WSL process manifest", None, 0, 2, "medium", 60,
+       command="wslmanifest", domain="linux", cost_s=0.3,
+       unscored="new; reports drift only after the owner approves a manifest, not yet soaked"),
     _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
-       command="opshealth", domain="linux", cost_s=0.6,
+       command="opshealth", domain="linux", cost_s=0.6, requires=("systemd",),
        unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),
     # Boot-chain persistence (GRUB, grub.d, initramfs hooks, dracut modules,
     # kernel and initramfs images) and kernel attack surface (Exa threat
     # research 2026-10-29). Stat signatures for images keep a run cheap.
     _c("bootchain", 1800, "Boot chain & kernel attack surface", None, 0, 3, "medium", 90,
-       command="bootchain", domain="linux", cost_s=0.1, boot_scoped=True,
+       command="bootchain", domain="linux", cost_s=0.1, boot_scoped=True, requires=("own-kernel",),
        unscored="source-tested only; package-update attribution not yet soaked on real servers"),
     # Processes reading the keyboard, raw HID or uinput, judged by their image;
     # hidden staging in /var/log, /run, /dev/shm and /tmp (spyware research 2026-10-29).
     _c("keyreaders", 900, "Keyboard readers & hidden staging", None, 0, 3, "medium", 60,
-       command="keyreaders", domain="linux", cost_s=0.1, boot_scoped=True,
+       command="keyreaders", domain="linux", cost_s=0.1, boot_scoped=True, requires=("own-kernel",),
        unscored="source-tested only; expected-reader list not yet soaked on desktops and servers"),
     # Friday Defender reviews of the codebases appcode found, with the owner's
     # consent (`jarvis defender enable`). Each pass collects finished reviews and
@@ -348,7 +414,7 @@ COLLECTORS = (
     # dpkg --verify / rpm -V over the packages intruders replace; IO-heavy, so
     # daily, deferrable and in the bulk lane.
     _c("pkgverify", 86400, "Package file integrity", None, 0, 4, "medium", 300,
-       command="pkgverify", domain="linux", lane="bulk", governed=True,
+       command="pkgverify", domain="linux", lane="bulk", governed=True, requires=("package-db",),
        unscored="source-tested only; a rewritten package database defeats it"),
     # ARGUS-SERVER.md W10: one bounded GET to the owner's dead-man service, so a
     # silent host or daemon pages someone. Fast lane: the ping proves it runs.
@@ -357,15 +423,24 @@ COLLECTORS = (
        unscored="delivery of liveness to an outside service, not a state of this machine"),
     # ARGUS-SERVER.md W11: fixable CVEs, pending updates, pending reboots.
     _c("patches", 3600, "Security fixes not installed", None, 0, 3, "medium", 180,
-       command="status", domain="linux", governed=True, cost_s=8.0,
+       command="status", domain="linux", governed=True, cost_s=8.0, requires=("package-db",),
        unscored="source-tested; scored after it has run on a real server"),
+    # Outdated software on every package manager (apt, snap, Homebrew, winget,
+    # Chocolatey), important first; with auto_update opted in, hands user-scope
+    # items to the bounded updater (response/updater.py). Listing measured
+    # 2026-11-02 at ~75 s (winget 2 x 24 s, Chocolatey 25 s, Homebrew 19 s).
+    # Main lane: the winget and Chocolatey listings run through PowerShell, and
+    # the bulk lane never crosses into Windows (tests/test_bulk_lane.py).
+    _c("updates", 21600, "Outdated software", None, 0, 4, "medium", 300,
+       command="update plan", governed=True, cost_s=75.0,
+       unscored="source-tested; scored after its listings are measured across machines"),
     # Daily download of the release's own OVAL security data. Debian 12 parses at
     # ~85 MB above baseline and returns to +6 MB once freed (measured 2026-10-25).
     # Isolated (2026-10-29): parsing a large dump inside the daemon stalled it
     # entirely on a busy host; a child process gets a deadline it can be killed at.
     _c("distrovuln", 86400, "Distribution security data", None, 0, 4, "medium", 300,
        command="status", domain="linux", lane="bulk", governed=True, isolated=True,
-       cost_s=25.0, unscored=_KNOWLEDGE),
+       cost_s=25.0, unscored=_KNOWLEDGE, requires=("oval-source",)),
     # ARGUS-SERVER.md W12: every codebase on the server, its dependencies
     # against OSV, risky code, credentials, writable code and web-root leaks.
     # One bounded audit (200 000 files; 180 s for walk, rules and tools, so a
@@ -404,6 +479,7 @@ COLLECTORS = (
     # Stages sealed history for the broker's vault, verifies it, checks the
     # running Sysmon rules and timestamps chain heads. DrvFS hashing: bulk.
     _c("evidence", 900, "Evidence vault & anchors", MO, 6, 3, "medium", 90,
+       admin_sensor="unavailable",
        command="broker status",
        lane="bulk", cost_s=217.0),
     # Planted canary bait: journal verification, decoy fingerprints, off-box
@@ -427,6 +503,14 @@ BY_NAME = {c.name: c for c in COLLECTORS}
 def schedule_table():
     """name -> (interval, label), in declaration order: schedule.ALL_JOBS."""
     return {c.name: (c.interval, c.label) for c in COLLECTORS}
+
+
+NEEDS_ADMIN_SENSOR = "Needs administrator sensor"
+
+
+def admin_sensor_jobs():
+    """{job: "unavailable" | "limited"} for the collectors that need the administrator sensor."""
+    return {c.name: c.admin_sensor for c in COLLECTORS if c.admin_sensor}
 
 
 def names(**match):

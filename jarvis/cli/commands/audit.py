@@ -490,3 +490,44 @@ def cmd_preos(args, store):
         return
     render_findings(findings, verbose=args.verbose, severity=args.severity,
                     show_ok=True, empty="no pre-OS boot evidence returned")
+
+
+def cmd_wslmanifest(args, store):
+    """What WSL runs, by owner, against the approved manifest."""
+    from jarvis.collectors.host import wslmanifest
+    rows, unreadable = wslmanifest.read_procs()
+    observed = wslmanifest.observe(rows)
+    if args.approve:
+        view = wslmanifest.daemon_view(store) if store is not None else None
+        if view and view[2] <= wslmanifest.OBS_FRESH_S and view[1] == 0:
+            observed, unreadable = view[0], 0
+            print(f"  using the daemon's view from {view[2]}s ago (it can read every process)")
+        elif unreadable and not args.partial:
+            # Approving a partial view makes every unseen owner read as drift
+            # on the daemon's next run.
+            print("  refused: the daemon has no fresh complete view and this shell cannot read "
+                  f"{unreadable} process(es).\n  The daemon refreshes its view every 5 minutes; "
+                  "approve again after its next run\n"
+                  "  (or pass --partial to approve only what this shell sees)")
+            return 1
+        else:
+            print("  approving what this shell can read")
+        data = wslmanifest.approve(observed)
+        print(f"  approved {len(data['owners'])} owners into {wslmanifest.MANIFEST}")
+        for owner, spec in sorted(data["owners"].items()):
+            bins = spec["binaries"]
+            shown = "any binary" if bins == wslmanifest.ANY else ", ".join(bins)[:110]
+            print(f"    {owner:40} {'required ' if spec['required'] else ''}{shown}")
+        if unreadable:
+            print(f"  {unreadable} process(es) were unreadable from this shell and are not in it; "
+                  f"run it as the daemon's user with its capabilities, or approve again later")
+        return
+    findings = wslmanifest.audit(store, record=False)
+    if args.json:
+        print(json.dumps({"owners": observed, "unreadable": unreadable, "findings": findings}, indent=2))
+        return
+    for owner, o in sorted(observed.items()):
+        print(f"  {owner:40} {o['pids']:4} proc  {', '.join(o['binaries'])[:100]}")
+    print()
+    render_findings(findings, verbose=args.verbose, severity=args.severity, show_ok=True,
+                    empty="no WSL process findings")

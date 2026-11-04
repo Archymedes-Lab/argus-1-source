@@ -27,11 +27,24 @@ import sys
 import urllib.request
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    # A refusal must print, not crash on a cp1252 console. Some runners replace the
+    # stream with one that cannot be reconfigured (unittest buffering), so ask first.
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(errors="replace")
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import gate  # noqa: E402
 
 REPO = HERE.parent
+
+# Build inputs that are never published. The Windows desktop app on its own has no
+# monitoring program: as a download it opens, finds nothing to talk to and leaves the
+# customer to install the rest. It ships only inside Argus-Setup.exe.
+# Kept published for now (2026-11-04): the live download page links it and the
+# 2026.11.03-0 release ships it. Add it here once the page offers only the Setup.
+INTERNAL_INPUTS = set()
 
 
 def load_previous(where):
@@ -93,6 +106,7 @@ def main():
     ap.add_argument("--commit", required=True)
     ap.add_argument("--run-url", default="")
     ap.add_argument("--previous", default="")
+    ap.add_argument("--proposal", action="append", default=[], help="dry run only: an additive policy proposal")
     args = ap.parse_args()
     builds, out = Path(args.builds), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -104,6 +118,8 @@ def main():
         if rec["version"] != args.version:
             sys.exit(f"{rec_path.name} is version {rec['version']}, not {args.version}")
         for name, meta in rec["files"].items():
+            if name in INTERNAL_INPUTS:
+                continue
             src = rec_path.parent / name
             if hashlib.sha256(src.read_bytes()).hexdigest() != meta["sha256"]:
                 sys.exit(f"{name} changed after its build recorded it")
@@ -111,7 +127,9 @@ def main():
             files[name] = meta
     if not files:
         sys.exit("no build records found")
-    policy = gate.load_policy()
+    policy = gate.load_policy(proposals=args.proposal)
+    for line in policy["_proposals"]:
+        print("PROPOSAL ACTIVE (dry run only): " + line)
     counts = {}
     for name in files:
         problems, counts[name] = gate.check_artifact(out / name, gate.rule_for(name, policy), policy)

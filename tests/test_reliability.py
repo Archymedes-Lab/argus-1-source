@@ -218,3 +218,48 @@ class SchedulerIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JobCostTests(unittest.TestCase):
+    """The scheduler records what each run cost (CPU, memory growth) so the
+    Monitoring view can rank collectors by real cost, not wall time."""
+
+    def test_run_once_records_cpu_and_memory_growth(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            sched = Scheduler(tmp + "/s.db", ("wsl",))
+
+            def busy(name, hosts, db_path):
+                total = 0
+                for i in range(300000):
+                    total += i * i
+                return [{"category": "x", "severity": "ok", "title": "t", "detail": "", "where": "", "host": "wsl"}]
+
+            from jarvis.core.store import Store
+            store = Store(tmp + "/s.db")
+            try:
+                with mock.patch("jarvis.service.scheduler.run_job", side_effect=busy), \
+                     mock.patch("jarvis.service.scheduler.alert.load_conf", return_value={}), \
+                     mock.patch("jarvis.service.scheduler.remediation.process", side_effect=lambda s, c, n, f, e, v: (f, e)), \
+                     mock.patch("jarvis.service.scheduler.defense.process", side_effect=lambda s, c, n, f, coverage: f):
+                    sched.run_once(store, "hidden")
+            finally:
+                store.close()
+            cost = sched.job_cost["hidden"]
+            self.assertGreater(cost["cpu_s"], 0.0)
+            self.assertGreaterEqual(cost["rss_growth_kib"], 0)
+            from jarvis.web.server import _performance_state
+            perf = _performance_state([{"name": "hidden", "label": "Hidden", "interval": 300, "duration": 1.0}], sched)
+            self.assertIn("cpu_pct", perf["top"][0])
+            self.assertIsNotNone(perf["collector_cpu_pct"])
+
+    def test_isolated_child_reports_its_own_cost(self):
+        import subprocess
+        from unittest import mock
+        out = '{"findings":[],"error":"","status":"complete","cpu_s":1.25,"max_rss_kib":51200}'
+        done = subprocess.CompletedProcess(["w"], 0, stdout=out, stderr="")
+        from jarvis.service import scheduler as sched_mod
+        with mock.patch("jarvis.service.scheduler.subprocess.run", return_value=done):
+            sched_mod._isolated_job("native", ("win",), "/tmp/x.db", 5)
+        self.assertEqual(sched_mod._CHILD_COST.value, (1.25, 51200))
