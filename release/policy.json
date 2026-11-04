@@ -284,6 +284,12 @@
     "f30d0d0a"
   ],
   "max_file_count_growth": 0.25,
+  "explained_growth": [
+    {"artifact": "argus-server-linux-x86_64.tar.gz", "previous": 79, "max": 106, "reason": "the dashboard's 27 web files (web/static, styles), missing from 2026.11.03-0: Path.glob('dir/**') found no files on Python 3.12"},
+    {"artifact": "argus-server_*_amd64.deb", "previous": 83, "max": 110, "reason": "the dashboard's 27 web files (web/static, styles), missing from 2026.11.03-0: Path.glob('dir/**') found no files on Python 3.12"},
+    {"artifact": "argus-instinct-windows-x64.zip", "previous": 34, "max": 61, "reason": "the dashboard's 27 web files (web/static, styles), missing from 2026.11.03-0: Path.glob('dir/**') found no files on Python 3.12"},
+    {"artifact": "ARGUS-INSTINCT-Setup-windows-x64.exe", "previous": 40, "max": 67, "reason": "the dashboard's 27 web files (web/static, styles), missing from 2026.11.03-0: Path.glob('dir/**') found no files on Python 3.12"}
+  ],
   "_third_party_comment": "Reviewed upstream build paths inside third-party binaries of the Windows engine: python.org's CPython 3.12 release build (D:\\\\a\\\\1\\\\), the OpenSSL it ships (C:\\\\A\\\\_work\\\\) the Microsoft C++ runtime it ships (D:\\\\a\\\\_work\\\\) and the pinned cryptography wheel built on its maintainers' GitHub runner. Each entry exempts one exact matched text in the named files only; every other match in those files, and the same text in any other file (our own program included), is still refused. Changing this list needs the same two-person review as a release.",
   "third_party_markers": [
     {

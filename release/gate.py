@@ -458,12 +458,23 @@ def check_release(folder, policy, previous=None):
         if not (folder / "SHA256SUMS").exists():
             problems.append("SHA256SUMS is missing")
     if previous:
-        prev = json.loads(Path(previous).read_text()).get("member_counts") or {}
+        def unversioned(n):
+            return re.sub(r"_\d[\w.]*?_", "_*_", n)
+        # Both sides without their version: a versioned name (the .deb) was
+        # never compared while only the new side was normalised.
+        prev = {unversioned(k): v for k, v in
+                (json.loads(Path(previous).read_text()).get("member_counts") or {}).items()}
         growth = policy["max_file_count_growth"]
+        explained = {(e["artifact"], e["previous"]): e for e in policy.get("explained_growth", ())}
         for name, n in counts.items():
-            key = re.sub(r"_\d[\w.]*?_", "_*_", name)
-            before = prev.get(key) or prev.get(name)
+            key = unversioned(name)
+            before = prev.get(key)
             if before and n > before * (1 + growth):
+                # An explanation names the artifact, the exact previous count it
+                # applies to and the most files it allows: it covers one jump only.
+                ex = explained.get((key, before))
+                if ex and n <= ex["max"]:
+                    continue
                 problems.append(f"{name}: {n} files, up from {before} in the previous release "
                                 f"(more than {growth:.0%}); explain it in the policy or the build")
     return problems, counts

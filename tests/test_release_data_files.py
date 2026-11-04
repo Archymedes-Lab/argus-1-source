@@ -5,6 +5,7 @@ windows-installer branch): on 3.12 `glob("dir/**")` returns no files, and the
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +83,39 @@ class ShippedDataIsAllowed(unittest.TestCase):
                     self.assertIsNone(gate.denied_path(path, policy))
                     self.assertTrue(any(gate.glob_match(path, p) for p in rules[name]["allow"]),
                                     f"{path} is not in the allow list of {name}")
+
+
+class FileCountGrowth(unittest.TestCase):
+    """The growth check compares versioned names too, and an explanation covers
+    one pinned jump only (run 41746357384)."""
+
+    def _check(self, prev_counts, counts, policy):
+        import json as _json
+
+        import gate
+        prev = Path(tempfile.mkdtemp()) / "manifest.json"
+        prev.write_text(_json.dumps({"member_counts": prev_counts}))
+        with mock.patch.object(gate, "members_of", side_effect=lambda path, kind: []), \
+             mock.patch.object(gate, "check_artifact", side_effect=lambda path, rule, pol: ([], counts[path.name])):
+            folder = Path(tempfile.mkdtemp())
+            for name in counts:
+                (folder / name).write_bytes(b"x")
+            problems, _ = gate.check_release(folder, policy, prev)
+        return [p for p in problems if "up from" in p]
+
+    def test_a_versioned_deb_is_compared_and_explanations_are_pinned(self):
+        import gate
+        policy = dict(gate.load_policy(), explained_growth=[])
+        prev = {"argus-server_2026.11.03.0_amd64.deb": 83}
+        new = {"argus-server_2026.11.04.9_amd64.deb": 110}
+        self.assertEqual(len(self._check(prev, new, policy)), 1, "the versioned .deb must be compared")
+        policy["explained_growth"] = [{"artifact": "argus-server_*_amd64.deb", "previous": 83, "max": 110,
+                                       "reason": "test"}]
+        self.assertEqual(self._check(prev, new, policy), [])
+        self.assertEqual(len(self._check(prev, {"argus-server_2026.11.04.9_amd64.deb": 111}, policy)), 1)
+        self.assertEqual(len(self._check({"argus-server_2026.11.03.0_amd64.deb": 90},
+                                         {"argus-server_2026.11.04.9_amd64.deb": 120}, policy)), 1,
+                         "an explanation pinned to 83 does not cover a later jump")
 
 
 if __name__ == "__main__":
