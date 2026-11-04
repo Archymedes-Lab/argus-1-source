@@ -1,4 +1,4 @@
-"""Phone pairing through the sealed relay: the steps `notify pair` and the
+r"""Phone pairing through the sealed relay: the steps `notify pair` and the
 desktop/dashboard API share (docs/architecture/ARGUS-NOTIFY.md).
 
 Steps (each one relay call or one local check):

@@ -883,6 +883,12 @@ class Scheduler(threading.Thread):
                     defense.reconcile(store)
                 except Exception:
                     pass
+                try:
+                    # Phone approvals hear about new proposals from the first collection on.
+                    from jarvis.response.notify import replies
+                    replies.register()
+                except Exception:
+                    pass
                 if self.cold_start_pending:
                     self._open_wake_window(time.time())
             while True:

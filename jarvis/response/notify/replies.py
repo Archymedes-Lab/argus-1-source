@@ -297,6 +297,15 @@ def queue_offer(store, eid):
         return False
 
 
+def register():
+    """Hear about new defense proposals (idempotent). The scheduler calls it before its first collection."""
+    if queue_offer not in defense.PROPOSAL_LISTENERS:
+        defense.PROPOSAL_LISTENERS.append(queue_offer)
+
+
+register()
+
+
 def flush_offers(store, conf, now=None, opener=None):
     """Offer every queued proposal that is still waiting. Returns how many were offered."""
     st = _state(store)
