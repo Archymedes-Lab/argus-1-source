@@ -38,6 +38,8 @@ LINUX_DEPENDS = "libwebkit2gtk-4.1-0, libgtk-3-0, libayatana-appindicator3-1"
 
 def run(cmd, cwd, env=None):
     print("$ " + " ".join(cmd), flush=True)
+    # Windows cannot start a .cmd shim (npm's bun) by its bare name; resolve it first.
+    cmd = [shutil.which(cmd[0]) or cmd[0], *cmd[1:]]
     subprocess.run(cmd, cwd=cwd, check=True, env=env)
 
 

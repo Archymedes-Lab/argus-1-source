@@ -15,13 +15,11 @@
  "ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected.": "ARGUS-INSTINCT अभी Windows का एंटीवायरस नहीं पढ़ पा रहा है, इसलिए यह नहीं बता सकता कि आप सुरक्षित हैं या नहीं।",
  "ARGUS-INSTINCT detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-INSTINCT reads its state and can start a quick scan.": "ARGUS-INSTINCT पहचानता और समझाता है; वह खुद मैलवेयर को रोकता या हटाता नहीं है। रोकथाम Defender का काम है; ARGUS-INSTINCT उसकी स्थिति पढ़ता है और क्विक स्कैन शुरू कर सकता है।",
  "ARGUS-INSTINCT has not learned what is normal here yet, so nothing can be marked new.": "ARGUS-INSTINCT ने अभी यह नहीं सीखा है कि यहाँ क्या सामान्य है, इसलिए कुछ भी नया चिह्नित नहीं किया जा सकता।",
- "ARGUS-INSTINCT is not answering right now. Showing the last state it reported; monitoring may still be running.": "ARGUS-INSTINCT अभी जवाब नहीं दे रहा है। उसकी आखिरी रिपोर्ट की गई स्थिति दिखाई जा रही है; निगरानी शायद अब भी चल रही है।",
  "ARGUS-INSTINCT is still getting a look at your computer": "ARGUS-INSTINCT अभी आपके कंप्यूटर को देख रहा है",
  "ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.": "ARGUS-INSTINCT विराम पर है और आपके कंप्यूटर की जाँच नहीं कर रहा। यह {time} पर अपने आप फिर शुरू होगा।",
  "ARGUS-INSTINCT is taking a break. It starts again by itself.": "ARGUS-INSTINCT विराम पर है। यह अपने आप फिर शुरू हो जाएगा।",
  "ARGUS-INSTINCT is watching again": "ARGUS-INSTINCT फिर से निगरानी कर रहा है",
  "ARGUS-INSTINCT looks at your computer in many small ways. Each one is a check.": "ARGUS-INSTINCT आपके कंप्यूटर को कई छोटे तरीकों से देखता है। हर एक तरीका एक जाँच है।",
- "ARGUS-INSTINCT unreachable": "ARGUS-INSTINCT से संपर्क नहीं हो पा रहा",
  "ARGUS-INSTINCT watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.": "ARGUS-INSTINCT आपके कंप्यूटर पर नज़र रखता है और कुछ गड़बड़ लगने पर बताता है। जाने-पहचाने वायरस आते ही Windows उन्हें रोक देता है।",
  "ARGUS-INSTINCT works out roughly where this computer is, so it can tell when it is somewhere unusual. This page loads no map from other websites; the full map opens in your browser.": "ARGUS-INSTINCT मोटे तौर पर पता लगाता है कि यह कंप्यूटर कहाँ है, ताकि किसी असामान्य जगह पर होने पर पहचान सके। यह पेज दूसरी वेबसाइटों से कोई नक्शा लोड नहीं करता; पूरा नक्शा आपके ब्राउज़र में खुलता है।",
  "ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed": "ARGUS-INSTINCT का अपना डेटा और अंतर्निहित सुरक्षा गाइड; किसी अतिरिक्त सॉफ़्टवेयर की ज़रूरत नहीं",
@@ -424,5 +422,6 @@
  "{n}h ago": "{n} घंटे पहले",
  "{n}m ago": "{n} मिनट पहले",
  "{n}s ago": "{n} सेकंड पहले",
- "“{name}” wants to receive alerts from this computer.": "“{name}” इस कंप्यूटर से अलर्ट पाना चाहता है।"
+ "“{name}” wants to receive alerts from this computer.": "“{name}” इस कंप्यूटर से अलर्ट पाना चाहता है।",
+ "Showing the last state it reported.": "इसने जो आख़िरी स्थिति बताई थी, वही दिखाई जा रही है।"
 }

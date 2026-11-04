@@ -234,6 +234,13 @@ pub async fn daemon_state() -> Result<Value, String> {
     blocking(|| get_json("/api/state", STATE_TIMEOUT)).await
 }
 
+/// What the app knows about the daemon and why: running, degraded (with the
+/// collectors that cannot run), stopped, not installed, or not authorised.
+#[tauri::command]
+pub fn app_status() -> Value {
+    serde_json::to_value(crate::lifecycle::current()).unwrap_or(Value::Null)
+}
+
 /// Cheap liveness for the sidebar: the pulse summary, or why it is missing.
 #[tauri::command]
 pub async fn daemon_status() -> Result<Value, String> {

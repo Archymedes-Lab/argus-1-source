@@ -114,6 +114,13 @@ async function procsSnapshotHttp(): Promise<ProcsSnapshot> {
   return out;
 }
 
+/** What the app knows about the daemon (desktop/src/lifecycle.rs): never "healthy" unless it is. */
+export type AppStatus = {
+  phase: "starting" | "live" | "degraded" | "not_installed" | "not_authorised" | "stopped";
+  message: string;
+  detail: string;
+};
+
 export type Reply = { ok?: boolean; message?: string; answer?: string; source?: string; queued?: boolean };
 
 export type Protection = { available: boolean; level: "on" | "off" | "stale" | "unknown"; summary: string; signature_age_days?: number | null; last_quick_scan?: string };
@@ -155,6 +162,7 @@ export type ProcsSnapshot = { snaps: Record<string, any[][]>; status: any };
 
 export const api = {
   state: () => call<any>("daemon_state"),
+  status: () => call<AppStatus>("app_status"),
   runCollector: (job: string) => call<Reply>("run_collector", { job }),
   answer: (id: string, choice: "yes" | "no") => call<Reply>("answer_question", { id, choice }),
   ask: (question: string, level: "simple" | "expert" = "expert", lang = "en") => call<Reply>("ask_jarvis", { question, level, lang }),

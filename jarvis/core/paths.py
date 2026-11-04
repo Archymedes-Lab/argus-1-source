@@ -108,15 +108,23 @@ def _compiled():
     return "__compiled__" in globals()
 
 
-def program(compiled=None, argv0=None, executable=None, listdir=os.listdir):
-    """The command that runs this program again: the Python interpreter in a source tree,
-    the compiled program itself in an edition. In a Nuitka standalone build sys.executable
-    names a python.exe that does not exist (measured on Windows, run 41646681752), so the
-    program is argv[0], or else the one other program in its folder."""
+def self_executable(compiled=None, argv0=None, executable=None, listdir=os.listdir, module_path=None):
+    """The program file to start when Argus runs a copy of itself (`-m module`).
+
+    `sys.executable` is wrong in a compiled Windows build: Nuitka's standalone
+    mode reports a python.exe in the install folder that does not exist, so
+    every collector worker failed with FileNotFoundError (found 2026-11-03 on
+    the compiled program and on the clean-machine CI run 41646681752). In
+    order: an existing sys.executable; on Windows the running program's own
+    path from GetModuleFileNameW; argv[0]; the one other program in its folder.
+    """
     compiled = _compiled() if compiled is None else compiled
     executable = sys.executable if executable is None else executable
-    if not compiled:
+    if not compiled or (executable and os.path.exists(executable)):
         return executable
+    found = (module_path or _module_path)()
+    if found and os.path.exists(found):
+        return found
     argv0 = (sys.argv[0] if sys.argv else "") if argv0 is None else argv0
     candidates = [os.path.abspath(argv0)] if argv0 else []
     candidates += [c + ".exe" for c in candidates if not c.lower().endswith(".exe")]
@@ -131,6 +139,24 @@ def program(compiled=None, argv0=None, executable=None, listdir=os.listdir):
     if len(others) == 1:
         return os.path.join(folder, others[0])
     return executable
+
+
+def _module_path():
+    """The running program's path as Windows knows it, or None elsewhere."""
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(32768)
+        if ctypes.windll.kernel32.GetModuleFileNameW(None, buf, len(buf)):
+            return buf.value
+    except (AttributeError, OSError):
+        pass
+    return None
+
+
+# The name the native service commands use.
+program = self_executable
 
 
 def win_script(name):

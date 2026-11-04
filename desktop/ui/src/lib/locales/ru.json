@@ -15,13 +15,11 @@
  "ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected.": "ARGUS-INSTINCT сейчас не может прочитать состояние антивируса Windows, поэтому не может сказать, защищены ли вы.",
  "ARGUS-INSTINCT detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-INSTINCT reads its state and can start a quick scan.": "ARGUS-INSTINCT обнаруживает и объясняет, но сам не блокирует и не удаляет вредоносное ПО. Защита — задача Defender; ARGUS-INSTINCT читает его состояние и может запустить быструю проверку.",
  "ARGUS-INSTINCT has not learned what is normal here yet, so nothing can be marked new.": "ARGUS-INSTINCT ещё не узнал, что здесь нормально, поэтому ничего нельзя пометить как новое.",
- "ARGUS-INSTINCT is not answering right now. Showing the last state it reported; monitoring may still be running.": "ARGUS-INSTINCT сейчас не отвечает. Показано последнее сообщённое состояние; мониторинг, возможно, продолжает работать.",
  "ARGUS-INSTINCT is still getting a look at your computer": "ARGUS-INSTINCT всё ещё изучает ваш компьютер",
  "ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.": "ARGUS-INSTINCT на паузе и не проверяет ваш компьютер. Он сам возобновит работу в {time}.",
  "ARGUS-INSTINCT is taking a break. It starts again by itself.": "ARGUS-INSTINCT на паузе. Он возобновит работу сам.",
  "ARGUS-INSTINCT is watching again": "ARGUS-INSTINCT снова следит",
  "ARGUS-INSTINCT looks at your computer in many small ways. Each one is a check.": "ARGUS-INSTINCT смотрит на ваш компьютер множеством небольших способов. Каждый из них — проверка.",
- "ARGUS-INSTINCT unreachable": "ARGUS-INSTINCT недоступен",
  "ARGUS-INSTINCT watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.": "ARGUS-INSTINCT следит за вашим компьютером и сообщает, если что-то выглядит неправильно. Windows блокирует известные вирусы сразу при появлении.",
  "ARGUS-INSTINCT works out roughly where this computer is, so it can tell when it is somewhere unusual. This page loads no map from other websites; the full map opens in your browser.": "ARGUS-INSTINCT примерно определяет, где находится этот компьютер, чтобы заметить необычное место. Эта страница не загружает карты с других сайтов; полная карта открывается в браузере.",
  "ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed": "Данные самого ARGUS-INSTINCT и встроенное руководство по безопасности; дополнительное ПО не нужно",
@@ -424,5 +422,6 @@
  "{n}h ago": "{n} ч назад",
  "{n}m ago": "{n} мин назад",
  "{n}s ago": "{n} с назад",
- "“{name}” wants to receive alerts from this computer.": "«{name}» хочет получать оповещения с этого компьютера."
+ "“{name}” wants to receive alerts from this computer.": "«{name}» хочет получать оповещения с этого компьютера.",
+ "Showing the last state it reported.": "Показано последнее сообщённое состояние."
 }

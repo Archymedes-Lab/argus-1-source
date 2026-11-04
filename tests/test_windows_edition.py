@@ -149,7 +149,7 @@ class ProgramPath(unittest.TestCase):
         for mod in (scheduler, rulepack, fridaydefender, native):
             src = inspect.getsource(mod)
             self.assertNotRegex(src, r"\[sys\.executable, \"-m\"", mod.__name__)
-            self.assertIn("program()", src, mod.__name__)
+            self.assertIn("self_executable()", src, mod.__name__)
 
 
 class CliExitCode(unittest.TestCase):
@@ -371,7 +371,14 @@ class WindowsBuild(unittest.TestCase):
             return b"PK\x01\x02" + b"\x00" * 24 + len(name).to_bytes(2, "little") + b"\x00" * 16 + name
         constant = ("python312.dll", b"MZ zipimport" + header(b"\x00\x00\x00z\x19bad local header") + b"tail")
         self.assertEqual(self._gate(self._zip([constant])), [])
-        planted = ("python312.dll", b"MZ" + header(b"argus/core/main.pyc") + b"tail")
+        # A lone directory header is not an archive (detection is structural since
+        # the windows-installer merge); a real zip appended to a binary is.
+        lone = ("python312.dll", b"MZ" + header(b"argus/core/main.pyc") + b"tail")
+        self.assertEqual(self._gate(self._zip([lone])), [])
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as inner:
+            inner.writestr("argus/core/main.pyc", b"\x00" * 16)
+        planted = ("python312.dll", b"MZ" + b"\x00" * 64 + buf.getvalue())
         self.assertTrue(any("embedded archive member" in p for p in self._gate(self._zip([planted]))))
 
     def test_setup_stage_refuses_members_outside_the_top_folder(self):

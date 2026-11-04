@@ -373,8 +373,8 @@ def candidate_roots(consent):
 
 def start_review(root, friday, budget, spawn=subprocess.Popen):
     os.makedirs(RUNS, mode=0o700, exist_ok=True)
-    from jarvis.core.paths import program
-    child = spawn([program(), "-m", "jarvis.collectors.host.fridaydefender", "review", root, friday,
+    from jarvis.core.paths import self_executable
+    child = spawn([self_executable(), "-m", "jarvis.collectors.host.fridaydefender", "review", root, friday,
                    str(budget)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                   stderr=subprocess.DEVNULL, start_new_session=True)
     with open(LOCK, "w", encoding="utf-8") as fh:

@@ -15,13 +15,11 @@
  "ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected.": "لا يستطيع ARGUS-INSTINCT قراءة مضاد الفيروسات في Windows الآن، لذا لا يمكنه الجزم بأنك محمي.",
  "ARGUS-INSTINCT detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-INSTINCT reads its state and can start a quick scan.": "يكتشف ARGUS-INSTINCT ويشرح، لكنه لا يحجب البرمجيات الخبيثة ولا يحذفها بنفسه. الوقاية مهمة Defender؛ ويقرأ ARGUS-INSTINCT حالته ويمكنه بدء فحص سريع.",
  "ARGUS-INSTINCT has not learned what is normal here yet, so nothing can be marked new.": "لم يتعلّم ARGUS-INSTINCT بعد ما هو طبيعي هنا، لذا لا يمكن وسم أي شيء بأنه جديد.",
- "ARGUS-INSTINCT is not answering right now. Showing the last state it reported; monitoring may still be running.": "ARGUS-INSTINCT لا يستجيب الآن. يُعرض آخر وضع أبلغ عنه؛ وقد تكون المراقبة ما زالت تعمل.",
  "ARGUS-INSTINCT is still getting a look at your computer": "لا يزال ARGUS-INSTINCT يفحص جهازك",
  "ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.": "ARGUS-INSTINCT في استراحة ولا يفحص جهازك. سيستأنف تلقائياً في {time}.",
  "ARGUS-INSTINCT is taking a break. It starts again by itself.": "ARGUS-INSTINCT في استراحة. سيستأنف تلقائياً.",
  "ARGUS-INSTINCT is watching again": "عاد ARGUS-INSTINCT إلى المراقبة",
  "ARGUS-INSTINCT looks at your computer in many small ways. Each one is a check.": "يفحص ARGUS-INSTINCT جهازك بطرق صغيرة كثيرة، وكل طريقة منها هي فحص.",
- "ARGUS-INSTINCT unreachable": "تعذّر الوصول إلى ARGUS-INSTINCT",
  "ARGUS-INSTINCT watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.": "يراقب ARGUS-INSTINCT جهازك ويخبرك عندما يبدو أن هناك خطباً. ويحجب Windows الفيروسات المعروفة فور وصولها.",
  "ARGUS-INSTINCT works out roughly where this computer is, so it can tell when it is somewhere unusual. This page loads no map from other websites; the full map opens in your browser.": "يحدّد ARGUS-INSTINCT تقريباً مكان هذا الجهاز ليلاحظ وجوده في مكان غير معتاد. لا تحمّل هذه الصفحة أي خريطة من مواقع أخرى؛ وتُفتح الخريطة الكاملة في متصفحك.",
  "ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed": "بيانات ARGUS-INSTINCT نفسها ودليل أمان مدمج؛ لا حاجة إلى برامج إضافية",
@@ -424,5 +422,6 @@
  "{n}h ago": "قبل {n} ساعة",
  "{n}m ago": "قبل {n} دقيقة",
  "{n}s ago": "قبل {n} ثانية",
- "“{name}” wants to receive alerts from this computer.": "\"{name}\" يريد استلام التنبيهات من هذا الحاسوب."
+ "“{name}” wants to receive alerts from this computer.": "\"{name}\" يريد استلام التنبيهات من هذا الحاسوب.",
+ "Showing the last state it reported.": "يُعرض آخر وضع أبلغ عنه."
 }

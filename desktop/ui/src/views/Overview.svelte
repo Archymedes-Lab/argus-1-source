@@ -30,7 +30,10 @@
 </script>
 
 {#if !d}
-  <div class="empty">{app.error || tr("Reading ARGUS-INSTINCT…")}</div>
+  <div class="empty">
+    {tr(app.status.message)}{#if app.status.detail}<br />{app.status.detail}{/if}
+    {#if app.error && app.status.phase === "starting"}<br />{app.error}{/if}
+  </div>
 {:else}
   <div class="flex flex-col gap-8">
     {#if counts.critical}

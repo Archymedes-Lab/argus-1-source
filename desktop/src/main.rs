@@ -25,7 +25,9 @@ compile_error!("release builds need `--features custom-protocol` (see docs/archi
 
 mod api;
 mod brand;
+mod lifecycle;
 mod pairing;
+mod provision;
 mod pulse;
 mod settings;
 mod startmenu;
@@ -111,10 +113,12 @@ fn pulse_loop(app: AppHandle) {
     let mut watch = Watch::default();
     let mut last = None;
     let mut backoff = Duration::from_secs(1);
+    let mut governor = lifecycle::Governor::default();
     loop {
         let mut got = false;
         let end = pulse::stream(&mut |p| {
             got = true;
+            lifecycle::set(lifecycle::classify_pulse(&p));
             // The interface refetches state when the daemon says it changed.
             let _ = app.emit_to(MAIN, "pulse", &p);
             apply(&app, watch.pulse(&p), &mut last);
@@ -125,10 +129,12 @@ fn pulse_loop(app: AppHandle) {
                 // poll the same summary instead of going dark.
                 match pulse::poll() {
                     Ok(p) => {
+                        lifecycle::set(lifecycle::classify_pulse(&p));
                         let _ = app.emit_to(MAIN, "pulse", &p);
                         apply(&app, watch.pulse(&p), &mut last)
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        lifecycle::set(lifecycle::from_error(&e.to_string()));
                         let _ = app.emit_to(MAIN, "daemon-down", ());
                         apply(&app, watch.unreachable(Instant::now()), &mut last)
                     }
@@ -137,6 +143,9 @@ fn pulse_loop(app: AppHandle) {
             }
             _ if got => backoff = Duration::from_secs(1), // stream ended normally
             _ => {
+                // Nothing answered. Start the daemon if it is installed and not
+                // running (within the restart budget), and say what is true.
+                lifecycle::set(lifecycle::ensure_running(&mut governor, pulse::port()));
                 let _ = app.emit_to(MAIN, "daemon-down", ());
                 apply(&app, watch.unreachable(Instant::now()), &mut last);
                 thread::sleep(backoff);
@@ -200,6 +209,28 @@ fn main() {
         }
         return;
     }
+    // `--check`: headless self-test for installers and release tests. Pairs if
+    // needed, asks the daemon for its pulse, reports by exit code only (this
+    // is a windowless program): 0 monitoring answers, 2 cannot pair, 3 daemon
+    // not answering.
+    if std::env::args().any(|a| a == "--check") {
+        let st = lifecycle::ensure_for_check();
+        if matches!(st.phase, lifecycle::Phase::NotInstalled | lifecycle::Phase::Stopped) {
+            eprintln!("{} {}", st.message, st.detail);
+            std::process::exit(3);
+        }
+        if let Err(e) = pairing::client_token() {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+        match pulse::poll() {
+            Ok(_) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(3);
+            }
+        }
+    }
     // `--hidden`: start in the tray (used by the logon task).
     let hidden = std::env::args().any(|a| a == "--hidden");
     tauri::Builder::default()
@@ -208,6 +239,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             api::daemon_state,
             api::daemon_status,
+            api::app_status,
             api::run_collector,
             api::answer_question,
             api::ask_jarvis,

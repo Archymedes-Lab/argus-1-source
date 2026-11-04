@@ -108,11 +108,8 @@ def nuitka(tree, work, jobs, version):
     icon = tree / "desktop" / "icons" / "icon.ico"
     if icon.is_file():
         cmd.append(f"--windows-icon-from-ico={icon}")
-    pkg = tree / "argus"
-    for pattern in build_server.DATA_KEEP:
-        for f in sorted(pkg.glob(pattern)):
-            if f.is_file():
-                cmd.append(f"--include-data-files={f}={f.relative_to(tree).as_posix()}")
+    for f, rel in build_server.data_files(tree, Path(work) / "data-clean"):
+        cmd.append(f"--include-data-files={f}={rel}")
     for rel in REPO_DATA:
         if not (tree / rel).is_file():
             sys.exit(f"{rel} is missing from the export")

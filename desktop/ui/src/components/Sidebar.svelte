@@ -42,8 +42,8 @@
   <div class="mt-auto flex flex-col gap-0.5 px-2 pb-2">
     {#each NAV.filter((n) => n.group === "bottom") as n (n.view)}{@render item(n)}{/each}
     <div class="mt-2 flex items-center gap-2 px-2.5 py-2 text-label-12 text-gray-900">
-      <span class="dot {app.daemon === 'live' ? 'dot-ok' : app.daemon === 'down' ? 'dot-bad' : 'dot-run'}"></span>
-      {app.daemon === "live" ? ((app.data?.paused_until ?? 0) * 1000 > Date.now() ? tr("On a break") : tr("Watching")) : app.daemon === "down" ? tr("ARGUS-INSTINCT unreachable") : tr("Connecting")}
+      <span class="dot {app.status.phase === 'live' ? 'dot-ok' : app.status.phase === 'degraded' ? 'dot-warn' : app.status.phase === 'starting' ? 'dot-run' : 'dot-bad'}"></span>
+      <span title={app.status.detail}>{app.status.phase === "live" ? ((app.data?.paused_until ?? 0) * 1000 > Date.now() ? tr("On a break") : tr("Watching")) : tr(app.status.message)}</span>
     </div>
   </div>
 </aside>

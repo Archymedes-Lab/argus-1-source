@@ -54,8 +54,41 @@ CHUNK = 8 * 1024 * 1024
 OVERLAP = 4096
 
 
-def load_policy(path=POLICY):
+def load_policy(path=POLICY, proposals=()):
+    """The policy at `path`. `proposals` are changes under review (release/proposals/),
+    loaded only by dry runs (release-test/* branches) and never by a tagged build:
+
+      * `artifacts`: new artifact rules (a name that already has a rule is refused);
+      * `deny_markers`: a replacement regex for a marker that already exists, by id
+        (a marker cannot be added or removed this way).
+
+    Nothing else can be touched: not the suffix, folder or bytecode lists, and not
+    the other markers. Each active proposal is recorded in policy["_proposals"] so
+    the caller can print it."""
     policy = json.loads(Path(path).read_text())
+    policy["_proposals"] = []
+    for prop in proposals:
+        extra = json.loads(Path(prop).read_text())
+        stray = sorted(k for k in extra if k not in ("artifacts", "deny_markers", "marker_exemptions")
+                       and not k.startswith("_"))
+        if stray:
+            raise ValueError(f"{prop}: a proposal may only add artifact rules, replace named markers or add "
+                             f"marker exemptions, not {', '.join(stray)}")
+        known = {r["name"] for r in policy["artifacts"]}
+        for rule in extra.get("artifacts", []):
+            if rule["name"] in known:
+                raise ValueError(f"{prop}: {rule['name']} already has a rule; a proposal cannot replace it")
+            policy["artifacts"].append(rule)
+            policy["_proposals"].append(f"{Path(prop).name}: adds artifact rule {rule['name']}")
+        for ex in extra.get("marker_exemptions", []):
+            policy.setdefault("marker_exemptions", []).append(ex)
+            policy["_proposals"].append(f"{Path(prop).name}: exempts {ex['marker']} in {ex['member']} (sha256 pinned)")
+        by_id = {m["id"]: i for i, m in enumerate(policy["deny_markers"])}
+        for marker in extra.get("deny_markers", []):
+            if marker["id"] not in by_id:
+                raise ValueError(f"{prop}: marker {marker['id']} does not exist; a proposal cannot add one")
+            policy["deny_markers"][by_id[marker["id"]]] = {**policy["deny_markers"][by_id[marker["id"]]], **marker}
+            policy["_proposals"].append(f"{Path(prop).name}: REPLACES marker {marker['id']}")
     policy["_markers"] = [(m["id"], re.compile(m["regex"].encode())) for m in policy["deny_markers"]
                           if m["id"] != "python-source-header"]
     policy["_magic"] = [bytes.fromhex(h) for h in policy["deny_bytecode_magic"]]
@@ -73,6 +106,23 @@ def _exempt(policy, member, marker_id, found):
     return any(marker_id == mid and found == text and any(glob_match(member, g) for g in members)
                for mid, text, members in policy.get("_third_party", ()))
 
+
+
+def exempt(label, marker_id, data, policy):
+    """True when this exact file is exempted from this marker by its SHA-256.
+
+    A `marker_exemptions` entry names a member path, one marker and the SHA-256 of
+    the file's bytes; it applies to those bytes only. Stricter than
+    `third_party_markers` (which pins the matched text): use it for a vendor's
+    signed binary that cannot be altered.
+    """
+    for ex in policy.get("marker_exemptions", ()):
+        member = ex["member"]
+        if ex["marker"] == marker_id and (label == member or label.endswith(":" + member)
+                                          or label.endswith("/" + member)):
+            if hashlib.sha256(data).hexdigest() == ex["sha256"]:
+                return True
+    return False
 
 def glob_match(path, pattern):
     """fnmatch where * stays inside one path segment and ** spans segments."""
@@ -253,6 +303,8 @@ def scan_bytes(label, data, policy, member=None):
                 if _exempt(policy, member, mid, m.group(0)):
                     continue
                 seen.add(mid)
+                if exempt(label, mid, data, policy):
+                    continue
                 problems.append(f"{label}: contains {mid} ({evidence(mid, m.group(0))})")
                 break
     # A zip appended to or embedded in a binary (PyInstaller, a self-extractor).
@@ -272,27 +324,52 @@ def evidence(marker_id, found):
     return f"{head.decode('ascii', 'replace')}... {len(found)} bytes, redacted"
 
 
-MAX_ENTRY_NAME = 1024
+def _walk_central_directory(data, end, entries, size):
+    """Names listed by the central directory of `entries` records and `size` bytes that
+    ends at `end`, or None when the bytes there are not a consistent directory."""
+    start = end - size
+    if entries <= 0 or start < 0 or data[start:start + 4] != b"PK\x01\x02":
+        return None
+    names, pos = [], start
+    for _ in range(entries):
+        if data[pos:pos + 4] != b"PK\x01\x02" or pos + 46 > end:
+            return None
+        n_len = int.from_bytes(data[pos + 28:pos + 30], "little")
+        extra = int.from_bytes(data[pos + 30:pos + 32], "little")
+        comment = int.from_bytes(data[pos + 32:pos + 34], "little")
+        names.append(_norm(data[pos + 46:pos + 46 + n_len].decode("utf-8", "replace")))
+        pos += 46 + n_len + extra + comment
+    return names if pos == end else None
 
 
 def embedded_zip_names(data):
-    """File names from every zip central-directory header found in the bytes.
+    """File names of every real zip archive appended to or embedded in the bytes.
 
-    Only a plausible entry name counts: valid UTF-8, printable, 1..1024 bytes. A
-    real archive (a PyInstaller payload, a self-extractor) always has such names;
-    the four signature bytes alone also occur as a constant in programs that read
-    zips (CPython's frozen zipimport in python312.dll), followed by binary data."""
-    names, pos = [], data.find(b"PK\x01\x02")
-    while pos != -1 and pos + 46 <= len(data):
-        n_len = int.from_bytes(data[pos + 28:pos + 30], "little")
-        raw = data[pos + 46:pos + 46 + n_len]
-        try:
-            name = raw.decode("utf-8") if 0 < n_len <= MAX_ENTRY_NAME and len(raw) == n_len else ""
-        except UnicodeDecodeError:
-            name = ""
-        if name and name.isprintable():
-            names.append(_norm(name))
-        pos = data.find(b"PK\x01\x02", pos + 4)
+    A real archive has a central directory that is consistent with its
+    end-of-directory record. Finding the four bytes `PK\x01\x02` is not enough: a
+    Python runtime (python3*.dll) carries those bytes, and the end-record and
+    zip64 signatures too, as constants in its built-in zipimport code, and decoding
+    what follows them reported garbage as "archive members". The check stays strict
+    for what it is for: a zip after or inside a binary (the PyInstaller pattern) is
+    found wherever it sits, in the classic layout and in zip64 (whose sizes are in the
+    zip64 end record, not the classic one).
+    """
+    names = []
+    pos = data.find(b"PK\x05\x06")
+    while pos != -1:
+        if pos + 22 <= len(data):
+            entries = int.from_bytes(data[pos + 10:pos + 12], "little")
+            size = int.from_bytes(data[pos + 12:pos + 16], "little")
+            if entries != 0xFFFF and size != 0xFFFFFFFF:
+                names += _walk_central_directory(data, pos, entries, size) or []
+        pos = data.find(b"PK\x05\x06", pos + 4)
+    pos = data.find(b"PK\x06\x06")
+    while pos != -1:
+        if pos + 56 <= len(data):
+            entries = int.from_bytes(data[pos + 32:pos + 40], "little")
+            size = int.from_bytes(data[pos + 40:pos + 48], "little")
+            names += _walk_central_directory(data, pos, entries, size) or []
+        pos = data.find(b"PK\x06\x06", pos + 4)
     return names
 
 

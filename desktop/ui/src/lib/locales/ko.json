@@ -15,13 +15,11 @@
  "ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected.": "ARGUS-INSTINCT이 지금 Windows 바이러스 백신 상태를 읽을 수 없어 보호 여부를 알 수 없습니다.",
  "ARGUS-INSTINCT detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-INSTINCT reads its state and can start a quick scan.": "ARGUS-INSTINCT은 탐지하고 설명할 뿐, 악성 코드를 직접 차단하거나 삭제하지 않습니다. 예방은 Defender의 역할이며, ARGUS-INSTINCT은 그 상태를 읽고 빠른 검사를 시작할 수 있습니다.",
  "ARGUS-INSTINCT has not learned what is normal here yet, so nothing can be marked new.": "ARGUS-INSTINCT이 아직 이곳의 정상 상태를 학습하지 못해 ‘새로운 항목’을 표시할 수 없습니다.",
- "ARGUS-INSTINCT is not answering right now. Showing the last state it reported; monitoring may still be running.": "ARGUS-INSTINCT이 지금 응답하지 않습니다. 마지막으로 보고된 상태를 표시하며, 모니터링은 계속 실행 중일 수 있습니다.",
  "ARGUS-INSTINCT is still getting a look at your computer": "ARGUS-INSTINCT이 아직 컴퓨터를 살펴보는 중입니다",
  "ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.": "ARGUS-INSTINCT이 쉬는 중이라 컴퓨터를 점검하지 않습니다. {time}에 자동으로 다시 시작합니다.",
  "ARGUS-INSTINCT is taking a break. It starts again by itself.": "ARGUS-INSTINCT이 쉬는 중입니다. 자동으로 다시 시작합니다.",
  "ARGUS-INSTINCT is watching again": "ARGUS-INSTINCT이 다시 감시하고 있습니다",
  "ARGUS-INSTINCT looks at your computer in many small ways. Each one is a check.": "ARGUS-INSTINCT은 여러 작은 방식으로 컴퓨터를 살펴봅니다. 그 하나하나가 점검입니다.",
- "ARGUS-INSTINCT unreachable": "ARGUS-INSTINCT에 연결할 수 없음",
  "ARGUS-INSTINCT watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.": "ARGUS-INSTINCT은 컴퓨터를 지켜보다가 이상한 점이 있으면 알려 드립니다. 알려진 바이러스는 Windows가 들어오는 즉시 차단합니다.",
  "ARGUS-INSTINCT works out roughly where this computer is, so it can tell when it is somewhere unusual. This page loads no map from other websites; the full map opens in your browser.": "ARGUS-INSTINCT은 이 컴퓨터의 대략적인 위치를 파악해 평소와 다른 곳에 있는지 알아냅니다. 이 페이지는 다른 웹사이트의 지도를 불러오지 않으며, 전체 지도는 브라우저에서 열립니다.",
  "ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed": "ARGUS-INSTINCT의 자체 데이터와 내장 안전 가이드, 추가 소프트웨어 불필요",
@@ -424,5 +422,6 @@
  "{n}h ago": "{n}시간 전",
  "{n}m ago": "{n}분 전",
  "{n}s ago": "{n}초 전",
- "“{name}” wants to receive alerts from this computer.": "“{name}”이(가) 이 컴퓨터의 알림을 받으려고 합니다."
+ "“{name}” wants to receive alerts from this computer.": "“{name}”이(가) 이 컴퓨터의 알림을 받으려고 합니다.",
+ "Showing the last state it reported.": "마지막으로 보고된 상태를 표시합니다."
 }

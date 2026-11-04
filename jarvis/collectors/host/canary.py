@@ -174,8 +174,8 @@ def _event_lane(state, previous, *, events=None, eventlog_root=None):
     from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
     cursor = previous.get("event_cursor")
     try:
-        from jarvis.core.paths import program
-        images = {sys.executable, program()}
+        from jarvis.core.paths import self_executable
+        images = {sys.executable, self_executable()}
         progress = {"last": cursor if type(cursor) is int else 0}
 
         def bounded(source):

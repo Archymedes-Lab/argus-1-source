@@ -1,6 +1,6 @@
 // Application state. The daemon owns the truth; this holds the last copy the
 // shell fetched and refreshes it when the pulse stream says something changed.
-import { api, onDaemon } from "./api";
+import { api, onDaemon, type AppStatus } from "./api";
 import { tr } from "./i18n";
 
 export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "settings";
@@ -26,6 +26,7 @@ export const app = $state({
   loading: false,
   error: "",
   daemon: "connecting" as "connecting" | "live" | "down",
+  status: { phase: "starting", message: "Starting ARGUS-1", detail: "" } as AppStatus,
   updatedAt: 0,
   view: "overview" as View,
   query: "",
@@ -89,6 +90,11 @@ export function applyTheme() {
   else root.setAttribute("data-theme", app.theme);
 }
 
+/** The shell's own account of the daemon: running, degraded, stopped, not installed. */
+export async function refreshStatus() {
+  try { app.status = await api.status(); } catch { /* the shell is the source; keep the last */ }
+}
+
 let inFlight = false, last = 0, queued = 0 as any;
 
 export async function refresh() {
@@ -97,9 +103,11 @@ export async function refresh() {
   try {
     app.data = await api.state();
     app.error = ""; app.daemon = "live"; app.updatedAt = Date.now();
+    await refreshStatus();
   } catch (e) {
     app.error = String((e as Error)?.message ?? e);
     app.daemon = "down";
+    await refreshStatus();
   } finally {
     inFlight = false; app.loading = false;
   }
@@ -127,7 +135,7 @@ export async function start() {
   applyMode();
   await refresh();
   void confirmReturnFromCheckout();
-  await onDaemon(() => schedule(), () => { app.daemon = "down"; });
+  await onDaemon(() => { refreshStatus(); schedule(); }, () => { app.daemon = "down"; refreshStatus(); });
   setInterval(() => { if (Date.now() - last > FALLBACK_MS) refresh(); }, 10000);
 }
 

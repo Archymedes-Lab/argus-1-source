@@ -15,13 +15,11 @@
  "ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected.": "ARGUS-INSTINCT ne peut pas lire l'antivirus de Windows pour le moment et ne peut donc pas dire si vous êtes protégé.",
  "ARGUS-INSTINCT detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-INSTINCT reads its state and can start a quick scan.": "ARGUS-INSTINCT détecte et explique ; il ne bloque ni ne supprime lui-même les logiciels malveillants. La prévention est le rôle de Defender ; ARGUS-INSTINCT lit son état et peut lancer une analyse rapide.",
  "ARGUS-INSTINCT has not learned what is normal here yet, so nothing can be marked new.": "ARGUS-INSTINCT n'a pas encore appris ce qui est normal ici : rien ne peut donc être marqué comme nouveau.",
- "ARGUS-INSTINCT is not answering right now. Showing the last state it reported; monitoring may still be running.": "ARGUS-INSTINCT ne répond pas pour le moment. Dernier état connu affiché ; la surveillance peut continuer.",
  "ARGUS-INSTINCT is still getting a look at your computer": "ARGUS-INSTINCT est encore en train d'examiner votre ordinateur",
  "ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.": "ARGUS-INSTINCT fait une pause et ne vérifie pas votre ordinateur. Il reprend automatiquement à {time}.",
  "ARGUS-INSTINCT is taking a break. It starts again by itself.": "ARGUS-INSTINCT fait une pause. Il reprendra tout seul.",
  "ARGUS-INSTINCT is watching again": "ARGUS-INSTINCT surveille de nouveau",
  "ARGUS-INSTINCT looks at your computer in many small ways. Each one is a check.": "ARGUS-INSTINCT examine votre ordinateur de plusieurs petites façons. Chacune est un contrôle.",
- "ARGUS-INSTINCT unreachable": "ARGUS-INSTINCT injoignable",
  "ARGUS-INSTINCT watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.": "ARGUS-INSTINCT surveille votre ordinateur et vous prévient quand quelque chose semble anormal. Windows bloque les virus connus dès leur arrivée.",
  "ARGUS-INSTINCT works out roughly where this computer is, so it can tell when it is somewhere unusual. This page loads no map from other websites; the full map opens in your browser.": "ARGUS-INSTINCT estime approximativement où se trouve cet ordinateur, afin de repérer un lieu inhabituel. Cette page ne charge aucune carte depuis d'autres sites ; la carte complète s'ouvre dans votre navigateur.",
  "ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed": "Les données d'ARGUS-INSTINCT et un guide de sécurité intégré ; aucun logiciel supplémentaire requis",
@@ -424,5 +422,6 @@
  "{n}h ago": "il y a {n} h",
  "{n}m ago": "il y a {n} min",
  "{n}s ago": "il y a {n} s",
- "“{name}” wants to receive alerts from this computer.": "« {name} » veut recevoir les alertes de cet ordinateur."
+ "“{name}” wants to receive alerts from this computer.": "« {name} » veut recevoir les alertes de cet ordinateur.",
+ "Showing the last state it reported.": "Affichage du dernier état signalé."
 }

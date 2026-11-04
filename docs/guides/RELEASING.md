@@ -151,6 +151,36 @@ commits exactly the release files to the site, the site's deploy job checks
 them again, and the workflow reads the live site back. Watch it to the end:
 `gh run watch -R chrisnkuno/Argus-1`.
 
+## The Windows installer
+
+Windows customers get `ARGUS-INSTINCT-Setup-windows-x64.exe`: the compiled
+engine (`engine\argus-instinct.exe`, Nuitka, no Python, bytecode or script;
+`release/build_windows.py`) and the desktop app, installed for the signed-in
+user by `release/build_setup.py` + `release/windows/setup.nsi`. The engine's
+`native install` registers the logon task, waits for the service to answer and
+pairs the app. The app manages the engine from then on (`desktop/src/lifecycle.rs`,
+from the windows-installer branch): it starts it through the task when nothing
+answers, restarts it within a budget, pairs itself on first run when it has no
+token (`provision.rs`), and shows the engine's real state, never "monitoring"
+unless it answers healthy. `windows-source-smoke` checks the service path from
+source in minutes; `windows-install-test` (`release/windows/install_test.ps1`)
+installs the Setup on a fresh Windows runner and checks the task, health,
+pairing, a planted-autostart positive control and the uninstall.
+
+The app on its own (`argus-desktop-windows-x64.exe`) is still published because
+the download page links it; `release/assemble.py` `INTERNAL_INPUTS` drops it
+once the page offers only the Setup.
+
+**Not in this edition:** the elevated native sensor and the read-only broker.
+Jobs that need them are reported as needing the administrator sensor
+(`jarvis/platform/admin_sensor.py`), never as full coverage.
+
+**Before the first public Windows release**, once, on a real clean Windows PC
+(not a CI runner): download the Setup, run it, open ARGUS-INSTINCT from the
+Start menu, and confirm monitoring data appears with no terminal step. Windows
+SmartScreen warns about an unsigned installer until a code-signing certificate
+is in place (none is configured yet).
+
 ## Rolling back
 
 ```sh

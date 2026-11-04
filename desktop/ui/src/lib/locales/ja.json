@@ -15,13 +15,11 @@
  "ARGUS-INSTINCT cannot read Windows' antivirus right now, so it cannot say whether you are protected.": "ARGUS-INSTINCT は現在 Windows のウイルス対策を読み取れないため、保護されているかどうかを判断できません。",
  "ARGUS-INSTINCT detects and explains; it does not block or delete malware itself. Prevention is Defender's job; ARGUS-INSTINCT reads its state and can start a quick scan.": "ARGUS-INSTINCT は検出と説明を行い、マルウェアのブロックや削除は自分では行いません。防御は Defender の役割で、ARGUS-INSTINCT はその状態を読み取り、クイックスキャンを開始できます。",
  "ARGUS-INSTINCT has not learned what is normal here yet, so nothing can be marked new.": "ARGUS-INSTINCT はまだここでの通常状態を学習していないため、「新規」と判定できません。",
- "ARGUS-INSTINCT is not answering right now. Showing the last state it reported; monitoring may still be running.": "ARGUS-INSTINCT が現在応答していません。最後に報告された状態を表示しています。監視は動作中の可能性があります。",
  "ARGUS-INSTINCT is still getting a look at your computer": "ARGUS-INSTINCT はまだお使いのコンピューターを確認しています",
  "ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.": "ARGUS-INSTINCT は休止中で、コンピューターをチェックしていません。{time} に自動で再開します。",
  "ARGUS-INSTINCT is taking a break. It starts again by itself.": "ARGUS-INSTINCT は休止中です。自動で再開します。",
  "ARGUS-INSTINCT is watching again": "ARGUS-INSTINCT が再び監視しています",
  "ARGUS-INSTINCT looks at your computer in many small ways. Each one is a check.": "ARGUS-INSTINCT はいくつもの小さな方法でコンピューターを調べます。その一つひとつがチェックです。",
- "ARGUS-INSTINCT unreachable": "ARGUS-INSTINCT に接続できません",
  "ARGUS-INSTINCT watches your computer and tells you when something looks wrong. Windows blocks known viruses as they arrive.": "ARGUS-INSTINCT はコンピューターを見守り、おかしな点があれば知らせます。既知のウイルスは Windows が到着時にブロックします。",
  "ARGUS-INSTINCT works out roughly where this computer is, so it can tell when it is somewhere unusual. This page loads no map from other websites; the full map opens in your browser.": "ARGUS-INSTINCT はこのコンピューターのおおよその場所を割り出し、普段と違う場所にあるときに気づけるようにします。このページは他のサイトから地図を読み込みません。完全な地図はブラウザーで開きます。",
  "ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed": "ARGUS-INSTINCT 自身のデータと内蔵の安全ガイド。追加のソフトウェアは不要です",
@@ -424,5 +422,6 @@
  "{n}h ago": "{n} 時間前",
  "{n}m ago": "{n} 分前",
  "{n}s ago": "{n} 秒前",
- "“{name}” wants to receive alerts from this computer.": "「{name}」がこのコンピューターのアラートを受け取ろうとしています。"
+ "“{name}” wants to receive alerts from this computer.": "「{name}」がこのコンピューターのアラートを受け取ろうとしています。",
+ "Showing the last state it reported.": "最後に報告された状態を表示しています。"
 }
