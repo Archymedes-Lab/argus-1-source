@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -8,6 +9,7 @@ import unittest
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from unittest import mock
 
 from jarvis.core.paths import STATIC_DIR
@@ -426,6 +428,20 @@ class RouteTests(unittest.TestCase):
             status, _headers, body = self.get("/static/vendor/three.module.min.js")
         self.assertEqual(status, 500)
         self.assertIn(b"pinned hash", body)
+
+    def test_leaflet_as_the_release_build_ships_it_is_still_served(self):
+        """The build removes leaflet's sourceMappingURL comment (the release policy denies it),
+        which changes the file's hash; the shipped copy must still pass the pin or /geo has no map."""
+        import re
+        route = "/static/vendor/leaflet/leaflet.js"
+        name, ctype, _digest = server.COVERAGE_ASSETS[route]
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
+        import build_server
+        raw = (STATIC_DIR / name).read_bytes().replace(bytes([13, 10]), bytes([10]))
+        shipped = build_server.SOURCE_MAP_COMMENT.sub(b"", raw)
+        self.assertNotIn(b"sourceMappingURL=", shipped)
+        self.assertIn(hashlib.sha256(shipped).hexdigest(), server.COVERAGE_ASSETS[route][2])
+        self.assertIn(hashlib.sha256(raw).hexdigest(), server.COVERAGE_ASSETS[route][2])
 
     def test_unknown_static_path_is_not_served(self):
         self.assertEqual(self.get("/static/../server.py")[0], 404)
