@@ -482,6 +482,17 @@ class Workflow(unittest.TestCase):
         self.assertIn("$staged = Join-Path $StateRoot", block)   # only this service's own loop
         self.assertLess(kill, block.index("Stop-Daemon ([int]$old.pid)"))
 
+    def test_the_repeating_trigger_can_revive_a_dead_loop_and_install_resets_the_budget(self):
+        # Run 41839251050: the loop died, the task stayed "Running", IgnoreNew dropped
+        # every revival trigger; and a reinstall kept a spent budget and never started.
+        text = (ROOT / "jarvis-native-service.ps1").read_text(encoding="utf-8")
+        self.assertIn("-MultipleInstances Parallel", text)
+        self.assertNotIn("-MultipleInstances IgnoreNew", text)
+        self.assertIn("$owned = $mutex.WaitOne(0)", text)            # extra instances exit
+        install = text[text.index("if ($Install -or $Remove) {"):text.index("Register-ScheduledTask")]
+        self.assertIn("Remove-Item -LiteralPath $statePath", install)
+        self.assertLess(install.index('if ($Remove) { Say'), install.index("Remove-Item -LiteralPath $statePath"))
+
     def test_lifting_a_pause_lets_it_supervise_again_within_budget(self):
         text = (ROOT / "jarvis-native-service.ps1").read_text(encoding="utf-8")
         self.assertIn("if (-not $paused -and $st.gaveUp) { $st.gaveUp = $false", text)

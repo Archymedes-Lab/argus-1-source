@@ -166,6 +166,11 @@ if ($Install -or $Remove) {
     }
     $Engine = $newEngine
     if ($Remove) { Say "removed task '$TaskName'"; return }
+    # Installing is a person choosing to run it: start with a fresh restart budget.
+    # A kept state from before (an uninstall that kept history, a budget spent by a
+    # crashing build) would otherwise stop the new loop from starting the daemon
+    # (clean windows-2025 run 41839251050: reinstall exit 2). The log is kept.
+    Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
 
     if ($Engine) {
         if (-not (Test-Engine $Engine)) { Say "FAILED: $Engine is not a program file"; exit 1 }
@@ -204,16 +209,18 @@ if ($Install -or $Remove) {
     # conhost --headless: -WindowStyle Hidden alone still flashes a console window.
     $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" `
         -Argument ('--headless "' + "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" + '" ' + $argline)
-    # The loop is meant to run forever. The repeating trigger is its resurrection:
-    # while it runs, IgnoreNew drops each trigger; if it has died, the next one
-    # (at most five minutes away) starts it again.
+    # The loop is meant to run forever. The repeating trigger is its resurrection.
+    # Parallel, not IgnoreNew: when the loop's PowerShell dies the task can stay
+    # "Running" (conhost outlives it; measured on windows-2025, run 41839251050), and
+    # IgnoreNew then dropped every trigger. A trigger that fires while the loop runs
+    # exits at once on the single-instance lock below, so there is never a second loop.
     $triggers = @((New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME),
                   (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
                      -RepetitionInterval (New-TimeSpan -Minutes 5) `
                      -RepetitionDuration (New-TimeSpan -Days 3650)))
     $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-        -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds 0) `
+        -StartWhenAvailable -MultipleInstances Parallel -ExecutionTimeLimit (New-TimeSpan -Seconds 0) `
         -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Principal $principal `
         -Settings $settings -Description 'Runs the JARVIS daemon natively and restarts it when it stops' | Out-Null
