@@ -186,17 +186,17 @@ def cmd_review(args, store):
     if refusal:
         print(refusal, file=sys.stderr)
         return 2
-    from jarvis.licensing import polar
+    from jarvis.licensing import licence
     try:
         report = review.build(args.db, days=args.days)
     except review.ReviewError as exc:
         print(f"no review: {exc}", file=sys.stderr)
         return 2
-    lic = polar.status(polar.path_for(args.db))
+    lic = licence.status(licence.path_for(args.db))
     if not lic["licensed"]:
-        report = review.preview(report, polar.REVIEW_CHECKOUT)
+        report = review.preview(report, licence.REVIEW_CHECKOUT)
         print(f"preview only: {lic['reason']}. Full report: an Argus Server Review key "
-              f"({polar.REVIEW_CHECKOUT}).", file=sys.stderr)
+              f"({licence.REVIEW_CHECKOUT}).", file=sys.stderr)
     text = (json.dumps(report, indent=2) + "\n") if args.json else review.render(report)
     if not args.out:
         sys.stdout.write(text)
@@ -214,30 +214,30 @@ def cmd_review(args, store):
 
 
 def cmd_licence(args, store):
-    """Argus licence keys from Polar: unlock the full review report (never protection)."""
+    """Argus licence keys (Archymedes licence service, sold through Stripe): unlock the full review report (never protection)."""
     from jarvis.core.store import DEFAULT_DB
-    from jarvis.licensing import polar
-    path = polar.path_for(args.db or DEFAULT_DB)
+    from jarvis.licensing import licence
+    path = licence.path_for(args.db or DEFAULT_DB)
     try:
         if args.action == "activate":
-            rec = polar.activate(path, args.key)
-            print(f"{rec['product']} key activated for this server; checked with Polar "
+            rec = licence.activate(path, args.key)
+            print(f"{rec['product']} key activated for this server; checked with the {licence.SERVICE} "
                   f"(expires {rec.get('expires_at') or 'with the subscription'}).")
         elif args.action == "refresh":
-            rec = polar.refresh(path)
-            print(f"{rec['product']}: still granted by Polar.")
+            rec = licence.refresh(path)
+            print(f"{rec['product']}: still granted by the {licence.SERVICE}.")
         elif args.action == "remove":
             if os.path.exists(path):
                 os.unlink(path)
-            print("licence removed from this server (deactivate it in your Polar customer portal "
-                  "to use it elsewhere).")
+            print("licence removed from this server. The key stays bound to this server's name: "
+                  "activate it here again any time, or reply to your receipt email to move it.")
         else:
-            st = polar.status(path)
+            st = licence.status(path)
             state = "licensed" if st["licensed"] else "not licensed"
             print(f"{state}: {st['reason']}" + (f" (key …{st['key_hint']})" if st.get("key_hint") else ""))
             if not st["licensed"]:
-                print(f"Argus Server Review: {polar.REVIEW_CHECKOUT}")
-    except polar.LicenceError as exc:
+                print(f"Argus Server Review: {licence.REVIEW_CHECKOUT}")
+    except licence.LicenceError as exc:
         print(f"licence: {exc}", file=sys.stderr)
         return 2
     return 0
@@ -279,10 +279,10 @@ def add_parser(sub):
     p.add_argument("--json", action="store_true")
     p.add_argument("--out", help="write the report to this new file, owner-only")
     p.set_defaults(fn=cmd_review, no_store=True)
-    p = sub.add_parser("licence", help="Argus licence key from Polar: unlocks the full review report "
+    p = sub.add_parser("licence", help="Argus licence key (Archymedes licence service): unlocks the full review report "
                        "(protection never needs one)")
     p.add_argument("action", nargs="?", default="status", choices=("status", "activate", "refresh", "remove"))
-    p.add_argument("key", nargs="?", help="activate: the ARGUS-REVIEW-... key from your Polar receipt")
+    p.add_argument("key", nargs="?", help="activate: the ARGUS-REVIEW-... key from your receipt email")
     p.set_defaults(fn=cmd_licence, no_store=True)
     p = sub.add_parser("netstate", help="write the firewall snapshot (run by argus-netstate)")
     p.set_defaults(fn=cmd_netstate, no_store=True)

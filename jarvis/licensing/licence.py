@@ -1,22 +1,25 @@
-"""Argus licence keys sold through Polar (merchant of record), checked without any secret.
+"""Argus licence keys sold through Stripe, checked against the Archymedes licence service.
 
-Decided 2026-11-03 (archymedes-gtm docs/OWNER-DECISIONS-2026-11-03.md): the one-week
-observed server review is sold as software, an "Argus Server Review" licence key bought
-at a Polar checkout. Polar issues the key; this module activates it for this server and
-validates it through Polar's customer-portal endpoints, which take the key and the public
-organisation id and no API token. No seller secret ever reaches a customer machine.
+Decided 2026-11-04: Polar is dropped; Argus is sold through Stripe Checkout with Stripe
+Managed Payments (Stripe is the merchant of record). The buyer pays at
+https://pay.archymedes.xyz/buy/<offer>; the Archymedes licence service (the
+hosted/licence-cloudflare Worker at pay.archymedes.xyz) issues an ARGUS-...-<UUID> key. This
+module activates the key for this machine and validates it at
+https://pay.archymedes.xyz/licence/{activate,validate} with the key alone. No seller secret
+or API token ever reaches a customer machine.
 
-Rules (tests/test_polar_licence.py):
+Rules (tests/test_licence.py):
 - Licence state only unlocks premium content (the full review report). Detection,
   collectors, alerts, evidence and on-demand checks never consult it
   (tests/test_licence_never_gates_core.py).
-- Network: HTTPS POST to POLAR_API only, and only from activate/refresh, which the owner
+- Network: HTTPS POST to LICENCE_API only, and only from activate/refresh, which the owner
   runs on purpose. Reading the status is offline.
 - A key is accepted only in Argus's own formats; the stored file is owner-only and is
-  written atomically. Nothing is stored except the key, the activation id, Polar's
+  written atomically. Nothing is stored except the key, the activation id, the service's
   answer (status, expiry, benefit) and when it was checked.
-- Offline grace: a key Polar granted stays valid offline for GRACE_DAYS after the last
-  successful check, never past its own expiry. A refused key is not licensed.
+- Offline grace: a granted key stays valid offline for GRACE_DAYS after the last
+  successful check, never past its own expiry. A refused, revoked or expired key is not
+  licensed.
 """
 
 import json
@@ -28,15 +31,18 @@ import time
 import urllib.error
 import urllib.request
 
-POLAR_API = 'https://api.polar.sh/v1/customer-portal/license-keys'
-ORGANIZATION_ID = '91790506-28ba-4ddb-be3b-76a7357d8a0f'   # public: Archymedes on Polar
-REVIEW_CHECKOUT = 'https://buy.polar.sh/polar_cl_vvFLaw5zgfNKHxQHWcDgk04jKDkvR65bEiJME0D8wch'
-WATCH_CHECKOUT = 'https://buy.polar.sh/polar_cl_QhadpCwdQPQcU6rAsSixlQfp4P4vK0TqUyodT2a43v9'
+SERVICE = 'Archymedes licence service'
+PAY_ORIGIN = 'https://pay.archymedes.xyz'
+LICENCE_API = f'{PAY_ORIGIN}/licence'
+REVIEW_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-review'
+WATCH_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-watch'
+DESKTOP_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-desktop'   # sellable only after the free beta
 PRODUCTS = {'REVIEW': 'Argus Server Review', 'WATCH': 'Argus Watch', 'DESKTOP': 'Argus Desktop'}
 KEY_RE = re.compile(r'^ARGUS-(REVIEW|WATCH|DESKTOP)-[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$')
 GRACE_DAYS = 7
 TIMEOUT = 15
 FILENAME = 'licence.json'
+REFUSED = (400, 403, 404, 422)
 
 
 class LicenceError(Exception):
@@ -61,20 +67,23 @@ def path_for(db_path):
 
 
 def _post(endpoint, body, opener=None):
-    req = urllib.request.Request(f'{POLAR_API}/{endpoint}', data=json.dumps(body).encode(),
+    req = urllib.request.Request(f'{LICENCE_API}/{endpoint}', data=json.dumps(body).encode(),
                                  method='POST', headers={'content-type': 'application/json',
                                                          'accept': 'application/json',
-                                                         'user-agent': 'argus-licence/1'})
+                                                         'user-agent': 'argus-licence/2'})
     try:
         with (opener or urllib.request.urlopen)(req, timeout=TIMEOUT) as resp:
             return json.loads(resp.read(65536) or b'{}')
     except urllib.error.HTTPError as exc:
-        if exc.code in (400, 403, 404, 422):
-            raise LicenceError('Polar does not recognise this key for this server '
-                               f'(HTTP {exc.code}); check the key in your Polar receipt') from None
-        raise LicenceError(f'Polar answered HTTP {exc.code}; try again later') from None
+        if exc.code == 409:
+            raise LicenceError(f'the {SERVICE} says this key is already activated on another '
+                               'machine; one key covers one machine') from None
+        if exc.code in REFUSED:
+            raise LicenceError(f'the {SERVICE} does not recognise this key for this machine '
+                               f'(HTTP {exc.code}); check the key in your receipt email') from None
+        raise LicenceError(f'the {SERVICE} answered HTTP {exc.code}; try again later') from None
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        raise LicenceError(f'Polar could not be reached ({type(exc).__name__}); '
+        raise LicenceError(f'the {SERVICE} could not be reached ({type(exc).__name__}); '
                            'the stored licence, if any, is unchanged') from None
 
 
@@ -112,44 +121,44 @@ def _expiry(ts):
 
 def _record(key, activation_id, answer, now):
     if answer.get('status') != 'granted':
-        raise LicenceError(f'Polar says this key is {answer.get("status") or "not valid"}')
+        raise LicenceError(f'the {SERVICE} says this key is {answer.get("status") or "not valid"}')
     return {'key': key, 'product': product_of(key), 'activation_id': activation_id,
             'status': 'granted', 'expires_at': answer.get('expires_at'),
-            'benefit_id': answer.get('benefit_id'), 'checked_at': now}
+            'benefit': answer.get('benefit'), 'checked_at': now}
 
 
 def activate(path, key, label=None, now=None, opener=None):
-    """Activate `key` for this server at Polar, validate it, store it. Returns the record."""
+    """Activate `key` for this machine, validate it, store it. Returns the record."""
     key = normalise(key)
     now = time.time() if now is None else now
     host = (label or socket.gethostname())[:60]
-    act = _post('activate', {'key': key, 'organization_id': ORGANIZATION_ID, 'label': host,
-                             'conditions': {'product': 'argus'}, 'meta': {'host': host}}, opener)
+    act = _post('activate', {'key': key, 'label': host}, opener)
     activation_id = act.get('id')
     if not activation_id:
-        raise LicenceError('Polar did not return an activation for this key')
-    rec = _record(key, activation_id, _post('validate', {
-        'key': key, 'organization_id': ORGANIZATION_ID, 'activation_id': activation_id,
-        'conditions': {'product': 'argus'}}, opener), now)
+        raise LicenceError(f'the {SERVICE} did not return an activation for this key')
+    rec = _record(key, activation_id, _post('validate', {'key': key, 'activation_id': activation_id},
+                                            opener), now)
     save(path, rec)
     return rec
 
 
 def refresh(path, now=None, opener=None):
-    """Re-check the stored key with Polar. A refusal removes the grant; no answer keeps it."""
+    """Re-check the stored key. A refusal, revocation or expiry removes the grant; no answer keeps it."""
     rec = load(path)
     if not rec or not rec.get('key'):
-        raise LicenceError('no licence is installed on this server')
+        raise LicenceError('no licence is installed on this machine')
     now = time.time() if now is None else now
     try:
-        answer = _post('validate', {'key': rec['key'], 'organization_id': ORGANIZATION_ID,
-                                    'activation_id': rec.get('activation_id'),
-                                    'conditions': {'product': 'argus'}}, opener)
+        answer = _post('validate', {'key': rec['key'], 'activation_id': rec.get('activation_id')}, opener)
     except LicenceError as exc:
         if 'does not recognise' in str(exc):
             rec.update(status='refused', checked_at=now)
             save(path, rec)
         raise
+    if answer.get('status') != 'granted':
+        # Revoked (refund, cancelled subscription) or expired: stop the grant now, not after the grace.
+        rec.update(status=str(answer.get('status') or 'refused')[:20], checked_at=now)
+        save(path, rec)
     new = _record(rec['key'], rec.get('activation_id'), answer, now)
     save(path, new)
     return new
@@ -166,12 +175,14 @@ def status(path, product='Argus Server Review', now=None):
     if rec.get('product') != product:
         return {**out, 'licensed': False, 'reason': f'the installed key is for {rec.get("product")}'}
     if rec.get('status') != 'granted':
-        return {**out, 'licensed': False, 'reason': 'Polar refused this key at the last check'}
+        return {**out, 'licensed': False,
+                'reason': f'the {SERVICE} did not grant this key at the last check'}
     exp = _expiry(rec.get('expires_at'))
     if exp is not None and now > exp:
         return {**out, 'licensed': False, 'reason': 'the key has expired'}
     checked = float(rec.get('checked_at') or 0)
     if now - checked > GRACE_DAYS * 86400:
         return {**out, 'licensed': False,
-                'reason': f'not checked with Polar for over {GRACE_DAYS} days (run `argus licence refresh`)'}
-    return {**out, 'licensed': True, 'reason': 'granted by Polar'}
+                'reason': f'not checked with the {SERVICE} for over {GRACE_DAYS} days '
+                          '(run `argus licence refresh`)'}
+    return {**out, 'licensed': True, 'reason': f'granted by the {SERVICE}'}

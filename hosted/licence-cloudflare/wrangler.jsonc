@@ -1,0 +1,31 @@
+{
+  // pay.archymedes.xyz: Stripe Checkout for Argus and the licence service the Argus client
+  // calls (docs/BILLING.md, docs/STRIPE-HANDOFF.md). Stripe is the merchant of record
+  // (Managed Payments). No secret is ever needed by a customer machine.
+  "name": "argus-licence",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "account_id": "403e1436a8490c86a5c1ba912180c032",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "pay.archymedes.xyz", "custom_domain": true }],
+  // Requests carry licence keys and Stripe payloads with emails: no request logging.
+  "observability": { "enabled": false },
+  "d1_databases": [
+    // `wrangler d1 create argus-licence`, then paste the id it prints here.
+    { "binding": "DB", "database_name": "argus-licence", "database_id": "REPLACE_WITH_D1_ID" }
+  ],
+  // Per-IP request limits at the edge (Workers rate limiting).
+  "ratelimits": [
+    { "name": "RL_BUY", "namespace_id": "4411", "simple": { "limit": 30, "period": 60 } },
+    { "name": "RL_LICENCE", "namespace_id": "4412", "simple": { "limit": 60, "period": 60 } }
+  ],
+  "vars": {
+    "SITE_ORIGIN": "https://www.archymedes.xyz",
+    "MANAGED_PAYMENTS": "1",
+    "ARGUS_DESKTOP_OPEN": "0",
+    "MAIL_FROM": "Archymedes <licences@archymedes.xyz>"
+  }
+  // Secrets (never in this file): `wrangler secret put STRIPE_SECRET_KEY` (sk_ or rk_),
+  // `wrangler secret put STRIPE_WEBHOOK_SECRET` (whsec_), optional `wrangler secret put RESEND_API_KEY`.
+}

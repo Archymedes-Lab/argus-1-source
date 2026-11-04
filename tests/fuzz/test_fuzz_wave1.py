@@ -22,7 +22,7 @@ try:
 except ImportError:  # pragma: no cover - the product test run has no Hypothesis
     raise unittest.SkipTest("hypothesis not installed (dev-only fuzzing)")
 
-from jarvis.licensing import polar
+from jarvis.licensing import licence
 from jarvis.response import privacy, review
 
 N = int(os.environ.get("FUZZ_EXAMPLES", "300"))
@@ -42,10 +42,10 @@ class LicenceKeys(unittest.TestCase):
     def test_normalise_accepts_only_argus_keys(self, text):
         # ORACLE: returns a key matching KEY_RE exactly, or raises LicenceError; nothing else.
         try:
-            k = polar.normalise(text)
-        except polar.LicenceError:
+            k = licence.normalise(text)
+        except licence.LicenceError:
             return
-        self.assertRegex(k, polar.KEY_RE)
+        self.assertRegex(k, licence.KEY_RE)
         self.assertNotIn("\x00", k)
 
     json_value = st.recursive(st.none() | st.booleans() | st.integers() | st.floats(allow_nan=True) | st.text(max_size=40),
@@ -59,20 +59,20 @@ class LicenceKeys(unittest.TestCase):
         # ORACLE: status() never raises on any file content; licensed only for a granted, matching,
         # unexpired record checked within the grace window.
         with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, polar.FILENAME)
+            path = os.path.join(d, licence.FILENAME)
             with open(path, "w") as fh:
                 json.dump(record, fh, allow_nan=True)
-            st_ = polar.status(path, now=now)
+            st_ = licence.status(path, now=now)
         if st_["licensed"]:
             self.assertEqual(record.get("status"), "granted")
             self.assertEqual(record.get("product"), "Argus Server Review")
-            self.assertLessEqual(now - float(record.get("checked_at") or 0), polar.GRACE_DAYS * 86400)
+            self.assertLessEqual(now - float(record.get("checked_at") or 0), licence.GRACE_DAYS * 86400)
 
     @FAST
     @given(st.text(max_size=60))
     def test_expiry_parse_is_total(self, text):
         # ORACLE: any expires_at text gives a float or None, never an exception.
-        v = polar._expiry(text)
+        v = licence._expiry(text)
         self.assertTrue(v is None or isinstance(v, float))
 
 

@@ -25,7 +25,7 @@ RANK = {"core": 0, "platform": 1, "collectors": 2, "lab": 3, "intel": 4,
         "verify": 9,
         # Agent reference monitor: imports only core, so it sits just above it.
         "argus": 1,
-        # Licence keys for premium content (Polar): standard library only, used by cli.
+        # Licence keys for premium content (Archymedes licence service): standard library only, used by cli.
         "licensing": 1}
 
 
