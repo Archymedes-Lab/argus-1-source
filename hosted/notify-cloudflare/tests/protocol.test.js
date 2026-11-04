@@ -65,3 +65,29 @@ describe("protocol matches the server's Python implementation", () => {
     expect(p.validCode("7K2QM9XWFU")).toBe(false);
   });
 });
+
+describe("approvals match the server's Python implementation", () => {
+  it("computes the same action-bound challenge", async () => {
+    const a = vec.approval;
+    const ch = await p.approvalChallenge(a.approval_id, a.eid, a.action, a.target, a.expires);
+    expect(p.b64u(ch)).toBe(a.challenge);
+  });
+
+  it("changing any shown field changes the challenge", async () => {
+    const a = vec.approval;
+    const base = p.b64u(await p.approvalChallenge(a.approval_id, a.eid, a.action, a.target, a.expires));
+    for (const alt of [[a.approval_id.replace("A", "B"), a.eid, a.action, a.target, a.expires],
+                       [a.approval_id, "e2", a.action, a.target, a.expires],
+                       [a.approval_id, a.eid, "wipe", a.target, a.expires],
+                       [a.approval_id, a.eid, a.action, "other", a.expires],
+                       [a.approval_id, a.eid, a.action, a.target, a.expires + 1]])
+      expect(p.b64u(await p.approvalChallenge(...alt))).not.toBe(base);
+  });
+
+  it("computes the same QR proof, and a different secret gives a different proof", async () => {
+    const q = vec.qr_proof;
+    const proof = await p.qrProof(p.unb64u(q.secret), p.unb64u(q.d_sig), p.unb64u(q.d_enc), p.unb64u(q.passkey));
+    expect(proof).toBe(q.proof);
+    expect(await p.qrProof(new Uint8Array(16), p.unb64u(q.d_sig), p.unb64u(q.d_enc), p.unb64u(q.passkey))).not.toBe(q.proof);
+  });
+});

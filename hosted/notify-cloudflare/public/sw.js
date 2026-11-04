@@ -4,8 +4,9 @@
 import { syncAll } from "./lib/sync.js";
 import { settings } from "./lib/store.js";
 
-const SHELL = "argus-shell-v1";
+const SHELL = "argus-shell-v2";
 const FILES = ["/", "/index.html", "/app.js", "/style.css", "/lib/protocol.js", "/lib/store.js", "/lib/sync.js",
+  "/lib/passkey.js", "/lib/qr.js",
   "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/badge-72.png"];
 
 self.addEventListener("install", (e) => {
@@ -31,8 +32,10 @@ self.addEventListener("push", (e) => {
     const detail = await settings.get("lockscreenDetail", false);
     const alerts = [...fresh].sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9));
     if (!alerts.length) {
-      // Browsers require a visible notification for every push.
-      return self.registration.showNotification("Argus", { body: "Checked in: nothing new.", tag: "argus-sync",
+      // Browsers (and iOS, which drops a subscription that stays silent) require a visible notification
+      // for every push. A push with nothing new is rare now: the relay only wakes a phone for a message.
+      // Replace, never stack: one quiet entry under a fixed tag.
+      return self.registration.showNotification("Argus", { body: "Nothing new.", tag: "argus-sync",
         icon: "/icons/icon-192.png", badge: "/icons/badge-72.png", silent: true });
     }
     const shown = alerts.length > 3 ? [summary(alerts)] : alerts.map((m) => single(m, detail));
@@ -42,6 +45,12 @@ self.addEventListener("push", (e) => {
 
 function single(m, detail) {
   const where = m.label || m.host || "your server";
+  if (m.kind === "approval") {
+    // Needs a person: always visible, and it stays until acted on. iOS web push has no action buttons,
+    // so the tap opens the app on the request.
+    return { title: `Argus · ${where}`, options: { body: "Approval needed. Tap to review.", tag: m.id,
+      icon: "/icons/icon-192.png", badge: "/icons/badge-72.png", data: { url: `/#/m/${m.id}` }, requireInteraction: true } };
+  }
   return {
     title: detail ? `${m.severity.toUpperCase()} · ${where}` : `Argus · ${where}`,
     options: { body: detail ? m.title : `${article(m.severity)} ${m.severity} alert. Open to read it.`,

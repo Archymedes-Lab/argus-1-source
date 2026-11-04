@@ -40,6 +40,10 @@ export async function syncAll() {
         const m = { id: env.id, mb: server.mb, label: server.label, kind: p.kind, title: String(p.title || ""),
           body: String(p.body || ""), severity: String(p.severity || "info"), host: String(p.host || ""),
           at: Number(p.at) || env.sent, read: false };
+        // Approval requests (and the undo offered after one) carry what the phone must show and sign.
+        for (const k of ["approval_id", "approval", "eid", "action", "target", "preview", "challenge"])
+          if (typeof p[k] === "string") m[k] = p[k].slice(0, 700);
+        if (Number.isFinite(Number(p.expires))) m.expires = Number(p.expires);
         await messages.put(m);
         fresh.push(m);
       } catch {

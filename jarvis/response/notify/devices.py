@@ -65,3 +65,22 @@ def revoke(dev, path=None, now=None):
     hits[0]["revoked_at"] = int(time.time() if now is None else now)
     save(doc, path)
     return hits[0]["dev"]
+
+
+def get(dev, path=None):
+    """The active device with exactly this id, or None."""
+    for d in load(path)["devices"]:
+        if d.get("dev") == dev and not d.get("revoked_at"):
+            return d
+    return None
+
+
+def update(dev, path=None, **fields):
+    """Set fields on the active device `dev` (passkey, last_counter, ...). False if there is none."""
+    doc = load(path)
+    for d in doc["devices"]:
+        if d.get("dev") == dev and not d.get("revoked_at"):
+            d.update(fields)
+            save(doc, path)
+            return True
+    return False
