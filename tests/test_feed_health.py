@@ -5,6 +5,7 @@ Gone" from 2026-10-21 (abuse.ch has required an Auth-Key since 2025-06-30).
 Each feed retries once a day, so only that one run mentioned it; the hourly
 runs between recorded the feeds job as complete over six-day-old indicators.
 """
+import io
 import os
 import tempfile
 import unittest
@@ -54,6 +55,56 @@ class AuthKeyTests(unittest.TestCase):
         self.assertTrue(feeds.is_abusech("feodo"))
         self.assertFalse(feeds.is_abusech("blocklist-de"))
         self.assertFalse(feeds.is_abusech("no-such-feed"))
+
+
+class KeyedExportTests(unittest.TestCase):
+    """abuse.ch moved its exports to {platform}-api.abuse.ch with the key in the path
+    (old URLs 410 Gone; new ones verified with a real key 2026-11-04)."""
+    KEY = "secret-key-123"
+    ABUSE = ("threatfox", "malwarebazaar", "urlhaus", "bazaar-full", "threatfox-full", "urlhaus-full")
+
+    def test_the_six_abuse_ch_feeds_use_keyed_exports_and_store_only_the_placeholder(self):
+        for name in self.ABUSE:
+            url = feeds.FEEDS[name]["url"]
+            self.assertIn("-api.abuse.ch/v2/files/exports/" + feeds.KEY_SLOT + "/", url, name)
+        self.assertNotIn(feeds.KEY_SLOT, feeds.FEEDS["feodo"]["url"])
+
+    def test_the_key_goes_into_the_request_path_only(self):
+        seen = {}
+
+        class Resp(io.BytesIO):
+            headers = {}
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def opener(req, timeout=None):
+            seen["url"], seen["headers"] = req.full_url, dict(req.header_items())
+            return Resp(b"# sha256_hash\nab\n")
+        url = feeds.FEEDS["malwarebazaar"]["url"]
+        with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: self.KEY}), \
+                mock.patch.object(feeds.urllib.request, "urlopen", opener):
+            feeds.fetch(url, 1000)
+        self.assertIn("/exports/" + self.KEY + "/sha256_recent.txt", seen["url"])
+        self.assertNotIn(self.KEY, url)                                  # the table keeps the slot
+        self.assertFalse(any("auth-key" == k.lower() for k in seen["headers"]))
+
+    def test_no_key_is_a_plain_error_and_nothing_is_requested(self):
+        with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: ""}), \
+                mock.patch("jarvis.core.paths.CONFIG_PATH", "/nonexistent/config.json"), \
+                mock.patch.object(feeds.urllib.request, "urlopen", side_effect=AssertionError("requested")):
+            with self.assertRaises(ValueError) as ctx:
+                feeds.fetch(feeds.FEEDS["urlhaus"]["url"], 1000)
+        self.assertIn("abuse_ch_auth_key", str(ctx.exception))
+
+    def test_an_error_never_carries_the_key(self):
+        def boom(req, timeout=None):
+            raise OSError(f"connection reset while fetching {req.full_url}")
+        with mock.patch.dict(os.environ, {feeds.ABUSECH_KEY_ENV: self.KEY}), \
+                mock.patch.object(feeds.urllib.request, "urlopen", boom):
+            with self.assertRaises(ValueError) as ctx:
+                feeds.fetch(feeds.FEEDS["threatfox"]["url"], 1000)
+        self.assertNotIn(self.KEY, str(ctx.exception))
+        self.assertIn("<abuse.ch key>", str(ctx.exception))
 
 
 class FeedsJobTests(unittest.TestCase):

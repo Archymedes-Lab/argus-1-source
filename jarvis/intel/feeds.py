@@ -85,6 +85,29 @@ def is_abusech(name):
     return _is_abusech_url((FEEDS.get(name) or {}).get("url", ""))
 
 
+# Since 2026-10-21 abuse.ch serves exports only from {platform}-api.abuse.ch with the
+# Auth-Key in the path (the old export URLs answer 410 Gone with no forwarding
+# address; verified with a real key on 2026-11-04). The feed table keeps the
+# placeholder: the key is filled in for the request only, so it never reaches the
+# feed registry, the indicators' source_url, feed_runs errors or the dashboard.
+KEY_SLOT = "{auth_key}"
+
+
+def abusech_export(platform, filename):
+    return f"https://{platform}-api.abuse.ch/v2/files/exports/{KEY_SLOT}/{filename}"
+
+
+def _resolve(url):
+    """(url to request, key to scrub from errors). ValueError when a keyed URL has no key."""
+    if KEY_SLOT not in url:
+        return url, ""
+    key = abusech_key()
+    if not key:
+        raise ValueError("abuse.ch Auth-Key not set: add abuse_ch_auth_key to the config "
+                         f"(or {ABUSECH_KEY_ENV}); free at https://auth.abuse.ch/")
+    return url.replace(KEY_SLOT, urllib.parse.quote(key, safe="")), key
+
+
 def _auth_headers(url):
     if _is_abusech_url(url):
         key = abusech_key()
@@ -99,15 +122,23 @@ def fetch(url, max_bytes, timeout=180, max_inflated=MAX_INFLATED):
     could exhaust memory on a machine this is supposed to be protecting.
     Both layers count the bytes they produce (core/inflate.py): neither a gzip
     bomb nor a zip header that understates its size gets past the cap."""
-    req = urllib.request.Request(url, headers={
-        "User-Agent": UA, "Accept": "*/*", "Accept-Encoding": "gzip",
-        **_auth_headers(url)})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read(max_bytes + 1)
-        if len(raw) > max_bytes:
-            raise ValueError(f"feed exceeds {max_bytes} bytes")
-        if resp.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
-            raw = inflate.gunzip(raw, max_inflated)
+    real, key = _resolve(url)
+    headers = {"User-Agent": UA, "Accept": "*/*", "Accept-Encoding": "gzip"}
+    if not key:
+        headers.update(_auth_headers(url))
+    req = urllib.request.Request(real, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read(max_bytes + 1)
+            if len(raw) > max_bytes:
+                raise ValueError(f"feed exceeds {max_bytes} bytes")
+            if resp.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
+                raw = inflate.gunzip(raw, max_inflated)
+    except Exception as exc:
+        # The key is in the request path: no error text may carry it onward.
+        if key and key in str(exc):
+            raise ValueError(str(exc).replace(key, "<abuse.ch key>")) from None
+        raise
     if raw[:2] == b"PK":
         raw = inflate.zip_first_member(raw, max_inflated)
     return raw
@@ -133,7 +164,7 @@ def _rows(raw):
 
 # ── the feeds ─────────────────────────────────────────────────────────────
 
-@feed("threatfox", "https://threatfox.abuse.ch/export/csv/recent/", 3600,
+@feed("threatfox", abusech_export("threatfox", "recent.csv"), 3600,
       "abuse.ch ThreatFox — current C2 infrastructure, updated continuously")
 def _threatfox(raw):
     out = []
@@ -156,7 +187,7 @@ def _threatfox(raw):
     return out
 
 
-@feed("malwarebazaar", "https://bazaar.abuse.ch/export/txt/sha256/recent/", 3600,
+@feed("malwarebazaar", abusech_export("mb", "sha256_recent.txt"), 3600,
       "abuse.ch MalwareBazaar — SHA-256 of recently submitted samples")
 def _bazaar(raw):
     out = []
@@ -177,7 +208,7 @@ def _feodo(raw):
     return out
 
 
-@feed("urlhaus", "https://urlhaus.abuse.ch/downloads/csv_recent/", 3600,
+@feed("urlhaus", abusech_export("urlhaus", "recent.csv"), 3600,
       "abuse.ch URLhaus — hosts serving malware payloads")
 def _urlhaus(raw):
     out = []
@@ -248,7 +279,7 @@ def _kev(raw):
 # The "recent" endpoints above keep the picture current; these carry the depth.
 # They are large, so they refresh daily rather than hourly.
 
-@feed("bazaar-full", "https://bazaar.abuse.ch/export/txt/sha256/full/", 86400,
+@feed("bazaar-full", abusech_export("mb", "sha256_full.txt.zip"), 86400,
       "abuse.ch MalwareBazaar — full sample corpus",
       max_bytes=48 * 1024 * 1024)
 def _bazaar_full(raw):
@@ -260,13 +291,13 @@ def _bazaar_full(raw):
     return out
 
 
-@feed("threatfox-full", "https://threatfox.abuse.ch/export/csv/full/", 86400,
+@feed("threatfox-full", abusech_export("threatfox", "full.csv.zip"), 86400,
       "abuse.ch ThreatFox — full C2 corpus", max_bytes=32 * 1024 * 1024)
 def _threatfox_full(raw):
     return _threatfox(raw)
 
 
-@feed("urlhaus-full", "https://urlhaus.abuse.ch/downloads/csv/", 86400,
+@feed("urlhaus-full", abusech_export("urlhaus", "full.csv.zip"), 86400,
       "abuse.ch URLhaus — full payload-host corpus",
       max_bytes=32 * 1024 * 1024)
 def _urlhaus_full(raw):
