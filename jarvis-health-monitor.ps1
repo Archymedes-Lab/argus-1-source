@@ -10,6 +10,9 @@ param([switch]$Install, [switch]$ProbeOnly, [switch]$TestNotification,
       # copies it forward once; the old folder stays as the rollback copy.
       [string]$LegacyStateRoot = (Join-Path $env:LOCALAPPDATA 'Jarvis\Deadman'))
 $ErrorActionPreference='Stop'
+# .NET cuts a non-200 reply at 64 KB; /api/health answers 503 when degraded and is ~90 KB, so the probe
+# misread a live daemon as silent and restarted it (measured 2026-11-04). Read up to 4 MB.
+[Net.HttpWebRequest]::DefaultMaximumErrorResponseLength = 4096
 $taskName='JARVIS independent health monitor'
 $appId='JARVIS.Monitor'
 
