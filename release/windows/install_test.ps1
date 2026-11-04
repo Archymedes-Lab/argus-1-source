@@ -336,8 +336,24 @@ Check (-not (Test-Path -LiteralPath $uninstKey)) 'uninstall entry removed'
 Check (-not (Test-Path -LiteralPath (Join-Path $appDir 'client.token'))) 'desktop token removed'
 Check (-not (Health $port)) 'nothing answers on the port any more'
 Check (-not (Test-Path -LiteralPath $lnk)) 'Start menu entry removed'
-$kept = Join-Path $env:USERPROFILE '.argus'
-Write-Host "history kept at $kept : $(Test-Path -LiteralPath $kept)"
+Check (-not (Test-Path -LiteralPath $appDir)) "the app's settings and pairing folder removed"
+Check (-not (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'local.argus.desktop'))) "the app's browser profile removed"
+# A silent uninstall keeps the history (evidence) unless /PURGE is given.
+Check ((Test-Path -LiteralPath $histDir) -and (Test-Path -LiteralPath $marker)) 'silent uninstall keeps the history'
+
+Write-Host "== reinstall, then uninstall with /PURGE"
+$p = Start-Process -FilePath $Setup -ArgumentList '/S' -Wait -PassThru
+Check ($p.ExitCode -eq 0) "reinstall: Setup /S exit code 0 (was $($p.ExitCode))"
+Check (Test-Path -LiteralPath $marker) 'reinstall: the kept history is still there'
+$u = Start-Process -FilePath (Join-Path $install 'Uninstall.exe') -ArgumentList '/S', '/PURGE', "_?=$install" -Wait -PassThru
+Check ($u.ExitCode -eq 0) "purge: uninstaller exit code 0 (was $($u.ExitCode))"
+Remove-Item -LiteralPath (Join-Path $install 'Uninstall.exe') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $install -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 5
+Check (-not (Test-Path -LiteralPath $histDir)) 'purge: the history is deleted'
+Check (-not (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Argus'))) "purge: the service's logs are deleted"
+Check (-not (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue)) 'purge: task removed'
+Check (-not (Health $port)) 'purge: nothing answers on the port'
 
 if ($script:failed) { Write-Host "$($script:failed) check(s) failed"; exit 1 }
 Write-Host 'all checks passed'

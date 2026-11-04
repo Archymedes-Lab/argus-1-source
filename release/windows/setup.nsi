@@ -22,6 +22,7 @@ SetDateSave off
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
 
 !define PRODUCT "ARGUS-INSTINCT"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ARGUS-INSTINCT"
@@ -139,6 +140,27 @@ Section "Uninstall"
     nsExec::ExecToLog '"${APP}" --remove-shortcut'
     Pop $Result
   ${EndIf}
+  ; Everything this Setup created goes: the program, its task (native uninstall above),
+  ; the Start menu entry, and the app's own settings, pairing and browser profile.
+  RMDir /r "$APPDATA\local.argus.desktop"
+  RMDir /r "$LOCALAPPDATA\local.argus.desktop"
+  ; History (what ARGUS-INSTINCT saw on this PC) and the service's logs are evidence: they go
+  ; only when the person says so. Asked when uninstalling by hand, "No" by default; a silent
+  ; uninstall keeps them unless /PURGE is given. Nothing outside this product is touched
+  ; (no WSL, no other program's folders or tasks).
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/PURGE" $1
+  ${If} ${Errors}
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete ${PRODUCT}'s history on this PC?$\r$\n$\r$\nThat is everything it recorded about this computer, and its logs. Choose No to keep them (in $PROFILE\.argus) in case you reinstall or need them later." /SD IDNO IDYES purge
+    DetailPrint "kept the history in $PROFILE\.argus"
+    Goto history_done
+  ${EndIf}
+  purge:
+  RMDir /r "$PROFILE\.argus"
+  RMDir /r "$LOCALAPPDATA\Argus"
+  DetailPrint "deleted the history"
+  history_done:
   RMDir /r "$INSTDIR"
   DeleteRegKey HKCU "${UNINST_KEY}"
 SectionEnd
