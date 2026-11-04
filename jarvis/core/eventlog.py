@@ -19,8 +19,14 @@ Layout under ~/.jarvis/eventlog/:
                       carries the previous header's hash, so deleting,
                       editing, reordering or inserting a segment breaks the
                       chain at that point.
-  pruned.jsonl        legacy retention losses, preserved as explicit gaps.
-                      New history is never automatically pruned.
+  pruned.jsonl        segments removed whole, preserved as explicit gaps.
+  compacted.jsonl     segments rewritten to keep only their suspicious events
+                      (owner retention policy, 2026-11-04): the chain header is
+                      unchanged, the record keeps the original payload hash and
+                      what was dropped, and verify() checks the rewritten payload
+                      against it. Retention never touches the newest 30 days,
+                      held ranges, or anything suspicious (collectors/telemetry/
+                      retention.py decides; this file only applies it).
   holds.jsonl         sequence ranges retention must not remove (evidence).
   index.db            a projection for fast questions — has this hash ever
                       run, which process started which. Rebuildable from the
@@ -67,7 +73,9 @@ MAX_EVENT_LINE = 1024 * 1024
 MAX_SEGMENT_PLAIN = 1024 * 1024 * 1024
 SEAL_AGE = 300
 
-DEFAULT_BUDGET = 2 * 1024 ** 3
+# The payload cap that refuses new history when reached (raised from 2 GiB on
+# 2026-11-04 by the owner, with retention compacting normal history after 30 days).
+DEFAULT_BUDGET = 6 * 1024 ** 3
 
 INDEX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -237,6 +245,7 @@ class EventLog:
         self.chain_path = self.root / "chain.jsonl"
         self.pruned_path = self.root / "pruned.jsonl"
         self.holds_path = self.root / "holds.jsonl"
+        self.compacted_path = self.root / "compacted.jsonl"
         self._lock = None
         if writer:
             self.segdir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -509,6 +518,10 @@ class EventLog:
     def _pruned(self):
         return {p["segment"] for p in _jsonl(self.pruned_path)}
 
+    def _compacted(self):
+        """segment -> its compaction record (a segment is compacted at most once)."""
+        return {c["segment"]: c for c in _jsonl(self.compacted_path)}
+
     def iter_events(self, after=0, until=None, since=None):
         """Committed events with after < seq <= until, in sequence order.
 
@@ -577,6 +590,7 @@ class EventLog:
         """
         problems = []
         pruned = self._pruned()
+        compacted = self._compacted()
         prev = GENESIS
         expected_seq = 1
         for i, header in enumerate(self.chain):
@@ -611,7 +625,13 @@ class EventLog:
                 else:
                     if stored != header:
                         problems.append(f"segment {n}: file header differs from the chain")
-                    if digest != header.get("payload_sha256"):
+                    record = compacted.get(n)
+                    if record is not None:
+                        if record.get("original_payload_sha256") != header.get("payload_sha256"):
+                            problems.append(f"segment {n}: compaction record names another payload")
+                        if digest != record.get("payload_sha256"):
+                            problems.append(f"segment {n}: compacted payload altered")
+                    elif digest != header.get("payload_sha256"):
                         problems.append(f"segment {n}: payload altered")
             prev = header.get("hash")
             expected_seq = header.get("last_seq", 0) + 1
@@ -623,15 +643,40 @@ class EventLog:
                 problems.append("the exported chain head is no longer part of this history")
         for n in sorted(pruned - {h["segment"] for h in self.chain}):
             problems.append(f"pruned record names segment {n}, which was never sealed")
+        for n in sorted(set(compacted) - {h["segment"] for h in self.chain}):
+            problems.append(f"compaction record names segment {n}, which was never sealed")
         return {"ok": not problems, "segments": len(self.chain), "pruned": len(pruned),
+                "compacted": len(compacted),
                 "sealed_through": self.sealed_seq, "unsealed_events": self.active_events,
                 "head": self.head(), "anchored": anchored, "problems": problems}
 
     # -- retention ---------------------------------------------------------
 
     def holds(self):
+        lines = _jsonl(self.holds_path)
+        released = {(r["release"]["first_seq"], r["release"]["last_seq"], r["release"]["at"])
+                    for r in lines if isinstance(r.get("release"), dict)}
         return [(h["first_seq"], h["last_seq"], h.get("reason", ""))
-                for h in _jsonl(self.holds_path) if not h.get("released")]
+                for h in lines if "first_seq" in h and not h.get("released")
+                and (h["first_seq"], h["last_seq"], h.get("at")) not in released]
+
+    def hold_records(self):
+        """Active holds with their identity (`at`), for an explicit owner release."""
+        active = {(a, b) for a, b, _r in self.holds()}
+        return [h for h in _jsonl(self.holds_path)
+                if "first_seq" in h and (h["first_seq"], h["last_seq"]) in active]
+
+    def release_hold(self, first_seq, last_seq, at, by):
+        """Release one hold, identified exactly. Appended, never rewritten: the
+        hold and its release both stay on record. Owner action only (CLI)."""
+        if not self.writer:
+            raise LogError("event log opened read-only")
+        match = [h for h in self.hold_records() if h["first_seq"] == first_seq
+                 and h["last_seq"] == last_seq and h.get("at") == at]
+        if not match:
+            raise LogError("no active hold matches exactly")
+        _append_line(self.holds_path, {"release": {"first_seq": first_seq, "last_seq": last_seq,
+                                                    "at": at}, "by": str(by)[:80], "at": time.time()})
 
     def hold(self, first_seq, last_seq, reason):
         """Keep a sequence range through retention (incident evidence)."""
@@ -650,6 +695,81 @@ class EventLog:
             raise LogError("event log opened read-only")
         return []
 
+    def compact(self, n, keep, reason):
+        """Rewrite sealed segment `n` to hold only the events `keep(event)` accepts
+        (plus every event inside an active hold). Returns a summary dict.
+
+        Applied by the retention job (collectors/telemetry/retention.py), which
+        alone decides what is normal. The header and the chain stay as they were;
+        compacted.jsonl records the original payload hash, the new one, and how
+        many events went. A segment left with nothing is removed whole and
+        recorded in pruned.jsonl. Never the newest segment, never twice."""
+        if not self.writer:
+            raise LogError("event log opened read-only")
+        if not self.chain or n >= self.chain[-1]["segment"] or n < 1:
+            raise LogError("only an older sealed segment can be compacted")
+        header = self.chain[n - 1]
+        if n in self._pruned() or n in self._compacted():
+            raise LogError(f"segment {n} was already reduced")
+        held = self.holds()
+        path = self._segment_path(n)
+        kept_lines, kept, dropped = [], 0, 0
+        with gzip.open(path, "rb") as fh:
+            stored = json.loads(inflate.readline(fh, MAX_HEADER_LINE))
+            if stored != header:
+                raise LogError(f"segment {n}: file header differs from the chain; not touching it")
+            hasher = hashlib.sha256()
+            for line in inflate.lines(fh, MAX_EVENT_LINE):
+                hasher.update(line)
+                obj = json.loads(line)
+                if "cursor" in obj:
+                    kept_lines.append(line)
+                    continue
+                seq = obj.get("seq", 0)
+                if any(a <= seq <= b for a, b, _r in held) or keep(obj):
+                    kept_lines.append(line)
+                    kept += 1
+                else:
+                    dropped += 1
+        if hasher.hexdigest() != header.get("payload_sha256"):
+            raise LogError(f"segment {n}: payload does not match its header; not touching it")
+        before = path.stat().st_size
+        if not dropped:
+            return {"segment": n, "kept": kept, "dropped": 0, "freed": 0, "action": "kept"}
+        now = time.time()
+        if not kept:
+            _append_line(self.pruned_path, {"segment": n, "at": now, "reason": str(reason)[:200],
+                                            "dropped": dropped})
+            path.unlink()
+            _fsync_dir(self.segdir)
+            with self.db:
+                self.db.execute("UPDATE segments SET state='pruned' WHERE segment=?", (n,))
+            self.sealed_bytes -= before
+            return {"segment": n, "kept": 0, "dropped": dropped, "freed": before, "action": "removed"}
+        payload = b"".join(kept_lines)
+        tmp = path.with_suffix(".compact")
+        with open(tmp, "wb") as raw:
+            for part in ((_canonical(header) + "\n").encode(), payload):
+                with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
+                    gz.write(part)
+            raw.flush()
+            os.fsync(raw.fileno())
+        # The record first: a crash between the two leaves a record whose payload
+        # hash does not match the old file, which verify() reports, never silence.
+        _append_line(self.compacted_path, {
+            "segment": n, "at": now, "reason": str(reason)[:200], "kept": kept,
+            "dropped": dropped, "original_payload_sha256": header.get("payload_sha256"),
+            "payload_sha256": hashlib.sha256(payload).hexdigest(), "payload_bytes": len(payload)})
+        os.replace(tmp, path)
+        _fsync_dir(self.segdir)
+        after = path.stat().st_size
+        with self.db:
+            self.db.execute("UPDATE segments SET bytes=?, state='compacted' WHERE segment=?",
+                            (after, n))
+        self.sealed_bytes -= before - after
+        return {"segment": n, "kept": kept, "dropped": dropped, "freed": before - after,
+                "action": "compacted"}
+
     # -- index projection --------------------------------------------------
 
     def _reindex(self):
@@ -665,6 +785,8 @@ class EventLog:
                      header["hash"]))
             for n in self._pruned():
                 self.db.execute("UPDATE segments SET state='pruned' WHERE segment=?", (n,))
+            for n in self._compacted():
+                self.db.execute("UPDATE segments SET state='compacted' WHERE segment=?", (n,))
         row = self.db.execute("SELECT value FROM meta WHERE key='indexed_through'").fetchone()
         done = int(row[0]) if row else 0
         if done > self.last_seq:
@@ -790,7 +912,9 @@ class EventLog:
                 "pruned": len(self._pruned()), "sealed_bytes": sealed_bytes,
                 "unsealed_events": self.active_events, "unsealed_bytes": self.active_bytes,
                 "cursors": list(self.cursors.values()), "head": self.head(),
-                "retention": "preserve; no automatic deletion",
+                "compacted": len(self._compacted()),
+                "retention": "everything for 30 days; after that only suspicious events "
+                             "(collectors/telemetry/retention.py), reductions recorded",
                 "payload_budget_bytes": self.budget,
                 "payload_capacity_remaining": max(0, self.budget - sealed_bytes
                                                    - self.active_bytes),
