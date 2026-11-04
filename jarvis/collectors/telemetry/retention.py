@@ -134,6 +134,50 @@ def keep_reason(ev, known=frozenset(), cited=frozenset(), match=None):
     return None
 
 
+def lineage(events, kept_seqs):
+    """Sequence numbers to keep so each kept event's process can be traced: the
+    start events, in this segment, of the processes (and their parents) that
+    have a kept event. Across segments the index keeps every parent link."""
+    guids = set()
+    for ev in events:
+        if ev.get("seq") in kept_seqs:
+            for side in ("process", "parent"):
+                g = (ev.get(side) or {}).get("guid")
+                if g:
+                    guids.add(g)
+    return {ev["seq"] for ev in events
+            if ev.get("category") == "process" and ev.get("action") == "start"
+            and (ev.get("process") or {}).get("guid") in guids}
+
+
+SUMMARY_TOP = 25
+
+
+def summarize(events):
+    """A bounded picture of the events a compaction dropped: what kind, where to,
+    which programs. Enough to ask "was there traffic to X?" later; not the events."""
+    import collections
+    kinds, dests, programs = collections.Counter(), collections.Counter(), collections.Counter()
+    tmin = tmax = None
+    for ev in events:
+        kinds[f"{ev.get('category')}/{ev.get('action')}"] += 1
+        t = _target(ev)
+        d = t.get("query") or t.get("ip")
+        if d:
+            dests[str(d)[:120]] += 1
+        img = (ev.get("process") or {}).get("image")
+        if img:
+            programs[str(img)[:200]] += 1
+        tt = ev.get("time")
+        if tt:
+            tmin = tt if tmin is None or tt < tmin else tmin
+            tmax = tt if tmax is None or tt > tmax else tmax
+    return {"events": len(events), "time_min": tmin, "time_max": tmax,
+            "kinds": dict(kinds.most_common(SUMMARY_TOP)),
+            "destinations": dict(dests.most_common(SUMMARY_TOP)), "destination_count": len(dests),
+            "programs": dict(programs.most_common(SUMMARY_TOP)), "program_count": len(programs)}
+
+
 def known_indicators(store, pairs):
     """The subset of (kind, value) pairs that are active indicators, by batched lookups."""
     found, by_kind = set(), {}
@@ -197,14 +241,19 @@ def run(store, log, now=None, max_segments=MAX_SEGMENTS, budget_s=TIME_BUDGET_S,
         pairs = {pair for ev in events for pair in lookups(ev)}
         known = known_indicators(store, pairs) if pairs else set()
         reasons = summary["reasons"]
-
-        def keep(ev, known=known, reasons=reasons):
+        kept_seqs = set()
+        for ev in events:
             why = keep_reason(ev, known, cited, match)
             if why:
                 reasons[why] = reasons.get(why, 0) + 1
-            return why is not None
+                kept_seqs.add(ev["seq"])
+        extra = lineage(events, kept_seqs) - kept_seqs
+        if extra:
+            reasons["process lineage of a kept event"] = reasons.get("process lineage of a kept event", 0) + len(extra)
+            kept_seqs |= extra
         try:
-            r = log.compact(header["segment"], keep, REASON)
+            r = log.compact(header["segment"], lambda ev, keep=kept_seqs: ev.get("seq") in keep, REASON,
+                            summary=summarize)
         except (LogError, OSError, ValueError) as exc:
             summary["errors"].append(f"segment {header['segment']}: {exc}"[:200])
             continue
