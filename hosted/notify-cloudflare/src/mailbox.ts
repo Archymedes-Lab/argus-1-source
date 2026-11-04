@@ -7,6 +7,7 @@ import { tickle, validSubscription, type PushSubscription } from "./webpush";
 export const LIMITS = {
   envelopeBytes: 8 * 1024, pendingPerDevice: 500, devicesPerMailbox: 20, envelopeTtl: 7 * 86400,
   postBatch: 20, claimTtl: 600, nonceTtl: 600,
+  replyBytes: 8 * 1024, pendingReplies: 50, replyTtl: 900,
 };
 
 export interface Env {
@@ -21,7 +22,7 @@ export interface Env {
 }
 
 type Device = { dev: string; d_sig: string; d_enc: string; name: string; state: string; code: string;
-  push: string | null; added: number };
+  push: string | null; added: number; passkey: string | null; proof: string | null };
 
 export class Mailbox extends DurableObject<Env> {
   sql: SqlStorage;
@@ -34,7 +35,12 @@ export class Mailbox extends DurableObject<Env> {
         code TEXT, push TEXT, added INTEGER);
       CREATE TABLE IF NOT EXISTS envelopes (id TEXT PRIMARY KEY, dev TEXT, body TEXT, created INTEGER, expires INTEGER);
       CREATE INDEX IF NOT EXISTS envelopes_dev ON envelopes (dev, expires);
-      CREATE TABLE IF NOT EXISTS nonces (sig TEXT PRIMARY KEY, at INTEGER);`);
+      CREATE TABLE IF NOT EXISTS nonces (sig TEXT PRIMARY KEY, at INTEGER);
+      CREATE TABLE IF NOT EXISTS replies (id TEXT PRIMARY KEY, dev TEXT, body TEXT, created INTEGER, expires INTEGER);`);
+    // Mailboxes created before approvals have no passkey / proof columns.
+    const cols = this.sql.exec("PRAGMA table_info(devices)").toArray().map((r) => r.name as string);
+    if (!cols.includes("passkey")) this.sql.exec("ALTER TABLE devices ADD COLUMN passkey TEXT");
+    if (!cols.includes("proof")) this.sql.exec("ALTER TABLE devices ADD COLUMN proof TEXT");
   }
 
   // A request signature may be used once: replays inside the time window are refused.
@@ -56,18 +62,24 @@ export class Mailbox extends DurableObject<Env> {
     return (this.sql.exec("SELECT * FROM devices WHERE dev = ?", dev).toArray()[0] as unknown as Device) ?? null;
   }
 
-  addClaim(c: { dev: string; d_sig: string; d_enc: string; name: string; code: string; push: unknown }, now: number) {
+  addClaim(c: { dev: string; d_sig: string; d_enc: string; name: string; code: string; push: unknown;
+                passkey?: unknown; proof?: unknown }, now: number) {
     const count = this.sql.exec("SELECT COUNT(*) AS n FROM devices").one().n as number;
     if (count >= LIMITS.devicesPerMailbox && !this.device(c.dev)) return "this server has the maximum number of devices";
     const push = validSubscription(c.push) ? JSON.stringify(c.push) : null;
-    this.sql.exec(`INSERT OR REPLACE INTO devices (dev, d_sig, d_enc, name, state, code, push, added)
-      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`, c.dev, c.d_sig, c.d_enc, c.name.slice(0, 40), c.code, push, now);
+    // The passkey's public key (DER, base64url) and the QR proof are opaque to the relay: it stores and
+    // forwards them, the server decides what they mean.
+    const passkey = typeof c.passkey === "string" && /^[A-Za-z0-9_-]{40,200}$/.test(c.passkey) ? c.passkey : null;
+    const proof = typeof c.proof === "string" && /^[A-Za-z0-9_-]{43}$/.test(c.proof) ? c.proof : null;
+    this.sql.exec(`INSERT OR REPLACE INTO devices (dev, d_sig, d_enc, name, state, code, push, added, passkey, proof)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`, c.dev, c.d_sig, c.d_enc, c.name.slice(0, 40), c.code, push, now,
+      passkey, proof);
     return "";
   }
 
   claims(code: string, now: number) {
     this.sql.exec("DELETE FROM devices WHERE state = 'pending' AND added < ?", now - LIMITS.claimTtl);
-    return this.sql.exec("SELECT dev, d_sig, d_enc, name, code FROM devices WHERE state = 'pending' AND code = ?", code).toArray();
+    return this.sql.exec("SELECT dev, d_sig, d_enc, name, code, passkey, proof FROM devices WHERE state = 'pending' AND code = ?", code).toArray();
   }
 
   activate(dev: string, code: string): boolean {
@@ -79,6 +91,7 @@ export class Mailbox extends DurableObject<Env> {
 
   remove(dev: string) {
     this.sql.exec("DELETE FROM envelopes WHERE dev = ?", dev);
+    this.sql.exec("DELETE FROM replies WHERE dev = ?", dev);
     this.sql.exec("DELETE FROM devices WHERE dev = ?", dev);
   }
 
@@ -123,6 +136,29 @@ export class Mailbox extends DurableObject<Env> {
     return { stored: envelopes.length, pushed: results.filter((r) => r === "ok").length };
   }
 
+  // A phone's sealed answer to the server (approvals). The relay cannot read it and does not wake
+  // anything: the server polls for replies, it never listens.
+  async postReply(dev: string, reply: any, now: number) {
+    const body = JSON.stringify(reply);
+    if (body.length > LIMITS.replyBytes) return { error: "reply too large" };
+    if (typeof reply?.id !== "string" || reply.id.length > 32 || reply.dev !== dev) return { error: "reply does not belong to this device" };
+    const pending = this.sql.exec("SELECT COUNT(*) AS n FROM replies").one().n as number;
+    if (pending >= LIMITS.pendingReplies) return { error: "too many unread replies" };
+    this.sql.exec("INSERT OR IGNORE INTO replies (id, dev, body, created, expires) VALUES (?, ?, ?, ?, ?)",
+      reply.id, dev, body, now, Math.min(Number(reply.expires) || 0, now + LIMITS.replyTtl));
+    await this.ctx.storage.setAlarm(Date.now() + 3600_000);
+    return { ok: true };
+  }
+
+  replies(now: number) {
+    return this.sql.exec("SELECT body FROM replies WHERE expires > ? ORDER BY created LIMIT 50", now)
+      .toArray().map((r) => JSON.parse(r.body as string));
+  }
+
+  ackReplies(ids: string[]) {
+    for (const id of ids.slice(0, 100)) this.sql.exec("DELETE FROM replies WHERE id = ?", id);
+  }
+
   inbox(dev: string, now: number) {
     return this.sql.exec("SELECT body FROM envelopes WHERE dev = ? AND expires > ? ORDER BY created LIMIT 100", dev, now)
       .toArray().map((r) => JSON.parse(r.body as string));
@@ -135,9 +171,11 @@ export class Mailbox extends DurableObject<Env> {
   async alarm() {
     const now = Math.floor(Date.now() / 1000);
     this.sql.exec("DELETE FROM envelopes WHERE expires < ?", now);
+    this.sql.exec("DELETE FROM replies WHERE expires < ?", now);
     this.sql.exec("DELETE FROM nonces WHERE at < ?", now - LIMITS.nonceTtl);
     this.sql.exec("DELETE FROM devices WHERE state = 'pending' AND added < ?", now - LIMITS.claimTtl);
-    if (this.sql.exec("SELECT 1 FROM envelopes LIMIT 1").toArray().length) await this.ctx.storage.setAlarm(Date.now() + 3600_000);
+    if (this.sql.exec("SELECT 1 FROM envelopes LIMIT 1").toArray().length
+        || this.sql.exec("SELECT 1 FROM replies LIMIT 1").toArray().length) await this.ctx.storage.setAlarm(Date.now() + 3600_000);
   }
 }
 

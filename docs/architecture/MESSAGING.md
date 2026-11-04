@@ -180,6 +180,10 @@ Each accepted reply is written to an append-only `reply_audit` table and
 confirmed back to every paired device. A phone that didn't send the reply
 therefore sees that one was made.
 
+> **Updated 2026-11-04:** a phone paired by QR may approve one *reversible* defense proposal and undo what a phone approved,
+> with Face ID / fingerprint bound to the exact action (see ARGUS-NOTIFY.md, "Approvals from the phone"). Everything below
+> that says `approve` is excluded now applies to irreversible actions, repair and config changes only.
+
 `approve`, `undo`, `repair` and config changes are **not in the allowlist**. A
 compromised phone or chat account can't switch off a defence or trigger an
 action. Those stay on the CLI and the local dashboard.

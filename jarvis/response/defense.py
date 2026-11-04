@@ -165,7 +165,7 @@ def _apply(store, conf, finding, job, action, target, now=None):
     eid, entry, _ = _propose(store, conf, finding, job, action, target, now)
     if entry["status"] in ("attempting", "uncertain"):
         return eid, entry, False
-    entry.update(status="attempting", evidence=case_name,
+    entry.update(status="attempting", evidence=case_name, approved_by="auto",
                  detail="Action started; outcome requires verification if interrupted.")
     ledger = load(store)
     ledger[eid] = entry
@@ -213,6 +213,16 @@ def _propose(store, conf, finding, job, action, target, now=None):
     ledger[eid] = entry
     _save(store, ledger)
     return eid, entry, True
+
+
+def _queue_for_phone(store, eid):
+    """Ask the scheduler to offer this proposal to paired phones that can approve it. Local and cheap
+    (no network here); a failure never touches the ladder."""
+    try:
+        from jarvis.response.notify import replies
+        replies.queue_offer(store, eid)
+    except Exception:
+        pass
 
 
 def _active(ledger, action_id):
@@ -288,13 +298,15 @@ def process(store, conf, job, findings, *, coverage="complete", now=None):
                                       "approve": f"jarvis defend approve {eid}"}
                 if coverage != "complete":
                     finding["defense"]["reason"] = "incomplete collection; automatic response inhibited"
+                elif _new:
+                    _queue_for_phone(store, eid)
     return findings
 
 
 # ── acting on a proposal, and undoing ──────────────────────────────────────
 
-def approve(store, eid, now=None, conf=None):
-    """Apply a proposed action now. Returns (ok, detail)."""
+def approve(store, eid, now=None, conf=None, by=None):
+    """Apply a proposed action now. Returns (ok, detail). `by` names who approved (default: the operator)."""
     ledger = load(store, strict=True)
     entry = ledger.get(eid)
     if not entry:
@@ -322,7 +334,7 @@ def approve(store, eid, now=None, conf=None):
         case = Case(case_name, create=False) if case_name else None
     except Exception:
         case = None
-    entry.update(status="attempting", evidence=case_name,
+    entry.update(status="attempting", evidence=case_name, approved_by=by or "operator",
                  detail="Action started; outcome requires verification if interrupted.")
     _save(store, ledger)
     try:

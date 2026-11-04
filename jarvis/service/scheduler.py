@@ -60,6 +60,10 @@ RESUME_JUMP_S = 60.0
 # A failed run inside its freshness budget keeps the last good result and is
 # retried after RETRY_S, at most HOLD_MAX times in a row before it is recorded.
 RETRY_S = 60
+# How often a paired phone's approvals are offered and its replies fetched (notify/replies.py). When no
+# request is outstanding this does no network work at all.
+PHONE_TICK_S = 5
+
 # How often time-bounded containment (defense.expire) is checked for expiry.
 EXPIRY_SWEEP_S = 60
 # How overdue (as a share of its cadence) a forced job counts as, at least.
@@ -664,6 +668,7 @@ class Scheduler(threading.Thread):
                 self._note_resume()
                 if lane == "main":
                     self._sweep_expiry(store)
+                    self._phone_tick(store)
                 name = self._due(lane)
                 if name is None:
                     time.sleep(1)
@@ -702,6 +707,20 @@ class Scheduler(threading.Thread):
         self._expiry_due = now + EXPIRY_SWEEP_S
         try:
             defense.expire(store)
+        except Exception:
+            pass
+
+    def _phone_tick(self, store, now=None):
+        """Offer queued approvals to paired phones and apply their answers, every few seconds.
+
+        Guarded like the expiry sweep: nothing here can take down the scheduler."""
+        now = time.monotonic() if now is None else now
+        if now < getattr(self, "_phone_due", 0.0):
+            return
+        self._phone_due = now + PHONE_TICK_S
+        try:
+            from jarvis.response.notify import replies
+            replies.tick(store, alert.load_conf())
         except Exception:
             pass
 

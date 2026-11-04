@@ -25,9 +25,10 @@ def base_url(conf):
         host = parts.hostname
     except ValueError:
         raise RelayError("notify_url is not a URL") from None
-    local = parts.scheme == "http" and host == "127.0.0.1"
+    # "localhost" as well: WebAuthn needs a hostname (not an IP) as its relying-party id, so browser tests use it.
+    local = parts.scheme == "http" and host in ("127.0.0.1", "localhost")
     if not host or (parts.scheme != "https" and not local) or parts.username or parts.password:
-        raise RelayError("notify_url must be https (http only for 127.0.0.1 tests)")
+        raise RelayError("notify_url must be https (http only for 127.0.0.1 / localhost tests)")
     return url
 
 
