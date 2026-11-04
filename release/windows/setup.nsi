@@ -76,15 +76,17 @@ Section "Install"
     Quit
   ${EndIf}
 
-  ; An upgrade: stop the running engine and app so their files can be replaced.
-  ; The pairing and the history stay.
+  ; An upgrade: stop the running app and engine so their files can be replaced. The
+  ; pairing and the history stay. The APP FIRST: an open app of an older build starts
+  ; the engine again whenever it finds it down, which would re-lock the engine folder
+  ; right after `native stop` removes the service.
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM argus-desktop.exe'
+  Pop $Result
   ${If} ${FileExists} "${ENGINE}"
     DetailPrint "Stopping the running ${PRODUCT} service ..."
     nsExec::ExecToLog '"${ENGINE}" native stop'
     Pop $Result
   ${EndIf}
-  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM argus-desktop.exe'
-  Pop $Result
   ; A clean engine folder every time: no file of an older build survives.
   RMDir /r "$INSTDIR\engine"
 
@@ -125,12 +127,14 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  ; The app first, for the same reason as in the install: an open app must not start
+  ; the engine again between the service being removed and the files being deleted.
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM argus-desktop.exe'
+  Pop $Result
   ${If} ${FileExists} "${ENGINE}"
     nsExec::ExecToLog '"${ENGINE}" native uninstall'
     Pop $Result
   ${EndIf}
-  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM argus-desktop.exe'
-  Pop $Result
   ${If} ${FileExists} "${APP}"
     nsExec::ExecToLog '"${APP}" --remove-shortcut'
     Pop $Result
