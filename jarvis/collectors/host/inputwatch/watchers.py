@@ -57,6 +57,7 @@ SCRIPT_HOSTS = {"powershell.exe", "pwsh.exe", "wscript.exe", "cscript.exe",
 
 SYSTEM_DIRS = ("c:\\windows\\", "c:\\program files\\", "c:\\program files (x86)\\")
 BOOT_GAP_S = 300        # trace started this long after boot: early watchers unseen
+MAX_TRACE_TRIES = 3     # mirrors $MaxTries in inputaudit.ps1
 
 POLLING_BLIND_SPOT = (
     "Key-state polling (GetAsyncKeyState) is logged by Windows only at one call "
@@ -259,6 +260,32 @@ def audit(own_pids=(), result=None, clock=None):
             f"the trace file reached {int(data.get('etl_bytes') or 0) // (1 << 20)} MB "
             f"before this run, so registrations after that point are lost; the "
             f"next rotation starts clean.", "inputaudit"))
+    # The queue (2026-10-31): a closed trace is dropped only past its bounds or
+    # after it killed the run repeatedly, and never without saying so.
+    dropped = int(data.get("dropped_files") or 0)
+    if dropped:
+        retries = int(data.get("dropped_retries") or 0)
+        out.append(_finding(
+            "input", "medium", "input audit trace dropped before it was read",
+            f"{dropped} closed trace file(s), {int(data.get('dropped_bytes') or 0) // (1 << 20)} MB, "
+            f"were deleted unparsed"
+            + (f" ({retries} after reading them failed {MAX_TRACE_TRIES} times)" if retries else
+               " because the queue was over its bound")
+            + "; input watchers registered in those windows are not in this inventory.",
+            "inputaudit"))
+    backlog = int(data.get("backlog_files") or 0)
+    if backlog:
+        out.append(_finding(
+            "input", "low", "input audit is catching up",
+            f"{backlog} closed trace file(s) are queued for the next run; watchers "
+            f"registered in them are reported then.", "inputaudit"))
+    lost = int(data.get("overflow") or 0) + int(data.get("identity_failures") or 0)
+    if lost:
+        out.append(_finding(
+            "input", "low", "part of the input audit was not kept",
+            f"{int(data.get('overflow') or 0)} registration group(s) past the run's cap and "
+            f"{int(data.get('identity_failures') or 0)} failed Sysmon lookup(s); the watchers "
+            f"involved may be missing or unidentified.", "inputaudit"))
     out.append(_finding(
         "input", "ok",
         f"{len(watching)} process(es) watching keyboard or mouse input",

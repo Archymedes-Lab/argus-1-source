@@ -191,3 +191,25 @@ class ParseFailurePersistsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SmallCommits(unittest.TestCase):
+    def test_ingest_commits_in_small_chunks(self):
+        import hashlib
+        rows = "\n".join(hashlib.sha256(str(i).encode()).hexdigest() for i in range(1, 5001))
+        spec = {"url": "https://example.test/x", "max_bytes": 10 ** 7,
+                "parse": lambda raw: [("sha256", line, "") for line in raw.decode().splitlines()]}
+        commits = []
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(os.path.join(d, "j.db"))
+            real_commit = store.commit
+            store.commit = lambda: (commits.append(1), real_commit())
+            with mock.patch.object(feeds, "fetch", return_value=rows.encode()), \
+                    mock.patch.object(feeds.time, "sleep"):
+                r = feeds.ingest(store, "t", spec)
+            n = store.db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
+            store.close()
+        self.assertEqual(r.get("error"), None)
+        self.assertEqual(n, 5000)
+        self.assertGreaterEqual(len(commits), 5000 // feeds.WRITE_CHUNK)
+        self.assertLessEqual(feeds.WRITE_CHUNK, 5000)

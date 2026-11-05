@@ -39,7 +39,7 @@ class NotificationsTests(unittest.TestCase):
         self.now.return_value+=3601
         n.flush(self.store,CONF)
         self.send.assert_called_once()
-        self.assertIn('2 update(s)',self.send.call_args.args[1])
+        self.assertIn('(and 1 more, ',self.send.call_args.args[1])
         self.assertEqual(json.loads(self.store.get_meta(n.QUEUE)),{})
 
     def test_no_still_repeat_and_each_age_tier_sends_once(self):
@@ -146,7 +146,7 @@ class NotificationsTests(unittest.TestCase):
         crit = {**self.f, 'severity': 'critical', 'title': 'new critical'}
         n.dispatch(self.store, conf, 'posture', [self.f, crit])
         self.send.assert_called_once()                # only the new critical
-        self.assertIn('priority interrupt', self.send.call_args.args[1])
+        self.assertIn('Please look at this now: new critical', self.send.call_args.args[1])
         self.assertNotIn('unknown script', self.send.call_args.args[2])
 
     def test_daily_is_once_per_local_day_not_every_poll(self):
@@ -255,7 +255,8 @@ class BriefingContentTests(unittest.TestCase):
         subject, text, html = emails.briefing(
             pending, {'score': 61, 'grade': 'fair', 'areas': [], 'coverage': 90, 'next_steps': []}, 3, snaps, 1000000,
             conf={}, custody=custody, part='evening')
-        self.assertIn('Evening briefing — condition AMBER · 61%', subject)
+        self.assertTrue(subject.startswith('[JARVIS] Evening briefing: '), subject)
+        self.assertIn('security score 61% · condition AMBER', subject)
         self.assertIn('MISSION OF THE DAY: unknown script', text)
         self.assertIn('reminder · open 3d', text)
         self.assertIn('old task — no longer observed', text)

@@ -38,7 +38,7 @@ not match a primitive in code fails `tests/test_mechanisms.py`.
 | `unscored` | why a collector with `area=None` is unscored | required when unscored, forbidden when scored |
 | `tier`, `criticality` | reliability tier 0-4 and paging weight | tiers 2-4 by interval band (≤300 s, ≤7200 s, longer); tiers 0-1 at most 600 s; critical exactly when tier 0 |
 | `timeout` | run budget | below the interval (fast lane exempt) and at most a tenth of it, clamped to 60-300 s |
-| `lane` | `fast`, `main` or `bulk` serial worker | known lane; measured duty per lane at most 0.8 |
+| `lane` | `fast`, `frequent`, `main` or `bulk` serial worker | known lane; measured duty per lane at most 0.8; frequent: cadence ≤ 300 s, measured cost, timeout ≤ 60 s, never governed, and every 300 s evidence collector belongs there ([FREQUENT-LANE.md](FREQUENT-LANE.md)) |
 | `domain` | `both`, `windows` or `linux` | known domain |
 | `governed` | the resource governor may defer it | never for tier 0 or the fast lane |
 | `isolated` | runs in a deadline-bounded child | fast lane only |
@@ -103,7 +103,7 @@ The registry made these visible on 2026-10-23. They are kept as they were,
 because changing them changes live behaviour and needs its own measurement:
 
 - `sysmon_linux` is tier 0/critical but runs on the main lane.
-- `netwatch` is tier 1 fast liveness but runs on the main lane.
+- `netwatch` is tier 1 fast liveness but runs on the frequent lane (main until 2026-11-03).
 - `preos` and `containers` are unscored pending a scoring decision.
 - `storage` had no scoring decision at all. It is now unscored like
   `resources`, which leaves the score unchanged, and maps to `status`.

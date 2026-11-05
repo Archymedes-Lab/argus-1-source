@@ -467,14 +467,18 @@ def _filed(subject, category):
     return subject if subject.startswith(tag) else f"{tag} {subject}"
 
 
+TEST_SUBJECT = "[ARGUS-INSTINCT] Test message: warnings can reach you"
+TEST_TEXT = ("This is a test message you asked for (jarvis alert --test). Nothing to do.\n"
+             "If it reached you, warnings about this computer, including when ARGUS-INSTINCT "
+             "stops watching it, will reach you here too.\n")
+
+
 def test(store):
     conf = load_conf()
     if not enabled(conf):
         return "alerts are not configured — set an email (resend_api_key, alert_from, " \
                "alert_to), webhook_url or ntfy_url in " + CONFIG_PATH
-    err = deliver(conf, "[JARVIS] test alert",
-                  "This is a test from JARVIS (`jarvis alert --test`).\n"
-                  "If you got this, outage alerts will reach you too.\n", category="test")
+    err = deliver(conf, TEST_SUBJECT, TEST_TEXT, category="test", severity="low")
     if not err:
         record_send(store)
     return err

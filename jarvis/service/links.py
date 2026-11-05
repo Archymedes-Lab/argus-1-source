@@ -84,6 +84,8 @@ LINKS: tuple[Link, ...] = (
          what="the one-minute lane (scan, bridge, native, hook, heartbeat)"),
     Link("lane:main", "lane", 900, "high", None, "systemctl restart jarvis", lane="main",
          what="the main collector lane"),
+    Link("lane:frequent", "lane", 900, "high", None, "systemctl restart jarvis", lane="frequent",
+         what="the five-minute collector lane (audio, hidden, resources, netwatch, ...)"),
     Link("lane:bulk", "lane", 1800, "medium", None, "systemctl restart jarvis", lane="bulk",
          what="the bulk lane (feeds, evidence, deep audits)"),
     Link("windows-bridge", "job", 135, "critical", INTEROP, "wsl --shutdown (from Windows), then wait",
@@ -501,7 +503,7 @@ def gather_evidence(snapshots, now, store=None, scheduler=None, plane=None, wind
           "channels": [], "phone": {"applicable": False, "reason": "not gathered"}}
     ev["windows"] = host.has_windows() if windows is None else bool(windows)
     if scheduler is not None:
-        for lane in ("fast", "main", "bulk"):
+        for lane in ("fast", "frequent", "main", "bulk"):
             thread = getattr(scheduler, f"{lane}_thread", None) if lane != "main" else scheduler
             if thread is None:
                 continue                      # never started here: not applicable

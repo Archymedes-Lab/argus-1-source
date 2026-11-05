@@ -307,6 +307,8 @@ def build_parser():
                         help="detect keystrokes and clicks no hardware produced")
     iw.add_argument("--start", action="store_true", help="start the hook helper")
     iw.add_argument("--stop", action="store_true", help="stop the hook helper")
+    iw.add_argument("--own", action="store_true",
+                    help="make this install the one that runs the machine's input hook")
     iw.add_argument("--hours", type=int, default=24,
                     help="how far back to report (default 24)")
     iw.add_argument("--severity", choices=["critical", "high", "medium", "low"])

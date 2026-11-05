@@ -91,6 +91,8 @@ def is_abusech(name):
 # placeholder: the key is filled in for the request only, so it never reaches the
 # feed registry, the indicators' source_url, feed_runs errors or the dashboard.
 KEY_SLOT = "{auth_key}"
+WRITE_CHUNK = 2000          # indicators per commit (see ingest)
+WRITE_PAUSE_S = 0.05        # between commits, so other writers get the lock
 
 
 def abusech_export(platform, filename):
@@ -443,9 +445,14 @@ def ingest(store, name, spec, max_rows=250000):
                  last_seen=excluded.last_seen,
                  status='active',
                  doc_count=indicators.doc_count+1"""
-    for i in range(0, len(batch), 20000):
-        store.db.executemany(sql, batch[i:i + 20000])
+    # Small commits with a breath between them: each one holds SQLite's single
+    # write lock, and on 2026-11-05 20 000-row commits into the 900 MB store held
+    # it past the 10 s busy timeout, so other writers failed ("database is
+    # locked") and three scheduler lanes died. Readers are never blocked (WAL).
+    for i in range(0, len(batch), WRITE_CHUNK):
+        store.db.executemany(sql, batch[i:i + WRITE_CHUNK])
         store.commit()
+        time.sleep(WRITE_PAUSE_S)
     store.db.execute(
         """INSERT INTO feed_runs(name,last_run,rows,kept,bytes,error)
            VALUES(?,?,?,?,?,'')

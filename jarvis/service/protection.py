@@ -30,8 +30,8 @@ def _invariants(sources, scheduler, stamp):
         # Noncritical running is approximated by whether a governed job is
         # currently executing; the scheduler defers them under pressure, so
         # this closes the loop without new instrumentation.
-        current = {scheduler.current, getattr(scheduler, "fast_current", None),
-                   getattr(scheduler, "bulk_current", None)}
+        from jarvis.service.scheduler import running_jobs
+        current = set(running_jobs(scheduler))
         noncritical_running = pressured and any(
             c in governor_mod.GOVERNED_JOBS for c in current if c)
         return invariants_mod.evaluate_all(
@@ -93,8 +93,11 @@ def health(db_path, scheduler, stamp=None):
     from jarvis.service.scheduler import lane_age
     age = lane_age(scheduler, 'main', stamp)
     fast_age = lane_age(scheduler, 'fast', stamp)
+    # The frequent lane holds five-minute collectors whose runs are bounded at
+    # 60 s, so it shares the main lane's 900 s bar for a wedge.
+    frequent_age = lane_age(scheduler, 'frequent', stamp)
     fast_ok = getattr(scheduler, 'fast_alive', lambda: True)() and fast_age < 300
-    alive = scheduler.is_alive() and age < 900 and fast_ok
+    alive = scheduler.is_alive() and age < 900 and frequent_age < 900 and fast_ok
     sources = {}
     required, optional = mechanisms.health_sources(windows='win' in scheduler.hosts)
     try:
@@ -178,7 +181,7 @@ def health(db_path, scheduler, stamp=None):
         invariants_state = None
     return {'assurance': assurance_report(sources), 'service': 'JARVIS', 'time': stamp, 'healthy': alive and protected,
             'live': alive, 'ready': alive and protected, 'protection_healthy': protected,
-            'progress_age': age, 'fast_lane_age': fast_age,
+            'progress_age': age, 'fast_lane_age': fast_age, 'frequent_lane_age': frequent_age,
             'current_job': scheduler.current,
             'current_fast_job': getattr(scheduler, 'fast_current', None), 'sources': sources,
             'telemetry_chain': telemetry_chain,

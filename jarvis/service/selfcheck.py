@@ -38,6 +38,18 @@ from jarvis.response import alert
 
 UNIT = "jarvis.service"
 
+# What the outage and recovery messages say first, in everyday words
+# (response/plainalert.py); the exact facts follow under "Details:".
+SUBJECT_DOWN = "[ARGUS-INSTINCT] Stopped watching this computer"
+PLAIN_DOWN = ("ARGUS-INSTINCT has stopped watching this computer. Until it is running again, "
+              "nothing new is being checked or recorded.")
+PLAIN_DOWN_NEXT = ("What to do: open ARGUS-INSTINCT on this computer to see why it stopped and "
+                   "the steps to start it again. If this keeps happening, keep this message: the "
+                   "details below show what was wrong.")
+SUBJECT_UP = "[ARGUS-INSTINCT] Watching this computer again"
+PLAIN_UP = ("ARGUS-INSTINCT is running again and has started checking this computer again. "
+            "Anything that happened while it was stopped may not have been recorded.")
+
 # The scheduler runs jobs one at a time and the longest measured job is ~106s,
 # so a gap of a couple of minutes is normal. Five is not.
 STALE_AFTER = 300
@@ -370,12 +382,12 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
                 return ""
             if now() < int(store.get_meta('selfcheck_retry_at', 0) or 0):
                 return ""
-            body = (f"JARVIS is running again.\n\n"
+            body = (f"{PLAIN_UP}\n\nDetails:\n"
                     f"newest snapshot: {verdict['newest_kind']} "
                     f"{iso(verdict['newest_ts'])} ({verdict['age']}s ago)\n"
                     f"unit: {UNIT} {verdict['active_state']} "
                     f"({verdict['scope']} manager)\n")
-            err = alert.deliver(conf, "[JARVIS] the monitor is back up", body)
+            err = alert.deliver(conf, SUBJECT_UP, body, category="system", severity="high")
             if not err:
                 alert.record_send(store)
                 store.set_meta(_M_LAST_STATE, state)
@@ -399,7 +411,12 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
         if now() < retry:
             return ''
 
-        lines = ["JARVIS is NOT monitoring this machine.", ""]
+        lines = [PLAIN_DOWN, ""]
+        if restarted:
+            lines += ["It tried to restart itself automatically; the restart reported success."
+                      if not restart_err else
+                      "It tried to restart itself automatically, and that did not work.", ""]
+        lines += [PLAIN_DOWN_NEXT, "", "Details:", "JARVIS is NOT monitoring this machine."]
         lines += [f"  - {p}" for p in verdict["problems"]]
         lines += ["", f"unit:  {UNIT} {verdict['active_state'] or '?'} "
                       f"({verdict['scope'] or 'not installed'})"]
@@ -410,12 +427,11 @@ def _notify(db_path, verdict, restart_err=None, restarted=False):
             lines += ["", "A restart was attempted automatically."
                           if not restart_err
                           else f"Automatic restart FAILED: {restart_err}"]
-        lines += ["", "This message was sent by JARVIS (`jarvis selfcheck`), which runs "
-                      "outside the daemon precisely so a dead daemon still "
-                      "reaches you."]
-        err = alert.deliver(
-            conf, "[JARVIS] the monitor is DOWN — nothing is being watched",
-            "\n".join(lines) + "\n")
+        lines += ["", "This message comes from a separate safety check (jarvis selfcheck) "
+                      "that runs on its own, so it can reach you even when the main part "
+                      "has stopped."]
+        err = alert.deliver(conf, SUBJECT_DOWN, "\n".join(lines) + "\n",
+                            category="system", severity="critical")
         if not err:
             alert.record_send(store)
             store.set_meta(_M_LAST_STATE, state)

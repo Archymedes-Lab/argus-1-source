@@ -117,6 +117,10 @@ function Get-JarvisHealth {
     # health monitor silently stops checking -- the exact failure it exists
     # to catch. Proxy is disabled explicitly: this call never leaves the host.
     try {
+        # A non-200 reply is cut at DefaultMaximumErrorResponseLength (64 KB) and the
+        # health body is 72-76 KB: a live 503 parsed as silence (2026-10-31). Bounded
+        # at 4 MB (the unit is KB).
+        [Net.HttpWebRequest]::DefaultMaximumErrorResponseLength = 4096
         $req=[Net.HttpWebRequest]::Create('http://127.0.0.1:8787/api/health')
         $req.Proxy=$null; $req.Timeout=8000; $req.ReadWriteTimeout=8000
         $req.Method='GET'; $req.KeepAlive=$false; Add-JarvisToken $req

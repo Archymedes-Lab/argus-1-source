@@ -9,7 +9,8 @@ What this does, every run:
   * reads the host side in one PowerShell call (system drive free, WSL image
     size, swap, page-file policy, ballast file);
   * reads the guest side cheaply (statvfs, bounded walks of the known
-    reclaimable caches, Docker's own accounting, JARVIS's own stores);
+    reclaimable caches at most every 6 h while headroom is fine, Docker's
+    own accounting, JARVIS's own stores);
   * keeps a bounded history of free space and estimates the growth rate, so
     the owner is warned in days, not at the line;
   * removes JARVIS-made release stages beyond the newest three when they are
@@ -67,6 +68,16 @@ STAGING = Path(os.path.expanduser("~/.cache/jarvis-release-staging"))
 STAGES_KEEP = 3
 WALK_BUDGET_S = 20.0
 HISTORY_META = "storage_free_history_v1"
+# The reclaim walks are hints, not evidence, and the costliest part of this
+# job: measured 2026-11-04 on the owner's laptop, about 19 s CPU and 76 s of
+# metadata reads every 30 minutes (uv, npm, Gradle and Bun caches; Gradle and
+# Bun hit the 20 s budget every time). A walk's sizes are reused for at most
+# RECLAIM_MAX_AGE_S while the system drive has headroom; once free space is
+# below HIGH_FREE, or has dropped by RECLAIM_FREE_DROP since the walk, every
+# run walks again, because that is when the owner acts on the hints.
+RECLAIM_META = "storage_reclaim_walk_v1"
+RECLAIM_MAX_AGE_S = 6 * 3600
+RECLAIM_FREE_DROP = 2 * GIB
 BALLAST_META = "storage_ballast_releases_v1"
 LIVE_RELEASE = Path("/opt/jarvis/current")
 
@@ -101,6 +112,49 @@ def tree_bytes(path, budget_s=WALK_BUDGET_S, clock=time.monotonic):
     except OSError:
         return 0, False
     return total, complete
+
+
+def walk_reclaimables(home=None, walk=None):
+    """[(label, bytes, complete, command)] for the known caches that exist."""
+    home = Path(os.path.expanduser("~")) if home is None else Path(home)
+    walk = walk or tree_bytes
+    out = []
+    for label, rel, cmd in RECLAIMABLES:
+        p = home / rel
+        if p.is_dir():
+            size, complete = walk(p)
+            out.append((label, size, complete, cmd))
+    return out
+
+
+def reclaim_sizes(store, now, free, walk_all=None):
+    """The reclaim hints: a fresh walk, or the last one while it may stand.
+
+    Reused only when the last walk is younger than RECLAIM_MAX_AGE_S (and not
+    from the future), the drive is measured above HIGH_FREE, and free space
+    has not fallen by RECLAIM_FREE_DROP since. Anything unreadable walks."""
+    walk_all = walk_all or walk_reclaimables
+    measured = isinstance(free, (int, float)) and math.isfinite(free)
+    try:
+        last = json.loads(store.get_meta(RECLAIM_META, "") or "null")
+    except (ValueError, TypeError, AttributeError):
+        last = None
+    if (measured and free >= HIGH_FREE and isinstance(last, dict)
+            and isinstance(last.get("at"), (int, float)) and 0 <= now - last["at"] < RECLAIM_MAX_AGE_S
+            and isinstance(last.get("free"), (int, float)) and last["free"] - free < RECLAIM_FREE_DROP
+            and isinstance(last.get("sizes"), list)):
+        try:
+            return [(str(a), int(b), bool(c), str(d)) for a, b, c, d in last["sizes"]]
+        except (TypeError, ValueError):
+            pass
+    sizes = walk_all()
+    try:
+        store.set_meta(RECLAIM_META, json.dumps({
+            "at": now, "free": free if measured else None,
+            "sizes": [list(x) for x in sizes]}))
+    except Exception:
+        pass
+    return sizes
 
 
 def guest_usage(root="/"):
@@ -288,8 +342,9 @@ def judge(host, guest, now, history=(), reclaim=(), docker=None, stages=(), ball
                             host="wsl"))
     out.append(_finding(
         "low", "storage governor boundaries",
-        "Measures the system drive, the WSL image, swap, page-file policy, the ballast and "
-        "the known caches every run. Deletes only JARVIS-made superseded release stages and, "
+        "Measures the system drive, the WSL image, swap, page-file policy and the ballast "
+        "every run, and the known caches at least every 6 hours (every run once headroom "
+        "is low). Deletes only JARVIS-made superseded release stages and, "
         "below the critical line, the ballast file it was told to hold. Never touches your "
         "data, the store or the sealed history.", category="limits"))
     return out
@@ -465,13 +520,7 @@ def audit(store, hosts=("wsl", "win"), now=None, host=None, guest=None, reclaim=
     if guest is None:
         guest = guest_usage()
     if reclaim is None:
-        home = Path(os.path.expanduser("~"))
-        reclaim = []
-        for label, rel, cmd in RECLAIMABLES:
-            p = home / rel
-            if p.is_dir():
-                size, complete = tree_bytes(p)
-                reclaim.append((label, size, complete, cmd))
+        reclaim = reclaim_sizes(store, now, (host or {}).get("sys_free"))
     if docker is None:
         docker = docker_reclaimable()
     if syslog is None:

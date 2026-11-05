@@ -23,7 +23,10 @@
 # write, owner read) and never overwrites or deletes. The one stateful job is
 # inputaudit.ps1: it keeps JARVIS's own Win32k audit trace session running
 # (observation only; it changes no system setting and ends at reboot) and an
-# inventory under this folder. hp_firmware_audit.ps1 loads HP's signed CMSL
+# inventory under this folder. beeptrace.ps1 likewise keeps JARVIS's own
+# kernel file-open trace, filtered in the kernel to opens of \Device\Beep, so
+# every Beep() caller is named; it opens the Beep device itself once a run as a
+# silent canary (no tone) and changes no system setting. hp_firmware_audit.ps1 loads HP's signed CMSL
 # module from Program Files only after checking every file's signer and that
 # only SYSTEM, Administrators or TrustedInstaller can change it; it reads the
 # HP Sure Start audit log and changes nothing. The broker adds no remediation
@@ -88,6 +91,9 @@ $Jobs = [ordered]@{
     # 128 MB, so 400 s covers the worst case measured.
     inputaudit = @{ script = 'inputaudit.ps1';   timeout = 400 }
     fwaudit  = @{ script = 'hp_firmware_audit.ps1'; timeout = 120 }
+    # Its file is capped at 4 MB and filtered in the kernel to Beep-device
+    # opens; the run is the 2 s fail-fast check plus a parse of a few events.
+    beeptrace = @{ script = 'beeptrace.ps1';     timeout = 120 }
 }
 
 function Test-Admin {

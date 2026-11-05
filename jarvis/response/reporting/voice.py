@@ -128,10 +128,10 @@ _NUMBER_WORDS.update(pair="2", couple="2", trio="3", quartet="4", dozen="12")
 _FALLBACK = {
     "urgent": (
         "Something has turned up uninvited, and I have rushed it to you ahead of the usual "
-        "digest. The good news: early is by far the best time to show it the door.",
-        "Pardon the grand entrance, but this one could not wait for the digest. Caught "
+        "summary. The good news: early is by far the best time to show it the door.",
+        "Pardon the grand entrance, but this one could not wait for the summary. Caught "
         "early, it is a much friendlier conversation.",
-        "Interrupting on purpose: this one earned a seat at the front of the queue. Details "
+        "Breaking in on purpose: this one earned a seat at the front of the queue. Details "
         "below, freshest first.",
         "Priority channel open. One matter jumped the queue, and it is laid out below so you "
         "can deal with it swiftly.",

@@ -24,6 +24,7 @@ RUNNER_MODULES = {
     "world": "jarvis.intel.worldwatch",
     "feeds": "jarvis.intel.feeds",
     "history_verify": "jarvis.collectors.telemetry.history_verify",
+    "retention": "jarvis.collectors.telemetry.history_retention",
     "verify": "jarvis.service.verifyjob",
     "pkgverify": "jarvis.collectors.persistence.pkgverify",
     "distrovuln": "jarvis.intel.distrovuln",
@@ -88,6 +89,7 @@ class BulkLaneTests(unittest.TestCase):
         for name in JOBS:
             lane = scheduler.Scheduler._lane_of(sched, name)
             expected = ("fast" if name in scheduler.FAST
+                        else "frequent" if name in scheduler.FREQUENT
                         else "bulk" if name in scheduler.BULK else "main")
             self.assertEqual(lane, expected, name)
         self.assertEqual(scheduler.Scheduler._lane_of(sched, "sysmon"), "main")

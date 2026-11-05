@@ -100,8 +100,51 @@ def _clock(args):
     return 1 if result["status"] == "unstable" else 0
 
 
+def _holds(args):
+    """List the active retention holds, or release one (owner action, exact match)."""
+    import sys
+    root = args.log or DEFAULT_ROOT
+    if args.action == "holds":
+        log = EventLog(root)
+        rows = log.hold_records()
+        if args.json:
+            print(json.dumps(rows))
+        for h in ([] if args.json else rows):
+            print(f"  events {h['first_seq']}-{h['last_seq']}  at={h.get('at')}  {h.get('reason', '')}")
+        if not rows and not args.json:
+            print("  no active holds")
+        return 0
+    if args.first is None or args.last is None or args.at is None:
+        print("release-hold needs --first, --last and --at exactly as `timeline holds` lists them")
+        return 2
+    if not sys.stdin.isatty():
+        print("release-hold asks for confirmation; run it in a terminal")
+        return 2
+    answer = input(f"Release the hold on events {args.first}-{args.last}? Retention may then reduce "
+                   "the normal events in that range (suspicious ones stay). Type 'release' to confirm: ")
+    if answer.strip() != "release":
+        print("not released")
+        return 1
+    try:
+        log = EventLog(root, writer=True)
+    except LogError as exc:
+        print(f"could not open the event log for writing: {exc}")
+        return 1
+    try:
+        log.release_hold(args.first, args.last, args.at, by="owner (timeline release-hold)")
+    except LogError as exc:
+        print(f"not released: {exc}")
+        return 1
+    finally:
+        log.close()
+    print(f"released the hold on events {args.first}-{args.last}; the release is on record")
+    return 0
+
+
 def cmd_timeline(args, store):
     action = args.action
+    if action in ("holds", "release-hold"):
+        return _holds(args)
     if action == "clock":
         return _clock(args)
     if action == "wsl-boundary":
@@ -285,7 +328,7 @@ def cmd_timeline(args, store):
 def add_parser(sub):
     p = sub.add_parser("timeline", help="the recorded event history: search, lineage, integrity")
     p.add_argument("action", choices=["status", "ingest", "verify", "search", "tree", "show", "tail", "changes", "linux-truth", "wsl-boundary", "clock",
-                                      "state", "detect"])
+                                      "state", "detect", "holds", "release-hold"])
     p.add_argument("guid", nargs="?", help="tree: a process GUID")
     p.add_argument("--sha256"); p.add_argument("--dns"); p.add_argument("--ip")
     p.add_argument("--image", help="full image path")
@@ -308,5 +351,8 @@ def add_parser(sub):
     p.add_argument("--anchor", help="verify: a previously exported head, as JSON")
     p.add_argument("--spool", help="sensor spool directory (default: ProgramData)")
     p.add_argument("--log", help="event log directory, e.g. a preserved copy (default: ~/.jarvis/eventlog)")
+    p.add_argument("--first", type=int, help="release-hold: first event of the hold")
+    p.add_argument("--last", type=int, help="release-hold: last event of the hold")
+    p.add_argument("--at", type=float, help="release-hold: the hold's `at` as `timeline holds` shows it")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_timeline)

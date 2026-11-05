@@ -28,7 +28,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms
 
 $src = @'
 using System;
@@ -39,6 +38,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Management;
+using System.Reflection;
 
 public static class JarvisInputHook
 {
@@ -211,7 +212,7 @@ public static class JarvisInputHook
             uint pid;
             GetWindowThreadProcessId(GetForegroundWindow(), out pid);
             if (pid == 0) return "";
-            return Process.GetProcessById((int)pid).ProcessName + ":" + pid;
+            using (var p = Process.GetProcessById((int)pid)) return p.ProcessName + ":" + pid;
         } catch { return ""; }
     }
 
@@ -259,29 +260,86 @@ public static class JarvisInputHook
         Write(kind, flags, cls, true);
     }
 
+    // Called on the hook thread, so it only records the facts that are gone a
+    // moment later (time, foreground pid) and queues them. Until 2026-10-31 it
+    // opened the output file and built a Process object here, per control,
+    // digit and punctuation key, inside the callback Windows times.
     static void Write(string kind, uint flags, string cls, bool injected)
     {
-        var line = new StringBuilder();
-        line.Append("{\"ts\":").Append(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        line.Append(",\"kind\":\"").Append(kind).Append("\"");
-        line.Append(",\"injected\":").Append(injected ? 1 : 0);
-        line.Append(",\"lower_il\":").Append((flags & LLKHF_LOWER_IL_INJECTED) != 0 ? 1 : 0);
-        line.Append(",\"class\":\"").Append(cls).Append("\"");
-        line.Append(",\"fg\":\"").Append(Foreground().Replace("\"", "")).Append("\"}");
-        lock (_lock) {
-            try { File.AppendAllText(_out, line.ToString() + Environment.NewLine); }
-            catch { }
-        }
+        uint pid = 0;
+        try { GetWindowThreadProcessId(GetForegroundWindow(), out pid); } catch { }
+        Enqueue(new OutItem { Ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), Kind = kind,
+                              Flags = flags, Cls = cls, Injected = injected, FgPid = pid });
     }
 
-    // Used by the volume sampler below. Goes through the same lock so a state
-    // line can never interleave with a key line mid-write.
+    // Every output line goes through one capped queue, written by the host's
+    // worker thread in batches. A full queue drops and counts; the count rides
+    // the heartbeat.
+    class OutItem {
+        public string Text;                    // a finished line, or null for a key line
+        public long Ts; public string Kind, Cls; public uint Flags, FgPid; public bool Injected;
+    }
+    static readonly ConcurrentQueue<OutItem> _outq = new ConcurrentQueue<OutItem>();
+    static int _outCount;
+    public const int OutCap = 8192;
+    public static long OutDropped;
+
+    static void Enqueue(OutItem item)
+    {
+        if (Interlocked.Increment(ref _outCount) > OutCap) {
+            Interlocked.Decrement(ref _outCount);
+            Interlocked.Increment(ref OutDropped);
+            return;
+        }
+        _outq.Enqueue(item);
+    }
+
     public static void WriteState(string json)
     {
-        lock (_lock) {
-            try { File.AppendAllText(_out, json + Environment.NewLine); }
-            catch { }
+        Enqueue(new OutItem { Text = json });
+    }
+
+    public static int Pending() { return Volatile.Read(ref _outCount); }
+
+    // Worker thread: format queued key lines (process names resolved once per
+    // batch) and append the batch with one open/close. The file is truncated
+    // by the WSL side after each read, so it is never held open.
+    public static int FlushOut()
+    {
+        if (Volatile.Read(ref _outCount) == 0) return 0;
+        var sb = new StringBuilder();
+        var names = new Dictionary<uint, string>();
+        int n = 0;
+        OutItem it;
+        while (n < 4096 && _outq.TryDequeue(out it)) {
+            Interlocked.Decrement(ref _outCount);
+            n++;
+            if (it.Text != null) { sb.Append(it.Text).Append(Environment.NewLine); continue; }
+            string name;
+            if (!names.TryGetValue(it.FgPid, out name)) {
+                name = "";
+                if (it.FgPid != 0) {
+                    // An owner that exited before the flush keeps its pid.
+                    name = "?:" + it.FgPid;
+                    try { using (var p = Process.GetProcessById((int)it.FgPid)) name = p.ProcessName + ":" + it.FgPid; }
+                    catch { }
+                }
+                names[it.FgPid] = name;
+            }
+            sb.Append("{\"ts\":").Append(it.Ts)
+              .Append(",\"kind\":\"").Append(it.Kind).Append("\"")
+              .Append(",\"injected\":").Append(it.Injected ? 1 : 0)
+              .Append(",\"lower_il\":").Append((it.Flags & LLKHF_LOWER_IL_INJECTED) != 0 ? 1 : 0)
+              .Append(",\"class\":\"").Append(it.Cls).Append("\"")
+              .Append(",\"fg\":\"").Append(name.Replace("\"", "")).Append("\"}")
+              .Append(Environment.NewLine);
         }
+        if (sb.Length > 0) {
+            lock (_lock) {
+                try { File.AppendAllText(_out, sb.ToString()); } catch { }
+            }
+        }
+        return n;
     }
 
     // ---- forensic capture of injected keys -----------------------------------
@@ -614,23 +672,23 @@ public static class JarvisInputHook
         return sb.Append(']').ToString();
     }
 
-    static void WriterLoop()
+    static readonly List<InjEvent> _pendingInj = new List<InjEvent>();
+
+    // One step of the injected-burst writer; the host's worker calls it every
+    // 100 ms (it had a thread of its own until 2026-10-31).
+    public static void PumpInjected()
     {
-        var pending = new List<InjEvent>();
-        while (true) {
-            try {
-                InjEvent e;
-                while (_inj.TryDequeue(out e)) pending.Add(e);
-                // A burst ends after 800 ms of silence, which keeps one paste or
-                // one auto-type together and separates unrelated phantoms.
-                if (pending.Count > 0 &&
-                        (NowMs() - pending[pending.Count - 1].Ms > 800 || pending.Count >= 2000)) {
-                    Flush(pending);
-                    pending.Clear();
-                }
-            } catch { pending.Clear(); }
-            Thread.Sleep(100);
-        }
+        try {
+            InjEvent e;
+            while (_inj.TryDequeue(out e)) _pendingInj.Add(e);
+            // A burst ends after 800 ms of silence, which keeps one paste or
+            // one auto-type together and separates unrelated phantoms.
+            if (_pendingInj.Count > 0 &&
+                    (NowMs() - _pendingInj[_pendingInj.Count - 1].Ms > 800 || _pendingInj.Count >= 2000)) {
+                Flush(_pendingInj);
+                _pendingInj.Clear();
+            }
+        } catch { _pendingInj.Clear(); }
     }
 
     static void Flush(List<InjEvent> ev)
@@ -717,8 +775,13 @@ public static class JarvisInputHook
         WriteState(summary.Done());
     }
 
+    // Tick of the newest callback of either hook: compared with the session's
+    // last-input time, it shows input the hooks never saw.
+    public static int LastCallbackTick, LastKbTick, LastMsTick;
+
     static IntPtr KbProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        LastCallbackTick = LastKbTick = Environment.TickCount;
         if (nCode >= 0) {
             var d = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
             int msg = (int)wParam;
@@ -766,6 +829,7 @@ public static class JarvisInputHook
 
     static IntPtr MsProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        LastCallbackTick = LastMsTick = Environment.TickCount;
         if (nCode >= 0) {
             var d = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
             int msg = (int)wParam;
@@ -813,16 +877,31 @@ public static class JarvisInputHook
     {
         _out = outFile;
         _redactOver = redactOver;
-        var writer = new Thread(WriterLoop);
-        writer.IsBackground = true;
-        writer.Name = "jarvis-forensic-writer";
-        writer.Start();
+        LastCallbackTick = Environment.TickCount;
         _kbProc = KbProc;
         _msProc = MsProc;
         IntPtr mod = GetModuleHandle(null);
         _kb = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProc, mod, 0);
         _ms = SetWindowsHookEx(WH_MOUSE_LL,    _msProc, mod, 0);
         if (_kb == IntPtr.Zero) throw new Exception("SetWindowsHookEx (keyboard) failed");
+    }
+
+    [DllImport("user32.dll")]
+    static extern bool UnhookWindowsHookEx(IntPtr hk);
+
+    // Windows removes a low-level hook without notice when its thread overruns
+    // LowLevelHooksTimeout. Must run on the thread that installed the hooks
+    // (the one pumping messages). Returns true if the keyboard hook is back.
+    public static bool Reinstall()
+    {
+        // New hooks first, then the old ones go: there is no instant with no
+        // hook. If Windows already removed the old one, unhooking it is a no-op.
+        IntPtr mod = GetModuleHandle(null);
+        IntPtr kb = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProc, mod, 0);
+        IntPtr ms = SetWindowsHookEx(WH_MOUSE_LL,    _msProc, mod, 0);
+        if (kb != IntPtr.Zero) { if (_kb != IntPtr.Zero) UnhookWindowsHookEx(_kb); _kb = kb; }
+        if (ms != IntPtr.Zero) { if (_ms != IntPtr.Zero) UnhookWindowsHookEx(_ms); _ms = ms; }
+        return kb != IntPtr.Zero;
     }
 
     public static string Counters()
@@ -863,9 +942,440 @@ public static class JarvisInputHook
         }
     }
 }
+
+// The resident host (2026-10-31). Before it, five WinForms timers ran
+// PowerShell code on the hook thread every 1-60 s and a second runspace looped
+// for brightness: the interpreter woke several times a second for the life of
+// the process, and every tick delayed the hook. Now the PowerShell launcher
+// calls Run() once and never runs script again:
+//   hook thread   installs the hooks, pumps messages, answers pings; nothing else
+//   worker thread everything periodic, each task isolated, one output writer
+// The sound listener keeps its own 25 ms metering thread.
+public static class JarvisHost
+{
+    [StructLayout(LayoutKind.Sequential)]
+    struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public int x, y; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] static extern int GetMessage(out MSG m, IntPtr h, uint min, uint max);
+    [DllImport("user32.dll")] static extern bool PeekMessage(out MSG m, IntPtr h, uint min, uint max, uint remove);
+    [DllImport("user32.dll")] static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO li);
+    [DllImport("user32.dll")] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+    [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern bool GetUserObjectInformation(IntPtr h, int index, StringBuilder buf, int len, out int needed);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+    [DllImport("advapi32.dll")] static extern bool OpenProcessToken(IntPtr p, uint access, out IntPtr tok);
+    [DllImport("advapi32.dll")] static extern bool GetTokenInformation(IntPtr tok, int cls, out int value, int len, out int ret);
+
+    const uint WM_APP_PING = 0x8001, WM_APP_REHOOK = 0x8002;
+    public const int DeafGapMs = 2000;          // input this much newer than the last callback
+    public const int DeafPasses = 2;            // on consecutive 1 s checks, on the user's desktop
+    public const int RehookMinGapMs = 30000;    // at most one reinstall per 30 s
+    public const int PongStaleMs = 15000;       // hook thread silent this long: no pulse
+
+    static uint _hookTid;
+    static int _pongTick;
+    static string _out, _alive;
+    static int _heartbeatMs, _ownSession;
+
+    // watchdog state (worker thread only, except the counters read by Hook())
+    static int _deafPasses, _lastRehookTick, _rehookPending;
+    static uint _prevInput;
+    static bool _stillReported;
+    public static long Reinstalls, ReinstallFailures, DeafEpisodes, DeafUnrecovered;
+    static long _lastReinstallTs;
+
+    // optional parts, bound by reflection so one that failed to compile leaves the rest running
+    static Func<int[]> _audioRead; static Func<int> _audioLevel; static Func<bool> _audioMuted;
+    static Func<string[]> _audioSessions;
+    static Func<string> _soundTake, _soundCounters;
+    static string _soundState = "{\"state\":\"unavailable: listener did not compile\"}";
+
+    public static void Run(string outFile, int heartbeatSeconds)
+    {
+        _out = outFile;
+        _alive = Path.ChangeExtension(outFile, ".alive");
+        _heartbeatMs = Math.Max(5, heartbeatSeconds) * 1000;
+        using (var me = Process.GetCurrentProcess()) _ownSession = me.SessionId;
+        _hookTid = GetCurrentThreadId();
+        MSG m;
+        PeekMessage(out m, IntPtr.Zero, 0, 0, 0);   // creates this thread's queue before anyone posts to it
+        _pongTick = Environment.TickCount;
+        Bind();
+        var w = new Thread(Worker);
+        w.IsBackground = true; w.Name = "jarvis-host-worker";
+        w.Start();
+        // Startup garbage (compilation, binding) is collected once; nothing
+        // periodic allocates on this thread afterwards.
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) {
+            if (m.hwnd != IntPtr.Zero) continue;
+            if (m.message == WM_APP_PING) { _pongTick = Environment.TickCount; }
+            else if (m.message == WM_APP_REHOOK) {
+                bool ok = false;
+                try { ok = JarvisInputHook.Reinstall(); } catch { }
+                if (ok) Interlocked.Increment(ref Reinstalls); else Interlocked.Increment(ref ReinstallFailures);
+                Interlocked.Exchange(ref _rehookPending, 0);
+            }
+        }
+    }
+
+    static MethodInfo Find(string type, string method)
+    {
+        // Explicit types and the two-argument GetMethod keep every metadata
+        // name of this assembly visible in the script text, which is how memscan
+        // recognises JARVIS's own in-memory code (collectors/process/assemblies.py).
+        foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies()) {
+            Type t = null;
+            try { t = a.GetType(type, false); } catch { }
+            if (t != null) {
+                try { return t.GetMethod(method, BindingFlags.Public | BindingFlags.Static); }
+                catch (AmbiguousMatchException) { return null; }
+            }
+        }
+        return null;
+    }
+
+    static T Bind<T>(string type, string method) where T : class
+    {
+        var mi = Find(type, method);
+        if (mi == null) return null;
+        try { return Delegate.CreateDelegate(typeof(T), mi, false) as T; } catch { return null; }
+    }
+
+    static void Bind()
+    {
+        _audioRead = Bind<Func<int[]>>("JarvisAudio", "Read");
+        _audioLevel = Bind<Func<int>>("JarvisAudio", "Level");
+        _audioMuted = Bind<Func<bool>>("JarvisAudio", "Muted");
+        _audioSessions = Bind<Func<string[]>>("JarvisAudio", "Sessions");
+        var start = Bind<Action>("JarvisSound.Listener", "Start");
+        _soundTake = Bind<Func<string>>("JarvisSound.Listener", "Take");
+        _soundCounters = Bind<Func<string>>("JarvisSound.Listener", "Counters");
+        if (start != null && _soundTake != null && _soundCounters != null) {
+            try { start(); _soundState = null; }
+            catch { _soundState = "{\"state\":\"unavailable: listener did not start\"}"; _soundTake = null; }
+        }
+    }
+
+    // ---- the worker ---------------------------------------------------------
+    static void Worker()
+    {
+        int t0 = Environment.TickCount;
+        int next1s = t0, next2s = t0, nextPulse = t0, nextBeat = t0 + _heartbeatMs;
+        Step("pulse", Pulse);
+        Step("audio", SampleAudio); Step("apps", SampleApps);
+        while (true) {
+            int now = Environment.TickCount;
+            Step("injected", JarvisInputHook.PumpInjected);
+            if (now - next1s >= 0) {
+                next1s = now + 1000;
+                PostThreadMessage(_hookTid, WM_APP_PING, IntPtr.Zero, IntPtr.Zero);
+                Step("audio", SampleAudio); Step("sound", DrainSound); Step("watchdog", Watchdog);
+            }
+            if (now - next2s >= 0) { next2s = now + 2000; Step("apps", SampleApps); Step("brightness", SampleBrightness); }
+            if (now - nextBeat >= 0) { nextBeat = now + _heartbeatMs; Step("heartbeat", Heartbeat); }
+            if (now - nextPulse >= 0) { nextPulse = now + 10000; Step("pulse", Pulse); }
+            // Anything queued is on disk within one 100 ms tick: the old hook
+            // appended each line synchronously, so a kill must not cost more.
+            if (JarvisInputHook.Pending() > 0) Step("flush", Flush);
+            Thread.Sleep(100);
+        }
+    }
+
+    public static long TaskFaults;
+    static string _lastFault = "";
+    // A task that throws is counted and named in the heartbeat; it never stops
+    // the worker or the other tasks.
+    static void Flush() { JarvisInputHook.FlushOut(); }
+
+    static void Step(string task, Action a)
+    {
+        try { a(); }
+        catch (Exception e) {
+            Interlocked.Increment(ref TaskFaults);
+            var b = new StringBuilder();
+            foreach (char c in (task + ": " + e.GetType().FullName + " " + e.Message))
+                if (c >= 32 && c < 127 && c != '"' && c != '\\' && b.Length < 160) b.Append(c);
+            _lastFault = b.ToString();
+        }
+    }
+
+    // A contentless liveness beat, read by the WSL watchdog as a file mtime.
+    // Written only while the hook thread answers pings, so a wedged message
+    // loop stops it exactly as before, and a dead worker stops it too.
+    static void Pulse()
+    {
+        if (Environment.TickCount - Volatile.Read(ref _pongTick) > PongStaleMs) return;
+        File.WriteAllText(_alive, Process.GetCurrentProcess().Id + ":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+    }
+
+    static void Heartbeat()
+    {
+        long ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        int desk = -1;
+        var shells = Process.GetProcessesByName("explorer");
+        try { if (shells.Length > 0) desk = shells[0].SessionId; }
+        finally { foreach (var p in shells) p.Dispose(); }
+        string snd = _soundState ?? _soundCounters();
+        int pid;
+        using (var me = Process.GetCurrentProcess()) pid = me.Id;
+        JarvisInputHook.WriteState("{\"ts\":" + ts + ",\"kind\":\"heartbeat\",\"pid\":" + pid +
+            ",\"session\":" + _ownSession + ",\"desktop\":" + desk +
+            ",\"counters\":" + JarvisInputHook.Counters() +
+            ",\"window\":" + JarvisInputHook.TakeWindowCounters() +
+            ",\"sound\":" + snd + ",\"hook\":" + Hook() + "}");
+    }
+
+    public static string Hook()
+    {
+        long priv = 0;
+        using (var me = Process.GetCurrentProcess()) priv = me.PrivateMemorySize64;
+        return "{\"reinstalls\":" + Interlocked.Read(ref Reinstalls) +
+               ",\"reinstall_failures\":" + Interlocked.Read(ref ReinstallFailures) +
+               ",\"deaf_episodes\":" + Interlocked.Read(ref DeafEpisodes) +
+               ",\"deaf_unrecovered\":" + Interlocked.Read(ref DeafUnrecovered) +
+               ",\"last_reinstall\":" + Interlocked.Read(ref _lastReinstallTs) +
+               ",\"out_dropped\":" + Interlocked.Read(ref JarvisInputHook.OutDropped) +
+               ",\"task_faults\":" + Interlocked.Read(ref TaskFaults) +
+               ",\"last_fault\":\"" + _lastFault + "\"" +
+               ",\"private_mb\":" + (priv >> 20) + "}";
+    }
+
+    // ---- deafness watchdog ----------------------------------------------------
+    static uint LastInputTick()
+    {
+        var li = new LASTINPUTINFO(); li.cbSize = (uint)Marshal.SizeOf(li);
+        return GetLastInputInfo(ref li) ? li.dwTime : 0;
+    }
+
+    // Input on the secure desktop (lock screen, UAC prompt) never reaches a
+    // hook on the user's desktop, and must not read as deafness.
+    static bool OnUserDesktop()
+    {
+        IntPtr h = OpenInputDesktop(0, false, 0x0001);
+        if (h == IntPtr.Zero) return false;
+        try {
+            var sb = new StringBuilder(64); int need;
+            return GetUserObjectInformation(h, 2, sb, sb.Capacity * 2, out need)
+                && string.Equals(sb.ToString(), "Default", StringComparison.OrdinalIgnoreCase);
+        } finally { CloseDesktop(h); }
+    }
+
+    // UIPI: a normal-integrity hook is not called for input to an elevated
+    // window (an administrator terminal, the UAC-launched installer), the same
+    // way it is not called on the secure desktop. Unknown counts as elevated:
+    // a process whose token cannot be opened is above us.
+    static bool ForegroundElevated()
+    {
+        uint pid;
+        GetWindowThreadProcessId(GetForegroundWindow(), out pid);
+        if (pid == 0) return true;
+        IntPtr p = OpenProcess(0x1000, false, (int)pid);
+        if (p == IntPtr.Zero) return true;
+        try {
+            IntPtr tok;
+            if (!OpenProcessToken(p, 0x8, out tok)) return true;
+            try {
+                int elevated, ret;
+                return !GetTokenInformation(tok, 20, out elevated, 4, out ret) || elevated != 0;
+            } finally { CloseHandle(tok); }
+        } finally { CloseHandle(p); }
+    }
+
+    // Pure decision, unit-tested: consecutive deaf passes after this one. A
+    // pass counts only when NEW input arrived since the previous check and the
+    // hooks saw none of it: an old unseen gap with no input since is not
+    // evidence (2026-10-31: judging the same frozen gap every 30 s while the
+    // owner was idle reinstalled the hook seven times in five minutes).
+    public static int DeafStep(int passes, uint lastInput, uint prevInput, int lastCallback, bool watchable)
+    {
+        if (lastInput == 0 || !watchable || lastInput == prevInput) return 0;
+        int gap = unchecked((int)(lastInput - (uint)lastCallback));
+        return gap > DeafGapMs ? passes + 1 : 0;
+    }
+
+    static void Watchdog()
+    {
+        uint li = LastInputTick();
+        int cb = Volatile.Read(ref JarvisInputHook.LastCallbackTick);
+        bool watchable = li != 0 && li != _prevInput && OnUserDesktop() && !ForegroundElevated();
+        _deafPasses = DeafStep(_deafPasses, li, _prevInput, cb, watchable);
+        _prevInput = li;
+        if (_deafPasses == 0) { _stillReported = false; return; }
+        if (_deafPasses < DeafPasses || Volatile.Read(ref _rehookPending) != 0) return;
+        int now = Environment.TickCount;
+        if (_lastRehookTick != 0 && now - _lastRehookTick < RehookMinGapMs) {
+            // New input still unseen after a reinstall: once per episode.
+            if (!_stillReported) { Report("still-deaf", li, cb, ref DeafUnrecovered); _stillReported = true; }
+            return;
+        }
+        _lastRehookTick = now;
+        _deafPasses = 0;                 // a new episode needs fresh evidence
+        Interlocked.Exchange(ref _rehookPending, 1);
+        Report("reinstalling", li, cb, ref DeafEpisodes);
+        Interlocked.Exchange(ref _lastReinstallTs, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        if (!PostThreadMessage(_hookTid, WM_APP_REHOOK, IntPtr.Zero, IntPtr.Zero))
+            Interlocked.Exchange(ref _rehookPending, 0);
+    }
+
+    static void Report(string state, uint li, int cb, ref long counter)
+    {
+        Interlocked.Increment(ref counter);
+        long gap = unchecked((int)(li - (uint)cb));
+        // Which hook went quiet: decides between a dropped hook and input one
+        // of them is never shown (a hook installed later that swallows keys,
+        // touch or pen input that bypasses the mouse hook).
+        long kb = unchecked((int)(li - (uint)Volatile.Read(ref JarvisInputHook.LastKbTick)));
+        long ms = unchecked((int)(li - (uint)Volatile.Read(ref JarvisInputHook.LastMsTick)));
+        JarvisInputHook.WriteState("{\"ts\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds() +
+            ",\"kind\":\"hook-state\",\"state\":\"" + state + "\",\"unseen_ms\":" + gap +
+            ",\"kb_quiet_ms\":" + kb + ",\"mouse_quiet_ms\":" + ms +
+            ",\"fg\":\"" + JarvisInputHook.Foreground().Replace("\"", "") + "\"}");
+    }
+
+    // ---- samplers (the logic of the former PowerShell timers, unchanged) --------
+    static int _lastVol = -1; static bool _lastMute;
+
+    static string Keyed(out long gap)
+    {
+        gap = JarvisInputHook.MsSinceControlKey();
+        // 1500 ms is generous for the gap between a key-down and the level
+        // actually moving; beyond it, no key explains the change.
+        return gap <= 1500 ? "1" : "0";
+    }
+
+    static void SampleAudio()
+    {
+        int v; bool m;
+        if (_audioRead != null) { var r = _audioRead(); v = r[0]; m = r[1] != 0; }
+        else if (_audioLevel != null && _audioMuted != null) { v = _audioLevel(); m = _audioMuted(); }
+        else return;
+        if (_lastVol < 0) { _lastVol = v; _lastMute = m; return; }
+        if (v == _lastVol && m == _lastMute) return;
+        long gap; string keyed = Keyed(out gap);
+        JarvisInputHook.WriteState("{\"ts\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds() +
+            ",\"kind\":\"control-state\",\"control\":\"volume\",\"from\":" + _lastVol + ",\"to\":" + v +
+            ",\"muted\":" + (m ? 1 : 0) + ",\"was_muted\":" + (_lastMute ? 1 : 0) +
+            ",\"keyed\":" + keyed + ",\"key_gap_ms\":" + gap +
+            ",\"fg\":\"" + JarvisInputHook.Foreground().Replace("\"", "") + "\"}");
+        _lastVol = v; _lastMute = m;
+    }
+
+    // Per-app levels: the master sampler cannot see one app turned up in the
+    // mixer, or an app raising its own session.
+    static readonly Dictionary<string, string> _appVol = new Dictionary<string, string>();
+    static readonly Dictionary<string, string> _appNames = new Dictionary<string, string>();
+
+    static void SampleApps()
+    {
+        if (_audioSessions == null) return;
+        var rows = _audioSessions();
+        var seen = new HashSet<string>();
+        foreach (var row in rows) {
+            var parts = row.Split('|');
+            if (parts.Length < 3) continue;
+            string appPid = parts[0], state = parts[1] + "|" + parts[2];
+            seen.Add(appPid);
+            if (!_appNames.ContainsKey(appPid)) {
+                string name = "?";
+                try { using (var p = Process.GetProcessById(int.Parse(appPid))) name = p.ProcessName; } catch { }
+                _appNames[appPid] = name;
+            }
+            string was;
+            if (!_appVol.TryGetValue(appPid, out was)) { _appVol[appPid] = state; continue; }
+            if (was == state) continue;
+            var old = was.Split('|');
+            long gap; string keyed = Keyed(out gap);
+            JarvisInputHook.WriteState("{\"ts\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds() +
+                ",\"kind\":\"control-state\",\"control\":\"app-volume\",\"app\":\"" + _appNames[appPid].Replace("\"", "") +
+                "\",\"pid\":" + appPid + ",\"from\":" + old[0] + ",\"to\":" + parts[1] +
+                ",\"muted\":" + parts[2] + ",\"was_muted\":" + old[1] +
+                ",\"keyed\":" + keyed + ",\"key_gap_ms\":" + gap +
+                ",\"fg\":\"" + JarvisInputHook.Foreground().Replace("\"", "") + "\"}");
+            _appVol[appPid] = state;
+        }
+        var gone = new List<string>();
+        foreach (KeyValuePair<string, string> kv in _appVol) if (!seen.Contains(kv.Key)) gone.Add(kv.Key);
+        foreach (string g in gone) { _appVol.Remove(g); _appNames.Remove(g); }
+    }
+
+    // Brightness: Fn+brightness goes through ACPI/WMI and never produces a key,
+    // and Windows dims on its own, so the level is sampled. After 30 failures
+    // in a row (no provider) the sampler stops; the controls collector reports it.
+    static readonly Dictionary<string, int> _bright = new Dictionary<string, int>();
+    static int _brightFailures;
+    static ManagementObjectSearcher _brightQuery;
+
+    static void SampleBrightness()
+    {
+        if (_brightFailures >= 30) return;
+        try {
+            if (_brightQuery == null)
+            {
+                // Bounded: a hung WMI provider must not stall the worker (and
+                // with it the pulse) the way it could only stall its own
+                // runspace before.
+                EnumerationOptions options = new EnumerationOptions();
+                ((ManagementOptions)options).Timeout = TimeSpan.FromSeconds(2);
+                _brightQuery = new ManagementObjectSearcher(new ManagementScope(@"root\WMI"),
+                    new ObjectQuery("SELECT InstanceName, CurrentBrightness FROM WmiMonitorBrightness"), options);
+            }
+            using (ManagementObjectCollection rows = _brightQuery.Get()) {
+                ManagementObjectCollection.ManagementObjectEnumerator it = rows.GetEnumerator();
+                while (it.MoveNext()) {
+                    using (ManagementBaseObject r = it.Current) {
+                        string id = Convert.ToString(r["InstanceName"]);
+                        int v = Convert.ToInt32(r["CurrentBrightness"]);
+                        int last;
+                        if (!_bright.TryGetValue(id, out last)) { _bright[id] = v; continue; }
+                        if (last == v) continue;
+                        long gap; string keyed = Keyed(out gap);
+                        var disp = new StringBuilder();
+                        foreach (char c in id) if (char.IsLetterOrDigit(c) && c < 128 || c == '_') { if (disp.Length < 24) disp.Append(c); }
+                        JarvisInputHook.WriteState("{\"ts\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds() +
+                            ",\"kind\":\"control-state\",\"control\":\"brightness\",\"from\":" + last + ",\"to\":" + v +
+                            ",\"display\":\"" + disp + "\",\"idle_s\":" + IdleSeconds() +
+                            ",\"keyed\":" + keyed + ",\"key_gap_ms\":" + gap +
+                            ",\"fg\":\"" + JarvisInputHook.Foreground().Replace("\"", "") + "\"}");
+                        _bright[id] = v;
+                    }
+                }
+            }
+            _brightFailures = 0;
+        } catch {
+            _brightFailures++;
+            if (_brightQuery != null) { _brightQuery.Dispose(); _brightQuery = null; }
+        }
+    }
+
+    public static long IdleSeconds()
+    {
+        uint li = LastInputTick();
+        if (li == 0) return -1;
+        return (long)unchecked((uint)Environment.TickCount - li) / 1000;
+    }
+
+    static void DrainSound()
+    {
+        if (_soundTake == null) return;
+        // Bounded per tick; the listener's own budget caps what can be queued.
+        for (int i = 0; i < 64; i++) {
+            string line = _soundTake();
+            if (line == null) break;
+            JarvisInputHook.WriteState(line);
+        }
+    }
+}
 '@
 
-Add-Type -TypeDefinition $src -ReferencedAssemblies System.Windows.Forms, System.Drawing
+Add-Type -TypeDefinition $src -ReferencedAssemblies System.Management
 
 # Record our own pid. Matching on command lines to find this process does not
 # work: the query itself contains the script name, so it matches itself and the
@@ -878,40 +1388,9 @@ Add-Type -TypeDefinition $src -ReferencedAssemblies System.Windows.Forms, System
 $pidFile = [IO.Path]::ChangeExtension($OutFile, '.pid')
 Set-Content -Path $pidFile -Value $PID -Encoding ascii
 
-# A heartbeat proves the monitor is alive. Without it, a hook that silently
-# died and a genuinely quiet keyboard look identical.
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = $HeartbeatSeconds * 1000
-# The heartbeat also says which session this helper and the desktop are in: a
-# hook outside the desktop session is alive and counting nothing.
-$ownSession = (Get-Process -Id $PID).SessionId
-$timer.Add_Tick({
-    $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $c  = [JarvisInputHook]::Counters()
-    $w  = [JarvisInputHook]::TakeWindowCounters()
-    $desk = (Get-Process explorer -EA SilentlyContinue | Select-Object -First 1).SessionId
-    if ($null -eq $desk) { $desk = -1 }
-    # The sound listener is set up further down; until then, or if its C# did
-    # not compile, the heartbeat says so rather than omitting it.
-    $snd = if ($script:soundOk) { [JarvisSound.Listener]::Counters() }
-           elseif ($null -eq $script:soundOk) { '{"state":"starting"}' }
-           else { '{"state":"unavailable: listener did not compile"}' }
-    Add-Content -Path $OutFile -Value ("{""ts"":$ts,""kind"":""heartbeat"",""pid"":$PID,""session"":$ownSession,""desktop"":$desk,""counters"":$c,""window"":$w,""sound"":$snd}")
-})
-$timer.Start()
-
-# A faster, contentless liveness beat. The watchdog on the WSL side reads only
-# this file's mtime — a local stat, no interop — so a dead or wedged helper is
-# caught within one watchdog interval instead of waiting a full heartbeat. If
-# the message loop stalls, this timer stops too, which is the point.
-$aliveFile = [IO.Path]::ChangeExtension($OutFile, '.alive')
-$writePulse = { try { [IO.File]::WriteAllText($aliveFile,
-    ("" + $PID + ":" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds())) } catch { } }
-& $writePulse
-$pulse = New-Object System.Windows.Forms.Timer
-$pulse.Interval = 10000
-$pulse.Add_Tick($writePulse)
-$pulse.Start()
+# The heartbeat (with the helper's and the desktop's session, so a hook outside
+# the desktop session is visibly alive and counting nothing) and the 10 s
+# liveness pulse are written by the host's worker; see JarvisHost.Run below.
 
 # --- audio state sampler ------------------------------------------------------
 # The keyboard hook sees volume keys. It does not see everything that can change
@@ -950,7 +1429,6 @@ interface IMMDeviceEnumerator {
   int EnumAudioEndpoints(int f, int m, out IntPtr c);
   int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d);
 }
-[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorComObject { }
 // Per-app audio sessions: each app's own volume slider in the Windows mixer.
 [Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IAudioSessionManager2 {
@@ -971,20 +1449,40 @@ interface IAudioSessionControl2 {
 }
 [Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface ISimpleAudioVolume { int SetMasterVolume(float f, IntPtr g); int GetMasterVolume(out float f); int SetMute(bool m, IntPtr g); int GetMute(out bool m); }
+// The default device is looked up on every read (it can change at any time).
+// COM wrappers are deliberately NOT released here: the runtime keeps one
+// wrapper per COM object for the whole process, and the sound listener holds
+// the same enumerator, devices and sessions. Releasing them stopped the
+// listener with InvalidCastException in every smoke run (2026-10-31); the GC
+// frees these, and the host's private memory stayed flat without it.
 public class JarvisAudio {
+  // Created by CLSID and used only through interfaces. The sound listener
+  // declared its own [ComImport] class for the same CLSID; Windows returns one
+  // enumerator per process and the runtime caches its wrapper under the class
+  // that created it first, so whichever sampler started second failed with
+  // InvalidCastException (measured 2026-10-31: the listener stopped, or the
+  // volume sampler failed silently, depending on which won the race).
+  static readonly Type EnumeratorType = Type.GetTypeFromCLSID(new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"));
+  static IMMDeviceEnumerator Enumerator() { return (IMMDeviceEnumerator)Activator.CreateInstance(EnumeratorType); }
   static IAudioEndpointVolume Endpoint() {
     IMMDevice dev;
-    ((IMMDeviceEnumerator)new MMDeviceEnumeratorComObject()).GetDefaultAudioEndpoint(0, 1, out dev);
+    Enumerator().GetDefaultAudioEndpoint(0, 1, out dev);
     Guid iid = typeof(IAudioEndpointVolume).GUID;
     object o; dev.Activate(ref iid, 23, IntPtr.Zero, out o);
     return (IAudioEndpointVolume)o;
   }
-  public static int Level() { float f; Endpoint().GetMasterVolumeLevelScalar(out f); return (int)Math.Round(f * 100); }
-  public static bool Muted() { bool m; Endpoint().GetMute(out m); return m; }
+  // { level 0-100, muted 0/1 } from one endpoint lookup instead of two.
+  public static int[] Read() {
+    var ep = Endpoint(); float f; bool m;
+    ep.GetMasterVolumeLevelScalar(out f); ep.GetMute(out m);
+    return new int[] { (int)Math.Round(f * 100), m ? 1 : 0 };
+  }
+  public static int Level() { return Read()[0]; }
+  public static bool Muted() { return Read()[1] != 0; }
   // "pid|volume|muted" for every app session on the default output device.
   public static string[] Sessions() {
     IMMDevice dev;
-    ((IMMDeviceEnumerator)new MMDeviceEnumeratorComObject()).GetDefaultAudioEndpoint(0, 1, out dev);
+    Enumerator().GetDefaultAudioEndpoint(0, 1, out dev);
     Guid iid = typeof(IAudioSessionManager2).GUID; object o;
     dev.Activate(ref iid, 23, IntPtr.Zero, out o);
     IAudioSessionEnumerator en; ((IAudioSessionManager2)o).GetSessionEnumerator(out en);
@@ -1001,162 +1499,16 @@ public class JarvisAudio {
   }
 }
 '@
-$audioOk = $true
-try { Add-Type -TypeDefinition $audioSrc -ErrorAction Stop } catch { $audioOk = $false }
-
-if ($audioOk) {
-    $script:lastVol = -1
-    $script:lastMute = $null
-    $script:appVol = @{}
-    $script:appNames = @{}
-    # Per-app levels. The master sampler cannot see one app turned up in the
-    # mixer, or an app raising its own session: exactly the "the volume went up
-    # and no key did it" report that the master level alone could not explain.
-    $sampleApps = {
-        try { $rows = [JarvisAudio]::Sessions() } catch { return }
-        $seen = @{}
-        foreach ($row in $rows) {
-            $parts = $row -split '\|'
-            $appPid = $parts[0]; $state = $parts[1] + '|' + $parts[2]
-            $seen[$appPid] = $true
-            if (-not $script:appNames.ContainsKey($appPid)) {
-                $script:appNames[$appPid] = try { (Get-Process -Id ([int]$appPid) -ErrorAction Stop).ProcessName } catch { '?' }
-            }
-            if (-not $script:appVol.ContainsKey($appPid)) { $script:appVol[$appPid] = $state; continue }
-            $was = $script:appVol[$appPid]
-            if ($was -eq $state) { continue }
-            $old = $was -split '\|'
-            $gap = [JarvisInputHook]::MsSinceControlKey()
-            $keyed = if ($gap -le 1500) { 1 } else { 0 }
-            $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-            $json = '{"ts":' + $ts + ',"kind":"control-state","control":"app-volume"' +
-                    ',"app":"' + ($script:appNames[$appPid] -replace '"','') + '","pid":' + $appPid +
-                    ',"from":' + $old[0] + ',"to":' + $parts[1] +
-                    ',"muted":' + $parts[2] + ',"was_muted":' + $old[1] +
-                    ',"keyed":' + $keyed + ',"key_gap_ms":' + $gap +
-                    ',"fg":"' + ([JarvisInputHook]::Foreground() -replace '"','') + '"}'
-            [JarvisInputHook]::WriteState($json)
-            $script:appVol[$appPid] = $state
-        }
-        foreach ($gone in @($script:appVol.Keys | Where-Object { -not $seen.ContainsKey($_) })) {
-            $script:appVol.Remove($gone); $script:appNames.Remove($gone)
-        }
-    }
-    $sampleAudio = {
-        try {
-            $v = [JarvisAudio]::Level(); $m = [JarvisAudio]::Muted()
-        } catch { return }
-        if ($script:lastVol -lt 0) { $script:lastVol = $v; $script:lastMute = $m; return }
-        if ($v -eq $script:lastVol -and $m -eq $script:lastMute) { return }
-        $gap = [JarvisInputHook]::MsSinceControlKey()
-        # 1500 ms is generous for the gap between a key-down and the level
-        # actually moving; beyond it, no key explains the change.
-        $keyed = if ($gap -le 1500) { 1 } else { 0 }
-        $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-        $json = '{"ts":' + $ts + ',"kind":"control-state","control":"volume"' +
-                ',"from":' + $script:lastVol + ',"to":' + $v +
-                ',"muted":' + $(if ($m) { 1 } else { 0 }) +
-                ',"was_muted":' + $(if ($script:lastMute) { 1 } else { 0 }) +
-                ',"keyed":' + $keyed + ',"key_gap_ms":' + $gap +
-                ',"fg":"' + ([JarvisInputHook]::Foreground() -replace '"','') + '"}'
-        [JarvisInputHook]::WriteState($json)
-        $script:lastVol = $v; $script:lastMute = $m
-    }
-    & $sampleAudio
-    & $sampleApps
-    $appTimer = New-Object System.Windows.Forms.Timer
-    # Session enumeration costs more than two level reads; every two seconds
-    # still catches a slider drag.
-    $appTimer.Interval = 2000
-    $appTimer.Add_Tick($sampleApps)
-    $appTimer.Start()
-    $audioTimer = New-Object System.Windows.Forms.Timer
-    # Fast enough that a press-and-hold ramp is not collapsed into one jump,
-    # cheap enough to be invisible: two COM reads per tick.
-    $audioTimer.Interval = 1000
-    $audioTimer.Add_Tick($sampleAudio)
-    $audioTimer.Start()
-}
+# Optional: if it does not compile the host simply has no audio sampler.
+try { Add-Type -TypeDefinition $audioSrc -ErrorAction Stop } catch { }
 
 # --- brightness state sampler --------------------------------------------------
 # The keyboard hook sees no brightness key at all on most laptops: Fn+brightness
 # goes through ACPI/WMI straight to the display driver and never produces a
-# virtual key. Windows itself moves brightness (adaptive brightness, battery
-# dimming, idle dimming), and any process can set it through WMI with no input
-# event. So the level is sampled, like the volume, and every change is logged
-# with how long ago a control key was seen and how long the whole machine had
-# been idle (GetLastInputInfo: keyboard and mouse, system-wide).
-#
-# The WMI read takes tens of milliseconds, which is too long for the thread that
-# services the low-level hook, so it runs on its own runspace. It shares the
-# hook class's statics and the file lock, so a brightness line can never
-# interleave with a key line mid-write.
-$brightSrc = @'
-using System;
-using System.Runtime.InteropServices;
-public static class JarvisIdle {
-  [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
-  [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
-  // Seconds since the last keyboard or mouse input anywhere in this session; -1 if unknown.
-  public static long IdleSeconds() {
-    var li = new LASTINPUTINFO(); li.cbSize = (uint)Marshal.SizeOf(li);
-    if (!GetLastInputInfo(ref li)) return -1;
-    return (long)unchecked((uint)Environment.TickCount - li.dwTime) / 1000;
-  }
-}
-'@
-$brightOk = $true
-try { Add-Type -TypeDefinition $brightSrc -ErrorAction Stop } catch { $brightOk = $false }
-if ($brightOk) {
-    $brightWorker = {
-        $cim = $null
-        $last = @{}
-        $failures = 0
-        while ($true) {
-            Start-Sleep -Milliseconds 2000
-            try {
-                if ($null -eq $cim) { $cim = New-CimSession -ErrorAction Stop }
-                $rows = @(Get-CimInstance -CimSession $cim -Namespace root/WMI `
-                            -ClassName WmiMonitorBrightness -ErrorAction Stop)
-                $failures = 0
-            } catch {
-                # No provider (external monitor only, remote session) or a
-                # transient WMI fault. Give up after a run of failures: the
-                # 5-minute controls collector reports the provider as
-                # unobservable; this sampler must not keep paying for it.
-                $failures++
-                if ($cim) { try { $cim | Remove-CimSession } catch { }; $cim = $null }
-                if ($failures -ge 30) { return }
-                continue
-            }
-            foreach ($r in $rows) {
-                $id = [string]$r.InstanceName
-                $v = [int]$r.CurrentBrightness
-                if (-not $last.ContainsKey($id)) { $last[$id] = $v; continue }
-                if ($last[$id] -eq $v) { continue }
-                $gap = [JarvisInputHook]::MsSinceControlKey()
-                $keyed = if ($gap -le 1500) { 1 } else { 0 }
-                $idle = [JarvisIdle]::IdleSeconds()
-                $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-                # The panel id is a PnP string (vendor + uid), not content;
-                # trimmed to its first 24 safe characters.
-                $disp = $id -replace '[^A-Za-z0-9_]', ''
-                if ($disp.Length -gt 24) { $disp = $disp.Substring(0, 24) }
-                $json = '{"ts":' + $ts + ',"kind":"control-state","control":"brightness"' +
-                        ',"from":' + $last[$id] + ',"to":' + $v +
-                        ',"display":"' + $disp + '"' +
-                        ',"idle_s":' + $idle +
-                        ',"keyed":' + $keyed + ',"key_gap_ms":' + $gap +
-                        ',"fg":"' + ([JarvisInputHook]::Foreground() -replace '"','') + '"}'
-                [JarvisInputHook]::WriteState($json)
-                $last[$id] = $v
-            }
-        }
-    }
-    $brightRs = [powershell]::Create()
-    $null = $brightRs.AddScript($brightWorker)
-    $brightHandle = $brightRs.BeginInvoke()
-}
+# virtual key, and Windows moves brightness on its own. The host samples
+# WmiMonitorBrightness every 2 s on its worker thread (the WMI read takes tens
+# of milliseconds, never on the hook thread) and logs each change with the key
+# gap and the session idle time (JarvisHost.SampleBrightness).
 
 # --- continuous sound listener ------------------------------------------------
 # The 5-minute audio collector meters output for 8 s, about 2.7% of the time, so
@@ -1175,8 +1527,8 @@ if ($brightOk) {
 # shared "system sounds" session, which also carries Beep() tones and console
 # bells, so their calling program is not named here. Sound on a device that no
 # session explains is recorded as a device-level episode with no owner.
-# Episodes are queued here and written by a UI timer through the hook's own
-# locked writer, so a sound line can never interleave with a key line. Its
+# Episodes are queued here and drained by the host's worker into the hook's
+# single output queue, so a sound line can never interleave with a key line. Its
 # counters ride the heartbeat, so a dead listener and a silent machine are
 # distinguishable.
 #
@@ -1193,7 +1545,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 namespace JarvisSound {
-[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class DeviceEnumeratorClass { }
 [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IDeviceEnumerator {
     [PreserveSig] int EnumAudioEndpoints(int flow, uint mask, out IDeviceCollection devices);
@@ -1248,7 +1599,7 @@ class Track {
     public bool Active; public long StartMs, LastLoudMs, EndedMs = -1; public double Max; public int Pulses;
     public bool WasLoud; public long StartUnixMs; public long QuietMs, IdleS;
     public string DeviceId = "", Source = "session", App = "", ProcStart = "", Fg = "";
-    public uint Pid; public bool Known, Sys;
+    public uint Pid, FgPid; public bool Known, Sys;
     // JSON fragments: who called Beep() for this episode, and whose console it is.
     public volatile string Caller = ""; public string ConsoleOwner = "";
 }
@@ -1442,7 +1793,86 @@ static class BeepCallers {
         }
         // No Beep() caller this helper can see. With no new unopenable handle
         // either, nobody called Beep(): a Windows event sound or PlaySound.
-        return "\"caller\":\"" + (blockedNew > 0 ? "none visible" : "none") + "\"" + counts;
+        // Either way the foreground's process tree is added as an inference.
+        return "\"caller\":\"" + (blockedNew > 0 ? "none visible" : "none") + "\"" + counts + Likely(t.FgPid);
+    }
+
+    // The likely source of a tone nobody could be seen calling: the programs
+    // under the window that was in front at its onset. Measured 2026-11-03:
+    // four double 50 ms Beep() tones since 10-29 played while Windows Terminal
+    // was in front and its one Windows shell (PowerShell, whose line editor
+    // dings on a key that does nothing) was the only candidate; tones that
+    // short end before the handle snapshot. Console hosts, WSL launchers and
+    // the terminal itself never call Beep(), so they are not candidates; the
+    // window's own process is one only when nothing runs under it. A single
+    // candidate is named with its start time; several are listed, none named.
+    // This is an inference and is reported as one, never as the caller.
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct ProcessEntry {
+        public uint Size; public uint Usage; public uint ProcessId; public IntPtr DefaultHeapId; public uint ModuleId;
+        public uint Threads; public uint ParentProcessId; public int PriorityBase; public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string ExeFile;
+    }
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
+    const int MaxTreeDepth = 4, MaxTreeNodes = 64, MaxListed = 4;
+    static readonly string[] NotCallers = { "conhost", "openconsole", "windowsterminal", "wsl", "wslhost", "wslrelay", "wslservice" };
+
+    internal static bool NotCaller(string name) {
+        string n = name.ToLowerInvariant();
+        if (n.EndsWith(".exe")) n = n.Substring(0, n.Length - 4);
+        if (n.StartsWith("ubuntu")) return true;       // the distro launchers (ubuntu.exe, ubuntu2404.exe)
+        return Array.IndexOf(NotCallers, n) >= 0;
+    }
+
+    static string Likely(uint fgPid) {
+        if (fgPid == 0) return "";
+        var names = new Dictionary<uint, string>();
+        var children = new Dictionary<uint, List<uint>>();
+        IntPtr snap = CreateToolhelp32Snapshot(0x2, 0);            // TH32CS_SNAPPROCESS
+        if (snap == IntPtr.Zero || snap == new IntPtr(-1)) return "";
+        try {
+            var e = new ProcessEntry(); e.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+            if (!Process32FirstW(snap, ref e)) return "";
+            do {
+                names[e.ProcessId] = e.ExeFile ?? "";
+                if (e.ParentProcessId != e.ProcessId) {
+                    List<uint> kids;
+                    if (!children.TryGetValue(e.ParentProcessId, out kids)) children[e.ParentProcessId] = kids = new List<uint>();
+                    kids.Add(e.ProcessId);
+                }
+            } while (Process32NextW(snap, ref e));
+        } finally { CloseHandle(snap); }
+        if (!names.ContainsKey(fgPid)) return "";
+        var found = new List<uint>();
+        var level = new List<uint> { fgPid };
+        int visited = 0;
+        for (int depth = 0; depth < MaxTreeDepth && level.Count > 0 && visited < MaxTreeNodes; depth++) {
+            var next = new List<uint>();
+            foreach (uint pid in level) {
+                List<uint> kids;
+                if (!children.TryGetValue(pid, out kids)) continue;
+                foreach (uint kid in kids) {
+                    if (++visited > MaxTreeNodes) break;
+                    next.Add(kid);
+                    if (!NotCaller(names[kid])) found.Add(kid);
+                }
+            }
+            level = next;
+        }
+        if (found.Count == 0 && !NotCaller(names[fgPid])) found.Add(fgPid);
+        if (found.Count == 0) return "";
+        var listed = new StringBuilder();
+        for (int i = 0; i < found.Count && i < MaxListed; i++) {
+            string n = names[found[i]];
+            if (n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) n = n.Substring(0, n.Length - 4);
+            listed.Append(i > 0 ? " " : "").Append(n).Append(':').Append(found[i]);
+        }
+        if (found.Count > MaxListed) listed.Append(" +").Append(found.Count - MaxListed);
+        uint one = found.Count == 1 ? found[0] : 0;
+        return ",\"likely_pid\":" + one + ",\"likely_n\":" + Math.Min(found.Count, MaxTreeNodes) +
+               ",\"likely_list\":\"" + Listener.Esc(listed.ToString()) + "\"" +
+               (one != 0 ? ProcessFields(one, "likely") : "");
     }
 
     static uint PidOf(string key) { return UInt32.Parse(key.Substring(0, key.IndexOf(':'))); }
@@ -1536,13 +1966,35 @@ public static class Listener {
                ",\"episodes\":" + Interlocked.Read(ref Episodes) +
                ",\"beeps\":" + Interlocked.Read(ref Beeps) + ",\"dropped\":" + Interlocked.Read(ref Dropped) +
                ",\"errors\":" + Interlocked.Read(ref Errors) +
+               ",\"restarts\":" + Interlocked.Read(ref Restarts) +
                ",\"enumerations\":" + Interlocked.Read(ref Enumerations) +
                ",\"last_sample\":" + Interlocked.Read(ref LastSample) + BeepCallers.Counters() + "}";
     }
 
+    // A COM fault (an audio session vanishing mid-scan raised InvalidCastException
+    // in a smoke run on 2026-10-31) used to end the listener until the hook
+    // restarted. Now the loop starts over with fresh devices, counted in
+    // Errors; only RestartLimit faults inside RestartWindowMs stop it.
+    const int RestartLimit = 20;
+    const long RestartWindowMs = 600000;
+    public static long Restarts;
+
     static void Run() {
-        try { Loop(); }
-        catch (Exception error) { State = "stopped: " + error.GetType().Name; }
+        var faults = new Queue<long>();
+        while (true) {
+            try { Loop(); return; }
+            catch (Exception error) {
+                Interlocked.Increment(ref Errors);
+                long t = UnixMs();
+                faults.Enqueue(t);
+                while (faults.Count > 0 && t - faults.Peek() > RestartWindowMs) faults.Dequeue();
+                if (faults.Count >= RestartLimit) { State = "stopped: " + error.GetType().Name; return; }
+                State = "restarting: " + error.GetType().Name;
+                Interlocked.Increment(ref Restarts);
+                Thread.Sleep(1000);
+                State = "running";
+            }
+        }
     }
 
     static void Release(object value) {
@@ -1552,7 +2004,10 @@ public static class Listener {
     static long UnixMs() { return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); }
 
     static void Loop() {
-        var enumerator = (IDeviceEnumerator)new DeviceEnumeratorClass();
+        // By CLSID and through the interface only: see JarvisAudio for why a
+        // [ComImport] class here broke whenever the volume sampler ran first.
+        var enumerator = (IDeviceEnumerator)Activator.CreateInstance(
+            Type.GetTypeFromCLSID(new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")));
         var devices = new List<Device>();
         var clock = Stopwatch.StartNew();
         long nextEnum = 0;
@@ -1610,7 +2065,7 @@ public static class Listener {
             t.Active = true; t.StartMs = now; t.LastLoudMs = now; t.Max = peak; t.Pulses = 1; t.WasLoud = true;
             t.StartUnixMs = UnixMs();
             t.QuietMs = t.EndedMs < 0 ? -1 : now - t.EndedMs;
-            t.IdleS = IdleSeconds(); t.Fg = Foreground();
+            t.IdleS = IdleSeconds(); t.Fg = Foreground(out t.FgPid);
             t.Caller = "";
             if (t.Sys) BeepCallers.Request(t);
         } else if (loud) {
@@ -1785,9 +2240,9 @@ public static class Listener {
         return (long)unchecked((uint)Environment.TickCount - li.dwTime) / 1000;
     }
 
-    static string Foreground() {
+    static string Foreground(out uint pid) {
+        pid = 0;
         try {
-            uint pid;
             GetWindowThreadProcessId(GetForegroundWindow(), out pid);
             if (pid == 0) return "";
             using (Process process = Process.GetProcessById((int)pid)) return process.ProcessName;
@@ -1807,22 +2262,10 @@ public static class Listener {
 }
 }
 '@
-$script:soundOk = $true
-try { Add-Type -TypeDefinition $soundSrc -ErrorAction Stop } catch { $script:soundOk = $false }
-if ($script:soundOk) {
-    [JarvisSound.Listener]::Start()
-    $drainSound = {
-        # Bounded per tick; the listener's own budget caps what can be queued.
-        for ($i = 0; $i -lt 64; $i++) {
-            $line = [JarvisSound.Listener]::Take()
-            if ($null -eq $line) { break }
-            [JarvisInputHook]::WriteState($line)
-        }
-    }
-    $soundTimer = New-Object System.Windows.Forms.Timer
-    $soundTimer.Interval = 1000
-    $soundTimer.Add_Tick($drainSound)
-    $soundTimer.Start()
-}
+# Optional like the audio sampler: the host binds the listener if it compiled
+# and its heartbeat says "unavailable" otherwise.
+try { Add-Type -TypeDefinition $soundSrc -ErrorAction Stop } catch { }
 
-[System.Windows.Forms.Application]::Run()
+# No PowerShell runs after this line: the host pumps the hook's messages on
+# this thread and does everything periodic on its worker.
+[JarvisHost]::Run($OutFile, $HeartbeatSeconds)

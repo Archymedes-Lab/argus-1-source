@@ -5,7 +5,18 @@ import os
 
 from jarvis.core.util import now
 
-from .common import _M_DUPES, _M_OVERSIZE, _M_SESSION, READ_CAP, SOUND_META
+from .common import (
+    _M_DUPES,
+    _M_OVERSIZE,
+    _M_SESSION,
+    HOST_META,
+    OWN_PIDS_KEEP_S,
+    OWN_PIDS_META,
+    READ_CAP,
+    SOUND_META,
+    STATES_KEEP,
+    STATES_META,
+)
 from .helper import _paths
 
 _BEAT_COLS = ("real_keys", "injected_keys", "real_clicks", "injected_clicks",
@@ -29,8 +40,9 @@ _WINDOW_SQL = ("INSERT OR REPLACE INTO input_typing_windows (ts,"
 _SOUND_SQL = ("INSERT INTO sound_events(ts,ms,sound,source,dur_ms,pulses,peak,"
               "endpoint,pid,app,proc_start,known,sys,quiet_ms,idle_s,open,fg,"
               "caller,caller_pid,caller_app,caller_start,caller_blocked_new,"
-              "console_pid,console_app,console_start) "
-              "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+              "console_pid,console_app,console_start,"
+              "likely_pid,likely_app,likely_start,likely_list,likely_n) "
+              "VALUES(" + ",".join("?" * 30) + ")")
 _SOUND_COUNTERS = ("samples", "endpoints", "sessions", "episodes", "beeps",
                    "dropped", "errors", "enumerations", "last_sample",
                    "beep_lookups", "beep_callers", "beep_uninspectable",
@@ -76,18 +88,29 @@ def _sound_row(rec):
     caller_pid = _int(rec.get("caller_pid", 0), 0, 0xFFFFFFFF)
     blocked_new = _int(rec.get("caller_blocked_new", -1), -1, 10_000_000)
     console_pid = _int(rec.get("console_pid", 0), 0, 0xFFFFFFFF)
-    if (caller not in _CALLER_STATES or None in (caller_pid, blocked_new, console_pid)
+    likely_pid = _int(rec.get("likely_pid", 0), 0, 0xFFFFFFFF)
+    likely_n = _int(rec.get("likely_n", 0), 0, 64)
+    if (caller not in _CALLER_STATES or None in (caller_pid, blocked_new, console_pid,
+                                                  likely_pid, likely_n)
             or (caller == "found") != (caller_pid > 0)):
+        return None
+    # An inference only where nothing was found, only for the system-sounds
+    # session, and a single pid only when it was the one candidate.
+    if (likely_pid or likely_n) and (caller == "found" or not flags[1]):
+        return None
+    if likely_pid and likely_n != 1:
         return None
     text = {k: _clean(str(rec.get(k) or ""))[:n] for k, n in
             (("endpoint", 160), ("app", 64), ("proc_start", 40), ("fg", 64),
              ("caller_app", 64), ("caller_start", 40), ("console_app", 64),
-             ("console_start", 40))}
+             ("console_start", 40), ("likely_app", 64), ("likely_start", 40),
+             ("likely_list", 160))}
     return (ts, ms, rec["sound"], rec["source"], dur, pulses, float(peak),
             text["endpoint"], pid, text["app"], text["proc_start"],
             flags[0], flags[1], quiet, idle, flags[2], text["fg"],
             caller, caller_pid, text["caller_app"], text["caller_start"],
-            blocked_new, console_pid, text["console_app"], text["console_start"])
+            blocked_new, console_pid, text["console_app"], text["console_start"],
+            likely_pid, text["likely_app"], text["likely_start"], text["likely_list"], likely_n)
 
 
 def _sound_beat(rec, ts):
@@ -149,6 +172,8 @@ def ingest(store):
     sound_beat = None
     session = None
     controls = []
+    host = None
+    states = []
     for line in body.splitlines():
         line = line.strip()
         if not line:
@@ -171,6 +196,14 @@ def ingest(store):
             if "session" in rec:
                 session = f"{int(rec['session'])}:{int(rec.get('desktop', -1))}"
             sound_beat = _sound_beat(rec, ts) or sound_beat
+            if isinstance(rec.get("hook"), dict):
+                host = dict(_clean(rec["hook"]), ts=ts)
+        elif rec.get("kind") == "hook-state":
+            # The resident host's watchdog: Windows dropped the hook, or it
+            # stayed deaf after a reinstall. Not an input event.
+            states.append([int(rec.get("ts") or now()), str(rec.get("state") or "")[:16],
+                           int(rec.get("unseen_ms") or 0), str(rec.get("fg") or "")[:64],
+                           int(rec.get("kb_quiet_ms") or -1), int(rec.get("mouse_quiet_ms") or -1)])
         elif rec.get("kind") == "sound":
             row = _sound_row(rec)
             if row:
@@ -244,6 +277,26 @@ def ingest(store):
         store.set_meta(SOUND_META, sound_beat)
     if session is not None:
         store.set_meta(_M_SESSION, session)
+    if host is not None:
+        store.set_meta(HOST_META, json.dumps(host))
+    if beat_pids:
+        # Every pid that wrote a heartbeat into OUR output file is our helper.
+        # The watcher audit used only the current pid, so after each restart
+        # the previous JARVIS hook was reported as an unknown keylogger.
+        try:
+            own = {int(k): int(v) for k, v in json.loads(store.get_meta(OWN_PIDS_META, "{}") or "{}").items()}
+        except (ValueError, TypeError, AttributeError):
+            own = {}
+        stamp = now()
+        own.update({p: stamp for p in beat_pids})
+        own = {p: t for p, t in own.items() if stamp - t < OWN_PIDS_KEEP_S}
+        store.set_meta(OWN_PIDS_META, json.dumps({str(p): t for p, t in own.items()}))
+    if states:
+        try:
+            kept = json.loads(store.get_meta(STATES_META, "[]") or "[]")
+        except ValueError:
+            kept = []
+        store.set_meta(STATES_META, json.dumps((kept + states)[-STATES_KEEP:]))
     # Heartbeats from more than one PID in a single drain means two helpers are
     # writing to the same file and double-counting. Cheap and local — no
     # interop — so the healthy path can check it too.

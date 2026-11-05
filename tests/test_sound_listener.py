@@ -88,9 +88,11 @@ class HookScriptInvariants(unittest.TestCase):
         self.assertLessEqual(int(consts["LinesPerMinute"]), 60)
         self.assertLessEqual(int(consts["QueueCap"]), 1024)
         self.assertEqual(int(consts["MaxBeepMs"]), 1500)
-        # The drain writes through the hook's locked writer, a bounded number per tick.
-        self.assertIn("for ($i = 0; $i -lt 64; $i++)", self.script)
-        self.assertIn("[JarvisInputHook]::WriteState($line)", self.script)
+        # The host's worker drains a bounded number per tick into the hook's
+        # single output queue (2026-10-31; a WinForms timer did it before).
+        drain = self.script.split("static void DrainSound()", 1)[1].split("\n    }\n", 1)[0]
+        self.assertIn("for (int i = 0; i < 64; i++)", drain)
+        self.assertIn("JarvisInputHook.WriteState(line)", drain)
 
     def test_beep_lookup_is_bounded_and_names_only_the_beep_device(self):
         lookup = self.src.split("static class BeepCallers {", 1)[1].split("public static class Listener", 1)[0]
@@ -111,13 +113,17 @@ class HookScriptInvariants(unittest.TestCase):
         self.assertIn('"wedged"', lookup)
 
     def test_heartbeat_always_carries_listener_state(self):
-        hb = self.script.split("$timer.Add_Tick({", 1)[1].split("})", 1)[0]
-        self.assertIn('""sound"":$snd', hb)
-        self.assertIn("listener did not compile", hb)
+        hb = self.script.split("static void Heartbeat()", 1)[1].split("\n    }\n", 1)[0]
+        self.assertIn('",\\"sound\\":" + snd', hb)
+        self.assertIn("_soundState ?? _soundCounters()", hb)
+        # The state is never empty: "unavailable" until the listener is bound and started.
+        self.assertIn("listener did not compile", self.script.split("static string _soundState", 1)[1][:120])
 
     def test_compile_failure_does_not_stop_the_hook(self):
-        self.assertIn("try { Add-Type -TypeDefinition $soundSrc -ErrorAction Stop } "
-                      "catch { $script:soundOk = $false }", self.script)
+        self.assertIn("try { Add-Type -TypeDefinition $soundSrc -ErrorAction Stop } catch { }",
+                      self.script)
+        # The host binds it by reflection and runs without it.
+        self.assertIn('Bind<Action>("JarvisSound.Listener", "Start")', self.script)
 
     @unittest.skipIf(assemblies is None, "no own-assembly register in this tree")
     def test_own_assembly_register_counts_the_listener(self):
@@ -125,7 +131,8 @@ class HookScriptInvariants(unittest.TestCase):
         # script's identifiers; the listener must be inside both.
         assemblies._CACHE.pop("inputhook.ps1", None)
         idents, compiles, _hashes = assemblies._script_facts("inputhook.ps1")
-        self.assertGreaterEqual(compiles, 4)
+        # core + host, audio, sound (brightness moved into the host 2026-10-31)
+        self.assertEqual(compiles, 3)
         for name in ("JarvisSound", "Listener", "IPeakMeter", "GetPeakValue",
                      "GetSessionInstanceIdentifier", "FreeCoTaskMem"):
             self.assertIn(name, idents)

@@ -18,6 +18,16 @@ _M_SESSION = "input_hook_session"   # "<helper session>:<desktop session>" from 
 
 SOUND_META = "sound_listener_v1"      # JSON: the newest beat's sound-listener counters + its ts
 
+HOST_META = "input_hook_host"         # JSON: the newest beat's resident-host counters + its ts
+
+STATES_META = "input_hook_states"     # JSON list: recent watchdog events [ts, state, unseen_ms, fg]
+
+STATES_KEEP = 20
+
+OWN_PIDS_META = "input_hook_own_pids"  # JSON {pid: last heartbeat ts}: every helper of ours in 24 h
+
+OWN_PIDS_KEEP_S = 24 * 3600
+
 
 def _sha256(path):
     try:

@@ -18,7 +18,7 @@ reporting, coverage is the burst alone and that is said, never implied.
 import json
 import time
 
-from jarvis.collectors.host import privacyseal
+from jarvis.collectors.host import beeptrace, privacyseal
 from jarvis.collectors.host.inputwatch.common import SOUND_META
 from jarvis.core import collection
 from jarvis.core.paths import load_win_script
@@ -244,11 +244,27 @@ def listener_state(store, now=None):
 _BEEP_RENDERER = "taskhostw"
 
 
-def _actor(row):
+def _likely(row):
+    """The unelevated helper's inference, or "" when it made none."""
+    if "likely_app" not in row.keys():
+        return ""
+    if row["likely_pid"]:
+        return row["likely_app"] or f"process {row['likely_pid']}"
+    if row["likely_n"] > 1 and row["likely_list"]:
+        return f"one of {row['likely_n']} ({row['likely_list']})"
+    return ""
+
+
+def _actor(row, traced=()):
     if row["source"] == "device":
         return "sound with no app session"
     if row["sys"] and row["caller"] == "found":
         return f"{row['caller_app'] or 'process ' + str(row['caller_pid'])} (Beep() call)"
+    if row["sys"] and traced:
+        names = sorted({o["name"] or f"process {o['pid']}" for o in traced})
+        return f"{', '.join(names)} (Beep() call, kernel trace)"
+    if row["sys"] and _likely(row):
+        return f"the system sounds session, likely {_likely(row)} (inferred, not traced)"
     if row["sys"]:
         return "the system sounds session"
     if row["console_pid"]:
@@ -258,7 +274,20 @@ def _actor(row):
     return f"process {row['pid']} (exited or not inspectable)"
 
 
-def _who(latest, rows):
+def _inference(row):
+    """How the foreground inference was reached, for the finding's detail."""
+    if row["likely_pid"]:
+        who = (f"{row['likely_app'] or 'process'} {row['likely_pid']}"
+               + (f" started {row['likely_start']}" if row["likely_start"] else "")
+               + ", the only candidate in the foreground window's process tree")
+    else:
+        who = (f"one of {row['likely_n']} candidates in the foreground window's "
+               f"process tree ({row['likely_list']})")
+    return (f"Likely source, inferred and not proven: {who}. Short Beep() tones end "
+            "before the helper can look, so this is who was in front, not who called")
+
+
+def _who(latest, rows, traced=()):
     """What is known about who made the sound, for the finding's detail."""
     if latest["source"] == "device":
         return ("No app session carried it: an exclusive-mode or protected "
@@ -268,6 +297,11 @@ def _who(latest, rows):
                 + (f" started {latest['caller_start']}" if latest["caller_start"] else "")
                 + " had the Beep device open while the tone played: it called "
                 "Beep() (or Console.Beep); the Windows sound service played it")
+    if latest["sys"] and traced:
+        return ("The kernel file trace recorded "
+                + beeptrace.describe(traced)
+                + " opening the Beep device for this tone: it called Beep() (or "
+                "Console.Beep); the Windows sound service played it")
     if latest["sys"]:
         states = {}
         for r in rows:
@@ -283,7 +317,8 @@ def _who(latest, rows):
                    "inspect, so an elevated Beep() caller is not ruled out")
         else:
             why = f"The Beep() caller was not looked up ({latest['caller'] or 'older hook'})"
-        return f"{why} (caller lookups: {tally})"
+        guess = f". {_inference(latest)}" if _likely(latest) else ""
+        return f"{why} (caller lookups: {tally}){guess}"
     if latest["console_pid"]:
         return (f"The console host (process {latest['pid']}) played its bell for process "
                 f"{latest['console_pid']}"
@@ -293,8 +328,12 @@ def _who(latest, rows):
                                      if latest["proc_start"] else ""))
 
 
-def sound_findings(store, now=None):
-    """Beeps the continuous listener recorded in the last 24 h, by source."""
+def sound_findings(store, now=None, trace=None):
+    """Beeps the continuous listener recorded in the last 24 h, by source.
+
+    A system-sounds tone the listener could not attribute is attributed by the
+    broker's kernel trace when an open of the Beep device matches it in time;
+    failing both, the listener's foreground inference is shown as such."""
     now = time.time() if now is None else now
     try:
         rows = store.db.execute(
@@ -302,9 +341,11 @@ def sound_findings(store, now=None):
             "ORDER BY ts DESC, id DESC", (int(now - _SOUND_WINDOW_S),)).fetchall()
     except Exception:
         return []
-    groups = {}
+    groups, traced = {}, {}
     for row in rows:
-        groups.setdefault(_actor(row), []).append(row)
+        opens = beeptrace.callers(row, trace) if row["caller"] != "found" else []
+        traced[row["id"]] = opens
+        groups.setdefault(_actor(row, opens), []).append(row)
     findings = []
     for actor in sorted(groups):
         rows = groups[actor]
@@ -316,7 +357,8 @@ def sound_findings(store, now=None):
             f"(~{latest['dur_ms']} ms, peak {latest['peak']:.2f}, foreground "
             f"{latest['fg'] or 'unknown'}, input idle {latest['idle_s']} s); "
             f"{idle} while nobody had used the machine for 5 min. "
-            f"{_who(latest, rows)}. Amplitude only: tone and content are not observed"))
+            f"{_who(latest, rows, traced[latest['id']])}. Amplitude only: tone and content "
+            "are not observed"))
     return findings
 
 
@@ -343,10 +385,10 @@ def _beep_lookup_findings(beat):
     return findings
 
 
-def listener_findings(store, now=None):
+def listener_findings(store, now=None, trace=None):
     """Recorded beeps plus a visibility finding when the listener is down."""
     live, beat, why = listener_state(store, now)
-    findings = sound_findings(store, now)
+    findings = sound_findings(store, now, trace)
     if not live:
         findings.append(_finding(
             "medium", "continuous sound listener not reporting",
@@ -432,7 +474,9 @@ def audit(store, hosts=("wsl", "win")):
         collection.failed("audio", "Windows collection disabled")
         return [_finding("medium", "Windows audio routes are not monitored",
                          "Windows collection is disabled", "visibility")]
-    sounds, live, beat = listener_findings(store)
+    trace, trace_why = beeptrace.load()
+    sounds, live, beat = listener_findings(store, trace=trace)
+    sounds += beeptrace.health(trace, trace_why, _finding)
     data = ps_json(PS_AUDIO, timeout=45)
     if not _valid(data):
         collection.failed("audio", "metadata probe returned no valid snapshot")

@@ -14,6 +14,12 @@ one short process listing), and behind a single queue they starved: on
 and `scan` aged past their health limits, and the Windows monitor mailed
 "monitoring unavailable" about a daemon that was perfectly alive. A long audit
 must never be able to make JARVIS look dead.
+
+The same reasoning, measured again on 2026-11-03, gives the collectors on a
+five-minute cadence a lane of their own (FREQUENT): behind the post-boot sweep
+they went stale for 16 minutes. PowerShell launches from every lane pass one
+daemon-wide admission gate (platform/interop_gate.py), so more lanes never
+mean more concurrent powershell.exe processes than the gate allows.
 """
 
 import json
@@ -47,6 +53,20 @@ FAST = mechanisms.names(lane="fast")
 # steady-state duty was 94% with evidence, leaving 6% to catch up after a
 # restart, a WSL crash or a standby, and 32 of 51 collectors stayed stale.
 BULK = mechanisms.names(lane="bulk")
+# The frequent lane (2026-11-03): collectors on a cadence of five minutes or
+# less. After a boot the main lane owes one sweep of every audit (1331 s
+# measured, intrusion 299 s, secrets 168 s, firewall 117 s), and the
+# five-minute collectors behind it went stale for 16 min with no error. Here
+# they wait at most one pass of each other (duty 0.31). Their PowerShell
+# launches pass the same interop gate as every other lane, which bounds
+# concurrent launches daemon-wide (platform/interop_gate.py).
+FREQUENT = mechanisms.names(lane="frequent")
+# Lane -> (heartbeat attribute, running-job attribute). One table so a new
+# lane cannot be started without its liveness and its current job reported.
+LANE_ATTRS = {"fast": ("fast_heartbeat", "fast_current"),
+              "frequent": ("frequent_heartbeat", "frequent_current"),
+              "main": ("heartbeat", "current"),
+              "bulk": ("bulk_heartbeat", "bulk_current")}
 ISOLATED = set(mechanisms.names(isolated=True))
 # Longest the cold-start gate may hold coverage and report back. One full
 # sweep takes a few minutes; past this the audits run and report honestly
@@ -60,6 +80,8 @@ RESUME_JUMP_S = 60.0
 # A failed run inside its freshness budget keeps the last good result and is
 # retried after RETRY_S, at most HOLD_MAX times in a row before it is recorded.
 RETRY_S = 60
+# After a job raised out of run_once, the lane waits this long before the next job.
+LANE_ERROR_PAUSE_S = 5
 # How often a paired phone's approvals are offered and its replies fetched (notify/replies.py). When no
 # request is outstanding this does no network work at all.
 PHONE_TICK_S = 5
@@ -215,6 +237,7 @@ class Scheduler(threading.Thread):
         super().__init__(name="jarvis-scheduler")
         self.db_path = db_path
         self.hosts = hosts
+        self.lane_errors = {}      # lane -> jobs that raised out of run_once (the lane kept running)
         # Give every cold-start job a real deadline. Using 0 here makes every
         # job that has not run yet appear decades more overdue than a recurring
         # short-interval job. The result is a full, multi-minute cold-start
@@ -261,6 +284,10 @@ class Scheduler(threading.Thread):
         self.bulk_heartbeat_mono = time.monotonic()
         self.bulk_current = None
         self.bulk_thread = None
+        self.frequent_heartbeat = time.time()
+        self.frequent_heartbeat_mono = time.monotonic()
+        self.frequent_current = None
+        self.frequent_thread = None
         self.outages = None
         self.started_at = time.time()
         # The VM boots after Windows, so the guest boot bounds both: a result
@@ -408,7 +435,8 @@ class Scheduler(threading.Thread):
         return value
 
     def _lane_of(self, name):
-        return "fast" if name in FAST else "bulk" if name in BULK else "main"
+        return ("fast" if name in FAST else "frequent" if name in FREQUENT
+                else "bulk" if name in BULK else "main")
 
     def _note_resume(self):
         """Re-arm the cold-start hold after the host resumes from suspend.
@@ -455,8 +483,7 @@ class Scheduler(threading.Thread):
             holding = sorted(self.cold_start_pending) if self._cold_start_holding(now) else []
             return {"holding": holding, "resumed_at": self.resumed_at,
                     "started_at": self.started_at,
-                    "current": [n for n in (self.current, self.fast_current,
-                                                    self.bulk_current) if n]}
+                    "current": running_jobs(self)}
 
     def _cold_start_holding(self, now):
         return bool(self.cold_start_pending) and \
@@ -530,7 +557,7 @@ class Scheduler(threading.Thread):
         return False
 
     def _due(self, lane=None):
-        """The job to run next. `lane` is "fast", "main", "bulk" or None for any.
+        """The job to run next. `lane` is "fast", "frequent", "main", "bulk" or None for any.
 
         Order (docs/architecture/LANE-FAIRNESS-AND-OUTAGE-RECORD.md):
 
@@ -840,6 +867,9 @@ class Scheduler(threading.Thread):
         self.bulk_thread = threading.Thread(target=self._lane, args=("bulk",),
                                             name="jarvis-bulk-lane", daemon=True)
         self.bulk_thread.start()
+        self.frequent_thread = threading.Thread(target=self._lane, args=("frequent",),
+                                                name="jarvis-frequent-lane", daemon=True)
+        self.frequent_thread.start()
         self._start_outage_record()
         self._lane("main")
 
@@ -857,23 +887,18 @@ class Scheduler(threading.Thread):
 
     def lane_age(self, lane="main"):
         """Seconds since the lane last looped, on the monotonic clock."""
-        beat = {"main": "heartbeat", "fast": "fast_heartbeat",
-                "bulk": "bulk_heartbeat"}[lane]
+        beat = LANE_ATTRS[lane][0]
         return max(0.0, time.monotonic() - getattr(self, beat + "_mono"))
 
     def fast_alive(self):
-        """The secondary lanes are alive (fast and bulk). The name predates
-        the bulk lane; watchdogs and protection health read it."""
-        fast = self.fast_thread is None or self.fast_thread.is_alive()
-        bulk = self.bulk_thread is None or self.bulk_thread.is_alive()
-        return fast and bulk
+        """The secondary lanes are alive (fast, frequent and bulk). The name
+        predates the other lanes; watchdogs and protection health read it."""
+        return all(t is None or t.is_alive()
+                   for t in (self.fast_thread, self.frequent_thread, self.bulk_thread))
 
     def _lane(self, lane):
         store = Store(self.db_path)
-        beat = {"main": "heartbeat", "fast": "fast_heartbeat",
-                "bulk": "bulk_heartbeat"}[lane]
-        running = {"main": "current", "fast": "fast_current",
-                   "bulk": "bulk_current"}[lane]
+        beat, running = LANE_ATTRS[lane]
         try:
             # Reconciliation is read-only at the protected-host boundary.  It
             # happens once per scheduler process, before new collections can
@@ -906,8 +931,19 @@ class Scheduler(threading.Thread):
                     time.sleep(1)
                     continue
                 setattr(self, running, name)
+                failed = False
                 try:
                     findings, err = self.run_once(store, name)
+                except Exception as exc:
+                    # A lane never dies because one job, or saving its state,
+                    # raised: on 2026-11-05 "database is locked" from set_meta
+                    # killed the frequent, bulk and main lanes in turn and the
+                    # supervisors restarted the daemon three times. Record it,
+                    # retry the job after RETRY_S, keep the lane running.
+                    failed = True
+                    findings, err = [], f"{type(exc).__name__}: {exc}"[:300]
+                    self.lane_errors[lane] = self.lane_errors.get(lane, 0) + 1
+                    print(f"lane {lane}: job {name} raised {err}; the lane continues", flush=True)
                 finally:
                     setattr(self, running, None)
                     self.last_attempt[name] = time.time()
@@ -915,8 +951,11 @@ class Scheduler(threading.Thread):
                         soon = name in self.retry_soon
                         self.retry_soon.discard(name)
                     self.next_run[name] = time.time() + (
-                        min(RETRY_S, JOBS[name][0]) if soon else JOBS[name][0])
+                        min(RETRY_S, JOBS[name][0]) if soon or failed else JOBS[name][0])
                     self.cold_start_pending.discard(name)
+                if failed:
+                    time.sleep(LANE_ERROR_PAUSE_S)
+                    continue
                 # Page out anything that warrants it — especially a collector
                 # that has stopped recording. Guarded so a mail failure can
                 # never take down the scheduler.
@@ -1128,10 +1167,16 @@ def lane_age(scheduler, lane="main", now=None):
             return float(method(lane))
         except (AttributeError, KeyError, TypeError, ValueError):
             pass
-    beat = {"main": "heartbeat", "fast": "fast_heartbeat",
-            "bulk": "bulk_heartbeat"}[lane]
+    beat = LANE_ATTRS[lane][0]
     stamp = time.time() if now is None else now
     return max(0.0, stamp - getattr(scheduler, beat, stamp))
+
+
+def running_jobs(scheduler):
+    """Names of the jobs running in any lane now. Works on fakes that keep
+    only some lanes' attributes."""
+    return [n for _beat, attr in LANE_ATTRS.values()
+            if (n := getattr(scheduler, attr, None))]
 
 
 def watchdog_loop(scheduler):
@@ -1156,7 +1201,10 @@ def watchdog_loop(scheduler):
         time.sleep(interval)
         alive = scheduler.is_alive() and scheduler.fast_alive()
         # The fast lane's jobs take seconds, so a minute without a loop is a hang.
+        # The frequent lane's runs are bounded at 60 s but not killed, so it
+        # gets the main lane's generous bar: a wedge, never a slow PowerShell.
         progressed = (lane_age(scheduler, "main") < stall_limit and
+                      lane_age(scheduler, "frequent") < stall_limit and
                       lane_age(scheduler, "fast") < 300)
         if alive and progressed:
             sdnotify.watchdog()

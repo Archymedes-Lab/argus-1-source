@@ -137,6 +137,25 @@ class AuditTests(unittest.TestCase):
         out = watchers.audit(result=(data, ""), clock=10)
         self.assertTrue(any("size cap" in f["title"] and f["severity"] == "medium" for f in out))
 
+    def test_dropped_backlog_and_overflow_are_reported_not_silent(self):
+        base = {"boot": 1, "session_started": 2, "watchers": [], "polling_logged": True}
+        out = watchers.audit(result=(dict(base), ""), clock=10)
+        self.assertEqual([f["severity"] for f in out], ["ok"])          # a clean queue adds nothing
+        out = watchers.audit(result=(dict(base, dropped_files=2, dropped_bytes=200 << 20,
+                                          dropped_retries=1), ""), clock=10)
+        drop = next(f for f in out if "dropped" in f["title"])
+        self.assertEqual(drop["severity"], "medium")
+        self.assertIn("200 MB", drop["detail"])
+        self.assertIn("3 times", drop["detail"])
+        titles = {f["title"]: f["severity"] for f in watchers.audit(
+            result=(dict(base, backlog_files=1, overflow=4, identity_failures=1), ""), clock=10)}
+        self.assertEqual(titles["input audit is catching up"], "low")
+        self.assertEqual(titles["part of the input audit was not kept"], "low")
+
+    def test_retry_limit_matches_the_script(self):
+        text = (ROOT / "jarvis/platform/win/inputaudit.ps1").read_text(encoding="utf-8")
+        self.assertIn(f"$MaxTries = {watchers.MAX_TRACE_TRIES} ", text)
+
     def test_late_trace_start_and_parse_failures_are_reported(self):
         data = {"boot": 1000, "session_started": 1000 + 3600, "watchers": [],
                 "parse_failures": 2}
