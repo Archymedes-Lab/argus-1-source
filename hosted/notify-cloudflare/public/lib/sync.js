@@ -10,7 +10,7 @@ const now = () => Date.now() / 1000;
 // Unknown or missing (an older server) files it under "system".
 export const CATEGORIES = {
   threat: "Security threat", exposure: "Weakness to fix", updates: "Updates",
-  monitoring: "Monitoring", system: "Argus itself", test: "Test",
+  monitoring: "Not being checked", system: "Argus itself", test: "Test",
 };
 export const category = (p) => (Object.hasOwn(CATEGORIES, p?.category) ? p.category : (p?.kind === "test" ? "test" : "system"));
 

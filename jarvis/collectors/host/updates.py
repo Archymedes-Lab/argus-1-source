@@ -420,6 +420,21 @@ def audit(store, *, plan_fn=plan, conf=None, start_auto=None, last_auto=None, no
 NOTIFY_EVERY_S = 12 * 3600
 
 
+def notice_text(names, auto=0):
+    """(subject, text) of the updates notice, in everyday words, every name kept."""
+    n = len(names)
+    many = n != 1
+    subject = (f"[ARGUS-INSTINCT] {n} important update{'s' if many else ''} "
+               f"waiting to be installed")
+    text = (f"{n} important update{'s' if many else ''} for software on this computer "
+            f"{'are' if many else 'is'} not installed yet: {_names([{'name': x} for x in names])}.\n"
+            "Updates often fix security problems, so it is worth installing them soon.\n"
+            + (f"ARGUS-INSTINCT will install {auto} of them by itself.\n" if auto else "")
+            + "What to do: open ARGUS-INSTINCT to see and install them, or run "
+              "jarvis update plan and then jarvis update apply.")
+    return subject, text
+
+
 def notify_owner(store, conf, p, pol, now, deliver=None, enabled=None):
     """One categorized "updates" notice when the set of important pending
     updates changes (new ones appear), at most every NOTIFY_EVERY_S. Returns
@@ -444,11 +459,8 @@ def notify_owner(store, conf, p, pol, now, deliver=None, enabled=None):
         return False
     names = [i["name"] for i in p["items"] if i["important"]]
     auto = [i for i in p["items"] if auto_eligible(i, pol)]
-    text = (f"{len(names)} important update(s) are not installed: {_names([{'name': n} for n in names])}.\n"
-            + (f"Argus will update {len(auto)} of them itself.\n" if auto else "")
-            + "To see and install the rest: jarvis update plan, then jarvis update apply.")
-    err = deliver(conf, f"[ARGUS-INSTINCT] {len(names)} important update(s) available", text,
-                                     category="updates")
+    subject, text = notice_text(names, len(auto))
+    err = deliver(conf, subject, text, category="updates")
     if not err:
         store.set_meta(NOTIFY_META, json.dumps({"at": now, "seen": imp}))
         return True

@@ -19,7 +19,7 @@ import time
 
 from jarvis.core import brand
 from jarvis.platform.windows import ps_json, stdin_text  # noqa: F401  (stdin contract)
-from jarvis.response import alert
+from jarvis.response import alert, plainalert
 
 STATE_META = "toast_state_v1"
 TOAST_REPEAT_S = 6 * 3600
@@ -81,10 +81,16 @@ def select(findings, state, now):
 
 
 def text(finding, job):
-    title = f"JARVIS: {finding.get('title') or 'critical finding'}"[:TITLE_LIMIT]
-    body = (f"{job}: {alert.stable_text(finding.get('detail') or '')}"[:BODY_LIMIT]
-            or "open the dashboard")
-    return title, body
+    """(title, body) in everyday words (response/plainalert.py), facts kept: the
+    title is the finding's own, the body says what kind of thing it is, then
+    what was seen. Both fit TITLE_LIMIT / BODY_LIMIT after branding."""
+    title = plainalert.clip(f"{plainalert.PRODUCT}: {brand.brand(plainalert.title_of(finding))}",
+                            TITLE_LIMIT)
+    short = plainalert.SHORT[plainalert.kind(finding, job)]
+    seen = alert.stable_text(brand.brand(finding.get("detail") or ""))
+    body = (f"{short} What it saw: {seen}" if seen
+            else f"{short} Open {plainalert.PRODUCT} to see what this means and what to do.")
+    return title, plainalert.clip(body, BODY_LIMIT)
 
 
 def show(title, body, runner=None):

@@ -8,7 +8,7 @@ that):
     threat      Security threat      something may be attacking now: look
     exposure    Weakness to fix      a hardening gap, missing fix or risky setting
     updates     Updates              outdated software, or what Argus installed
-    monitoring  Monitoring           Argus cannot see something (a blind spot)
+    monitoring  Not being checked    Argus cannot see something (a blind spot)
     system      Argus itself         the monitor, its channels, its supervisors
     test        Test                 a test the owner asked for
 
@@ -24,7 +24,7 @@ LABELS = {
     "threat": "Security threat",
     "exposure": "Weakness to fix",
     "updates": "Updates",
-    "monitoring": "Monitoring",
+    "monitoring": "Not being checked",
     "system": "Argus itself",
     "test": "Test",
 }

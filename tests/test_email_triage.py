@@ -135,16 +135,16 @@ class DigestTests(unittest.TestCase):
                    ("c", {"finding": thread, "job": "sysmon", "tag": "NEW", "first": 0, "level": 0}),
                    ("d", {"finding": gone, "job": "firewall", "tag": "RESOLVED", "first": 0, "level": 0})]
         subject, text, html = emails.digest(ordered, True, None, None, 7200)
-        self.assertIn("4 update(s)", subject)
+        self.assertIn("(and 3 more, 2 need you)", subject)
         self.assertIn("2 need you", subject)
         sections = [l for l in text.splitlines() if re.match(r"^(NEEDS YOU|JARVIS IS HANDLING|NO LONGER)", l)]
         self.assertEqual(sections, ["NEEDS YOU — ACTION (1)", "NEEDS YOU — CONFIRM (1)",
-                                    "JARVIS IS HANDLING (1)", "NO LONGER OBSERVED (1)"])
+                                    "JARVIS IS HANDLING (1)", "NO LONGER SEEN (1)"])
         self.assertLess(text.index("OpenAI API key"), text.index("JARVIS IS HANDLING"))
         self.assertIn("$ chmod 600 /h/.env", text)
         for label in ("Needs you — action · 1", "Needs you — confirm · 1", "JARVIS is handling · 1"):
             self.assertIn(label, html)
-        self.assertIn("escalated · 2h open", html)
+        self.assertIn("reminder · 2h open", html)
 
 
 if __name__ == "__main__":
@@ -167,7 +167,7 @@ class DigestDesignTests(unittest.TestCase):
 
     def test_calm_digest_arrives_green_with_splendid_mood(self):
         subject, text, html = emails.digest([], False, None, None, 7200)
-        self.assertIn("nothing needs you", subject)
+        self.assertIn("Nothing needs you", subject)
         self.assertIn("#047857", html)  # emerald-700 hero
         self.assertIn("Splendid.", text)
 
@@ -175,7 +175,7 @@ class DigestDesignTests(unittest.TestCase):
         subject, text, html = emails.digest(self._ordered(), True, None, None, 7200)
         self.assertIn("RELATED ACTIVITY (1 story)", text)
         self.assertIn("2 related observations", text)
-        self.assertIn("one causal edge links these observations", html)
+        self.assertIn("one of these led directly to the next", html)
         self.assertIn("border-left-color:#7c3aed", html)  # violet story accent
 
     def test_story_headlines_are_escaped(self):
