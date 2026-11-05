@@ -31,7 +31,10 @@ export function page(title: string, body: string, o: PageOpts = {}): Response {
     (o.script ? `<script nonce="${nonce}">${o.script}</script>` : "") + `</body></html>`;
   return new Response(html, { status: o.status ?? 200, headers: { "Content-Type": "text/html; charset=utf-8", ...SECURITY_HEADERS,
     "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; ` +
-      "base-uri 'none'; form-action 'self'; frame-ancestors 'none'", "X-Frame-Options": "DENY", ...(o.headers || {}) } });
+      "base-uri 'none'; form-action 'self'; frame-ancestors 'none'", "X-Frame-Options": "DENY",
+    // no-referrer would make browsers send `Origin: null` on our own form posts; same-origin keeps the
+    // Origin header for the CSRF check and still sends nothing to other sites.
+    "Referrer-Policy": "same-origin", ...(o.headers || {}) } });
 }
 
 export const simplePage = (status: number, title: string, text: string, link?: string, linkText?: string) =>
@@ -42,7 +45,9 @@ export const redirect = (to: string, headers: Record<string, string> = {}) =>
 
 /** A form POST from our own pages only: the browser's Origin must be ours (CSRF, with SameSite=Strict and the token). */
 export function sameOrigin(req: Request, env: Env): boolean {
-  return req.headers.get("Origin") === payOrigin(env);
+  const origin = req.headers.get("Origin");
+  if (origin && origin !== "null") return origin === payOrigin(env);
+  return req.headers.get("Sec-Fetch-Site") === "same-origin";
 }
 
 export async function formOf(req: Request): Promise<URLSearchParams | null> {

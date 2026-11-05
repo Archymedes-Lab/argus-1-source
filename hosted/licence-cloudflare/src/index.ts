@@ -288,8 +288,20 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
   }
 }
 
+/**
+ * Local end-to-end runs only: with PAY_ORIGIN on loopback and DEV_FAKE_UPSTREAM set (in .dev.vars), Stripe and
+ * Resend calls go to a fake upstream instead. Ignored unless the worker itself is on 127.0.0.1, so a deployed
+ * worker can never be pointed elsewhere by a stray variable.
+ */
+export function upstream(env: Env & { DEV_FAKE_UPSTREAM?: string }): (u: string, i?: RequestInit) => Promise<Response> {
+  const fake = env.DEV_FAKE_UPSTREAM;
+  if (!fake || !/^http:\/\/127\.0\.0\.1:\d+$/.test(fake) || !/^http:\/\/127\.0\.0\.1:\d+$/.test(payOrigin(env)))
+    return (u, i) => fetch(u, i);
+  return (u, i) => fetch(u.replace(/^https:\/\/api\.(stripe|resend)\.com/, fake), i);
+}
+
 export default {
   fetch(req: Request, env: Env): Promise<Response> {
-    return handle(req, env, { fetch: (u, i) => fetch(u, i), now: () => Date.now() });
+    return handle(req, env, { fetch: upstream(env), now: () => Date.now() });
   },
 };

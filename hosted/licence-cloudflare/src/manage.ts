@@ -68,7 +68,7 @@ export async function thanks(env: Env, deps: Deps, url: URL): Promise<Response> 
 <p>Your licence key:</p><div class="key" id="key">${esc(key)}</div>
 <div class="row"><button class="primary" id="copy" type="button">Copy key</button>
 <a class="btn" href="argus://activate?key=${encodeURIComponent(key)}">Open in Argus</a><span id="copied" class="muted" aria-live="polite"></span></div>
-<h2>Activate it</h2>${how}
+${claimedLabel ? "<h2>Another computer instead?</h2><p>Keep the key: release this one at Manage your licence, then activate the key there.</p>" : `<h2>Activate it</h2>${how}`}
 <p class="muted">The key covers ${offer.seats === 1 ? (offer.plan === "server" ? "one server" : "one computer") : `${offer.seats} machines`}. We also emailed it to ${esc(masked)}. ` +
     `It is shown here only today; keep the email.</p>
 <h2>Later</h2><p><a href="${pay}/manage">Manage your licence</a> (see where it is active, move it, billing) · <a href="${pay}/recover">Lost your key?</a></p>`;
@@ -265,7 +265,7 @@ export async function manageHome(req: Request, env: Env, deps: Deps, url: URL): 
       `<p>${st === "active" ? `<span class="ok">Active</span>, renews or ends ${day(l.lic_exp)}` : `<span class="bad">${st === "revoked" ? "Cancelled" : "Ended"}</span>`}` +
       ` · ${acts.length} of ${l.seats} ${l.seats === 1 ? "seat" : "seats"} in use</p>` +
       (rows ? `<table>${rows}</table>` : `<p class="muted">Not active on any machine yet.</p>`) +
-      `<p class="muted">Releases left this month: ${left} of 3. Releasing frees the seat so the key can be activated on another machine.</p>` +
+      `<p class="muted">Releases left in the last 30 days: ${left} of 3. Releasing frees the seat so the key can be activated on another machine.</p>` +
       `<div class="row"><form method="post" action="/manage/resend">${csrf}<input type="hidden" name="licence_id" value="${esc(l.id)}"><button type="submit">Email me the key</button></form>` +
       `<form method="post" action="/manage/portal">${csrf}<input type="hidden" name="licence_id" value="${esc(l.id)}"><button type="submit">Billing and invoices</button></form></div></div>`;
   }));

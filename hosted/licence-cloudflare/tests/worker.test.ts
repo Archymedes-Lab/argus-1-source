@@ -588,6 +588,7 @@ describe("manage and recover", () => {
     expect(cookie.startsWith("__Host-argus_manage=")).toBe(true);
     expect((await form("/manage/release", { csrf: "wrong", activation_id }, { Cookie: cookie })).status).toBe(403);
     expect((await form("/manage/release", { csrf, activation_id }, { Cookie: cookie, Origin: "https://evil.example" })).status).toBe(403);
+    expect((await form("/manage/release", { csrf, activation_id }, { Cookie: cookie, Origin: "null", "Sec-Fetch-Site": "cross-site" })).status).toBe(403);
     const rel = await form("/manage/release", { csrf, activation_id }, { Cookie: cookie });
     expect(rel.headers.get("Location")).toBe("/manage/home?m=released");
     expect((await (await device("web-02")).activate(key)).status).toBe(200);
@@ -618,6 +619,26 @@ describe("manage and recover", () => {
 });
 
 describe("misc", () => {
+  test("browsers that send Origin: null are accepted only with Sec-Fetch-Site: same-origin", async () => {
+    await buyServer();
+    const n = mails().length;
+    expect((await form("/manage/link", { email: "alice@example.com" }, { Origin: "null", "Sec-Fetch-Site": "same-origin" })).status).toBe(200);
+    expect(mails().length).toBe(n + 1);
+    expect((await form("/recover", { email: "alice@example.com" }, { Origin: "null" })).status).toBe(403);
+  });
+
+  test("the fake-upstream redirect only works for a worker on loopback", async () => {
+    const { upstream } = await import("../src/index");
+    const seen: string[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (u: string) => { seen.push(String(u)); return new Response("{}"); }) as any;
+    try {
+      await upstream({ ...env, PAY_ORIGIN: "https://pay.archymedes.xyz", DEV_FAKE_UPSTREAM: "http://127.0.0.1:9" } as any)("https://api.stripe.com/v1/prices");
+      await upstream({ ...env, PAY_ORIGIN: "http://127.0.0.1:9477", DEV_FAKE_UPSTREAM: "http://127.0.0.1:9" } as any)("https://api.stripe.com/v1/prices");
+    } finally { globalThis.fetch = orig; }
+    expect(seen).toEqual(["https://api.stripe.com/v1/prices", "http://127.0.0.1:9/v1/prices"]);
+  });
+
   test("portal by key; health reports configuration without secrets; emails are masked", async () => {
     const { key } = await buyServer();
     expect(await (await post("/licence/portal", { key })).json() as any).toEqual({ url: "https://billing.stripe.com/p/session/test_1" });
