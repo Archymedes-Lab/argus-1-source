@@ -1,13 +1,17 @@
 name: CI
 
-# Every push and pull request: the static gate (ruff, mypy, property checks
-# and model checking), the full unit suite, the release tooling's own tests
-# and the desktop interface tests. A release tag runs these again before any
-# build (release.yml), so nothing ships that CI has not passed.
+# Every push: the static gate (ruff, mypy, property checks and model checking),
+# the full unit suite, the release tooling's own tests and the desktop interface
+# tests. A release tag runs these again before any build (release.yml), so
+# nothing ships that CI has not passed.
+#
+# Push only, not pull_request as well: a push's checks are attached to the commit, so a
+# pull request shows them, and running both ran CI twice for the same commit (20 of 30
+# commits in 5 days). CI minutes are a budget: the org's Actions budget is $0 with "stop
+# usage", so spending the included amount stops every workflow until the next cycle.
 on:
   push:
     branches: ["**"]
-  pull_request:
 
 permissions:
   contents: read
