@@ -211,6 +211,7 @@ jobs:
       # Compiled crates kept between dry runs (keyed by the lock file); cargo
       # rebuilds whatever its fingerprints say changed. A tag builds cold.
       - name: Restore compiled crates (dry runs only)
+        id: cargo-cache
         if: github.ref_type != 'tag'
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
@@ -218,21 +219,23 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ${{ runner.temp }}/desktop-target
-          key: cargo-linux-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}-${{ github.sha }}
+          key: cargo-linux-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}
           restore-keys: cargo-linux-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}-
       - name: Desktop app
         env:
           CARGO_TARGET_DIR: ${{ github.ref_type != 'tag' && format('{0}/desktop-target', runner.temp) || '' }}
         run: python3 release/build_desktop.py --platform linux --version "${{ needs.meta.outputs.version }}" --out out/desktop-linux --work "$RUNNER_TEMP/desktop-work"
+      # Keyed by the lock file, saved once: a key per commit added a ~420 MB entry per commit
+      # (6.7 GB of the 10 GB repo limit), and past 10 GB GitHub evicts the oldest entries.
       - name: Save compiled crates (dry runs only)
-        if: success() && github.ref_type != 'tag'
+        if: success() && github.ref_type != 'tag' && steps.cargo-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ${{ runner.temp }}/desktop-target
-          key: cargo-linux-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}-${{ github.sha }}
+          key: cargo-linux-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}
       - name: Record the build's digests
         id: digests
         shell: bash
@@ -267,6 +270,7 @@ jobs:
       # Compiled crates kept between dry runs (keyed by the lock file); cargo
       # rebuilds whatever its fingerprints say changed. A tag builds cold.
       - name: Restore compiled crates (dry runs only)
+        id: cargo-cache
         if: github.ref_type != 'tag'
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
@@ -274,21 +278,23 @@ jobs:
             ~\.cargo\registry
             ~\.cargo\git
             ${{ runner.temp }}\desktop-target
-          key: cargo-windows-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}-${{ github.sha }}
+          key: cargo-windows-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}
           restore-keys: cargo-windows-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}-
       - name: Desktop app
         env:
           CARGO_TARGET_DIR: ${{ github.ref_type != 'tag' && format('{0}\desktop-target', runner.temp) || '' }}
         run: python release/build_desktop.py --platform windows --version "${{ needs.meta.outputs.version }}" --out out/desktop-windows --work "$env:RUNNER_TEMP\desktop-work"
+      # Keyed by the lock file, saved once: a key per commit added a ~420 MB entry per commit
+      # (6.7 GB of the 10 GB repo limit), and past 10 GB GitHub evicts the oldest entries.
       - name: Save compiled crates (dry runs only)
-        if: success() && github.ref_type != 'tag'
+        if: success() && github.ref_type != 'tag' && steps.cargo-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~\.cargo\registry
             ~\.cargo\git
             ${{ runner.temp }}\desktop-target
-          key: cargo-windows-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}-${{ github.sha }}
+          key: cargo-windows-${{ env.RUST_VERSION }}-${{ hashFiles('desktop/Cargo.lock') }}
       - name: Record the build's digests
         id: digests
         shell: bash

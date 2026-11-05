@@ -62,6 +62,29 @@ class CiSpend(unittest.TestCase):
                 self.assertIsNotNone(limit, f"{path.name}:{name} has no timeout-minutes (default 360)")
                 self.assertLessEqual(limit, ceilings.get(name, GENERIC_CEILING), f"{path.name}:{name}")
 
+    def test_cargo_caches_are_keyed_by_content_and_saved_once(self):
+        # 63 caches held 7.8 GB of the 10 GB repo limit, 6.7 GB of it cargo: the release builds
+        # keyed theirs by commit (a new ~420 MB entry per commit) and CI saved a 640 MB copy per
+        # branch. Past 10 GB GitHub evicts the oldest entries, including the compiler caches.
+        release = (WORKFLOWS / "release.yml").read_text()
+        keys = re.findall(r"^\s+key: (cargo-[^\n]+)$", release, re.M)
+        self.assertGreaterEqual(len(keys), 4)
+        for key in keys:
+            self.assertNotIn("github.sha", key, "a per-commit key adds an entry per commit")
+        for job in ("desktop-linux", "desktop-windows"):
+            section = _jobs(release)[job]
+            self.assertIn("id: cargo-cache", section, job)
+            save = re.search(r"- name: Save compiled crates[^\n]*\n\s+if: ([^\n]+)\n", section)
+            self.assertIsNotNone(save, job)
+            self.assertIn("steps.cargo-cache.outputs.cache-hit != 'true'", save.group(1), job)
+
+        ci = (WORKFLOWS / "ci.yml").read_text()
+        self.assertNotIn("uses: actions/cache@", ci, "the combined action saves from every branch")
+        save = re.search(r"- name: Save compiled crates[^\n]*\n\s+if: ([^\n]+)\n", ci)
+        self.assertIsNotNone(save, "ci.yml saves the cargo cache in a step of its own")
+        self.assertIn("github.ref == 'refs/heads/main'", save.group(1))
+        self.assertIn("steps.cargo-cache.outputs.cache-hit != 'true'", save.group(1))
+
     def test_the_parsers_see_the_real_workflows(self):
         # Negative control: an empty parse would make the checks above pass for nothing.
         release = (WORKFLOWS / "release.yml").read_text()
