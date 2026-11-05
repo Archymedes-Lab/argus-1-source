@@ -921,6 +921,12 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
 
+        if url.path in ("/api/licence/activate", "/api/licence/deactivate", "/api/licence/refresh",
+                        "/api/licence/upgrade", "/api/licence/poll"):
+            # The licence screen (desktop app, dashboard). Premium content only; see licenceapi.
+            from jarvis.web import licenceapi
+            code, body = licenceapi.action(self.db_path, url.path.rsplit("/", 1)[1], self._json_body(4096))
+            return self._send(code, json.dumps(body, default=str))
         if url.path == "/api/answer":
             payload = self._json_body(4096)
             if payload is None:
@@ -1012,6 +1018,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps(assistant.greeting(store, JOBS)))
             finally:
                 store.close()
+
+        if url.path == "/api/licence":
+            from jarvis.web import licenceapi
+            return self._send(200, json.dumps(licenceapi.state(self.db_path), default=str))
 
         if url.path == "/api/state":
             return self._send(200, json.dumps(

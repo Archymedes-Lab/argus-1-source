@@ -7,11 +7,12 @@
   import Review from "./views/Review.svelte";
   import Assistant from "./views/Assistant.svelte";
   import Settings from "./views/Settings.svelte";
+  import Licence from "./views/Licence.svelte";
   import CommandPalette from "./components/CommandPalette.svelte";
   import { Tooltip } from "bits-ui";
   import { app } from "./lib/store.svelte";
 
-  const views = { overview: Overview, findings: Findings, collectors: Collectors, review: Review, assistant: Assistant, settings: Settings };
+  const views = { overview: Overview, findings: Findings, collectors: Collectors, review: Review, assistant: Assistant, licence: Licence, settings: Settings };
   const Current = $derived(views[app.view]);
 </script>
 

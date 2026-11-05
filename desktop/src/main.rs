@@ -198,6 +198,9 @@ fn main() {
             api::ask_jarvis,
             api::score_coach,
             api::decide_fix,
+            api::licence_state,
+            api::licence_action,
+            api::open_licence_page,
         ])
         .setup(move |app| {
             build_tray(app)?;

@@ -20,7 +20,7 @@ Rules (tests/test_licence.py, tests/test_licence_crypto.py):
   the last-seen time and renewal state.
 
 What this is not: a determined person who modifies the Argus program can skip these checks.
-Licensing here keeps honest customers honest and stops casual key sharing; it is not DRM.
+Licensing here keeps honest customers honest and discourages casual key sharing; it is not DRM.
 Value the server delivers (POST /content/<pack>) is the only part a modified client cannot get.
 """
 

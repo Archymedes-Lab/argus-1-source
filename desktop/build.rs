@@ -11,6 +11,9 @@ fn main() {
             "ask_jarvis",
             "score_coach",
             "decide_fix",
+            "licence_state",
+            "licence_action",
+            "open_licence_page",
         ]),
     ))
     .expect("tauri build");

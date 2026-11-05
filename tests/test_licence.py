@@ -428,6 +428,52 @@ class Content(Base):
             licence.fetch_content(self.path, 'sample', now=NOW + 2, opener=self.svc, trusted=TRUSTED)
 
 
+class DaemonApi(Base):
+    """jarvis/web/licenceapi.py: what the desktop app's Licence screen calls."""
+
+    def setUp(self):
+        super().setUp()
+        from jarvis.web import licenceapi
+        self.api = licenceapi
+        self.db = os.path.join(self.tmp.name, 'jarvis.db')
+        for p in (mock.patch.dict(trust.PUBLIC_KEYS, TRUSTED, clear=True),
+                  mock.patch.object(licenceapi, '_maybe_renew_in_background', lambda path: None),
+                  mock.patch('urllib.request.urlopen', self.svc),
+                  mock.patch('time.time', return_value=NOW)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_unlicensed_state_carries_buy_and_manage_links(self):
+        st = self.api.state(self.db)
+        self.assertFalse(st['licensed'])
+        self.assertTrue(st['needs_key'])
+        self.assertEqual(st['links']['buy_desktop'], licence.DESKTOP_CHECKOUT)
+        self.assertEqual(st['links']['manage'], licence.MANAGE_URL)
+
+    def test_activate_bad_key_seat_taken_and_deactivate(self):
+        code, body = self.api.action(self.db, 'activate', {'key': KEY[:-1] + ('Z' if KEY[-1] != 'Z' else 'Y')})
+        self.assertEqual((code, body['ok'], body['code']), (200, False, 'bad_check'))
+        code, body = self.api.action(self.db, 'activate', {'key': KEY})
+        self.assertTrue(body['ok'], body)
+        self.assertTrue(body['state']['licensed'])
+        self.assertNotIn('activation_id', body['state'])
+        code, body = self.api.action(self.db, 'deactivate', {})
+        self.assertTrue(body['ok'])
+        self.assertFalse(body['state']['licensed'])
+
+    def test_upgrade_returns_the_checkout_to_open_and_poll_installs(self):
+        code, body = self.api.action(self.db, 'upgrade', {'plan': 'desktop'})
+        self.assertTrue(body['open'].startswith('https://pay.archymedes.xyz/buy/argus-desktop?claim=clm_'))
+        self.assertFalse(self.api.action(self.db, 'poll', {})[1]['active'])
+        self.svc.bind_claim()
+        code, body = self.api.action(self.db, 'poll', {})
+        self.assertTrue(body['active'])
+        self.assertTrue(body['state']['licensed'])
+
+    def test_unknown_action_is_404(self):
+        self.assertEqual(self.api.action(self.db, '../x', {})[0], 404)
+
+
 class ReviewPreview(Base):
     def setUp(self):
         super().setUp()

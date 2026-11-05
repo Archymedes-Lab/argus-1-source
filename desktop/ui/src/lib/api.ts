@@ -14,6 +14,11 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 
 // Development preview in a plain browser: read-only, from a saved state file.
 async function preview<T>(cmd: string): Promise<T> {
+  if (cmd === "licence_state") {
+    const r = await fetch("/__fixture/licence.json");
+    if (!r.ok) throw new Error("No licence preview fixture.");
+    return (await r.json()) as T;
+  }
   if (cmd === "daemon_state") {
     const r = await fetch("/__fixture/state.json");
     if (!r.ok) throw new Error("No preview fixture (set JARVIS_UI_FIXTURE).");
@@ -32,7 +37,19 @@ export const api = {
   scoreCoach: () => call<Reply>("score_coach"),
   decideFix: (id: string, decision: "approve" | "retry" | "reject", reason?: string) =>
     call<Reply>("decide_fix", { id, decision, reason }),
+  licence: () => call<LicenceState>("licence_state"),
+  licenceAction: (action: "activate" | "deactivate" | "refresh" | "upgrade" | "poll", key?: string, plan?: "server" | "desktop") =>
+    call<LicenceReply>("licence_action", { action, key, plan }),
+  openLicencePage: (url: string) => call<void>("open_licence_page", { url }),
 };
+
+export type LicenceState = {
+  licensed: boolean; reason: string; product?: string; plan?: "server" | "desktop"; label?: string; key_hint?: string;
+  expires_at?: number | null; lease_until?: number; renew_after?: number; auto_renew?: boolean; renew_error?: string | null;
+  needs_key?: boolean; needs_check?: boolean; purchase_waiting?: boolean;
+  links: { buy_server: string; buy_desktop: string; manage: string; recover: string };
+};
+export type LicenceReply = { ok: boolean; code?: string; error?: string; open?: string; active?: boolean; state?: LicenceState };
 
 /** Pulses from the shell's stream thread; `down` when the daemon is unreachable. */
 export async function onDaemon(pulse: (p: unknown) => void, down: () => void): Promise<UnlistenFn> {

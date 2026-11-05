@@ -17,6 +17,13 @@ function fixture(): Plugin {
         res.setHeader("Content-Type", "application/json");
         res.end(readFileSync(path));
       });
+      // JARVIS_UI_LICENCE_FIXTURE=/path/licence.json: a saved GET /api/licence answer for the Licence view.
+      server.middlewares.use("/__fixture/licence.json", (_req, res) => {
+        const path = process.env.JARVIS_UI_LICENCE_FIXTURE;
+        if (!path) { res.statusCode = 404; res.end("{}"); return; }
+        res.setHeader("Content-Type", "application/json");
+        res.end(readFileSync(path));
+      });
     },
   };
 }

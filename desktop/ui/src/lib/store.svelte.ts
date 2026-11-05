@@ -2,7 +2,7 @@
 // shell fetched and refreshes it when the pulse stream says something changed.
 import { api, onDaemon } from "./api";
 
-export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "settings";
+export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "licence" | "settings";
 export type Theme = "auto" | "light" | "dark";
 
 const THEME_KEY = "jarvis.theme";

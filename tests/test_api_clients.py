@@ -34,13 +34,16 @@ ROOT = Path(__file__).resolve().parent.parent
 #   asset    open static file
 #   session  POST, same-origin, validates a paired client token itself
 #   veil     POST, the extension's own pairing token
+LICENCE_POSTS = ("/api/licence/activate", "/api/licence/deactivate", "/api/licence/refresh",
+                 "/api/licence/upgrade", "/api/licence/poll")
 ROUTES = {
     "/": "page", "/index.html": "page", "/geo": "page", "/pair": "page",
     "/api/health": "live", "/api/live": "live",
     "/api/session": "session", "/api/veil/events": "veil",
     "/metrics": "token",
+    **{p: "token" for p in LICENCE_POSTS},
     **{p: "token" for p in (
-        "/api/answer", "/api/arena", "/api/ask", "/api/assistant/action", "/api/brief",
+        "/api/licence", "/api/answer", "/api/arena", "/api/ask", "/api/assistant/action", "/api/brief",
         "/api/coverage", "/api/coverage/live", "/api/coverage/stream", "/api/defender",
         "/api/fix/approve", "/api/fix/authorize", "/api/fix/reject", "/api/fix/retry",
         "/api/geo", "/api/geo/here", "/api/geo/zone", "/api/greeting", "/api/posture",
@@ -48,7 +51,7 @@ ROUTES = {
         "/api/pulse", "/api/run", "/api/score-coach", "/api/state", "/api/stream",
         "/api/voice", "/api/world")},
 }
-POST_ONLY = {"/api/answer", "/api/ask", "/api/assistant/action", "/api/brief",
+POST_ONLY = {*LICENCE_POSTS, "/api/answer", "/api/ask", "/api/assistant/action", "/api/brief",
              "/api/fix/approve", "/api/fix/authorize", "/api/fix/reject", "/api/fix/retry",
              "/api/geo/here", "/api/geo/zone", "/api/score-coach", "/api/voice",
              "/api/session", "/api/veil/events"}
