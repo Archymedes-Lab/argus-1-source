@@ -29,8 +29,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
-# Every job's timeout is about twice what it needs, and tests/test_ci_spend.py holds the
-# ceiling: a hung job is billed until its timeout. Windows minutes cost 1.7x Linux ones.
+# Every job's timeout is about twice what it needs when COLD (a tag, and a new dry-run branch,
+# build cold), and tests/test_ci_spend.py holds both the ceiling and the floor: a hung job is
+# billed until its timeout, and a timeout below a cold build cancels the release. Windows minutes cost 1.7x Linux ones.
 env:
   RUST_VERSION: "1.97.1"
   BUN_VERSION: "1.3.14"
@@ -208,7 +209,7 @@ jobs:
       digests: ${{ steps.digests.outputs.desktop_linux }}
       key: ${{ steps.digests.outputs.desktop_linux_key }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

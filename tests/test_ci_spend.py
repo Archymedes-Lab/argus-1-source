@@ -16,12 +16,20 @@ WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 # hangs is billed until its timeout, so the ceiling is the most one runaway can cost.
 CEILINGS = {
     "release.yml": {
-        "server": 45, "server-install-test": 30, "desktop-linux": 30, "desktop-windows": 45,
+        "server": 60, "server-install-test": 30, "desktop-linux": 60, "desktop-windows": 60,
         "engine-windows": 90, "windows-source-smoke": 15, "windows-setup": 20,
         "windows-install-test": 45, "verify": 45, "meta": 10, "draft": 20,
     },
 }
 GENERIC_CEILING = 60
+
+# Lower bounds, from COLD builds on the 2-vCPU runners: a tag always builds cold, and a new
+# dry-run branch does too (caches are scoped per branch). desktop-linux was cut to 30 minutes
+# from a warm 4.6-minute run and the cold build was cancelled at the limit (run 42117983818).
+# A timeout below what a cold build needs fails the release it was meant to protect.
+FLOORS = {
+    "release.yml": {"desktop-linux": 60, "engine-windows": 75, "server": 40, "desktop-windows": 30},
+}
 
 
 def _triggers(text):
@@ -61,6 +69,12 @@ class CiSpend(unittest.TestCase):
                 limit = _timeout(section)
                 self.assertIsNotNone(limit, f"{path.name}:{name} has no timeout-minutes (default 360)")
                 self.assertLessEqual(limit, ceilings.get(name, GENERIC_CEILING), f"{path.name}:{name}")
+
+    def test_no_timeout_is_below_what_a_cold_build_needs(self):
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            jobs = _jobs(path.read_text())
+            for name, floor in FLOORS.get(path.name, {}).items():
+                self.assertGreaterEqual(_timeout(jobs[name]), floor, f"{path.name}:{name}: a cold build is cancelled")
 
     def test_cargo_caches_are_keyed_by_content_and_saved_once(self):
         # 63 caches held 7.8 GB of the 10 GB repo limit, 6.7 GB of it cargo: the release builds
