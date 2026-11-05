@@ -311,9 +311,14 @@ function Restart-Allowed {
 function Restart-Jarvis([string]$why) {
     if (-not (Restart-Allowed)) { return }
     $st.restarts = @($st.restarts) + (Now)
+    # Through the root-owned restart gate when it is installed: it re-checks the
+    # fault itself, records the warrant and refuses a live daemon
+    # (scripts/repair/jarvis-restart-gate). The legacy command stays only until
+    # the owner revokes its sudo rule.
+    $reason = if ($why -like 'unit is*') { 'unit-down' } else { 'health-silent' }
+    $cmd = "if [ -x /usr/local/sbin/jarvis-restart-gate ]; then exec sudo -n /usr/local/sbin/jarvis-restart-gate --actor reviver --reason $reason; fi; systemctl restart jarvis.service 2>/dev/null || sudo -n systemctl restart jarvis.service"
     Act "restarting jarvis.service: $why" {
-        [void](Invoke-Wsl @('-d', $Distro, '--exec', 'bash', '-lc',
-            'systemctl restart jarvis.service 2>/dev/null || sudo -n systemctl restart jarvis.service') 45)
+        [void](Invoke-Wsl @('-d', $Distro, '--exec', 'bash', '-lc', $cmd) 45)
     }
 }
 

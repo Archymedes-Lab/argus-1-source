@@ -39,6 +39,9 @@
     "allow-phone-pair-confirm",
     "allow-phone-pair-cancel",
     "allow-phone-revoke",
-    "allow-phone-test"
+    "allow-phone-test",
+    "allow-app-version",
+    "allow-check-update",
+    "allow-open-download-page"
   ]
 }

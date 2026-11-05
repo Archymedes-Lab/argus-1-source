@@ -271,7 +271,7 @@ elseif ($healthy -notcontains $state) {
     $state = Get-UnitStateConfirmed
     if ($state -ne '' -and $healthy -notcontains $state) {
         Say "jarvis.service is '$state' -- restarting"
-        & wsl.exe -d $Distro --exec bash -lc 'systemctl restart jarvis.service 2>/dev/null || sudo -n systemctl restart jarvis.service' 2>&1 | Out-Null
+        & wsl.exe -d $Distro --exec bash -lc 'if [ -x /usr/local/sbin/jarvis-restart-gate ]; then exec sudo -n /usr/local/sbin/jarvis-restart-gate --actor wake-watchdog --reason unit-down; fi; systemctl restart jarvis.service 2>/dev/null || sudo -n systemctl restart jarvis.service' 2>&1 | Out-Null
         Start-Sleep -Seconds 5
         $state2 = Get-UnitStateConfirmed
         if ($healthy -contains $state2) { Say "jarvis.service is '$state2' again" }

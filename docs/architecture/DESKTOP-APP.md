@@ -295,3 +295,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File \\wsl.localhost\Ubuntu\home\
 
 WebView2 is not bundled (`webviewInstallMode: skip`): Windows 11 ships it, and it was present
 here (155.0) on 2026-10-23.
+
+## Update notice and "What Argus can see"
+
+**Update notice.** The app tells a person when a newer release is published; it never installs one. The app
+itself still makes no network request. It asks the service (`GET /api/update`, behind the same token as every
+data route), and the service reads the public `manifest.json` from the release site
+(`jarvis/service/selfupdate.py`; not `collectors/host/updates.py`, which lists outdated *other* software).
+That is one plain GET with no identifier, no version and no cookie, cached six hours, and a failure is a quiet
+"could not check". `ARGUS_UPDATE_CHECK=0` turns it off. The app compares the answer with the release it was
+built as (`ARGUS_RELEASE`, set by `release/build_desktop.py`; a development build is "dev" and is never told
+to update). The sidebar shows a notice and Settings > Updates shows both versions; the button opens a fixed
+download page (`desktop/src/update.rs`), never an address taken from the service. Versions order by date, then
+by the number of the release that day (`-0` and no suffix are both the first), as `release/versioning.py` does.
+A binary built before this has no stamped version and cannot show the notice.
+
+**What Argus can see** (the Coverage screen). One summary card (techniques, the proven / expected / blind spot /
+got-worse split, hours watched), clickable attack stages, and a technique list that puts what needs a look first.

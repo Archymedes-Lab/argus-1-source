@@ -4,3 +4,5 @@ jarvis/platform/win/*.ps1 text eol=lf
 
 # Vendored assets are served against pinned SHA-256 hashes (web/server.py); never convert line endings.
 jarvis/web/static/vendor/* -text
+jarvis/web/static/vendor/leaflet/* -text
+jarvis/web/static/vendor/leaflet/images/* -text

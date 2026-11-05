@@ -72,6 +72,7 @@ from .commands import history as history_cli
 from .commands import impersonation as impersonation_cli
 from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
+from .commands import lifecycle as lifecycle_cli
 from .commands import mesh as mesh_cli
 from .commands import native as native_cli
 from .commands import notify as notify_cli
@@ -122,6 +123,7 @@ def build_parser():
     reason_cli.add_parser(sub)
     veil_cli.add_parser(sub)
     desktop_cli.add_parser(sub)
+    lifecycle_cli.add_parser(sub)
 
     b = sub.add_parser("baseline", help="record the current state as known-good")
     b.add_argument("--reset", action="store_true",
@@ -234,6 +236,9 @@ def build_parser():
     sv = sub.add_parser("serve",
                         help="run the 24/7 daemon and local dashboard")
     sv.add_argument("-p", "--port", type=int, default=8787)
+    sv.add_argument("--supervised", action="store_true",
+                    help="started by the watchdog task or the desktop app: one instance only, "
+                         "respect `argus stop`, and do not restart in a loop (service/supervision.py)")
     sv.set_defaults(fn=cmd_serve)
 
     inv = sub.add_parser("investigate",
@@ -526,6 +531,12 @@ def safe_streams(streams=None):
 def main(argv=None):
     safe_streams()
     args = build_parser().parse_args(argv)
+    if args.cmd == 'serve' and getattr(args, 'supervised', False):
+        # Before anything opens the store: a duplicate start must cost nothing.
+        from jarvis.service import supervision
+        refused = supervision.gate(args.port)
+        if refused is not None:
+            return refused
     if (args.cmd == 'mesh' or getattr(args, 'no_store', False)
             or (args.cmd == 'desktop' and args.action == 'save')):
         # Mesh owns its isolated store, and the server network sensors run as

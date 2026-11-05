@@ -1,6 +1,6 @@
 // Application state. The daemon owns the truth; this holds the last copy the
 // shell fetched and refreshes it when the pulse stream says something changed.
-import { api, onDaemon, type AppStatus } from "./api";
+import { api, inApp, onDaemon, type UpdateInfo, type AppStatus } from "./api";
 import { tr } from "./i18n";
 
 export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "settings";
@@ -28,6 +28,8 @@ export const app = $state({
   daemon: "connecting" as "connecting" | "live" | "down",
   status: { phase: "starting", message: "Starting ARGUS-INSTINCT", detail: "" } as AppStatus,
   updatedAt: 0,
+  update: null as UpdateInfo | null,
+  updateChecking: false,
   view: "overview" as View,
   query: "",
   severity: null as string | null,
@@ -113,6 +115,28 @@ export async function refresh() {
   }
 }
 
+const UPDATE_EVERY_MS = 6 * 3600 * 1000;       // the service caches its answer for as long
+
+/** Ask whether a newer release is published. `loud` (a click) says the result; the quiet check does not. */
+export async function checkUpdate(loud = false) {
+  if (!inApp || app.updateChecking) return;
+  app.updateChecking = true;
+  try {
+    app.update = await api.checkUpdate();
+    if (loud) {
+      const u = app.update;
+      if (!u.enabled) toast(tr("Update checks are turned off on this computer."), "info");
+      else if (u.error && !u.latest) toast(tr("Could not check for updates."), "bad");
+      else if (u.newer) toast(tr("Version {v} is available.", { v: u.latest ?? "" }), "ok");
+      else toast(tr("You have the latest version."), "ok");
+    }
+  } catch {
+    if (loud) toast(tr("Could not check for updates."), "bad");
+  } finally {
+    app.updateChecking = false;
+  }
+}
+
 function schedule() {
   const wait = Math.max(0, MIN_GAP_MS - (Date.now() - last));
   clearTimeout(queued);
@@ -135,6 +159,8 @@ export async function start() {
   applyMode();
   await refresh();
   void confirmReturnFromCheckout();
+  void checkUpdate();
+  setInterval(() => void checkUpdate(), UPDATE_EVERY_MS);
   await onDaemon(() => { refreshStatus(); schedule(); }, () => { app.daemon = "down"; refreshStatus(); });
   setInterval(() => { if (Date.now() - last > FALLBACK_MS) refresh(); }, 10000);
 }

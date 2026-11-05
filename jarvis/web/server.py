@@ -38,7 +38,7 @@ from jarvis.response import (
     remediation,
 )
 from jarvis.response.reporting import score, voice
-from jarvis.service import attackmap, autopilot, avguard, detectorhealth, sdnotify
+from jarvis.service import attackmap, autopilot, avguard, detectorhealth, sdnotify, selfupdate
 from jarvis.service import posture as posture_mod
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
@@ -138,7 +138,10 @@ COVERAGE_ASSETS = {
     # project's published SRI hashes. Only the images its CSS references.
     "/static/vendor/leaflet/leaflet.js": (
         "vendor/leaflet/leaflet.js", "text/javascript; charset=utf-8",
-        "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a"),
+        # Two digests: the upstream file, and the same file as the release
+        # build ships it (the trailing sourceMappingURL comment removed).
+        ("db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a",
+         "c973489bbc5ac530af0ffd1016a88122d3fa02b7b0c8de375ed906e04a46d10f")),
     "/static/vendor/leaflet/leaflet.css": (
         "vendor/leaflet/leaflet.css", "text/css; charset=utf-8",
         "a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6"),
@@ -677,7 +680,8 @@ class Handler(BaseHTTPRequestHandler):
                 body = fh.read()
         except OSError:
             return self._send(500, f"{name} missing", "text/plain")
-        if digest and hashlib.sha256(body).hexdigest() != digest:
+        allowed = (digest,) if isinstance(digest, str) else tuple(digest or ())
+        if allowed and hashlib.sha256(body).hexdigest() not in allowed:
             return self._send(500, f"{name} does not match its pinned hash", "text/plain")
         cookie = self._token_cookie() if ctype.startswith("text/html") else None
         return self._send(200, body, ctype, csp=self.CSP_COVERAGE, cookie=cookie)
@@ -1234,6 +1238,10 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/state":
             return self._send(200, json.dumps(
                 build_state(self.db_path, self.scheduler), default=str))
+
+        if url.path == "/api/update":
+            # The newest published release, for the desktop app's update notice. Cached; never raises.
+            return self._send(200, json.dumps(selfupdate.latest()))
 
         if url.path == "/api/pulse":
             return self._send(200, json.dumps(self._hub().latest(), default=str))
