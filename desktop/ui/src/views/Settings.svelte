@@ -5,7 +5,7 @@
   import { api, inApp, type AppSettings, type Autopilot, type Billing } from "../lib/api";
   import { t } from "../lib/words";
   import { LANGS, tr } from "../lib/i18n";
-  import { app, go, setLang, setMode, setTheme, toast, type Mode, type Theme } from "../lib/store.svelte";
+  import { app, checkUpdate, go, setLang, setMode, setTheme, toast, type Mode, type Theme } from "../lib/store.svelte";
   const themes: [Theme, string][] = [["auto", "Automatic"], ["light", "Light"], ["dark", "Dark"]];
 
   let ap = $state<Autopilot | null>(null);
@@ -41,6 +41,33 @@
       </div>
     </section>
   {/snippet}
+
+  {#if inApp}
+    <section>
+      <h2 class="mb-2 px-1 text-label-13 text-gray-900">{tr("Updates")}</h2>
+      <div class="card divide">
+        <div class="row justify-between gap-4">
+          <span class="text-label-13">{tr("This version")}</span>
+          <span class="selectable text-copy-13 text-gray-900">{app.update?.current ?? "…"}</span>
+        </div>
+        <div class="row justify-between gap-4">
+          <span class="text-label-13">{tr("Newest version")}</span>
+          <span class="selectable text-copy-13 {app.update?.newer ? 'text-blue-900' : 'text-gray-900'}">
+            {#if !app.update}{tr("Checking…")}{:else if !app.update.enabled}{tr("Update checks are turned off on this computer.")}
+            {:else if app.update.latest}{app.update.latest}{app.update.newer ? "" : ` · ${tr("Up to date")}`}
+            {:else}{tr("Could not check for updates.")}{/if}
+          </span>
+        </div>
+        <div class="row justify-end gap-2">
+          <button class="btn btn-sm" disabled={app.updateChecking} onclick={() => checkUpdate(true)}>{app.updateChecking ? tr("Checking…") : tr("Check now")}</button>
+          {#if app.update?.newer}
+            <button class="btn btn-sm btn-accent" onclick={() => api.openDownloadPage().catch(() => {})}>{tr("Get the update")}</button>
+          {/if}
+        </div>
+      </div>
+      <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("ARGUS-INSTINCT reads one public file to learn the newest version and sends nothing about this computer. It never installs anything by itself: the button opens the download page.")}</p>
+    </section>
+  {/if}
 
   <section>
     <h2 class="mb-2 px-1 text-label-13 text-gray-900">{tr("Language")}</h2>

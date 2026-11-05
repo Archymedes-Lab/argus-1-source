@@ -54,14 +54,14 @@ def remap_flags(src):
     return " ".join(f"--remap-path-prefix={p}=/{n.lstrip('/')}" for p, n in pairs)
 
 
-def build(tree, platform):
+def build(tree, platform, version):
     src = tree / "desktop"
     ui = src / "ui"
     run(["bun", "install", "--frozen-lockfile"], ui)
     run(["bun", "run", "build"], ui)
     if not (ui / "dist" / "index.html").exists():
         sys.exit("the interface build produced no dist/index.html")
-    env = {**os.environ, "RUSTFLAGS": remap_flags(src),
+    env = {**os.environ, "RUSTFLAGS": remap_flags(src), "ARGUS_RELEASE": version,
            "CARGO_PROFILE_RELEASE_DEBUG": "0", "CARGO_PROFILE_RELEASE_STRIP": "symbols"}
     run(["cargo", "build", "--release", "--locked", "--features", "custom-protocol"], src, env)
     # CARGO_TARGET_DIR (CI: a cached folder) keeps compiled dependencies between
@@ -124,7 +124,7 @@ def main():
             shutil.rmtree(tree, ignore_errors=True)
             tree.mkdir(parents=True)
         commit = rename.export(HERE.parent, args.ref, tree, paths=("desktop",))
-        src, exe = build(tree, args.platform)
+        src, exe = build(tree, args.platform, args.version)
         if args.platform == "linux":
             name = linux_deb(src, exe, out, args.version)
         else:

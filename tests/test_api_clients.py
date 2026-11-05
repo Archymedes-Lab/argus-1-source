@@ -56,7 +56,9 @@ ROUTES = {
         "/api/autopilot", "/api/autopilot/authorize", "/api/autopilot/decide",
         "/api/autopilot/notices", "/api/autopilot/policy", "/api/billing/checkout",
         "/api/billing/confirm", "/api/billing/status", "/api/pause", "/api/protection",
-        "/api/protection/scan", "/api/resume")},
+        "/api/protection/scan", "/api/resume",
+        # the desktop app's update notice (service/selfupdate.py)
+        "/api/update")},
 }
 POST_ONLY = {"/api/answer", "/api/ask", "/api/assistant/action", "/api/brief",
              "/api/fix/approve", "/api/fix/authorize", "/api/fix/reject", "/api/fix/retry",

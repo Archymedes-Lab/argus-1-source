@@ -1,5 +1,7 @@
 <script lang="ts">
   import Shield from "@lucide/svelte/icons/shield";
+  import Download from "@lucide/svelte/icons/download";
+  import { api } from "../lib/api";
   import { app, go, type View } from "../lib/store.svelte";
   import { EXPERT_ONLY, NAV } from "../lib/nav";
   import { t, type Key } from "../lib/words";
@@ -40,6 +42,15 @@
     {#each NAV.filter((n) => n.group === "explore" && (app.mode === "expert" || !EXPERT_ONLY.includes(n.view))) as n (n.view)}{@render item(n)}{/each}
   </nav>
   <div class="mt-auto flex flex-col gap-0.5 px-2 pb-2">
+    {#if app.update?.newer}
+      <div class="mb-2 rounded-lg bg-blue-100 p-3" role="status">
+        <div class="text-label-13 text-blue-900">{tr("Update available")}</div>
+        <div class="mt-0.5 text-copy-13 text-gray-900">{tr("Version {v} is ready to download.", { v: app.update.latest ?? "" })}</div>
+        <button class="btn btn-sm btn-accent mt-2 w-full" onclick={() => api.openDownloadPage().catch(() => {})}>
+          <Download size={13} />{tr("Get the update")}
+        </button>
+      </div>
+    {/if}
     {#each NAV.filter((n) => n.group === "bottom") as n (n.view)}{@render item(n)}{/each}
     <div class="mt-2 flex items-center gap-2 px-2.5 py-2 text-label-12 text-gray-900">
       <span class="dot {app.status.phase === 'live' ? 'dot-ok' : app.status.phase === 'degraded' ? 'dot-warn' : app.status.phase === 'starting' ? 'dot-run' : 'dot-bad'}"></span>
