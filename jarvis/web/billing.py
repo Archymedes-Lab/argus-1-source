@@ -1,4 +1,4 @@
-"""ARGUS-INSTINCT yearly licence: Stripe Checkout, a local licence record, an optional gate.
+"""ARGUS-INSTINCT licence ($15 a month or $79 a year): Stripe Checkout, a local licence record, an optional gate.
 
 Everything here is standard library. The Stripe secret key never reaches the
 browser; the dashboard only asks this module for a Checkout URL and for the
@@ -6,8 +6,10 @@ licence state. Configuration comes from the environment or from
 `~/.jarvis/billing.env` (KEY=value lines), so nothing secret lives in the repo:
 
     STRIPE_SECRET_KEY       sk_test_... or sk_live_...        (required to sell)
-    STRIPE_PRICE_ID         price_...  a yearly recurring price (optional; when
+    STRIPE_PRICE_ID         price_...  the yearly recurring price (optional; when
                             unset an inline $79/year price is used)
+    STRIPE_PRICE_ID_MONTHLY price_...  the monthly recurring price (optional; when
+                            unset an inline $15/month price is used)
     STRIPE_WEBHOOK_SECRET   whsec_...  (optional; verifies /api/billing/webhook)
     ARGUS_REQUIRE_LICENSE   1 to refuse assistant and audit calls without a licence
 
@@ -30,12 +32,21 @@ import urllib.request
 API = "https://api.stripe.com/v1"
 ENV_PATH = os.path.expanduser("~/.jarvis/billing.env")
 META_KEY = "billing.license"
-PRICE_USD = 79
-TERM_SECONDS = 366 * 86400          # a year plus a day of grace
+PLANS = {"month": 15, "year": 79}                  # US dollars per billing interval
+PRICE_USD = PLANS["year"]                          # the yearly price, kept for older callers
+TERMS = {"month": 32 * 86400, "year": 366 * 86400}  # one interval plus a day or two of grace
+TERM_SECONDS = TERMS["year"]
+DEFAULT_PLAN = "year"
 WEBHOOK_TOLERANCE = 300
 _SESSION_ID = re.compile(r"^cs_(test|live)_[A-Za-z0-9]{10,200}$")
-_KEYS = ("STRIPE_SECRET_KEY", "STRIPE_PRICE_ID", "STRIPE_WEBHOOK_SECRET",
-         "ARGUS_REQUIRE_LICENSE")
+_KEYS = ("STRIPE_SECRET_KEY", "STRIPE_PRICE_ID", "STRIPE_PRICE_ID_MONTHLY",
+         "STRIPE_WEBHOOK_SECRET", "ARGUS_REQUIRE_LICENSE")
+
+
+def plan_of(value):
+    """'month' or 'year'; anything else (including nothing) is the yearly plan."""
+    value = str(value or "").strip().lower()
+    return value if value in PLANS else DEFAULT_PLAN
 
 
 def _file_env(path=ENV_PATH):
@@ -106,6 +117,8 @@ def status(store, now=None):
         "required": required(),
         "price_usd": PRICE_USD,
         "interval": "year",
+        "plans": dict(PLANS),
+        "plan": plan_of((record or {}).get("plan")) if active else None,
     }
 
 
@@ -114,8 +127,10 @@ def allowed(store):
     return (not required()) or status(store)["licensed"]
 
 
-def checkout(origin):
-    """-> {url} to send the browser to, or {error}. `origin` is this dashboard's address."""
+def checkout(origin, plan=DEFAULT_PLAN):
+    """-> {url} to send the browser to, or {error}. `origin` is this dashboard's address.
+    `plan` is 'month' ($15) or 'year' ($79)."""
+    plan = plan_of(plan)
     if not configured():
         return {"error": "Payments are not set up on this computer yet. Add STRIPE_SECRET_KEY "
                          "to ~/.jarvis/billing.env (see docs/BILLING.md)."}
@@ -125,16 +140,19 @@ def checkout(origin):
         "cancel_url": origin + "/#pricing",
         "allow_promotion_codes": "true",
         "line_items[0][quantity]": "1",
+        "metadata[plan]": plan,
+        "subscription_data[metadata][plan]": plan,
     }
-    price = setting("STRIPE_PRICE_ID")
+    price = setting("STRIPE_PRICE_ID_MONTHLY" if plan == "month" else "STRIPE_PRICE_ID")
     if price:
         form["line_items[0][price]"] = price
     else:
         form.update({
             "line_items[0][price_data][currency]": "usd",
-            "line_items[0][price_data][unit_amount]": str(PRICE_USD * 100),
-            "line_items[0][price_data][recurring][interval]": "year",
-            "line_items[0][price_data][product_data][name]": "ARGUS-INSTINCT yearly licence",
+            "line_items[0][price_data][unit_amount]": str(PLANS[plan] * 100),
+            "line_items[0][price_data][recurring][interval]": plan,
+            "line_items[0][price_data][product_data][name]": "ARGUS-INSTINCT %s licence" % (
+                "monthly" if plan == "month" else "yearly"),
         })
     session, error = _stripe("POST", "/checkout/sessions", form)
     if not session or not session.get("url"):
@@ -144,11 +162,12 @@ def checkout(origin):
 
 def _grant(store, session, now):
     details = session.get("customer_details") or {}
+    plan = plan_of((session.get("metadata") or {}).get("plan"))
     store.set_meta(META_KEY, json.dumps({
         "session": session.get("id"), "customer": session.get("customer"),
-        "subscription": session.get("subscription"),
+        "subscription": session.get("subscription"), "plan": plan,
         "email": details.get("email") or session.get("customer_email"),
-        "activated": now, "expires": now + TERM_SECONDS}))
+        "activated": now, "expires": now + TERMS[plan]}))
 
 
 def confirm(store, session_id, now=None):
@@ -193,7 +212,7 @@ def handle_webhook(store, payload, header, now=None):
         _grant(store, obj, now)
     elif kind == "invoice.paid" and _load(store):
         record = _load(store)
-        record["expires"] = now + TERM_SECONDS
+        record["expires"] = now + TERMS[plan_of(record.get("plan"))]
         store.set_meta(META_KEY, json.dumps(record))
     elif kind == "customer.subscription.deleted" and _load(store):
         record = _load(store)

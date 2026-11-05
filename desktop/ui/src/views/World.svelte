@@ -10,17 +10,33 @@
 
   let data = $state<World | null>(null);
   let err = $state("");
+  let busy = $state(false);
+  let alive = true;
+  let loading = false;
   let query = $state("");
   let zone = $state<WorldZone | null>(null);
   let limit = $state(40);
   let timer: ReturnType<typeof setInterval> | undefined;
 
   async function load() {
+    if (loading || !alive) return;
+    loading = true;
     try { data = await api.world(); err = ""; }
     catch (e) { err = String((e as Error).message ?? e); }
+    finally { loading = false; }
   }
-  onMount(() => { load(); timer = setInterval(load, 60000); });
-  onDestroy(() => clearInterval(timer));
+  // Ask ARGUS-INSTINCT to fetch the news reports again now, then show them as soon as they arrive.
+  async function refresh() {
+    busy = true;
+    try {
+      await api.runCollector("world");
+      toast(tr("Fetching the latest reports…"), "ok");
+      for (const wait of [5000, 10000, 20000]) { await new Promise((r) => setTimeout(r, wait)); if (!alive) return; await load(); }
+    } catch (e) { toast(String((e as Error).message ?? e), "bad"); }
+    finally { busy = false; }
+  }
+  onMount(() => { load(); timer = setInterval(load, 30000); });
+  onDestroy(() => { alive = false; clearInterval(timer); });
   $effect(() => { query; zone; limit = 40; });
 
   // Great-circle distance, to say which reports fall inside a zone.
@@ -55,8 +71,15 @@
   {:else if !data}
     <div class="empty">{tr("Reading ARGUS-INSTINCT…")}</div>
   {:else}
+    {#if err}
+      <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900"><span class="dot dot-warn"></span>{tr("Could not refresh. Showing what ARGUS-INSTINCT received last.")}</div>
+    {/if}
     {#if data.stale}
-      <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900"><span class="dot dot-warn"></span>{tr("The news feed is out of date.")}</div>
+      <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900"><span class="dot dot-warn"></span><span class="min-w-0 flex-1">{app.mode === "simple" ? tr("The news is out of date. It was last updated {when}.", { when: agoT(data.generated_at) }) : tr("The news feed is out of date.")}</span>
+        <button class="btn btn-sm shrink-0" disabled={busy} onclick={refresh}>{busy ? tr("Updating…") : tr("Update now")}</button></div>
+    {:else if !data.items.length}
+      <div class="flex items-center gap-3 rounded-lg bg-gray-100 px-4 py-2.5 text-copy-13 text-gray-900"><span class="min-w-0 flex-1">{tr("No reports have come in lately. That can be normal.")}</span>
+        <button class="btn btn-sm shrink-0" disabled={busy} onclick={refresh}>{busy ? tr("Updating…") : tr("Update now")}</button></div>
     {/if}
 
     <section class="grid grid-cols-4 gap-3 max-md:grid-cols-2">

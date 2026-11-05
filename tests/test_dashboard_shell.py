@@ -218,7 +218,7 @@ class ClassificationTests(unittest.TestCase):
     def test_unknown_categories_get_honest_generic_guidance(self):
         g = run_node("guideFor({job:'j',category:'never-heard-of-it',severity:'high',title:'x'})")
         self.assertTrue(g["general"])
-        self.assertIn("rates this high", g["why"])
+        self.assertIn("thinks this is serious", g["why"])
         self.assertNotIn("attack", g["means"].lower())
 
     def test_duplicate_titles_collapse_with_a_count(self):

@@ -19,15 +19,16 @@ The app opens only `https://checkout.stripe.com/...` addresses in the browser (c
 
 ## What Chris needs to do
 
-1. In Stripe (test mode first) create a Product with a **yearly recurring $79 Price**. Copy its `price_...` id.
+1. In Stripe (test mode first) create a Product with a **yearly recurring $79 Price** and a **monthly recurring $15 Price**. Copy both `price_...` ids.
 2. Create `C:\Users\<user>\.jarvis\billing.env` (never commit it):
    ```
    STRIPE_SECRET_KEY=sk_test_...
-   STRIPE_PRICE_ID=price_...
+   STRIPE_PRICE_ID=price_...            # the yearly $79 Price
+   STRIPE_PRICE_ID_MONTHLY=price_...    # the monthly $15 Price
    STRIPE_WEBHOOK_SECRET=whsec_...
    ARGUS_REQUIRE_LICENSE=0
    ```
-   Without `STRIPE_PRICE_ID` an inline $79/year price is created per checkout (fine for testing, not for tax or coupons).
+   Without the price ids, inline $79/year and $15/month prices are created per checkout (fine for testing, not for tax or coupons).
 3. Webhook endpoint `POST /api/billing/webhook` on the daemon. Locally:
    `stripe listen --forward-to localhost:8787/api/billing/webhook`
    Events used: `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted`.

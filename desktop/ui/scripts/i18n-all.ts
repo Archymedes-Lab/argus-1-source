@@ -12,6 +12,9 @@ export function allKeys(root = "src"): string[] {
   for (const m of block.matchAll(re)) {
     for (const s of [m[1], m[2]]) if (s) keys.add(JSON.parse(`"${s}"`));
   }
+  // The category guidance shown in Simple mode (lib/guide.json) reaches tr() through plainFinding().
+  const guide = JSON.parse(readFileSync(`${root}/lib/guide.json`, "utf8")) as Record<string, string[]>;
+  for (const lines of Object.values(guide)) for (const s of lines) keys.add(s);
   return [...keys].sort();
 }
 

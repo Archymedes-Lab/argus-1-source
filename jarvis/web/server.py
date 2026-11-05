@@ -912,7 +912,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(result))
         if url.path == "/api/billing/checkout":
             origin = "http://%s" % (self.headers.get("Host") or "localhost")
-            result = billing.checkout(origin)
+            payload = self._json_body(2048) or {}
+            result = billing.checkout(origin, billing.plan_of(payload.get("plan")))
             return self._send(200 if "url" in result else 400, json.dumps(result))
         if url.path == "/api/billing/confirm":
             payload = self._json_body(2048) or {}
