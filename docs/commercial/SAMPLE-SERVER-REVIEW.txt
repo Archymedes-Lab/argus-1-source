@@ -5,7 +5,7 @@ Window: 2026-10-26 00:00 UTC to 2026-11-02 00:00 UTC (7 days)
 
 This is an observed review of what ARGUS-1 recorded on this server. It is not a security audit, a penetration test or a certification, and it does not say that this server is or is not compromised.
 
-None of the 54 capabilities in the coverage register has been live-tested yet.
+None of the 60 capabilities in the coverage register has been live-tested yet.
 
 Capability status: built and tested in source only; not yet verified on a real machine for every area below unless noted.
 Areas: 12 observed, 1 partial, 1 stale, 1 not observed.
@@ -81,7 +81,7 @@ Findings are operational observations to review with the server owner, not verdi
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
    No findings in the stored result of 2026-11-01 23:57 UTC.
 
-## Changes to ARGUS-1 itself [selfguard]
+## Changes to ARGUS-INSTINCT itself [selfguard]
    State: observed in this window. Runs in window: 2016 complete, 0 partial, 0 unavailable. Last run: 2026-11-01 23:57 UTC.
    No findings in the stored result of 2026-11-01 23:57 UTC.
 
@@ -102,12 +102,12 @@ What this review could not see (blind spots):
   - Pending security updates and known CVEs: built and tested in source only; not yet verified on a real machine. Limit: Measured on this WSL Ubuntu 24.04 only.
   - Vulnerable dependencies and secrets in codebases: built and tested in source only; not yet verified on a real machine. Limit: Not yet run on a real server.
   - Docker privilege and published ports: built and tested in source only; not yet verified on a real machine. Limit: No isolated malicious-container measurement, scheduled service receipt or sustained coverage proof.
-  - Changes to ARGUS-1 itself: built and tested in source only; not yet verified on a real machine. Limit: Not soaked.
+  - Changes to ARGUS-INSTINCT itself: built and tested in source only; not yet verified on a real machine. Limit: Not soaked.
   - Off-box "host went silent" heartbeat: built and tested in source only; not yet verified on a real machine. Limit: No delivery to a real dead-man service has been measured.
   - Alert delivery (email, webhook, ntfy, syslog): built and tested in source only; not yet verified on a real machine. Limit: No live delivery to a real webhook or ntfy topic has been measured.
   - Alert delivery (email, webhook, ntfy, syslog): no collector run is recorded for it in this report.
 
-Health and assurance scores describe what ARGUS-1 can observe and how much evidence supports it. Neither is a verdict that this machine is or is not compromised, and an absence of alerts is not proof of safety.
+Health and assurance scores describe what ARGUS-INSTINCT can observe and how much evidence supports it. Neither is a verdict that this machine is or is not compromised, and an absence of alerts is not proof of safety.
 
 Good to know:
   - The off-box heartbeat is off until you set a heartbeat URL; until then nobody is told if this server goes silent.

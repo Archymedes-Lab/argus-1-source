@@ -9,7 +9,6 @@ licence state. Configuration comes from the environment or from
     STRIPE_PRICE_ID         price_...  a yearly recurring price (optional; when
                             unset an inline $79/year price is used)
     STRIPE_WEBHOOK_SECRET   whsec_...  (optional; verifies /api/billing/webhook)
-    ARGUS_REQUIRE_LICENSE   1 to refuse assistant and audit calls without a licence
 
 A licence is written when Stripe says the Checkout Session is paid, either
 because the browser came back with its session id (`confirm`) or because a
@@ -34,8 +33,7 @@ PRICE_USD = 79
 TERM_SECONDS = 366 * 86400          # a year plus a day of grace
 WEBHOOK_TOLERANCE = 300
 _SESSION_ID = re.compile(r"^cs_(test|live)_[A-Za-z0-9]{10,200}$")
-_KEYS = ("STRIPE_SECRET_KEY", "STRIPE_PRICE_ID", "STRIPE_WEBHOOK_SECRET",
-         "ARGUS_REQUIRE_LICENSE")
+_KEYS = ("STRIPE_SECRET_KEY", "STRIPE_PRICE_ID", "STRIPE_WEBHOOK_SECRET")
 
 
 def _file_env(path=ENV_PATH):
@@ -58,10 +56,6 @@ def setting(name):
 
 def configured():
     return setting("STRIPE_SECRET_KEY").startswith(("sk_test_", "sk_live_", "rk_test_", "rk_live_"))
-
-
-def required():
-    return setting("ARGUS_REQUIRE_LICENSE").lower() in ("1", "true", "yes", "on")
 
 
 def _stripe(method, path, form=None, timeout=20):
@@ -103,15 +97,13 @@ def status(store, now=None):
         "expires": int(record["expires"]) if active else None,
         "email": (record or {}).get("email") if active else None,
         "can_purchase": configured(),
-        "required": required(),
+        # Protection never depends on payment (tests/test_licence_never_gates_core.py): no
+        # build asks for a licence before a check runs. Kept so older screens read a value.
+        "required": False,
         "price_usd": PRICE_USD,
         "interval": "year",
     }
 
-
-def allowed(store):
-    """False only when a licence is demanded and there is none."""
-    return (not required()) or status(store)["licensed"]
 
 
 def checkout(origin):

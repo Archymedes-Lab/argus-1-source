@@ -95,7 +95,7 @@ def _dir(path):
 # --- storage ---------------------------------------------------------------------------------------
 def load(path):
     try:
-        with open(path, encoding='utf-8') as fh:
+        with open(path, encoding='utf-8', errors='replace') as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else None
     except (OSError, ValueError):

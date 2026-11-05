@@ -1,3 +1,5 @@
+> **The licence lock (`ARGUS_REQUIRE_LICENSE`, HTTP 402) was removed in the merge:** protection never depends on payment (`tests/test_licence_never_gates_core.py`). Billing status and checkout remain; the lines below that describe the lock are historical.
+>
 > Kept alongside the newer licensing design. This describes the daemon-side Stripe billing (Pricing view, `/api/billing`). The signed-lease licensing service is in `docs/BILLING.md` and `docs/LICENSING-ARCHITECTURE.md`. Which of the two stays is an owner decision.
 
 # Licence and Stripe payments
@@ -15,7 +17,7 @@ Environment variables of the same names also work. Never commit this file.
 STRIPE_SECRET_KEY=sk_test_...        # Dashboard > Developers > API keys
 STRIPE_PRICE_ID=price_...            # optional: a yearly recurring $79 Price
 STRIPE_WEBHOOK_SECRET=whsec_...      # optional, see below
-ARGUS_REQUIRE_LICENSE=0              # 1 = lock the assistant and checks until licensed
+ARGUS_REQUIRE_LICENSE (REMOVED)=0              # 1 = lock the assistant and checks until licensed
 ```
 
 - Without `STRIPE_PRICE_ID` an inline `$79 / year` price is created per checkout.
@@ -39,7 +41,7 @@ ARGUS_REQUIRE_LICENSE=0              # 1 = lock the assistant and checks until l
 
 ## Enforcement
 
-`ARGUS_REQUIRE_LICENSE=1` makes `/api/ask`, `/api/run` and `/api/assistant/action`
+`ARGUS_REQUIRE_LICENSE (REMOVED)=1` makes `/api/ask`, `/api/run` and `/api/assistant/action`
 answer `402` without a licence, and the dashboard shows a banner. It is off by default
 so development builds stay usable. Turn it on for release builds.
 

@@ -1,3 +1,5 @@
+> **The licence lock (`ARGUS_REQUIRE_LICENSE`, HTTP 402) was removed in the merge:** protection never depends on payment (`tests/test_licence_never_gates_core.py`). Billing status and checkout remain; the lines below that describe the lock are historical.
+>
 > Kept alongside the newer licensing design. This describes the daemon-side Stripe billing (Pricing view, `/api/billing`). The signed-lease licensing service is in `docs/STRIPE-HANDOFF.md` and `docs/LICENSING-ARCHITECTURE.md`. Which of the two stays is an owner decision.
 
 # Stripe hand-off (for Chris)
@@ -27,7 +29,7 @@ The app opens only `https://checkout.stripe.com/...` addresses in the browser (c
    STRIPE_SECRET_KEY=sk_test_...
    STRIPE_PRICE_ID=price_...
    STRIPE_WEBHOOK_SECRET=whsec_...
-   ARGUS_REQUIRE_LICENSE=0
+   ARGUS_REQUIRE_LICENSE (REMOVED)=0
    ```
    Without `STRIPE_PRICE_ID` an inline $79/year price is created per checkout (fine for testing, not for tax or coupons).
 3. Webhook endpoint `POST /api/billing/webhook` on the daemon. Locally:
@@ -45,7 +47,7 @@ The app opens only `https://checkout.stripe.com/...` addresses in the browser (c
 ## Before going live
 
 - Swap `sk_test_` for `sk_live_` and re-create the webhook for the live endpoint.
-- Set `ARGUS_REQUIRE_LICENSE=1` on release builds only. The check is local and stops casual use, not a determined user.
+- Set `ARGUS_REQUIRE_LICENSE (REMOVED)=1` on release builds only. The check is local and stops casual use, not a determined user.
 - Decide the public return URL: the success address is built from the daemon's own address (`127.0.0.1:<port>`),
   so the paying browser must be on the same computer as the daemon.
 - The webhook needs a reachable address; for a desktop product that normally means polling/confirm only, or a small hosted relay (`hosted/` has Cloudflare examples).

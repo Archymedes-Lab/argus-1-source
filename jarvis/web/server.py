@@ -924,15 +924,6 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
             return self._send(200 if result.get("ok") else 400, json.dumps(result))
-        if url.path in ("/api/run", "/api/ask", "/api/assistant/action"):
-            store = Store(self.db_path)
-            try:
-                licensed = billing.allowed(store)
-            finally:
-                store.close()
-            if not licensed:
-                return self._send(402, json.dumps({"error": "An ARGUS-INSTINCT licence is required. "
-                                                            "Open the Pricing page."}))
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]
             ok = self.scheduler.force(job)

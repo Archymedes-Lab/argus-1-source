@@ -52,7 +52,7 @@ class DeviceError(Exception):
 # --- machine id ---------------------------------------------------------------------------------
 def _in_wsl():
     try:
-        with open('/proc/sys/kernel/osrelease', encoding='ascii') as fh:
+        with open('/proc/sys/kernel/osrelease', encoding='ascii', errors='replace') as fh:
             return 'microsoft' in fh.read().lower()
     except OSError:
         return False
@@ -67,10 +67,10 @@ def _windows_guid():
     # Windows interop usually answers in ~0.2 s but can stall under load: one retry with a longer wait.
     try:
         out = subprocess.run([_WSL_REG_EXE, 'query', _REG[0], '/v', _REG[1]], capture_output=True,
-                             text=True, timeout=8, check=True).stdout
+                             text=True, errors='replace', timeout=8, check=True).stdout
     except subprocess.TimeoutExpired:
         out = subprocess.run([_WSL_REG_EXE, 'query', _REG[0], '/v', _REG[1]], capture_output=True,
-                             text=True, timeout=30, check=True).stdout
+                             text=True, errors='replace', timeout=30, check=True).stdout
     for line in out.splitlines():
         parts = line.split()
         if parts and parts[0] == _REG[1]:
@@ -81,7 +81,7 @@ def _windows_guid():
 def _linux_id():
     for path in ('/etc/machine-id', '/var/lib/dbus/machine-id'):
         try:
-            with open(path, encoding='ascii') as fh:
+            with open(path, encoding='ascii', errors='replace') as fh:
                 value = fh.read().strip().lower()
             if len(value) >= 16:
                 return value
