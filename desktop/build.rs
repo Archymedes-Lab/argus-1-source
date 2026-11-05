@@ -43,6 +43,9 @@ fn main() {
             "app_version",
             "check_update",
             "open_download_page",
+            "licence_state",
+            "licence_action",
+            "open_licence_page",
         ]),
     ))
     .expect("tauri build");

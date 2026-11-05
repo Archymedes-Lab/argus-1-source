@@ -10,6 +10,7 @@
     pkgverify   packaged-file integrity of intruder targets
     appcode     every codebase: vulnerable dependencies, risky code, secrets  [PATH ...]
     services    the declared services file, and what listens now
+    review      one report of a window of stored observation, with its blind spots  [--days N]
     netstate    write the firewall snapshot      (argus-netstate unit; no store)
     netsensor   run the packet sensor            (argus-netsensor unit; no store)
 """
@@ -176,6 +177,130 @@ def cmd_netsensor(args, store):
     sys.exit(capture.main())
 
 
+def cmd_review(args, store):
+    """Read-only report over the daemon's stored observation (jarvis/response/review.py)."""
+    from jarvis.core import statedir
+    from jarvis.core.store import DEFAULT_DB
+    from jarvis.response import review
+    refusal = statedir.cli_refusal(args.db, DEFAULT_DB, sys.argv[1:])
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 2
+    from jarvis.licensing import licence
+    try:
+        report = review.build(args.db, days=args.days)
+    except review.ReviewError as exc:
+        print(f"no review: {exc}", file=sys.stderr)
+        return 2
+    lic_path = licence.path_for(args.db)
+    licence.maybe_renew(lic_path)   # one HTTPS call only when the lease is in its last 7 days
+    lic = licence.status(lic_path)
+    if not lic["licensed"]:
+        report = review.preview(report, licence.SERVER_CHECKOUT)
+        print(f"preview only: {lic['reason']}. Full report: enter a licence key with `argus licence activate "
+              f"<key>`, or buy Argus Server ($50 per server per year) at {licence.SERVER_CHECKOUT}.", file=sys.stderr)
+    text = (json.dumps(report, indent=2) + "\n") if args.json else review.render(report)
+    if not args.out:
+        sys.stdout.write(text)
+        return 0
+    try:
+        review.write_private(args.out, text)
+    except FileExistsError:
+        print(f"not written: {args.out} already exists (choose a new name)", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"not written: {exc.strerror or type(exc).__name__}", file=sys.stderr)
+        return 2
+    print(f"review written to {args.out} (readable by this account only)")
+    return 0
+
+
+def _licence_lines(st, licence):
+    """The status block shared by `argus licence status` and the other licence commands."""
+    import time as _t
+    day = (lambda ts: _t.strftime("%Y-%m-%d", _t.gmtime(ts)) if ts else "no end date")
+    lines = [f"{'licensed' if st['licensed'] else 'not licensed'}: {st['reason']}"]
+    if st.get("activation_id"):
+        lines.append(f"  plan: {st.get('product') or '?'}" + (f" (key ...{st['key_hint']})" if st.get("key_hint") else ""))
+        if st.get("expires_at"):
+            lines.append(f"  renews or ends: {day(st.get('expires_at'))}; offline lease until {day(st.get('lease_until'))}")
+        lines.append(f"  this machine: {st.get('label') or '?'}; automatic renewal {'on' if st.get('auto_renew', True) else 'off'}")
+        lines.append(f"  manage (move, billing, resend key): {licence.MANAGE_URL}")
+    if not st["licensed"]:
+        lines.append("  enter a licence key: argus licence activate ARGUS-SRV-... (or ARGUS-DSK-...)")
+        lines.append(f"  buy: Argus Server $50/server/year {licence.SERVER_CHECKOUT} , "
+                     f"Argus Desktop $79/year {licence.DESKTOP_CHECKOUT}")
+        lines.append(f"  lost your key? {licence.RECOVER_URL}")
+    return lines
+
+
+def cmd_licence(args, store):
+    """Argus licences (Archymedes licence service, sold through Stripe): unlock the full review report (never protection)."""
+    import webbrowser
+
+    from jarvis.core.store import DEFAULT_DB
+    from jarvis.licensing import licence
+    path = licence.path_for(args.db or DEFAULT_DB)
+    act = args.action
+    try:
+        if act == "activate":
+            if not args.value:
+                print("licence: give the key: argus licence activate ARGUS-SRV-XXXXX-...", file=sys.stderr)
+                return 2
+            rec = licence.activate(path, args.value)
+            print(f"{rec['product']} activated for this machine ({rec.get('label')}).")
+        elif act == "refresh":
+            licence.refresh(path)
+            print(f"renewed with the {licence.SERVICE}.")
+        elif act == "deactivate":
+            rec = licence.deactivate(path)
+            print(f"deactivated: the seat on {rec.get('label') or 'this machine'} is free; activate the key on the new machine.")
+            return 0
+        elif act == "remove":
+            if os.path.exists(path):
+                os.unlink(path)
+            print("licence forgotten on this machine, but its seat is still taken. To free the seat use "
+                  f"`argus licence deactivate`, or release this machine at {licence.MANAGE_URL}.")
+            return 0
+        elif act == "auto-renew":
+            if args.value not in ("on", "off"):
+                print("licence: auto-renew on|off", file=sys.stderr)
+                return 2
+            licence.set_auto_renew(path, args.value == "on")
+            print(f"automatic renewal {args.value}." + ("" if args.value == "on" else " Renew with `argus licence refresh`."))
+            return 0
+        elif act == "login":
+            licence.login(path)
+            print("activated.")
+        elif act == "buy":
+            c = licence.claim_start(path)
+            plan = args.value if args.value in ("server", "desktop") else "server"
+            url = c["buy"][plan]
+            print(f"Opening checkout: {url}")
+            print("Pay in the browser; this machine activates by itself when the payment is confirmed (Ctrl+C to stop waiting).")
+            try:
+                webbrowser.open(url)
+            except Exception:  # noqa: BLE001 - a headless machine has no browser; the link is printed
+                pass
+            import time as _t
+            deadline = _t.time() + int(c.get("expires_in") or 1800)
+            while _t.time() < deadline and licence.claim_poll(path) == "pending":
+                _t.sleep(int(c.get("interval") or 5))
+        elif act == "content":
+            data = licence.fetch_content(path, args.value or "sample")
+            print(json.dumps(data, indent=2))
+            return 0
+        licence.maybe_renew(path)
+        for line in _licence_lines(licence.status(path), licence):
+            print(line)
+    except licence.LicenceError as exc:
+        print(f"licence: {exc}", file=sys.stderr)
+        if exc.code == "seat_taken":
+            print(f"  manage your licence: {licence.MANAGE_URL}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def add_parser(sub):
     for name, fn, text in (("netflow", cmd_netflow, "incoming packets the sensor saw, judged"),
                            ("logins", cmd_logins, "successful SSH logins: new networks, new keys, guesses that worked"),
@@ -206,6 +331,19 @@ def add_parser(sub):
     p.add_argument("--suggest", action="store_true",
                    help="print a services.conf starting point from current listeners")
     p.set_defaults(fn=cmd_services, no_store=True)
+    p = sub.add_parser("review", help="observed server review: one report of the last days of "
+                       "stored observation, with what it could not see (read-only)")
+    p.add_argument("--days", type=int, default=7, help="window in days, 1 to 31 (default 7)")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--out", help="write the report to this new file, owner-only")
+    p.set_defaults(fn=cmd_review, no_store=True)
+    p = sub.add_parser("licence", help="Argus licence key (Archymedes licence service): unlocks the full review report "
+                       "(protection never needs one)")
+    p.add_argument("action", nargs="?", default="status",
+                   choices=("status", "activate", "refresh", "deactivate", "login", "buy", "auto-renew", "content", "remove"))
+    p.add_argument("value", nargs="?", help="activate: the ARGUS-SRV-... key (or an argus://activate link); "
+                   "buy: server|desktop; auto-renew: on|off; content: a pack name")
+    p.set_defaults(fn=cmd_licence, no_store=True)
     p = sub.add_parser("netstate", help="write the firewall snapshot (run by argus-netstate)")
     p.set_defaults(fn=cmd_netstate, no_store=True)
     p = sub.add_parser("netsensor", help="run the packet sensor (run by argus-netsensor)")

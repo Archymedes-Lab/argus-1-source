@@ -568,6 +568,61 @@ pub async fn procs_snapshot() -> Result<Value, String> {
     .await
 }
 
+// ---- licence (premium content only; protection never consults it) ---------
+
+/// Licence screen actions the daemon accepts (jarvis/web/licenceapi.py).
+pub fn valid_licence_action(a: &str) -> bool {
+    matches!(a, "activate" | "deactivate" | "refresh" | "upgrade" | "poll")
+}
+
+/// The only pages this app opens in the browser: Archymedes checkout and the licence pages.
+/// A purchase started in the app carries its claim id (`clm_` and 32 Crockford symbols).
+pub fn valid_licence_page(url: &str) -> bool {
+    const BASE: &str = "https://pay.archymedes.xyz/";
+    let Some(rest) = url.strip_prefix(BASE) else { return false };
+    if matches!(rest, "manage" | "recover" | "buy/argus-server" | "buy/argus-desktop") {
+        return true;
+    }
+    for offer in ["buy/argus-server?claim=clm_", "buy/argus-desktop?claim=clm_"] {
+        if let Some(id) = rest.strip_prefix(offer) {
+            return id.len() == 32 && id.bytes().all(|b| b.is_ascii_digit() || b.is_ascii_uppercase());
+        }
+    }
+    false
+}
+
+#[tauri::command]
+pub async fn licence_state() -> Result<Value, String> {
+    blocking(|| get_json("/api/licence", ACTION_TIMEOUT)).await
+}
+
+#[tauri::command]
+pub async fn licence_action(action: String, key: Option<String>, plan: Option<String>) -> Result<Value, String> {
+    if !valid_licence_action(&action) {
+        return Err("unknown licence action".into());
+    }
+    let key: String = key.unwrap_or_default().chars().take(200).collect();
+    let plan = match plan.as_deref() { Some("server") => "server", _ => "desktop" };
+    blocking(move || post_json(&format!("/api/licence/{action}"), &json!({ "key": key, "plan": plan }), ASK_TIMEOUT)).await
+}
+
+/// Open an allow-listed licence page in the default browser.
+#[tauri::command]
+pub async fn open_licence_page(url: String) -> Result<(), String> {
+    if !valid_licence_page(&url) {
+        return Err("that page is not an Archymedes licence page".into());
+    }
+    #[cfg(windows)]
+    let mut cmd = std::process::Command::new("rundll32");
+    #[cfg(windows)]
+    cmd.args(["url.dll,FileProtocolHandler", &url]);
+    #[cfg(not(windows))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    #[cfg(not(windows))]
+    cmd.arg(&url);
+    cmd.spawn().map(|_| ()).map_err(|e| format!("could not open the browser: {e}; open {url} yourself"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -586,6 +641,19 @@ mod tests {
         assert!(!valid_device_id("abc"));
         assert!(!valid_device_id("../etc"));
         assert!(!valid_device_id(&"a".repeat(65)));
+    }
+
+    #[test]
+    fn licence_pages_and_actions_are_allow_listed() {
+        assert!(valid_licence_page("https://pay.archymedes.xyz/manage"));
+        assert!(valid_licence_page("https://pay.archymedes.xyz/buy/argus-desktop"));
+        assert!(valid_licence_page("https://pay.archymedes.xyz/buy/argus-server?claim=clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ"));
+        for bad in ["https://evil.example/manage", "http://pay.archymedes.xyz/manage", "https://pay.archymedes.xyz/manage/../x",
+                    "https://pay.archymedes.xyz/buy/argus-server?claim=clm_short", "https://pay.archymedes.xyz.evil/manage",
+                    "https://pay.archymedes.xyz/buy/argus-server?claim=clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ&x=1"] {
+            assert!(!valid_licence_page(bad), "{bad}");
+        }
+        assert!(valid_licence_action("activate") && !valid_licence_action("../state"));
     }
 
     fn parse(raw: &str) -> io::Result<Response> {

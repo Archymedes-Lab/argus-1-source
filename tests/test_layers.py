@@ -24,7 +24,9 @@ RANK = {"core": 0, "platform": 1, "collectors": 2, "lab": 3, "intel": 4,
         # imported by nothing at runtime (tests only), so it sits above all.
         "verify": 9,
         # Agent reference monitor: imports only core, so it sits just above it.
-        "argus": 1}
+        "argus": 1,
+        # Licence keys for premium content (Archymedes licence service): standard library only, used by cli.
+        "licensing": 1}
 
 
 def _modules():

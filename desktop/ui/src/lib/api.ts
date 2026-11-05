@@ -202,7 +202,19 @@ export const api = {
   // Only inside the app: the page itself never reaches the network, and a browser has no build version to compare.
   checkUpdate: () => call<UpdateInfo>("check_update"),
   openDownloadPage: () => call<void>("open_download_page"),
+  licence: () => call<LicenceState>("licence_state"),
+  licenceAction: (action: "activate" | "deactivate" | "refresh" | "upgrade" | "poll", key?: string, plan?: "server" | "desktop") =>
+    call<LicenceReply>("licence_action", { action, key, plan }),
+  openLicencePage: (url: string) => call<void>("open_licence_page", { url }),
 };
+
+export type LicenceState = {
+  licensed: boolean; reason: string; product?: string; plan?: "server" | "desktop"; label?: string; key_hint?: string;
+  expires_at?: number | null; lease_until?: number; renew_after?: number; auto_renew?: boolean; renew_error?: string | null;
+  needs_key?: boolean; needs_check?: boolean; purchase_waiting?: boolean;
+  links: { buy_server: string; buy_desktop: string; manage: string; recover: string };
+};
+export type LicenceReply = { ok: boolean; code?: string; error?: string; open?: string; active?: boolean; state?: LicenceState };
 
 /** Pulses: from the shell's stream thread in the app, from the daemon's own
  *  stream in the browser. `down` when the daemon cannot be reached. */

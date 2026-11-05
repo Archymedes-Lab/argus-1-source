@@ -36,6 +36,8 @@ ROOT = Path(__file__).resolve().parent.parent
 #   veil     POST, the extension's own pairing token
 #   stripe   POST from Stripe, authenticated by its HMAC signature (billing.handle_webhook)
 #   redirect 302 to the interface; the token cookie only for an identified peer
+LICENCE_POSTS = ("/api/licence/activate", "/api/licence/deactivate", "/api/licence/refresh",
+                 "/api/licence/upgrade", "/api/licence/poll")
 ROUTES = {
     "/": "redirect", "/index.html": "redirect", "/ui": "redirect",
     "/ui/": "page", "/ui/index.html": "page", "/classic": "page",
@@ -44,8 +46,9 @@ ROUTES = {
     "/api/health": "live", "/api/live": "live",
     "/api/session": "session", "/api/veil/events": "veil",
     "/metrics": "token",
+    **{p: "token" for p in LICENCE_POSTS},
     **{p: "token" for p in (
-        "/api/answer", "/api/arena", "/api/ask", "/api/assistant/action", "/api/brief",
+        "/api/licence", "/api/answer", "/api/arena", "/api/ask", "/api/assistant/action", "/api/brief",
         "/api/coverage", "/api/coverage/live", "/api/coverage/stream", "/api/defender",
         "/api/fix/approve", "/api/fix/authorize", "/api/fix/reject", "/api/fix/retry",
         "/api/geo", "/api/geo/here", "/api/geo/zone", "/api/greeting", "/api/posture",
@@ -60,7 +63,7 @@ ROUTES = {
         # the desktop app's update notice (service/selfupdate.py)
         "/api/update")},
 }
-POST_ONLY = {"/api/answer", "/api/ask", "/api/assistant/action", "/api/brief",
+POST_ONLY = {*LICENCE_POSTS, "/api/answer", "/api/ask", "/api/assistant/action", "/api/brief",
              "/api/fix/approve", "/api/fix/authorize", "/api/fix/reject", "/api/fix/retry",
              "/api/geo/here", "/api/geo/zone", "/api/score-coach", "/api/voice",
              "/api/session", "/api/veil/events",

@@ -252,7 +252,7 @@ message.
 
 ## Reconciliation with the gstack market-readiness review (2026-11-01)
 
-Source: `~/.cache/gstack-review/ARCHYMEDES-MARKET-READINESS-2026-11-01.md` (read-only
+Source: `docs/commercial/MARKET-READINESS-GSTACK-2026-11-01.md` (read-only
 review). It recommends: ARGUS-1 Linux server edition first, sold as a founder-delivered
 one-week "agent-machine safety audit" (design-partner pilot); Friday CLI as free entry;
 Orion as a free beta; freeze Cloud, Desktop and gaming.

@@ -275,6 +275,9 @@ fn main() {
             update::app_version,
             update::check_update,
             update::open_download_page,
+            api::licence_state,
+            api::licence_action,
+            api::open_licence_page,
         ])
         .setup(move |app| {
             if let Ok(dir) = app.path().app_config_dir() {

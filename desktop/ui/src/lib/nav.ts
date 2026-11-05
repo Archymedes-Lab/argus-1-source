@@ -10,6 +10,7 @@ import Grid3x3 from "@lucide/svelte/icons/grid-3x3";
 import Globe from "@lucide/svelte/icons/globe";
 import Cpu from "@lucide/svelte/icons/cpu";
 import Smartphone from "@lucide/svelte/icons/smartphone";
+import KeyRound from "@lucide/svelte/icons/key-round";
 import type { View } from "./store.svelte";
 
 /** Views Simple leaves out of the sidebar: technical detail, or not about this computer.
@@ -30,5 +31,6 @@ export const NAV: { view: View; label: string; icon: typeof LayoutGrid; group: N
   { view: "procs", label: "Processes", icon: Cpu, group: "explore" },
   { view: "phone", label: "Phone", icon: Smartphone, group: "bottom" },
   { view: "pricing", label: "Pricing", icon: CreditCard, group: "bottom" },
+  { view: "licence", label: "Licence", icon: KeyRound, group: "bottom" },
   { view: "settings", label: "Settings", icon: Settings, group: "bottom" },
 ];

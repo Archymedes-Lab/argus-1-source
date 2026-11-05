@@ -1144,6 +1144,45 @@ when something hides behind an approved name:
 
 A trait on an approved process still gets flagged.
 
+## Licences and payments (Argus)
+
+Protection never needs a licence: detection, collectors, alerts, evidence and on-demand checks run the same with or
+without one (`tests/test_licence_never_gates_core.py`). A licence unlocks the premium content only, today the full
+review report.
+
+**Buying.** Argus is sold through Stripe Checkout at `https://pay.archymedes.xyz/buy/argus-server` ($50 per server
+per year, one server) and `/buy/argus-desktop` ($79 per year, one computer), with Stripe Managed Payments (Stripe is
+the merchant of record). The checkout and licence service is the Cloudflare Worker in `hosted/licence-cloudflare`.
+In the desktop app, **Licence → Buy** opens checkout and the computer activates by itself when the payment goes
+through; nothing to type. Bought on the website, the thank-you page shows the key (with Copy) and it is emailed.
+
+**Activating.** In the desktop app, **Licence** has a paste box that checks the key as you type. On a server (the
+public build names the command `argus`):
+
+```
+argus licence activate ARGUS-SRV-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX   # case, spaces and dashes do not matter
+argus licence buy server        # or: buy here, and this machine activates by itself
+argus licence login             # headless: approve a short code on the web instead
+argus licence status            # offline: plan, renews/ends, offline lease, this machine
+argus licence deactivate        # free this machine's seat, to move the licence
+argus licence refresh           # renew now (it also renews by itself when the lease has under 7 days left)
+argus licence auto-renew off    # turn that one automatic call off
+```
+
+A licence is a 30-day certificate signed with Ed25519 and bound to this machine and to a per-install device key. It
+is checked offline; an edited or copied licence file is refused (a modified program is another matter; see below). Renewal is one HTTPS call to `pay.archymedes.xyz`,
+signed by the device key. To move a licence, see where it is active, get the key again or manage billing, use
+`https://pay.archymedes.xyz/manage` (sign in with the purchase email); a lost key is resent from `/recover`. The
+licence service stores only hashes of keys, emails and machine ids. No seller secret reaches a customer machine.
+
+**What it cannot do.** A check on the customer's own machine can be bypassed by modifying the program: this is
+licensing meant to discourage casual key sharing, not DRM. The only part a modified client cannot get is content the server
+delivers (`/content/<pack>`; a sample pack today). Design and its limits: `docs/LICENSING-ARCHITECTURE.md`.
+
+Owner setup and support: `docs/BILLING.md` (plans, keys, runbooks) and `docs/STRIPE-HANDOFF.md` (Stripe objects,
+restricted keys, webhook). Prices and Stripe lookup keys come from the shared price book in the archymedes-gtm
+repository (`catalog/stripe.ts`).
+
 ## What it does not do
 
 - It is **not** a kernel-level EDR. It samples on an interval, so a process

@@ -3,7 +3,7 @@
 import { api, inApp, onDaemon, type UpdateInfo, type AppStatus } from "./api";
 import { tr } from "./i18n";
 
-export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "settings";
+export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "licence" | "settings";
 export type Mode = "simple" | "expert";
 export type Theme = "auto" | "light" | "dark";
 
