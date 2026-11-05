@@ -1137,31 +1137,33 @@ without one (`tests/test_licence_never_gates_core.py`). A licence unlocks the pr
 review report.
 
 **Buying.** Argus is sold through Stripe Checkout at `https://pay.archymedes.xyz/buy/argus-server` ($50 per server
-per year) and `/buy/argus-desktop` ($79 per year), with Stripe Managed Payments (Stripe is the merchant of record).
-The checkout and licence service is the Cloudflare Worker in `hosted/licence-cloudflare`, which issues the key and
-emails it.
+per year, one server) and `/buy/argus-desktop` ($79 per year, one computer), with Stripe Managed Payments (Stripe is
+the merchant of record). The checkout and licence service is the Cloudflare Worker in `hosted/licence-cloudflare`.
+In the desktop app, **Licence → Buy** opens checkout and the computer activates by itself when the payment goes
+through; nothing to type. Bought on the website, the thank-you page shows the key (with Copy) and it is emailed.
 
-**Activating.** The key goes into the licence command (the public build names it `argus`):
+**Activating.** In the desktop app, **Licence** has a paste box that checks the key as you type. On a server (the
+public build names the command `argus`):
 
 ```
-argus licence activate ARGUS-SERVER-...   # activate this machine (one key, one machine)
-argus licence status                      # offline: plan, expiry, last check
-argus licence refresh                     # re-check with the licence service
-argus licence remove                      # remove the key from this machine
+argus licence activate ARGUS-SRV-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX   # case, spaces and dashes do not matter
+argus licence buy server        # or: buy here, and this machine activates by itself
+argus licence login             # headless: approve a short code on the web instead
+argus licence status            # offline: plan, renews/ends, offline lease, this machine
+argus licence deactivate        # free this machine's seat, to move the licence
+argus licence refresh           # renew now (it also renews by itself when the lease has under 7 days left)
+argus licence auto-renew off    # turn that one automatic call off
 ```
 
-Only `activate` and `refresh` use the network (HTTPS to `pay.archymedes.xyz/licence`). No seller secret ever reaches
-a customer machine.
+A licence is a 30-day certificate signed with Ed25519 and bound to this machine and to a per-install device key. It
+is checked offline; an edited or copied licence file is refused (a modified program is another matter; see below). Renewal is one HTTPS call to `pay.archymedes.xyz`,
+signed by the device key. To move a licence, see where it is active, get the key again or manage billing, use
+`https://pay.archymedes.xyz/manage` (sign in with the purchase email); a lost key is resent from `/recover`. The
+licence service stores only hashes of keys, emails and machine ids. No seller secret reaches a customer machine.
 
-**Where it is going.** `docs/LICENSING-ARCHITECTURE.md` is the design being built next:
-- Ed25519-signed licence certificates verified offline, bound to the machine and to a per-device key, renewed
-  automatically about once a month.
-- Buying from inside the app without typing a key.
-- A self-serve page to move a licence or recover a lost key.
-- Keys and emails stored only as hashes.
-
-It also sets out honestly what licensing can and can't protect: a check on the customer's own machine can be bypassed
-by modifying the program, so the only fully secure gate is premium content the server delivers.
+**What it cannot do.** A check on the customer's own machine can be bypassed by modifying the program: this is
+licensing meant to discourage casual key sharing, not DRM. The only part a modified client cannot get is content the server
+delivers (`/content/<pack>`; a sample pack today). Design and its limits: `docs/LICENSING-ARCHITECTURE.md`.
 
 Owner setup and support: `docs/BILLING.md` (plans, keys, runbooks) and `docs/STRIPE-HANDOFF.md` (Stripe objects,
 restricted keys, webhook). Prices and Stripe lookup keys come from the shared price book in the archymedes-gtm
