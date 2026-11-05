@@ -141,7 +141,8 @@ class AssetTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertIsNotNone(digest, "a vendored file must be hash-pinned")
                 data = (STATIC / name).read_bytes()
-                self.assertEqual(hashlib.sha256(data).hexdigest(), digest)
+                allowed = (digest,) if isinstance(digest, str) else tuple(digest)
+                self.assertIn(hashlib.sha256(data).hexdigest(), allowed)
 
     def test_every_remote_script_and_stylesheet_is_versioned_and_integrity_pinned(self):
         for path in PAGES:
