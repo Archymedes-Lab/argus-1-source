@@ -243,6 +243,14 @@ class Run(Base):
         s = retention.run(FakeStore(), self.log, now=NOW, budget_s=10, clock=lambda: next(ticks))
         self.assertEqual(s["segments"], 1)
 
+    def test_a_fully_held_segment_is_not_even_read(self):
+        self.segment([normal(1), normal(2)])
+        h2 = self.segment([normal(3), normal(4)])
+        self.segment([normal(5)])
+        self.log.hold(1, 2, "owner preservation")
+        names = [c["segment"] for c in retention.candidates(self.log, NOW)]
+        self.assertEqual(names, [h2["segment"]])           # the held one is skipped, the next is not
+
     def test_a_held_range_survives_a_run(self):
         self.segment([normal(1), normal(2), normal(3)])
         self.segment([normal(4)])

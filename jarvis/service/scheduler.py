@@ -80,6 +80,8 @@ RESUME_JUMP_S = 60.0
 # A failed run inside its freshness budget keeps the last good result and is
 # retried after RETRY_S, at most HOLD_MAX times in a row before it is recorded.
 RETRY_S = 60
+# After a job raised out of run_once, the lane waits this long before the next job.
+LANE_ERROR_PAUSE_S = 5
 # How often a paired phone's approvals are offered and its replies fetched (notify/replies.py). When no
 # request is outstanding this does no network work at all.
 PHONE_TICK_S = 5
@@ -235,6 +237,7 @@ class Scheduler(threading.Thread):
         super().__init__(name="jarvis-scheduler")
         self.db_path = db_path
         self.hosts = hosts
+        self.lane_errors = {}      # lane -> jobs that raised out of run_once (the lane kept running)
         # Give every cold-start job a real deadline. Using 0 here makes every
         # job that has not run yet appear decades more overdue than a recurring
         # short-interval job. The result is a full, multi-minute cold-start
@@ -928,8 +931,19 @@ class Scheduler(threading.Thread):
                     time.sleep(1)
                     continue
                 setattr(self, running, name)
+                failed = False
                 try:
                     findings, err = self.run_once(store, name)
+                except Exception as exc:
+                    # A lane never dies because one job, or saving its state,
+                    # raised: on 2026-11-05 "database is locked" from set_meta
+                    # killed the frequent, bulk and main lanes in turn and the
+                    # supervisors restarted the daemon three times. Record it,
+                    # retry the job after RETRY_S, keep the lane running.
+                    failed = True
+                    findings, err = [], f"{type(exc).__name__}: {exc}"[:300]
+                    self.lane_errors[lane] = self.lane_errors.get(lane, 0) + 1
+                    print(f"lane {lane}: job {name} raised {err}; the lane continues", flush=True)
                 finally:
                     setattr(self, running, None)
                     self.last_attempt[name] = time.time()
@@ -937,8 +951,11 @@ class Scheduler(threading.Thread):
                         soon = name in self.retry_soon
                         self.retry_soon.discard(name)
                     self.next_run[name] = time.time() + (
-                        min(RETRY_S, JOBS[name][0]) if soon else JOBS[name][0])
+                        min(RETRY_S, JOBS[name][0]) if soon or failed else JOBS[name][0])
                     self.cold_start_pending.discard(name)
+                if failed:
+                    time.sleep(LANE_ERROR_PAUSE_S)
+                    continue
                 # Page out anything that warrants it — especially a collector
                 # that has stopped recording. Guarded so a mail failure can
                 # never take down the scheduler.

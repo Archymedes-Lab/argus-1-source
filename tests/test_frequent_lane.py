@@ -254,3 +254,55 @@ class FailurePathTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LaneSurvivesRunOnceErrors(unittest.TestCase):
+    """2026-11-05: "database is locked" raised out of run_once (set_meta) killed
+    the frequent, bulk and main lanes; the supervisors then restarted the daemon."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = str(Path(self.tmp.name) / "j.db")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_lane_keeps_running_after_run_once_raises(self):
+        import sqlite3
+        s = Scheduler(self.db, ("wsl", "win"))
+        s.cold_start_pending.clear()
+        far = time.time() + 9e5
+        s.next_run = {n: far for n in JOBS}
+        calls, stop = [], threading.Event()
+        first = next(n for n in JOBS if s._lane_of(n) == "frequent")
+
+        def run_once(store, name):
+            calls.append(name)
+            if len(calls) == 1:
+                raise sqlite3.OperationalError("database is locked")
+            stop.set()
+            return [], ""
+
+        real_due = s._due
+
+        def due(lane=None):
+            if stop.is_set():
+                raise SystemExit
+            if len(calls) == 1:
+                s.next_run[first] = time.time() - 1       # due again right away
+            return real_due(lane)
+
+        s.next_run[first] = time.time() - 1
+        a, b, c = _quiet_pipeline()
+        with a, b, c, _no_pressure(), \
+                mock.patch("jarvis.service.scheduler.LANE_ERROR_PAUSE_S", 0), \
+                mock.patch("jarvis.service.scheduler.notifications.deliver"), \
+                mock.patch.object(s, "_due", side_effect=due), \
+                mock.patch.object(s, "run_once", side_effect=run_once):
+            t = threading.Thread(target=s._lane, args=("frequent",), daemon=True)
+            t.start()
+            t.join(10)
+        self.assertEqual(calls, [first, first])            # the lane ran the job again
+        self.assertEqual(s.lane_errors.get("frequent"), 1)

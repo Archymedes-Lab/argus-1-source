@@ -220,9 +220,13 @@ def candidates(log, now):
     cutoff = _cutoff(now)
     done = log._pruned() | set(log._compacted())
     newest = log.chain[-1]["segment"] if log.chain else 0
+    held = [(a, b) for a, b, _r in log.holds()]
+    # A segment entirely inside an active hold would only be read and kept whole:
+    # skip it until the hold is released (each pass used to re-read the same 40).
     return [h for h in log.chain
             if h["segment"] < newest and h["segment"] not in done
-            and h.get("time_max") and str(h["time_max"]) < cutoff]
+            and h.get("time_max") and str(h["time_max"]) < cutoff
+            and not any(a <= h["first_seq"] and h["last_seq"] <= b for a, b in held)]
 
 
 def run(store, log, now=None, max_segments=MAX_SEGMENTS, budget_s=TIME_BUDGET_S, match=None,
