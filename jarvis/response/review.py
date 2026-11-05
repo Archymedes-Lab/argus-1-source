@@ -277,9 +277,10 @@ def render(review):
     lines += ['', f'To remove ARGUS-1: {review["removal"]}']
     if review.get('preview'):
         lines += ['', 'This is a preview. The full report lists every finding with its detail. '
-                  'It needs an Argus Server key for this server ($50 per server per year):',
-                  f'  buy: {review.get("buy_url")}',
-                  '  then: argus licence activate ARGUS-SERVER-...']
+                  'It needs an Argus licence on this server:',
+                  '  enter a licence key: argus licence activate ARGUS-SRV-XXXXX-...',
+                  f'  buy Argus Server ($50 per server per year): {review.get("buy_url")}',
+                  '  or buy from here and activate automatically: argus licence buy']
     if len(lines) > MAX_LINES:
         lines = lines[:MAX_LINES - 1] + ['(truncated: use --json for the full bounded report)']
     return '\n'.join(lines) + '\n'

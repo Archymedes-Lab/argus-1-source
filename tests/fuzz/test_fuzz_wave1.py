@@ -20,7 +20,7 @@ try:
     from hypothesis import HealthCheck, assume, example, given, settings
     from hypothesis import strategies as st
 except ImportError:  # pragma: no cover - the product test run has no Hypothesis
-    raise unittest.SkipTest("hypothesis not installed (dev-only fuzzing)")
+    raise unittest.SkipTest("hypothesis not installed (dev-only fuzzing)") from None
 
 from jarvis.licensing import licence
 from jarvis.response import privacy, review
@@ -33,47 +33,41 @@ secret_value = st.text(alphabet="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxy
 noise = st.text(max_size=80)
 
 
+KEY_RE = re.compile(r"^ARGUS-(SRV|DSK)(-[0-9A-HJKMNP-TV-Z]{5}){5}$")
+
+
 class LicenceKeys(unittest.TestCase):
     @FAST
     @given(st.text(max_size=200))
-    @example("ARGUS-SERVER-1c285b2d-6ce6-4bc7-b8be-adb6a7e304da")
-    @example("ARGUS-SERVER-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA\n")
-    @example("ARGUS-SERVER-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA\x00")
+    @example("argus-srv-01234-56789-abcde-fghjk-mnpq3")
+    @example("ARGUS-SRV-01234-56789-ABCDE-FGHJK-MNPQ3\n")
+    @example("ARGUS-SRV-01234-56789-ABCDE-FGHJK-MNPQ3\x00")
+    @example("argus://activate?key=ARGUS-SRV-01234-56789-ABCDE-FGHJK-MNPQ3")
     def test_normalise_accepts_only_argus_keys(self, text):
-        # ORACLE: returns a key matching KEY_RE exactly, or raises LicenceError; nothing else.
+        # ORACLE: returns a canonical key whose check character holds, or raises LicenceError; nothing else.
         try:
             k = licence.normalise(text)
         except licence.LicenceError:
             return
-        self.assertRegex(k, licence.KEY_RE)
-        self.assertNotIn("\x00", k)
+        self.assertRegex(k, KEY_RE)
+        self.assertEqual(licence.normalise(k), k)
 
     json_value = st.recursive(st.none() | st.booleans() | st.integers() | st.floats(allow_nan=True) | st.text(max_size=40),
                               lambda c: st.lists(c, max_size=4) | st.dictionaries(st.text(max_size=12), c, max_size=4), max_leaves=12)
 
     @FAST
-    @given(st.dictionaries(st.sampled_from(["key", "product", "status", "expires_at", "checked_at", "activation_id", "x"]),
-                           json_value, max_size=7),
+    @given(st.dictionaries(st.sampled_from(["key", "certificate", "status", "activation_id", "last_seen",
+                                            "last_seen_mac", "fp_source", "x"]), json_value, max_size=8),
            st.floats(min_value=0, max_value=4e9))
-    def test_status_never_raises_and_grants_only_when_earned(self, record, now):
-        # ORACLE: status() never raises on any file content; licensed only for a granted, matching,
-        # unexpired record checked within the grace window.
+    def test_status_never_raises_and_never_grants_without_a_signed_certificate(self, record, now):
+        # ORACLE: status() never raises on any file content, and no hand-written record is licensed:
+        # only a certificate signed by a key in trust.py can be.
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, licence.FILENAME)
             with open(path, "w") as fh:
                 json.dump(record, fh, allow_nan=True)
-            st_ = licence.status(path, now=now)
-        if st_["licensed"]:
-            self.assertEqual(record.get("status"), "granted")
-            self.assertEqual(record.get("product"), "Argus Server")
-            self.assertLessEqual(now - float(record.get("checked_at") or 0), licence.GRACE_DAYS * 86400)
-
-    @FAST
-    @given(st.text(max_size=60))
-    def test_expiry_parse_is_total(self, text):
-        # ORACLE: any expires_at text gives a float or None, never an exception.
-        v = licence._expiry(text)
-        self.assertTrue(v is None or isinstance(v, float))
+            st_ = licence.status(path, now=now, trusted={"t1": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"})
+        self.assertFalse(st_["licensed"])
 
 
 class ReviewRedaction(unittest.TestCase):
