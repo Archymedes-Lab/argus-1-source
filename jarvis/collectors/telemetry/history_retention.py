@@ -265,11 +265,12 @@ def run(store, log, now=None, max_segments=MAX_SEGMENTS, budget_s=TIME_BUDGET_S,
     return summary
 
 
-def retention(store, hosts=("win",), root=None):
-    """The `retention` job: bulk lane, bounded; reports what it reduced."""
-    import json
+def retention(store, hosts=("win",), root=None, match=None):
+    """The `retention` job: bulk lane, bounded; reports what it reduced.
 
-    from jarvis.collectors.telemetry import techniques
+    `match` is the detection-rule matcher (techniques.match), handed in by the job
+    runner so this bulk-lane module imports nothing that reaches Windows."""
+    import json
     root = root or DEFAULT_ROOT
     try:
         log = EventLog(root, writer=True)
@@ -277,7 +278,7 @@ def retention(store, hosts=("win",), root=None):
         return [_finding("visibility", "ok", "Event history retention waited for the writer",
                          f"{exc}; it runs again next time.", str(root))]
     try:
-        s = run(store, log, match=techniques.match)
+        s = run(store, log, match=match)
         stats = log.stats()
     finally:
         log.close()

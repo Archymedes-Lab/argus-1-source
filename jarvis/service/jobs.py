@@ -50,6 +50,7 @@ from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
 from jarvis.collectors.telemetry import (
     auditd,
     evidence,
+    history_retention,
     history_verify,
     mirror,
     native,
@@ -60,7 +61,6 @@ from jarvis.collectors.telemetry import (
     sysmon_policy,
     sysmon_pressure,
 )
-from jarvis.collectors.telemetry import retention as history_retention
 from jarvis.core import collection, historybook, retention
 from jarvis.core import mlworker as mlworker_mod
 from jarvis.core.eventlog import LogError
@@ -406,6 +406,13 @@ def _with_store(audit, **kwargs):
     return run
 
 
+def _rule_match(*args):
+    """The detection rules, for the retention job (bulk lane: history_retention
+    itself must not import what reaches Windows; the rules only match text)."""
+    from jarvis.collectors.telemetry import techniques
+    return techniques.match(*args)
+
+
 def _store_only(audit):
     """A job whose collector takes only the store."""
     def run(hosts, db_path):
@@ -559,7 +566,7 @@ RUNNERS = {
     "native": _with_store(native.audit),
     "rust_mirror": _with_store(mirror.audit),
     "history_verify": _with_store(history_verify.verify_history),
-    "retention": _with_store(history_retention.retention),
+    "retention": _with_store(history_retention.retention, match=_rule_match),
     "verify": _with_store(verifyjob.audit),
     "evidence": _with_store(evidence.audit),
     "canary": _canary,

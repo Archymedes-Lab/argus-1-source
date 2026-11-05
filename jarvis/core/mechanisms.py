@@ -483,7 +483,7 @@ COLLECTORS = (
        command="timeline status",
        lane="bulk", governed=True, cost_s=75.0),
     # Owner retention policy (2026-11-04): after 30 days, keep only the suspicious
-    # events of older history segments (collectors/telemetry/retention.py).
+    # events of older history segments (collectors/telemetry/history_retention.py).
     _c("retention", 1800, "Event history retention", MO, 10, 3, "low", 180,
        command="timeline status",
        lane="bulk", governed=True, cost_s=60.0),

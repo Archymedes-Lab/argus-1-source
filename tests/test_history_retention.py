@@ -16,7 +16,7 @@ import time
 import unittest
 from pathlib import Path
 
-from jarvis.collectors.telemetry import retention
+from jarvis.collectors.telemetry import history_retention as retention
 from jarvis.core import event
 from jarvis.core.eventlog import DEFAULT_BUDGET, EventLog, LogError
 

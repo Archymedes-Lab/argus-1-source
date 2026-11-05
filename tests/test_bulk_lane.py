@@ -24,6 +24,7 @@ RUNNER_MODULES = {
     "world": "jarvis.intel.worldwatch",
     "feeds": "jarvis.intel.feeds",
     "history_verify": "jarvis.collectors.telemetry.history_verify",
+    "retention": "jarvis.collectors.telemetry.history_retention",
     "verify": "jarvis.service.verifyjob",
     "pkgverify": "jarvis.collectors.persistence.pkgverify",
     "distrovuln": "jarvis.intel.distrovuln",

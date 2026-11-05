@@ -26,7 +26,7 @@ Layout under ~/.jarvis/eventlog/:
                       what was dropped, and verify() checks the rewritten payload
                       against it. Retention never touches the newest 30 days,
                       held ranges, or anything suspicious (collectors/telemetry/
-                      retention.py decides; this file only applies it).
+                      history_retention.py decides; this file only applies it).
   holds.jsonl         sequence ranges retention must not remove (evidence).
   index.db            a projection for fast questions — has this hash ever
                       run, which process started which. Rebuildable from the
@@ -699,7 +699,7 @@ class EventLog:
         """Rewrite sealed segment `n` to hold only the events `keep(event)` accepts
         (plus every event inside an active hold). Returns a summary dict.
 
-        Applied by the retention job (collectors/telemetry/retention.py), which
+        Applied by the retention job (collectors/telemetry/history_retention.py), which
         alone decides what is normal. The header and the chain stay as they were;
         compacted.jsonl records the original payload hash, the new one, and how
         many events went. A segment left with nothing is removed whole and
@@ -918,7 +918,7 @@ class EventLog:
                 "cursors": list(self.cursors.values()), "head": self.head(),
                 "compacted": len(self._compacted()),
                 "retention": "everything for 30 days; after that only suspicious events "
-                             "(collectors/telemetry/retention.py), reductions recorded",
+                             "(collectors/telemetry/history_retention.py), reductions recorded",
                 "payload_budget_bytes": self.budget,
                 "payload_capacity_remaining": max(0, self.budget - sealed_bytes
                                                    - self.active_bytes),
