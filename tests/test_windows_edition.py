@@ -21,6 +21,7 @@ import importlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -464,6 +465,40 @@ class Workflow(unittest.TestCase):
                 self.assertIn("if: github.ref_type != 'tag'", lines[i - 1], lines[i - 2])
         self.assertIn("release/windows/source_smoke.ps1", text)
         self.assertIn("retention-days: 7", text)
+
+    def test_a_build_cache_is_saved_only_after_a_successful_build(self):
+        # Run 42066556800 compiled 556 C files with 0 cache hits: a cancelled run had saved an
+        # empty cache under `if: always()`, and restore-keys returns the NEWEST prefix match,
+        # so the empty entry beat the populated ones. A cancelled or failed build saves nothing.
+        text = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        always = [ln.strip() for ln in text.splitlines() if "if: always()" in ln]
+        self.assertEqual(always, [], "a cancelled run must not save a cache")
+        steps = re.findall(r"- name: (Save [^\n]*)\n\s+if: ([^\n]+)\n", text)
+        self.assertGreaterEqual(len(steps), 4, "server, desktop-linux, desktop-windows, engine-windows")
+        for name, cond in steps:
+            self.assertIn("success()", cond, name)
+            self.assertIn("github.ref_type != 'tag'", cond, name)
+
+    def test_the_install_test_runs_every_scenario_on_its_own_clean_host(self):
+        # The scenarios share the supervisor's restart budget (3 per 15 minutes), which is why one
+        # host ran them in a fixed order with up to 16 minutes of waiting between them. A fresh host
+        # per scenario has the whole budget, so the host-sharing waits go; every real wait stays.
+        text = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        script = (ROOT / "release" / "windows" / "install_test.ps1").read_text()
+        declared = re.search(r"ValidateSet\(([^)]*)\)\]\[string\]\$Scenario\s*=\s*'all'", script)
+        self.assertIsNotNone(declared, "the script takes -Scenario with 'all' as its default")
+        names = set(re.findall(r"'([a-z-]+)'", declared.group(1)))
+        self.assertIn("all", names)
+        scenarios = names - {"all"}
+        job = text[text.index("  windows-install-test:"):text.index("  draft:")]
+        matrix = re.search(r"scenario:\s*\[([^\]]*)\]", job)
+        self.assertIsNotNone(matrix, "windows-install-test shards by scenario")
+        sharded = {s.strip() for s in matrix.group(1).split(",") if s.strip()}
+        self.assertEqual(sharded, scenarios, "a scenario missing from the matrix would never run in CI")
+        self.assertIn("fail-fast: false", job)
+        self.assertIn("-Scenario ${{ matrix.scenario }}", job)
+        for name in scenarios:
+            self.assertIn(f"Want '{name}'", script, f"{name} selects at least one block of the script")
 
     def test_service_loop_requires_the_exact_engine(self):
         text = (ROOT / "jarvis-native-service.ps1").read_text(encoding="utf-8")

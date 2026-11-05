@@ -141,8 +141,11 @@ jobs:
             $PY release/build_server.py --version "$VERSION" --out out/server --jobs 4 --work /work
             if [ -n "$WARM" ] && command -v ccache >/dev/null; then CCACHE_DIR=$(find /nuitka-cache -maxdepth 2 -type d -name "ccache*" | head -1) ccache -s 2>/dev/null | head -12 || true; fi
             chown -R '"$(id -u):$(id -g)"' out /nuitka-cache'
-      - name: Save the compiler cache (dry runs only, also after a failed build)
-        if: always() && github.ref_type != 'tag'
+      # Only after a successful build, in every job: restore-keys returns the NEWEST prefix
+      # match, so an empty or partial entry saved by a cancelled or failed run beats the
+      # populated ones (run 42066556800: 0 cache hits for 556 C files, a 37-minute cold compile).
+      - name: Save the compiler cache (dry runs only, after a successful build)
+        if: success() && github.ref_type != 'tag'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: nuitka-cache
@@ -220,7 +223,7 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.ref_type != 'tag' && format('{0}/desktop-target', runner.temp) || '' }}
         run: python3 release/build_desktop.py --platform linux --version "${{ needs.meta.outputs.version }}" --out out/desktop-linux --work "$RUNNER_TEMP/desktop-work"
       - name: Save compiled crates (dry runs only)
-        if: always() && github.ref_type != 'tag'
+        if: success() && github.ref_type != 'tag'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
@@ -276,7 +279,7 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.ref_type != 'tag' && format('{0}\desktop-target', runner.temp) || '' }}
         run: python release/build_desktop.py --platform windows --version "${{ needs.meta.outputs.version }}" --out out/desktop-windows --work "$env:RUNNER_TEMP\desktop-work"
       - name: Save compiled crates (dry runs only)
-        if: always() && github.ref_type != 'tag'
+        if: success() && github.ref_type != 'tag'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
@@ -347,8 +350,8 @@ jobs:
         env:
           NUITKA_CACHE_DIR: ${{ github.ref_type == 'tag' && format('{0}\nuitka-cold', runner.temp) || 'C:\nuitka-cache' }}
         run: python release/build_windows.py --version "${{ needs.meta.outputs.version }}" --out out/engine-windows --work C:\argus-build --jobs 4
-      - name: Save the compiler cache (dry runs only, also after a failed build)
-        if: always() && github.ref_type != 'tag'
+      - name: Save the compiler cache (dry runs only, after a successful build)
+        if: success() && github.ref_type != 'tag'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: C:\nuitka-cache
@@ -429,9 +432,17 @@ jobs:
   windows-install-test:
     needs: [windows-setup]
     runs-on: windows-2025
-    # Real waits in install_test.ps1: the supervisor's 15-minute restart window (twice, worst
-    # case), its 5-minute repeating trigger, a 75-second pause check, and the install itself.
-    timeout-minutes: 90
+    # One clean Windows host per scenario (install_test.ps1 -Scenario). On one host the
+    # scenarios ran in a fixed order because they share the supervisor's restart budget (3
+    # restarts per 15 minutes), with up to 16 minutes of waiting between them; a fresh host has
+    # the whole budget. Every real wait inside a scenario stays: the 5-minute repeating trigger,
+    # the 75-second pause check, the restart-budget kills. All legs must pass: draft needs this job.
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [supervisor, pause, app-open, budget, lifecycle]
+    name: windows-install-test (${{ matrix.scenario }})
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -447,8 +458,8 @@ jobs:
         env:
           DIGESTS: ${{ needs.windows-setup.outputs.digests }}
         run: python release/digests.py verify out/windows-setup "$DIGESTS"
-      - name: Install, run, observe, remove (a clean Windows host without WSL)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File release/windows/install_test.ps1 -Setup out/windows-setup/ARGUS-INSTINCT-Setup-windows-x64.exe
+      - name: Install, run, observe (a clean Windows host without WSL)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File release/windows/install_test.ps1 -Setup out/windows-setup/ARGUS-INSTINCT-Setup-windows-x64.exe -Scenario ${{ matrix.scenario }}
 
   draft:
     needs: [meta, verify, windows-source-smoke, server, server-install-test, desktop-linux, desktop-windows, engine-windows, windows-setup, windows-install-test]

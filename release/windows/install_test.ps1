@@ -14,7 +14,18 @@
 #   5. the uninstaller removes the task, the program, the uninstall entry and
 #      the desktop app's token; the user's history is kept and reported.
 
-param([Parameter(Mandatory = $true)][string]$Setup)
+param([Parameter(Mandatory = $true)][string]$Setup,
+      [ValidateSet('all', 'supervisor', 'pause', 'app-open', 'budget', 'lifecycle')][string]$Scenario = 'all')
+
+# CI runs one scenario per clean host, in parallel (.github/workflows/release.yml): the scenarios
+# share the supervisor's restart budget, which only a fresh host gives back. 'all' (the default)
+# is the original single-host run, in order. The install and its health checks run in every case.
+#   supervisor  killed daemon, then killed supervisor loop (repeating trigger)
+#   pause       maintenance pause
+#   app-open    recovery with the real app window process running
+#   budget      a daemon that keeps dying is not restarted forever
+#   lifecycle   positive control, native stop, uninstall, reinstall + /PURGE
+function Want([string]$name) { return ($Scenario -eq 'all' -or $Scenario -eq $name) }
 
 $ErrorActionPreference = 'Stop'
 $script:failed = 0
@@ -139,6 +150,7 @@ $welcome = Run-Engine welcome
 Write-Host $welcome
 Check ($welcome -match 'for Windows') "first-run statement chosen for native Windows"
 
+if (Want 'lifecycle') {
 Write-Host "== positive control: a planted autostart entry"
 # A brand-new profile can lack the Run key itself.
 if (-not (Test-Path -LiteralPath $runKey)) { New-Item -Path $runKey -Force | Out-Null }
@@ -151,6 +163,7 @@ try {
     Remove-ItemProperty -Path $runKey -Name $probeName -ErrorAction SilentlyContinue
 }
 Check (-not (Probe-Seen)) 'gone once removed'
+}
 
 Write-Host "== recovery and supervision (the service's supervisor loop; app closed, then open)"
 # What is checked, and why in this order: the supervisor restarts at most 3 times in 15
@@ -240,6 +253,7 @@ function App-Check {
 Check ((Daemon-Procs).Count -eq 1) "one daemon process before the scenarios ($((Daemon-Procs).Count))"
 Check ((Supervisor-Procs).Count -ge 1) "the supervisor loop is running ($((Supervisor-Procs).Count) process(es))"
 
+if (Want 'supervisor') {
 # 1. App closed: the supervisor alone brings a killed daemon back.
 $t0 = Get-Date
 Kill-Daemon
@@ -262,7 +276,9 @@ Check ((Supervisor-Procs).Count -eq 1) "watchdog: exactly one supervisor loop ($
 Check ((Daemon-Procs).Count -eq 1 -and (Up)) 'watchdog: still exactly one daemon, and it answers'
 Intact 'watchdog (supervisor revived)'
 Show-Service 'watchdog (supervisor revived)'
+}
 
+if (Want 'pause') {
 # 3. Maintenance pause: nothing is started while it exists, by the supervisor or by the app.
 Set-Content -LiteralPath $pauseFile -Value ''
 Start-Sleep -Seconds 8
@@ -277,7 +293,9 @@ Check (Wait-Until { Up } 180 3) 'pause: lifting it brings the daemon back'
 Check ((Daemon-Procs).Count -eq 1) "pause: exactly one daemon ($((Daemon-Procs).Count))"
 Intact 'pause'
 Show-Service 'pause'
+}
 
+if (Want 'app-open') {
 # 4. App open: the real app window process is running while the daemon dies.
 Wait-Budget
 $proc = Start-Process -FilePath $appExe -ArgumentList '--hidden' -PassThru
@@ -295,7 +313,9 @@ if ($proc.HasExited) {
     Show-Service 'recovery (app open)'
     Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
 }
+}
 
+if (Want 'budget') {
 # 5. A daemon that keeps dying is not restarted forever: the budget is spent on purpose.
 Wait-Budget
 $stopped = $false
@@ -311,7 +331,9 @@ Check ($svcLog -match 'restart budget spent') 'budget: the supervisor says why i
 Check ((Supervisor-Procs).Count -ge 1) 'budget: the supervisor itself is still running'
 Check ((Daemon-Procs).Count -eq 0) 'budget: no restart loop - nothing was started past the budget'
 Show-Service 'budget: no restart loop - nothing was started past the budget'
+}
 
+if (Want 'lifecycle') {
 # 6. `native stop` (what an upgrade or removal runs) leaves it stopped, and the app does not undo it.
 $o = Run-Engine native stop
 Write-Host $o
@@ -354,6 +376,7 @@ Check (-not (Test-Path -LiteralPath $histDir)) 'purge: the history is deleted'
 Check (-not (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Argus'))) "purge: the service's logs are deleted"
 Check (-not (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue)) 'purge: task removed'
 Check (-not (Health $port)) 'purge: nothing answers on the port'
+}
 
 if ($script:failed) { Write-Host "$($script:failed) check(s) failed"; exit 1 }
 Write-Host 'all checks passed'
