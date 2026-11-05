@@ -19,7 +19,7 @@ from jarvis.core.store import Store
 from jarvis.licensing import licence
 from jarvis.response import review
 
-KEY = 'ARGUS-REVIEW-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA'
+KEY = 'ARGUS-SERVER-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA'
 NOW = 1_800_000_000.0
 
 
@@ -27,7 +27,7 @@ class FakeService:
     def __init__(self, validate=None, activate=None, error=None):
         self.requests = []
         self.validate = validate or {'status': 'granted', 'expires_at': '2027-01-01T00:00:00.000Z',
-                                     'product': 'Argus Server Review', 'benefit': 'argus-review'}
+                                     'product': 'Argus Server', 'benefit': 'argus-server'}
         self.activate = activate or {'id': 'act-1', 'key': KEY, 'label': 'srv1'}
         self.error = error
 
@@ -52,14 +52,16 @@ class Base(unittest.TestCase):
 class Keys(Base):
     def test_only_argus_key_formats_are_accepted(self):
         self.assertEqual(licence.normalise(KEY.lower()), KEY)
-        for bad in ('', 'hello', 'ARGUS-REVIEW-123', 'MYAPP-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA',
-                    KEY + 'X', 'ARGUS-REVIEW-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA; rm -rf /'):
+        for bad in ('', 'hello', 'ARGUS-SERVER-123', 'MYAPP-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA',
+                    KEY + 'X', 'ARGUS-SERVER-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA; rm -rf /',
+                    # retired kinds (Server Review, Watch): the service no longer issues them
+                    KEY.replace('SERVER', 'REVIEW'), KEY.replace('SERVER', 'WATCH')):
             with self.subTest(bad=bad), self.assertRaises(licence.LicenceError):
                 licence.normalise(bad)
 
     def test_product_comes_from_the_prefix(self):
-        self.assertEqual(licence.product_of(KEY), 'Argus Server Review')
-        self.assertEqual(licence.product_of(KEY.replace('REVIEW', 'WATCH')), 'Argus Watch')
+        self.assertEqual(licence.product_of(KEY), 'Argus Server')
+        self.assertEqual(licence.product_of(KEY.replace('SERVER', 'DESKTOP')), 'Argus Desktop')
 
 
 class Activation(Base):
@@ -67,7 +69,7 @@ class Activation(Base):
         fake = FakeService()
         rec = licence.activate(self.path, KEY, label='srv1', now=NOW, opener=fake)
         self.assertEqual(rec['status'], 'granted')
-        self.assertEqual(rec['benefit'], 'argus-review')
+        self.assertEqual(rec['benefit'], 'argus-server')
         self.assertEqual([u.rsplit('/', 1)[1] for u, *_ in fake.requests], ['activate', 'validate'])
         for url, method, headers, body in fake.requests:
             self.assertTrue(url.startswith('https://pay.archymedes.xyz/licence/'))
@@ -78,8 +80,8 @@ class Activation(Base):
         self.assertEqual(fake.requests[1][3], {'key': KEY, 'activation_id': 'act-1'})
 
     def test_checkout_links_are_the_archymedes_pay_service(self):
-        self.assertEqual(licence.REVIEW_CHECKOUT, 'https://pay.archymedes.xyz/buy/argus-review')
-        self.assertEqual(licence.WATCH_CHECKOUT, 'https://pay.archymedes.xyz/buy/argus-watch')
+        self.assertEqual(licence.SERVER_CHECKOUT, 'https://pay.archymedes.xyz/buy/argus-server')
+        self.assertEqual(licence.DESKTOP_CHECKOUT, 'https://pay.archymedes.xyz/buy/argus-desktop')
 
     def test_a_key_active_on_another_machine_says_so(self):
         err = urllib.error.HTTPError('u', 409, 'conflict', {}, None)
@@ -133,7 +135,7 @@ class Status(Base):
         self.assertFalse(licence.status(self.path, now=NOW)['licensed'])
 
     def test_a_key_for_another_product_does_not_unlock_the_review(self):
-        licence.activate(self.path, KEY.replace('REVIEW', 'WATCH'), now=NOW, opener=FakeService(
+        licence.activate(self.path, KEY.replace('SERVER', 'DESKTOP'), now=NOW, opener=FakeService(
             validate={'status': 'granted', 'expires_at': None}))
         self.assertFalse(licence.status(self.path, now=NOW)['licensed'])
 
@@ -182,7 +184,7 @@ class ReviewPreview(Base):
         code, out, err = self.run_cli()
         self.assertEqual(code or 0, 0)
         self.assertIn('(preview)', out)
-        self.assertIn(licence.REVIEW_CHECKOUT, out)
+        self.assertIn(licence.SERVER_CHECKOUT, out)
         self.assertIn('preview only', err)
 
     def test_preview_keeps_states_counts_and_blind_spots_but_no_findings(self):

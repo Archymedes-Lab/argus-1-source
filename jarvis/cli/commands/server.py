@@ -194,9 +194,9 @@ def cmd_review(args, store):
         return 2
     lic = licence.status(licence.path_for(args.db))
     if not lic["licensed"]:
-        report = review.preview(report, licence.REVIEW_CHECKOUT)
-        print(f"preview only: {lic['reason']}. Full report: an Argus Server Review key "
-              f"({licence.REVIEW_CHECKOUT}).", file=sys.stderr)
+        report = review.preview(report, licence.SERVER_CHECKOUT)
+        print(f"preview only: {lic['reason']}. Full report: an Argus Server key, $50 per server per year "
+              f"({licence.SERVER_CHECKOUT}).", file=sys.stderr)
     text = (json.dumps(report, indent=2) + "\n") if args.json else review.render(report)
     if not args.out:
         sys.stdout.write(text)
@@ -236,7 +236,7 @@ def cmd_licence(args, store):
             state = "licensed" if st["licensed"] else "not licensed"
             print(f"{state}: {st['reason']}" + (f" (key …{st['key_hint']})" if st.get("key_hint") else ""))
             if not st["licensed"]:
-                print(f"Argus Server Review: {licence.REVIEW_CHECKOUT}")
+                print(f"Argus Server ($50 per server per year): {licence.SERVER_CHECKOUT}")
     except licence.LicenceError as exc:
         print(f"licence: {exc}", file=sys.stderr)
         return 2
@@ -282,7 +282,7 @@ def add_parser(sub):
     p = sub.add_parser("licence", help="Argus licence key (Archymedes licence service): unlocks the full review report "
                        "(protection never needs one)")
     p.add_argument("action", nargs="?", default="status", choices=("status", "activate", "refresh", "remove"))
-    p.add_argument("key", nargs="?", help="activate: the ARGUS-REVIEW-... key from your receipt email")
+    p.add_argument("key", nargs="?", help="activate: the ARGUS-SERVER-... key from your receipt email")
     p.set_defaults(fn=cmd_licence, no_store=True)
     p = sub.add_parser("netstate", help="write the firewall snapshot (run by argus-netstate)")
     p.set_defaults(fn=cmd_netstate, no_store=True)

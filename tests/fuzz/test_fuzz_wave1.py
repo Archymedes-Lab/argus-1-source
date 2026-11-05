@@ -36,9 +36,9 @@ noise = st.text(max_size=80)
 class LicenceKeys(unittest.TestCase):
     @FAST
     @given(st.text(max_size=200))
-    @example("ARGUS-REVIEW-1c285b2d-6ce6-4bc7-b8be-adb6a7e304da")
-    @example("ARGUS-REVIEW-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA\n")
-    @example("ARGUS-REVIEW-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA\x00")
+    @example("ARGUS-SERVER-1c285b2d-6ce6-4bc7-b8be-adb6a7e304da")
+    @example("ARGUS-SERVER-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA\n")
+    @example("ARGUS-SERVER-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA\x00")
     def test_normalise_accepts_only_argus_keys(self, text):
         # ORACLE: returns a key matching KEY_RE exactly, or raises LicenceError; nothing else.
         try:
@@ -65,7 +65,7 @@ class LicenceKeys(unittest.TestCase):
             st_ = licence.status(path, now=now)
         if st_["licensed"]:
             self.assertEqual(record.get("status"), "granted")
-            self.assertEqual(record.get("product"), "Argus Server Review")
+            self.assertEqual(record.get("product"), "Argus Server")
             self.assertLessEqual(now - float(record.get("checked_at") or 0), licence.GRACE_DAYS * 86400)
 
     @FAST

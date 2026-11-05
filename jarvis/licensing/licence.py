@@ -34,11 +34,12 @@ import urllib.request
 SERVICE = 'Archymedes licence service'
 PAY_ORIGIN = 'https://pay.archymedes.xyz'
 LICENCE_API = f'{PAY_ORIGIN}/licence'
-REVIEW_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-review'
-WATCH_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-watch'
-DESKTOP_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-desktop'   # sellable only after the free beta
-PRODUCTS = {'REVIEW': 'Argus Server Review', 'WATCH': 'Argus Watch', 'DESKTOP': 'Argus Desktop'}
-KEY_RE = re.compile(r'^ARGUS-(REVIEW|WATCH|DESKTOP)-[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$')
+# Owner decision 2026-11-04: two yearly plans, Argus Server ($50 per server) and Argus Desktop ($79).
+# Server Review and Watch are retired; the licence service issues only these two kinds.
+SERVER_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-server'
+DESKTOP_CHECKOUT = f'{PAY_ORIGIN}/buy/argus-desktop'
+PRODUCTS = {'SERVER': 'Argus Server', 'DESKTOP': 'Argus Desktop'}
+KEY_RE = re.compile(r'^ARGUS-(SERVER|DESKTOP)-[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$')
 GRACE_DAYS = 7
 TIMEOUT = 15
 FILENAME = 'licence.json'
@@ -53,8 +54,8 @@ def normalise(key):
     """The key in Argus's format, upper-case, or LicenceError."""
     k = str(key or '').strip().upper()
     if not KEY_RE.match(k):
-        raise LicenceError('that is not an Argus licence key (it starts with ARGUS-REVIEW-, '
-                           'ARGUS-WATCH- or ARGUS-DESKTOP-)')
+        raise LicenceError('that is not an Argus licence key (it starts with ARGUS-SERVER- '
+                           'or ARGUS-DESKTOP-)')
     return k
 
 
@@ -164,7 +165,7 @@ def refresh(path, now=None, opener=None):
     return new
 
 
-def status(path, product='Argus Server Review', now=None):
+def status(path, product='Argus Server', now=None):
     """Offline: {'licensed': bool, 'reason': str, ...} for `product`. Never touches the network."""
     now = time.time() if now is None else now
     rec = load(path)
