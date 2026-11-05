@@ -1130,6 +1130,43 @@ when something hides behind an approved name:
 
 A trait on an approved process still gets flagged.
 
+## Licences and payments (Argus)
+
+Protection never needs a licence: detection, collectors, alerts, evidence and on-demand checks run the same with or
+without one (`tests/test_licence_never_gates_core.py`). A licence unlocks the premium content only, today the full
+review report.
+
+**Buying.** Argus is sold through Stripe Checkout at `https://pay.archymedes.xyz/buy/argus-server` ($50 per server
+per year) and `/buy/argus-desktop` ($79 per year), with Stripe Managed Payments (Stripe is the merchant of record).
+The checkout and licence service is the Cloudflare Worker in `hosted/licence-cloudflare`, which issues the key and
+emails it.
+
+**Activating.** The key goes into the licence command (the public build names it `argus`):
+
+```
+argus licence activate ARGUS-SERVER-...   # activate this machine (one key, one machine)
+argus licence status                      # offline: plan, expiry, last check
+argus licence refresh                     # re-check with the licence service
+argus licence remove                      # remove the key from this machine
+```
+
+Only `activate` and `refresh` use the network (HTTPS to `pay.archymedes.xyz/licence`). No seller secret ever reaches
+a customer machine.
+
+**Where it is going.** `docs/LICENSING-ARCHITECTURE.md` is the design being built next:
+- Ed25519-signed licence certificates verified offline, bound to the machine and to a per-device key, renewed
+  automatically about once a month.
+- Buying from inside the app without typing a key.
+- A self-serve page to move a licence or recover a lost key.
+- Keys and emails stored only as hashes.
+
+It also sets out honestly what licensing can and can't protect: a check on the customer's own machine can be bypassed
+by modifying the program, so the only fully secure gate is premium content the server delivers.
+
+Owner setup and support: `docs/BILLING.md` (plans, keys, runbooks) and `docs/STRIPE-HANDOFF.md` (Stripe objects,
+restricted keys, webhook). Prices and Stripe lookup keys come from the shared price book in the archymedes-gtm
+repository (`catalog/stripe.ts`).
+
 ## What it does not do
 
 - It is **not** a kernel-level EDR. It samples on an interval, so a process
