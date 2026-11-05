@@ -8,14 +8,16 @@ version: **`2026-10-28.endive`** (`src/stripe.ts`); Managed Payments needs
 ## 0. Stripe account (Dashboard)
 
 1. Turn on Managed Payments: Dashboard → Settings → Managed Payments.
-2. Run the separate price setup script, which creates the three products (each with a
-   tax code labelled "Eligible for Managed Payments") and prices with these lookup keys:
-   `argus_review_usd_14900_once` (one-time, $149), `argus_watch_usd_900_month` ($9 / month),
-   `argus_desktop_usd_7900_year` ($79 / year). The Worker never creates prices.
+2. Run archymedes-gtm `scripts/stripe-setup.ts`, which creates the two products (tax code
+   `txcd_10103101`, eligible for Managed Payments) and prices with these lookup keys:
+   `argus_server_usd_5000_year` ($50 / year per server) and `argus_desktop_usd_7900_year`
+   ($79 / year). The Worker never creates prices. With `--retire` it also deactivates the
+   retired Server Review and Watch prices, if they were ever created.
 3. Configure the customer billing portal (Settings → Billing → Customer portal) so
    `POST /licence/portal` can open it.
-4. Create a **restricted key** (`rk_live_…`) with: Checkout Sessions write, Prices read,
-   Subscriptions read, Customer portal write. A full `sk_` key also works.
+4. Create a **restricted key** (`rk_live_…`) with: `checkout_session_write`,
+   `checkout_session_read`, `plan_read` (prices), `subscription_read`, `customer_portal_write`.
+   That is every Stripe call the Worker makes (archymedes-gtm `docs/stripe-restricted-keys.md`).
 
 ## 1. D1 database
 
@@ -35,8 +37,7 @@ npx wrangler secret put RESEND_API_KEY         # optional: emails the key after 
 ```
 
 Vars in `wrangler.jsonc`: `SITE_ORIGIN=https://www.archymedes.xyz`, `MANAGED_PAYMENTS="1"`
-(`"0"` falls back to `automatic_tax[enabled]=true`), `ARGUS_DESKTOP_OPEN="0"` (free beta),
-`MAIL_FROM` (a verified Resend sender on archymedes.xyz).
+(`"0"` falls back to `automatic_tax[enabled]=true`), `MAIL_FROM` (a verified Resend sender on archymedes.xyz).
 
 ## 3. Deploy and custom domain
 
@@ -70,9 +71,9 @@ account is separate; this endpoint ignores anything without `metadata.app=argus`
 ## 5. Test mode first
 
 Repeat steps 1–4 with `sk_test_`/`rk_test_` and a test webhook, then buy with card
-`4242 4242 4242 4242`: `/buy/argus-review` → thanks page shows the key →
-`argus licence activate <key>` → `argus review` is the full report. Refund the payment in
-the Dashboard → `argus licence refresh` reports the key revoked. In a sandbox Stripe sends
+`4242 4242 4242 4242`: `/buy/argus-server` → thanks page shows the key →
+`argus licence activate <key>` → `argus review` is the full report. Cancel the subscription
+in the Dashboard → `argus licence refresh` reports the key revoked. In a sandbox Stripe sends
 no receipt email automatically (Dashboard → payment → Send receipt to preview).
 
 ## Customer support notes

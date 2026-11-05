@@ -23,7 +23,6 @@
   "vars": {
     "SITE_ORIGIN": "https://www.archymedes.xyz",
     "MANAGED_PAYMENTS": "1",
-    "ARGUS_DESKTOP_OPEN": "0",
     "MAIL_FROM": "Archymedes <licences@archymedes.xyz>"
   }
   // Secrets (never in this file): `wrangler secret put STRIPE_SECRET_KEY` (sk_ or rk_),

@@ -9,19 +9,20 @@ service"). Deploying it: `docs/STRIPE-HANDOFF.md`.
 
 | Offer (`/buy/…`) | Stripe Price lookup key | Mode | Licence valid | Key prefix |
 |---|---|---|---|---|
-| `argus-review` (Argus Server Review, $149) | `argus_review_usd_14900_once` | payment | 30 days from purchase | `ARGUS-REVIEW-` |
-| `argus-watch` (Argus Watch, $9/month) | `argus_watch_usd_900_month` | subscription | current period end + 3 days, extended on every paid invoice | `ARGUS-WATCH-` |
-| `argus-desktop` (Argus Desktop, $79/year) | `argus_desktop_usd_7900_year` | subscription | as Watch | `ARGUS-DESKTOP-` |
+| `argus-server` (Argus Server, $50 per server per year) | `argus_server_usd_5000_year` | subscription | current period end + 3 days, extended on every paid invoice | `ARGUS-SERVER-` |
+| `argus-desktop` (Argus Desktop, $79 per computer per year) | `argus_desktop_usd_7900_year` | subscription | as Server | `ARGUS-DESKTOP-` |
 
-Argus Desktop is **free during the beta**: `/buy/argus-desktop` shows a "free during the
-beta" page until the Worker var `ARGUS_DESKTOP_OPEN` is `"1"`.
+Prices set by the owner on 2026-11-04 (archymedes-gtm `docs/PRICE-BOOK.md`). The Argus Server
+Review ($149 once), Argus Watch ($9/month) and the free desktop beta are retired: their
+`/buy/` links answer 404 and `ARGUS-REVIEW-` / `ARGUS-WATCH-` keys are not accepted.
 
-Prices and products are created by a separate setup script (with an eligible Managed
-Payments `tax_code` on every product); the Worker only looks prices up by lookup key.
+Prices and products are created by archymedes-gtm `scripts/stripe-setup.ts` (price book
+`catalog/stripe.ts`, tax code `txcd_10103101`, eligible for Managed Payments); the Worker
+only looks prices up by lookup key.
 
 ## How a purchase becomes a licence
 
-1. The buyer follows `https://pay.archymedes.xyz/buy/argus-review` (optionally with `ref`,
+1. The buyer follows `https://pay.archymedes.xyz/buy/argus-server` (optionally with `ref`,
    `utm_*` and `lang`). The Worker creates a Checkout Session with
    `managed_payments[enabled]=true` and `metadata[app]=argus` and redirects to Stripe.
 2. After payment Stripe returns the buyer to
@@ -30,7 +31,7 @@ Payments `tax_code` on every product); the Worker only looks prices up by lookup
 3. Stripe also calls `POST /stripe/webhook` (`checkout.session.completed`); the Worker
    issues the same key (one key per Checkout Session, however many times it is asked) and,
    when `RESEND_API_KEY` is set, emails it once with the next steps.
-4. On the server: `argus licence activate ARGUS-REVIEW-…`.
+4. On the server: `argus licence activate ARGUS-SERVER-…`.
    `jarvis/licensing/licence.py` calls `POST /licence/activate` `{key, label}` (label = host
    name) and `POST /licence/validate` `{key, activation_id}`. **No API token or seller secret
    is on any customer machine.** One key covers one machine: activating again with the same
@@ -40,9 +41,10 @@ Payments `tax_code` on every product); the Worker only looks prices up by lookup
    (`argus licence refresh`), never past its expiry. A key the service refuses, revokes or
    reports expired is not licensed from that check on.
 
-Revocation: a full refund (`charge.refunded`) of a one-time purchase, or a cancelled
-subscription (`customer.subscription.deleted`), marks the key revoked; the next refresh on
-the machine ends the grant.
+Revocation: a cancelled subscription (`customer.subscription.deleted`) marks the key
+revoked; the next refresh on the machine ends the grant. Both plans are subscriptions, so
+a refund is acted on through the cancellation that comes with it (`charge.refunded` only
+revokes one-time purchases, and none is sold now).
 
 Managing a purchase: `POST /licence/portal {key}` returns a Stripe billing-portal link for
 the key's customer. Managed Payments buyers can also manage subscriptions, receipts and
@@ -59,4 +61,6 @@ anywhere. A licence unlocks premium content only (today: the full server review 
 
 Orion sells from the same Stripe account and has its own webhook endpoint. The Argus Worker
 acts only on objects carrying `metadata.app=argus` (or a subscription / payment it issued a
-key for) and answers every other event with 200 and no change.
+key for) and answers every other event with 200 and no change. An event whose
+`metadata.app` names another app (`orion`) is ignored before anything else, even if its
+subscription id matched a licence.

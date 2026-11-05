@@ -5,7 +5,8 @@
 // - Prices are looked up by lookup_key; this worker never creates products or prices.
 // - A licence key is issued once per Checkout Session (same session, same key), only for a
 //   session Stripe says is complete and paid, and only for sessions with metadata.app=argus.
-//   Orion shares the Stripe account and has its own webhook, so every other event is ignored.
+//   Orion shares the Stripe account and has its own webhook: an event whose metadata.app names another
+//   app ("orion") is ignored before anything else, and so is any event that is not ours.
 // - Customer machines call /licence/* with the key alone: no secret leaves this worker.
 // - Full keys and email addresses are never logged, and emails are never stored.
 import { idOf, invoiceMetadata, invoicePeriodEnd, invoiceSubscription, periodEnd, stripe, StripeError,
@@ -18,7 +19,6 @@ export interface Env {
   RESEND_API_KEY?: string;
   SITE_ORIGIN: string;
   MANAGED_PAYMENTS?: string;
-  ARGUS_DESKTOP_OPEN?: string;
   MAIL_FROM?: string;
   RL_BUY?: RateLimit;
   RL_LICENCE?: RateLimit;
@@ -27,18 +27,20 @@ export interface Env {
 export interface Deps { fetch: Fetch; now: () => number /* ms */ }
 
 type Mode = "payment" | "subscription";
-type Offer = { lookup: string; mode: Mode; kind: "REVIEW" | "WATCH" | "DESKTOP"; product: string; days?: number };
+type Offer = { lookup: string; mode: Mode; kind: "SERVER" | "DESKTOP"; product: string; days?: number };
 
+// Owner decision 2026-11-04 (archymedes-gtm docs/PRICE-BOOK.md, catalog/stripe.ts): two yearly plans only.
+// Lookup keys are the price book's; scripts/stripe-setup.ts there creates the prices. Server Review ($149),
+// Watch ($9/month) and the free desktop beta are retired and no longer sold here.
 export const OFFERS: Record<string, Offer> = {
-  "argus-review": { lookup: "argus_review_usd_14900_once", mode: "payment", kind: "REVIEW", product: "Argus Server Review", days: 30 },
-  "argus-watch": { lookup: "argus_watch_usd_900_month", mode: "subscription", kind: "WATCH", product: "Argus Watch" },
+  "argus-server": { lookup: "argus_server_usd_5000_year", mode: "subscription", kind: "SERVER", product: "Argus Server" },
   "argus-desktop": { lookup: "argus_desktop_usd_7900_year", mode: "subscription", kind: "DESKTOP", product: "Argus Desktop" },
 };
 const SUBSCRIPTION_GRACE = 3 * 86400;
 const LANGS = new Set(["en", "zh", "ja", "ko", "de"]);
 const REF = /^[A-Za-z0-9_-]{1,64}$/;
 const SESSION_ID = /^cs_(test|live)_[A-Za-z0-9]+$/;
-const KEY = /^ARGUS-(REVIEW|WATCH|DESKTOP)-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/;
+const KEY = /^ARGUS-(SERVER|DESKTOP)-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/;
 const UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content"] as const;
 const MAX_WEBHOOK = 1024 * 1024;
 const MAX_JSON = 4096;
@@ -142,10 +144,6 @@ async function buy(req: Request, env: Env, deps: Deps, offerId: string, url: URL
   const lang = LANGS.has(url.searchParams.get("lang") || "") ? url.searchParams.get("lang")! : "en";
   const offer = OFFERS[offerId];
   if (!offer) return page(404, "Not found", "There is no Argus offer at this address.", pricingUrl(env, lang), "See Argus pricing");
-  if (offerId === "argus-desktop" && env.ARGUS_DESKTOP_OPEN !== "1")
-    return page(404, "Argus Desktop is free during the beta",
-                "The desktop edition costs nothing while it is in beta. The yearly plan opens after the beta.",
-                pricingUrl(env, lang), "Back to Argus");
   if (await limited(env.RL_BUY, req)) return page(429, "Please wait a moment", "Too many checkout attempts from this network. Try again in a minute.", pricingUrl(env, lang), "Back to pricing");
   try {
     const price = await priceId(env, deps, offer.lookup);
@@ -169,6 +167,10 @@ type Row = { key: string; session_id: string; offer: string; status: "active" | 
 
 const paid = (s: any) => s?.status === "complete" && (s?.payment_status === "paid" || s?.payment_status === "no_payment_required");
 const ours = (meta: any) => meta?.app === "argus";
+/** Another app on the shared Stripe account (e.g. "orion"): never ours, whatever else matches. */
+const foreign = (meta: any) => typeof meta?.app === "string" && meta.app !== "argus";
+/** The metadata an event's object carries, for every event type this worker handles. */
+const eventMeta = (type: string, obj: any) => (type === "invoice.paid" ? invoiceMetadata(obj) : obj?.metadata);
 
 /** The licence for a paid Argus Checkout Session, created on first call; the same row afterwards. */
 export async function issue(env: Env, deps: Deps, session: any): Promise<Row> {
@@ -210,13 +212,13 @@ async function mailKey(env: Env, deps: Deps, row: Row, email: unknown): Promise<
     .bind(sec(deps), row.key).run();
   if (!claim.meta?.changes) return;  // already sent
   const offer = OFFERS[row.offer];
-  const server = offer.kind !== "DESKTOP";
+  const server = offer.kind === "SERVER";
   const text = [
     `Thank you for buying ${offer.product}.`, "",
     `Your licence key: ${row.key}`, "",
     "Next steps:",
     server ? `1. On the server, run: argus licence activate ${row.key}` : "1. In Argus Desktop, open Pricing and paste the key.",
-    server && offer.kind === "REVIEW" ? "2. After a week of observation, run: argus review" : "2. The licence refreshes itself when you run `argus licence refresh`.",
+    "2. The licence renews with the yearly subscription; run `argus licence refresh` to re-check it.",
     "", `Manage billing: ${origin(env)}/en/solutions/argus/ (or at link.com with the email you paid with).`,
     "Receipts and invoices come from Stripe (Link), the merchant of record.", "", "Archymedes",
   ].join("\n");
@@ -285,6 +287,7 @@ async function webhook(req: Request, env: Env, deps: Deps): Promise<Response> {
 }
 
 async function handleEvent(env: Env, deps: Deps, type: string, obj: any): Promise<string> {
+  if (foreign(eventMeta(type, obj))) return "ignored";
   const now = sec(deps);
   switch (type) {
     case "checkout.session.completed":

@@ -8,6 +8,7 @@ import { hmacHex, STRIPE_VERSION, verifyStripeSignature } from "../src/stripe";
 const WHSEC = "whsec_test_synthetic";
 const NOW_MS = Date.UTC(2026, 10, 4, 12, 0, 0);
 const NOW = Math.floor(NOW_MS / 1000);
+const YEAR_END = NOW + 365 * 86400;
 const FORBIDDEN = ["automatic_tax", "tax_id_collection", "payment_method_types", "payment_method_configuration",
   "excluded_payment_method_types", "customer_update", "invoice_creation", "shipping_address_collection", "shipping_options",
   "payment_intent_data[statement_descriptor", "payment_intent_data[receipt_email]", "payment_intent_data[shipping]",
@@ -65,8 +66,9 @@ beforeEach(() => {
   stripe = new FakeStripe();
   store = fakeD1();
   env = { DB: store.d1, STRIPE_SECRET_KEY: "sk_test_synthetic", STRIPE_WEBHOOK_SECRET: WHSEC, SITE_ORIGIN: "https://www.archymedes.xyz",
-          MANAGED_PAYMENTS: "1", ARGUS_DESKTOP_OPEN: "0", MAIL_FROM: "Archymedes <licences@archymedes.xyz>" };
+          MANAGED_PAYMENTS: "1", MAIL_FROM: "Archymedes <licences@archymedes.xyz>" };
   deps = { fetch: stripe.fetch, now: () => NOW_MS };
+  stripe.subscriptions.set("sub_s", { id: "sub_s", items: { data: [{ current_period_end: YEAR_END }] }, metadata: { app: "argus" } });
 });
 
 const call = (path: string, init?: RequestInit) => handle(new Request(`https://pay.archymedes.xyz${path}`, init), env, deps);
@@ -77,22 +79,22 @@ async function signed(event: unknown, secret = WHSEC, t = NOW) {
   return call("/stripe/webhook", { method: "POST", body: raw, headers: { "Stripe-Signature": `t=${t},v1=${await hmacHex(secret, `${t}.${raw}`)}` } });
 }
 
-const reviewSession = (over: any = {}) => ({
-  id: "cs_test_review1", object: "checkout.session", status: "complete", payment_status: "paid", mode: "payment",
-  created: NOW - 60, livemode: false, customer: "cus_1", payment_intent: "pi_1", subscription: null,
-  customer_details: { email: "alice@example.com" }, metadata: { app: "argus", offer: "argus-review", ref: "hn" }, ...over,
+const serverSession = (over: any = {}) => ({
+  id: "cs_test_server1", object: "checkout.session", status: "complete", payment_status: "paid", mode: "subscription",
+  created: NOW - 60, livemode: false, customer: "cus_1", payment_intent: null, subscription: "sub_s",
+  customer_details: { email: "alice@example.com" }, metadata: { app: "argus", offer: "argus-server", ref: "hn" }, ...over,
 });
-const watchSession = (over: any = {}) => ({
-  id: "cs_test_watch1", object: "checkout.session", status: "complete", payment_status: "paid", mode: "subscription",
+const desktopSession = (over: any = {}) => ({
+  id: "cs_test_desk1", object: "checkout.session", status: "complete", payment_status: "paid", mode: "subscription",
   created: NOW - 60, livemode: false, customer: "cus_2", payment_intent: null, subscription: "sub_1",
-  customer_details: { email: "bob@example.com" }, metadata: { app: "argus", offer: "argus-watch" }, ...over,
+  customer_details: { email: "bob@example.com" }, metadata: { app: "argus", offer: "argus-desktop" }, ...over,
 });
 const event = (id: string, type: string, object: any) => ({ id, type, data: { object } });
 const licences = () => store.db.query("SELECT * FROM licences").all() as any[];
 
 describe("GET /buy", () => {
-  test("creates a Managed Payments session with metadata and none of the forbidden params", async () => {
-    const res = await call("/buy/argus-review?ref=hn_launch&utm_source=hacker<news>&utm_campaign=" + "x".repeat(150) + "&lang=ja");
+  test("creates a Managed Payments subscription session with metadata and none of the forbidden params", async () => {
+    const res = await call("/buy/argus-server?ref=hn_launch&utm_source=hacker<news>&utm_campaign=" + "x".repeat(150) + "&lang=ja");
     expect(res.status).toBe(303);
     expect(res.headers.get("Location")).toBe("https://checkout.stripe.com/c/pay/cs_test_new");
     const [c] = stripe.stripeCalls("/v1/checkout/sessions");
@@ -100,28 +102,29 @@ describe("GET /buy", () => {
     expect(STRIPE_VERSION).toBe("2026-10-28.endive");
     const f = new URLSearchParams(c.body);
     expect(f.get("managed_payments[enabled]")).toBe("true");
-    expect(f.get("mode")).toBe("payment");
-    expect(f.get("line_items[0][price]")).toBe("price_for_argus_review_usd_14900_once");
+    expect(f.get("mode")).toBe("subscription");
+    expect(f.get("line_items[0][price]")).toBe("price_for_argus_server_usd_5000_year");
     expect(f.get("line_items[0][quantity]")).toBe("1");
     expect(f.get("client_reference_id")).toBe("hn_launch");
-    for (const prefix of ["metadata", "payment_intent_data[metadata]"]) {
+    for (const prefix of ["metadata", "subscription_data[metadata]"]) {
       expect(f.get(`${prefix}[app]`)).toBe("argus");
-      expect(f.get(`${prefix}[offer]`)).toBe("argus-review");
+      expect(f.get(`${prefix}[offer]`)).toBe("argus-server");
       expect(f.get(`${prefix}[ref]`)).toBe("hn_launch");
       expect(f.get(`${prefix}[utm_source]`)).toBe("hackernews");
       expect(f.get(`${prefix}[utm_campaign]`)!.length).toBe(100);
     }
-    expect([...f.keys()].some((k) => k.startsWith("subscription_data"))).toBe(false);
+    expect([...f.keys()].some((k) => k.startsWith("payment_intent_data"))).toBe(false);
     expect(f.get("success_url")).toBe("https://www.archymedes.xyz/ja/solutions/argus/thanks/?session_id={CHECKOUT_SESSION_ID}");
     expect(f.get("cancel_url")).toBe("https://www.archymedes.xyz/ja/solutions/argus/#pricing");
     for (const k of f.keys()) for (const bad of FORBIDDEN) expect(k.startsWith(bad)).toBe(false);
   });
 
-  test("subscription offers put metadata on subscription_data; bad ref and lang are dropped", async () => {
-    await call("/buy/argus-watch?ref=bad%20ref!&lang=fr");
+  test("desktop is on sale ($79/year); bad ref and lang are dropped", async () => {
+    await call("/buy/argus-desktop?ref=bad%20ref!&lang=fr");
     const f = new URLSearchParams(stripe.stripeCalls("/v1/checkout/sessions")[0].body);
     expect(f.get("mode")).toBe("subscription");
-    expect(f.get("line_items[0][price]")).toBe("price_for_argus_watch_usd_900_month");
+    expect(f.get("line_items[0][price]")).toBe("price_for_argus_desktop_usd_7900_year");
+    expect(f.get("subscription_data[metadata][offer]")).toBe("argus-desktop");
     expect(f.get("subscription_data[metadata][app]")).toBe("argus");
     expect(f.get("client_reference_id")).toBeNull();
     expect(f.get("metadata[ref]")).toBeNull();
@@ -131,30 +134,25 @@ describe("GET /buy", () => {
 
   test("MANAGED_PAYMENTS=0 uses automatic_tax instead", async () => {
     env.MANAGED_PAYMENTS = "0";
-    await call("/buy/argus-review");
+    await call("/buy/argus-server");
     const f = new URLSearchParams(stripe.stripeCalls("/v1/checkout/sessions")[0].body);
     expect(f.get("automatic_tax[enabled]")).toBe("true");
     expect(f.get("managed_payments[enabled]")).toBeNull();
   });
 
   test("price lookups are cached", async () => {
-    await call("/buy/argus-review"); await call("/buy/argus-review");
+    await call("/buy/argus-server"); await call("/buy/argus-server");
     expect(stripe.stripeCalls("/v1/prices").length).toBe(1);
   });
 
-  test("desktop is a free-beta page until opened; unknown offers are 404", async () => {
-    const res = await call("/buy/argus-desktop");
-    expect(res.status).toBe(404);
-    expect(await res.text()).toContain("free during the beta");
+  test("retired offers (Server Review, Watch) and unknown offers are 404 and never reach Stripe", async () => {
+    for (const id of ["argus-review", "argus-watch", "argus-nothing"]) expect((await call(`/buy/${id}`)).status).toBe(404);
     expect(stripe.calls.length).toBe(0);
-    expect((await call("/buy/argus-nothing")).status).toBe(404);
-    env.ARGUS_DESKTOP_OPEN = "1";
-    expect((await call("/buy/argus-desktop")).status).toBe(303);
   });
 
   test("a Stripe failure shows a plain page without Stripe's message", async () => {
     stripe.failCheckout = true;
-    const res = await call("/buy/argus-review");
+    const res = await call("/buy/argus-server");
     expect(res.status).toBe(502);
     const html = await res.text();
     expect(html).toContain("#pricing");
@@ -164,7 +162,7 @@ describe("GET /buy", () => {
 
 describe("webhook signature", () => {
   test("rejects a wrong secret, a stale timestamp, a missing header; accepts any matching v1", async () => {
-    const ev = event("evt_1", "checkout.session.completed", reviewSession());
+    const ev = event("evt_1", "checkout.session.completed", serverSession());
     expect((await signed(ev, "whsec_other")).status).toBe(400);
     expect((await signed(ev, WHSEC, NOW - 301)).status).toBe(400);
     expect((await call("/stripe/webhook", { method: "POST", body: JSON.stringify(ev) })).status).toBe(400);
@@ -180,7 +178,7 @@ describe("webhook signature", () => {
 
 describe("webhook events", () => {
   test("events of another app (Orion) are ignored and not recorded", async () => {
-    const orion = reviewSession({ id: "cs_test_orion", metadata: { app: "orion", offer: "argus-review" } });
+    const orion = serverSession({ id: "cs_test_orion", metadata: { app: "orion", offer: "argus-server" } });
     const res = await signed(event("evt_o1", "checkout.session.completed", orion));
     expect(res.status).toBe(200);
     expect((await res.json() as any).ignored).toBe(true);
@@ -192,9 +190,21 @@ describe("webhook events", () => {
     expect(stripe.calls.length).toBe(0);
   });
 
+  test("an Orion-tagged event never touches an Argus licence, even on a matching subscription id", async () => {
+    await signed(event("evt_1", "checkout.session.completed", serverSession()));
+    const r1 = await signed(event("evt_o1", "customer.subscription.deleted", { id: "sub_s", object: "subscription", metadata: { app: "orion" } }));
+    expect((await r1.json() as any).ignored).toBe(true);
+    const r2 = await signed(event("evt_o2", "invoice.paid", { id: "in_o", parent: { subscription_details: { subscription: "sub_s", metadata: { app: "orion" } } },
+      lines: { data: [{ period: { end: YEAR_END + 999 * 86400 } }] } }));
+    expect((await r2.json() as any).ignored).toBe(true);
+    const [row] = licences();
+    expect(row.status).toBe("active");
+    expect(row.expires_at).toBe(YEAR_END + 3 * 86400);
+  });
+
   test("key issuance is idempotent across the webhook, its retries and the thanks page", async () => {
     env.RESEND_API_KEY = "re_synthetic";
-    const s = reviewSession();
+    const s = serverSession();
     stripe.sessions.set(s.id, s);
     await signed(event("evt_1", "checkout.session.completed", s));
     await signed(event("evt_1", "checkout.session.completed", s));                  // retry, same event
@@ -203,34 +213,35 @@ describe("webhook events", () => {
     const body = await res.json() as any;
     const rows = licences();
     expect(rows.length).toBe(1);
-    expect(rows[0].key).toMatch(/^ARGUS-REVIEW-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/);
-    expect(rows[0].expires_at).toBe(s.created + 30 * 86400);
-    expect(body).toEqual({ status: "paid", offer: "argus-review", key: rows[0].key, email_hint: "a***@example.com" });
+    expect(rows[0].key).toMatch(/^ARGUS-SERVER-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/);
+    expect(rows[0].expires_at).toBe(YEAR_END + 3 * 86400);
+    expect(rows[0].subscription).toBe("sub_s");
+    expect(body).toEqual({ status: "paid", offer: "argus-server", key: rows[0].key, email_hint: "a***@example.com" });
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://www.archymedes.xyz");
     expect(stripe.calls.filter((c) => c.url.startsWith("https://api.resend.com")).length).toBe(1);
     expect(JSON.stringify(rows[0])).not.toContain("alice@example.com");
   });
 
   test("an unpaid async session waits; the thanks page says pending", async () => {
-    const s = reviewSession({ payment_status: "unpaid" });
+    const s = serverSession({ payment_status: "unpaid" });
     stripe.sessions.set(s.id, s);
     await signed(event("evt_1", "checkout.session.completed", s));
     expect(licences().length).toBe(0);
     expect(await (await call(`/api/session/${s.id}`)).json() as any).toEqual({ status: "pending" });
-    stripe.sessions.set("cs_test_gone", reviewSession({ id: "cs_test_gone", status: "expired", payment_status: "unpaid" }));
+    stripe.sessions.set("cs_test_gone", serverSession({ id: "cs_test_gone", status: "expired", payment_status: "unpaid" }));
     expect(await (await call("/api/session/cs_test_gone")).json() as any).toEqual({ status: "unpaid" });
     expect((await call("/api/session/not_a_session")).status).toBe(400);
-    stripe.sessions.set("cs_test_orion", reviewSession({ id: "cs_test_orion", metadata: { app: "orion" } }));
+    stripe.sessions.set("cs_test_orion", serverSession({ id: "cs_test_orion", metadata: { app: "orion" } }));
     expect((await call("/api/session/cs_test_orion")).status).toBe(404);
   });
 
   test("invoice.paid extends a subscription key to period end + 3 days; deletion revokes", async () => {
-    const s = watchSession();
+    const s = desktopSession();
     const firstEnd = NOW + 30 * 86400;
     stripe.subscriptions.set("sub_1", { id: "sub_1", items: { data: [{ current_period_end: firstEnd }] }, metadata: { app: "argus" } });
     await signed(event("evt_1", "checkout.session.completed", s));
     let [row] = licences();
-    expect(row.key).toStartWith("ARGUS-WATCH-");
+    expect(row.key).toStartWith("ARGUS-DESKTOP-");
     expect(row.expires_at).toBe(firstEnd + 3 * 86400);
     const nextEnd = firstEnd + 31 * 86400;
     await signed(event("evt_2", "invoice.paid", { id: "in_2", object: "invoice",
@@ -242,12 +253,13 @@ describe("webhook events", () => {
     expect(licences()[0].status).toBe("revoked");
   });
 
-  test("a full refund revokes; a partial refund does not", async () => {
-    const s = reviewSession();
-    await signed(event("evt_1", "checkout.session.completed", s));
-    await signed(event("evt_2", "charge.refunded", { id: "ch_1", payment_intent: "pi_1", refunded: false, amount: 14900, amount_refunded: 5000 }));
+  test("a refund with no one-time licence is a no-op; cancelling the subscription revokes the key", async () => {
+    // Both plans are subscriptions: a refund under Managed Payments comes with the subscription's
+    // cancellation, and customer.subscription.deleted is what revokes the key.
+    await signed(event("evt_1", "checkout.session.completed", serverSession()));
+    await signed(event("evt_2", "charge.refunded", { id: "ch_1", payment_intent: "pi_x", refunded: true, amount: 5000, amount_refunded: 5000, metadata: { app: "argus" } }));
     expect(licences()[0].status).toBe("active");
-    await signed(event("evt_3", "charge.refunded", { id: "ch_1", payment_intent: "pi_1", refunded: true, amount: 14900, amount_refunded: 14900 }));
+    await signed(event("evt_3", "customer.subscription.deleted", { id: "sub_s", object: "subscription", metadata: { app: "argus" } }));
     expect(licences()[0].status).toBe("revoked");
     const key = licences()[0].key;
     const act = await (await post("/licence/activate", { key, label: "srv1" })).json() as any;
@@ -257,13 +269,13 @@ describe("webhook events", () => {
 });
 
 describe("licence service", () => {
-  async function installReview() {
-    await signed(event("evt_1", "checkout.session.completed", reviewSession()));
+  async function installServer() {
+    await signed(event("evt_1", "checkout.session.completed", serverSession()));
     return licences()[0].key as string;
   }
 
   test("one activation per key: same label returns the same id, another label is 409", async () => {
-    const key = await installReview();
+    const key = await installServer();
     const a = await post("/licence/activate", { key: key.toLowerCase(), label: "srv1" });
     expect(a.status).toBe(200);
     const first = await a.json() as any;
@@ -277,22 +289,24 @@ describe("licence service", () => {
   });
 
   test("validate grants, then expires; unknown keys and wrong activations are 404", async () => {
-    const key = await installReview();
+    const key = await installServer();
     const { id } = await (await post("/licence/activate", { key, label: "srv1" })).json() as any;
     const v = await (await post("/licence/validate", { key, activation_id: id })).json() as any;
-    expect(v).toEqual({ status: "granted", expires_at: new Date((NOW - 60 + 30 * 86400) * 1000).toISOString(),
-                        product: "Argus Server Review", benefit: "argus-review" });
+    expect(v).toEqual({ status: "granted", expires_at: new Date((YEAR_END + 3 * 86400) * 1000).toISOString(),
+                        product: "Argus Server", benefit: "argus-server" });
     expect((await post("/licence/validate", { key, activation_id: "nope" })).status).toBe(404);
-    const unknown = "ARGUS-REVIEW-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA";
+    const unknown = "ARGUS-SERVER-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA";
     expect((await post("/licence/validate", { key: unknown, activation_id: id })).status).toBe(404);
     expect((await post("/licence/activate", { key: unknown, label: "x" })).status).toBe(404);
     expect((await post("/licence/validate", { key: "hello" })).status).toBe(400);
-    deps.now = () => NOW_MS + 31 * 86400 * 1000;
+    // Retired kinds are not Argus keys any more.
+    expect((await post("/licence/validate", { key: "ARGUS-REVIEW-1C285B2D-6CE6-4BC7-B8BE-ADB6A7E304DA" })).status).toBe(400);
+    deps.now = () => NOW_MS + 369 * 86400 * 1000;
     expect((await (await post("/licence/validate", { key, activation_id: id })).json() as any).status).toBe("expired");
   });
 
   test("portal opens a Stripe billing portal session for the key's customer", async () => {
-    const key = await installReview();
+    const key = await installServer();
     const res = await post("/licence/portal", { key });
     expect(await res.json() as any).toEqual({ url: "https://billing.stripe.com/p/session/test_1" });
     const f = new URLSearchParams(stripe.stripeCalls("/v1/billing_portal/sessions")[0].body);

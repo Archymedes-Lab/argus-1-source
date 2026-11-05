@@ -3,14 +3,14 @@
 -- Stripe event when the key is mailed, and never written here or to logs.
 
 CREATE TABLE IF NOT EXISTS licences (
-  key            TEXT PRIMARY KEY,                 -- ARGUS-<KIND>-<UUID v4 upper-case>
+  key            TEXT PRIMARY KEY,                 -- ARGUS-<SERVER|DESKTOP>-<UUID v4 upper-case>
   session_id     TEXT NOT NULL UNIQUE,             -- the Checkout Session: same session, same key
-  offer          TEXT NOT NULL,                    -- argus-review | argus-watch | argus-desktop
+  offer          TEXT NOT NULL,                    -- argus-server | argus-desktop
   status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
   expires_at     INTEGER,                          -- null = no fixed end
   customer       TEXT,                             -- cus_… (billing portal)
   subscription   TEXT,                             -- sub_… (subscription offers)
-  payment_intent TEXT,                             -- pi_… (one-time offers; refunds)
+  payment_intent TEXT,                             -- pi_… (one-time offers; refunds; none sold now)
   livemode       INTEGER NOT NULL DEFAULT 0,
   ref            TEXT,                             -- attribution ref from /buy, if any
   emailed_at     INTEGER,                          -- set once the key email went out
