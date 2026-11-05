@@ -119,6 +119,7 @@ fn pulse_loop(app: AppHandle) {
         let mut got = false;
         let end = pulse::stream(&mut |p| {
             got = true;
+            lifecycle::mark_seen();
             lifecycle::set(lifecycle::classify_pulse(&p));
             // The interface refetches state when the daemon says it changed.
             let _ = app.emit_to(MAIN, "pulse", &p);

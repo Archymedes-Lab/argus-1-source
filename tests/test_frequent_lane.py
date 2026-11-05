@@ -28,6 +28,29 @@ from jarvis.service.scheduler import FREQUENT, Scheduler
 NOW = 1_000_000.0
 
 
+
+# These tests reason about the workstation schedule (Windows and Linux jobs side by
+# side). On a host without Windows, such as CI's Linux runner, the live table omits
+# the Windows jobs, so the module fills the shared table in for its run and restores
+# it after (in place: scheduler, links and protection all hold the same dict).
+_ADDED = []
+
+
+def setUpModule():
+    from jarvis.service import schedule
+    workstation, _absent = schedule.applicable(True, True)
+    for name, spec in workstation.items():
+        if name not in schedule.JOBS:
+            schedule.JOBS[name] = spec
+            _ADDED.append(name)
+
+
+def tearDownModule():
+    from jarvis.service import schedule
+    for name in _ADDED:
+        schedule.JOBS.pop(name, None)
+    _ADDED.clear()
+
 def _no_pressure():
     return mock.patch("jarvis.core.governor.live_pressure", return_value=(False, ""))
 

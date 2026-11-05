@@ -318,14 +318,37 @@ fn start_direct(env: &dyn Fn(&str) -> Option<String>, port: u16) -> Result<(), S
 /// Make sure the daemon answers, starting it when it does not. Returns the
 /// status to show: `Live`-class statuses are decided by the pulse, not here,
 /// so this returns `Starting` once the port is open.
-pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
-    let env = |k: &str| std::env::var(k).ok();
-    if !installed(&env, &|p| p.exists()) {
-        return Status::new(
+/// Set once this app has heard from the daemon. On a PC where the daemon runs
+/// inside Linux (WSL) nothing here looks "installed", so a short daemon restart
+/// used to read as "not installed" (2026-11-05).
+static SEEN_DAEMON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn mark_seen() {
+    SEEN_DAEMON.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// What to say when nothing answers and no engine is installed on this side.
+pub fn not_answering_or_missing(seen: bool) -> Status {
+    if seen {
+        Status::new(
+            Phase::Stopped,
+            "ARGUS-INSTINCT is not answering right now",
+            "It was answering a moment ago. It usually comes back by itself within a minute or two; \
+             nothing new is being checked until then. If this stays, restart the computer.",
+        )
+    } else {
+        Status::new(
             Phase::NotInstalled,
             "The part of ARGUS-INSTINCT that checks your computer is not installed",
             "Run the ARGUS-INSTINCT installer to add it. Nothing is being checked until then.",
-        );
+        )
+    }
+}
+
+pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
+    let env = |k: &str| std::env::var(k).ok();
+    if !installed(&env, &|p| p.exists()) {
+        return not_answering_or_missing(SEEN_DAEMON.load(std::sync::atomic::Ordering::Relaxed));
     }
     if listening(port) {
         return Status::new(Phase::Starting, "Connecting to ARGUS-INSTINCT", "");
@@ -340,8 +363,8 @@ pub fn ensure_running(governor: &mut Governor, port: u16) -> Status {
     if stopped_on_purpose(&env, &|p| p.exists()) {
         return Status::new(
             Phase::Stopped,
-            "ARGUS-1 monitoring was stopped on purpose",
-            "Someone ran `jarvis stop`. Nothing is being monitored until `jarvis start` is run; this app will not turn it back on.",
+            "ARGUS-INSTINCT was turned off on purpose",
+            "Someone turned it off (jarvis stop). Nothing is being checked until it is turned on again (jarvis start). This app will not turn it back on by itself.",
         );
     }
     if !governor.allow(Instant::now()) {
@@ -492,6 +515,16 @@ mod tests {
         assert!(listening(port));
         drop(l);
         assert!(!listening(port));
+    }
+
+    #[test]
+    fn a_daemon_heard_before_is_not_called_missing() {
+        let first = not_answering_or_missing(false);
+        assert_eq!(first.phase, Phase::NotInstalled);
+        let later = not_answering_or_missing(true);
+        assert_eq!(later.phase, Phase::Stopped);
+        assert!(later.message.contains("not answering right now"), "{}", later.message);
+        assert!(!later.message.contains("not installed"));
     }
 
     #[test]
