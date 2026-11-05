@@ -218,7 +218,11 @@ def save_cache(cache):
 
 def run_module(name, timeout):
     """One test module in its own process with a scratch home. -> (name, ok, seconds, tail)."""
-    with tempfile.TemporaryDirectory(prefix="fasttest-home-") as home:
+    # Not under /tmp: release and provenance code refuse a world-writable ancestor.
+    homes = CACHE_DIR / "homes"
+    homes.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(homes, 0o700)
+    with tempfile.TemporaryDirectory(prefix="home-", dir=homes) as home:
         # The usual home layout: some tests create temporary files under ~/.cache.
         for sub in (".cache", ".config", ".local/share"):
             os.makedirs(os.path.join(home, sub), exist_ok=True)
