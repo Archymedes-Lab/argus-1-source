@@ -18,13 +18,19 @@
   // Per-IP request limits at the edge (Workers rate limiting).
   "ratelimits": [
     { "name": "RL_BUY", "namespace_id": "4411", "simple": { "limit": 30, "period": 60 } },
-    { "name": "RL_LICENCE", "namespace_id": "4412", "simple": { "limit": 60, "period": 60 } }
+    { "name": "RL_LICENCE", "namespace_id": "4412", "simple": { "limit": 60, "period": 60 } },
+    // Routes that send email (/recover, /manage/link); D1 also throttles per email (3 an hour).
+    { "name": "RL_EMAIL", "namespace_id": "4413", "simple": { "limit": 5, "period": 60 } }
   ],
   "vars": {
     "SITE_ORIGIN": "https://www.archymedes.xyz",
+    "PAY_ORIGIN": "https://pay.archymedes.xyz",
+    "SUPPORT_EMAIL": "support@archymedes.xyz",
     "MANAGED_PAYMENTS": "1",
     "MAIL_FROM": "Archymedes <licences@archymedes.xyz>"
   }
   // Secrets (never in this file): `wrangler secret put STRIPE_SECRET_KEY` (sk_ or rk_),
-  // `wrangler secret put STRIPE_WEBHOOK_SECRET` (whsec_), optional `wrangler secret put RESEND_API_KEY`.
+  // `wrangler secret put STRIPE_WEBHOOK_SECRET` (whsec_), `wrangler secret put RESEND_API_KEY`,
+  // `wrangler secret put LICENCE_SIGNING_KEY` (from scripts/licence-keygen.ts) and
+  // `wrangler secret put KEY_PEPPER` (32+ random characters). docs/STRIPE-HANDOFF.md, "Signing keys".
 }
