@@ -4,3 +4,4 @@
 # archymedes-site) and the owner in ~/.config/argus-release/trusted_signers.
 # Add a releaser: docs/guides/RELEASING.md, "Adding a releaser".
 chrisnkuno namespaces="argus-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIErirMBHeY+W5nRR0fHK3y4oDwGU2K2ViFwXFTDShbT9
+soniAineza4 namespaces="argus-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEnM6R2n84YYEMBSkGfuYXKM3ZTlQZ6GPS5oLiJZbCAj
