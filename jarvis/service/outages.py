@@ -33,6 +33,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from jarvis.core import bugcheck
 from jarvis.core import event as event_mod
 from jarvis.core.eventlog import DEFAULT_ROOT, EventLog, LogError
 
@@ -62,10 +63,11 @@ MAX_CAUSE = 160
 # fatal error. Other IDs are left out until their meaning is verified. System: Kernel-Power 41 unexpected
 # power loss, 42 sleep, 107 resume, 506/507 Modern Standby enter/exit;
 # Kernel-General 12/13 OS start/stop; EventLog 6005/6006 log service
-# start/stop, 6008 unexpected shutdown; User32 1074 shutdown requested.
+# start/stop, 6008 unexpected shutdown; User32 1074 shutdown requested;
+# WER-SystemErrorReporting 1001 the restart followed a stop error (bug check).
 WINDOWS_QUERIES = (
     ("Microsoft-Windows-Hyper-V-Worker-Admin", (18500, 18502, 18508, 18515, 18590)),
-    ("System", (41, 42, 107, 506, 507, 12, 13, 6005, 6006, 6008, 1074)),
+    ("System", (41, 42, 107, 506, 507, 12, 13, 6005, 6006, 6008, 1074, 1001)),
     ("Application", (1000,)),
 )
 WINDOWS_MEANING = {
@@ -85,6 +87,7 @@ WINDOWS_MEANING = {
     6006: ("host_shutdown", "the Windows event log service stopped cleanly"),
     6008: ("host_unexpected_shutdown", "the previous Windows shutdown was unexpected"),
     1074: ("host_shutdown_requested", "a shutdown or restart was requested"),
+    1001: ("host_bugcheck", "Windows restarted after a stop error"),
     1000: ("wsl_process_crash", "a WSL process crashed"),
 }
 # The provider each ID must come from. IDs are only unique per provider: in
@@ -100,8 +103,10 @@ WINDOWS_PROVIDER = {
     12: "Microsoft-Windows-Kernel-General", 13: "Microsoft-Windows-Kernel-General",
     6005: "EventLog", 6006: "EventLog", 6008: "EventLog",
     1074: "User32", 1000: "Application Error",
+    1001: "Microsoft-Windows-WER-SystemErrorReporting",
 }
 _WSL_APPS = re.compile(r"\b(wsl|wslhost|wslrelay|wslservice)\.exe\b", re.I)
+_BUGCHECK = re.compile(r"0x[0-9A-Fa-f]{1,8}\s*\([^)]{0,200}\)")
 _GUID = re.compile(r"[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}", re.I)
 
 PS_WINDOWS = r"""
@@ -129,6 +134,15 @@ foreach ($q in @(__QUERIES__)) {
   }
 }
 """
+
+
+def _bugcheck(line):
+    """'0x20001 HYPERVISOR_ERROR (0x11, ...)' from a WER 1001 message line."""
+    match = _BUGCHECK.search(line)
+    parsed = bugcheck.from_wer(match.group(0)) if match else None
+    if not parsed:
+        return None
+    return f"{bugcheck.label(parsed[0])} ({', '.join(parsed[1])})"
 
 
 def _utc(epoch):
@@ -406,12 +420,15 @@ class OutageRecorder:
                     continue          # an unrelated application crash
                 kind, meaning = WINDOWS_MEANING.get(eid, ("windows_event", "Windows event"))
                 at = _epoch(row.get("time")) or time.time()
-                vm = _GUID.search(line)
+                vm = _GUID.search(line) if eid != 1001 else None   # 1001's GUID is a WER report
                 app = _WSL_APPS.search(line)
+                stop = _bugcheck(line) if eid == 1001 else None
+                if stop:
+                    meaning = f"{meaning}: {stop}"
                 records.append(self._record(
                     "host:windows", kind, at, windows_log=log, windows_event=eid,
                     windows_record=rec, provider=_short(row.get("provider")),
-                    cause=meaning, vm=vm.group(0).upper() if vm else None,
+                    cause=_short(meaning), vm=vm.group(0).upper() if vm else None,
                     app=app.group(0).lower() if app else None))
                 cursors[log] = max(int(cursors.get(log, 0)), rec)
             self.state["windows"] = cursors

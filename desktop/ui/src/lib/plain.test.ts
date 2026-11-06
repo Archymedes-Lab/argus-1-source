@@ -13,6 +13,14 @@ test("headline never says fine when something is critical, and admits partial co
   expect(headline(undefined, 0, 0, 0).tone).toBe("unknown");
 });
 
+test("with nothing found the headline never claims the computer is fine or safe", () => {
+  // The absence of alerts does not prove safety (Normal/Pro honesty rule, d50ac10).
+  const ok = headline(95, 0, 0, 0);
+  expect(ok.tone).toBe("ok");
+  expect(`${ok.title} ${ok.body}`).not.toMatch(/\b(fine|safe|secure|protected|clean|healthy)\b/i);
+  expect(ok.title).toContain("No signs");
+});
+
 test("plain wording uses the dashboard guide, and falls back without inventing a verdict", () => {
   const known = plainFinding({ severity: "high", title: "x", job: "j", category: "persistence" });
   expect(known.means.length).toBeGreaterThan(10);

@@ -233,6 +233,12 @@ COLLECTORS = (
        command="hidden --deep", boot_scoped=True),
     _c("hidden", 300, "Hidden processes", AT, 4, 2, "high", 60, cost_s=24.0,
        command="hidden", boot_scoped=True, lane="frequent"),
+    # osquery, when the operator installed it, as a second reader of processes,
+    # listeners and kernel modules; disagreement with Argus's own view is tamper
+    # evidence. Never installs osquery.
+    _c("osquery", 3600, "Independent view (osquery)", None, 0, 3, "medium", 120,
+       command="hidden", domain="linux",
+       unscored="optional second view; source-tested against recorded answers, never run on a host with osquery"),
     _c("firewall", 2400, "Firewall & inbound", OS, 1, 3, "high", 240,
        command="firewall",
        depends_on=("windows-bridge",), cost_s=18.0, boot_scoped=True),
@@ -401,6 +407,12 @@ COLLECTORS = (
     _c("wslmanifest", 300, "WSL process manifest", None, 0, 2, "medium", 60,
        command="wslmanifest", domain="linux", cost_s=0.3,
        unscored="new; reports drift only after the owner approves a manifest, not yet soaked", lane="frequent"),
+    # Restart autopsy (2026-11-04): every stop of this daemon is attributed to
+    # an actor and its reason cross-examined (systemd, Sysmon lineage, the
+    # restarters' own logs); an unidentified stop is a high tamper finding.
+    _c("restarts", 300, "Daemon stop attribution", None, 0, 1, "high", 60,
+       command="restarts", domain="linux", cost_s=4.0,
+       unscored="new; restarter signatures source-tested and replayed on 23 real stops, not yet soaked", lane="frequent"),
     _c("opshealth", 900, "Server operations health", None, 0, 3, "medium", 90,
        command="opshealth", domain="linux", cost_s=0.6, requires=("systemd",),
        unscored="operational health, not machine safety; thresholds not yet soaked on real servers"),

@@ -54,6 +54,25 @@ def cmd_opshealth(args, store):
     _print(opshealth.audit(store), args.json)
 
 
+def cmd_restarts(args, store):
+    """Who stopped JARVIS, when and why (collectors/host/restarts.py)."""
+    import time
+
+    from jarvis.collectors.host import restarts
+    findings = restarts.audit(store)
+    if args.json:
+        print(json.dumps({"stops": restarts.ledger(store), "findings": findings}, indent=2, default=str))
+        return
+    rows = restarts.ledger(store)
+    if not rows:
+        print("no stops of jarvis.service recorded in the last 7 days")
+    for v in rows:
+        when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(v["t"]))
+        who = v.get("actor") or "UNIDENTIFIED"
+        why = v.get("contradiction") or v.get("reason") or v.get("evidence") or ""
+        print(f"{when}  {v['verdict']:<11} {who:<16} {why}")
+
+
 def cmd_bootchain(args, store):
     from jarvis.collectors.host import bootchain
     _print(bootchain.audit(store), args.json)
@@ -308,6 +327,8 @@ def add_parser(sub):
                             "SSH server policy, every authorised key, host keys and live tunnels"),
                            ("opshealth", cmd_opshealth,
                             "failed services, expiring TLS certificates, OOM kills, crashes"),
+                           ("restarts", cmd_restarts,
+                            "every stop of JARVIS: who issued it, why, and whether that held up"),
                            ("bootchain", cmd_bootchain,
                             "boot-chain persistence and kernel attack surface"),
                            ("keyreaders", cmd_keyreaders,

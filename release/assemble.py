@@ -61,21 +61,43 @@ def load_previous(where):
         return {}
 
 
+def _licences():
+    """{(name, version): SPDX expression} from release/third_party.json."""
+    try:
+        snap = json.loads((HERE / "third_party.json").read_text())
+    except (OSError, ValueError):
+        return {}
+    return {(c["name"].lower(), c.get("version", "")): c["license"]
+            for section in ("python", "cargo") for c in snap.get(section, [])}
+
+
+def _with_licence(comp, licences):
+    lic = licences.get((comp["name"].lower(), comp["version"]))
+    if lic:
+        comp["licenses"] = [{"expression": lic}]
+    return comp
+
+
 def sbom(version, commit):
-    """CycloneDX 1.5: the pinned Python build inputs and the Rust crates of the desktop app."""
+    """CycloneDX 1.5: the pinned Python build inputs and the Rust crates of the desktop app,
+    each with its licence from release/third_party.json where one is recorded."""
     comps = []
+    licences = _licences()
     for req in ("requirements-build.txt", "requirements-runtime.txt"):
         for line in (HERE / req).read_text().splitlines():
             m = re.match(r"^([A-Za-z0-9_.-]+)==([^\s\\]+)", line)
             if m:
-                comps.append({"type": "library", "name": m[1], "version": m[2],
-                              "purl": f"pkg:pypi/{m[1].lower()}@{m[2]}"})
+                comps.append(_with_licence({"type": "library", "name": m[1], "version": m[2],
+                                            "purl": f"pkg:pypi/{m[1].lower()}@{m[2]}"}, licences))
     lock = REPO / "desktop" / "Cargo.lock"
     if lock.exists():
         for name, ver in re.findall(r'\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"', lock.read_text()):
-            comps.append({"type": "library", "name": name, "version": ver, "purl": f"pkg:cargo/{name}@{ver}"})
+            comps.append(_with_licence({"type": "library", "name": name, "version": ver,
+                                        "purl": f"pkg:cargo/{name}@{ver}"}, licences))
     return {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
             "metadata": {"component": {"type": "application", "name": "argus", "version": version,
+                                       "licenses": [{"license": {"id": "LicenseRef-Archymedes-Proprietary",
+                                                                 "name": "ARGUS-1 EULA (LICENSE.txt)"}}],
                                        "properties": [{"name": "commit", "value": commit}]}},
             "components": comps}
 
@@ -142,6 +164,8 @@ def main():
     previous = load_previous(args.previous)
     (out / "release-report.md").write_text(report(manifest, previous))
     (out / "sbom.cdx.json").write_text(json.dumps(sbom(args.version, args.commit), indent=2) + "\n")
+    for name in ("LICENSE.txt", "THIRD-PARTY-NOTICES.txt"):
+        shutil.copyfile(REPO / name, out / name)
     prev_path = None
     if previous:
         prev_path = out.parent / "previous-manifest.json"

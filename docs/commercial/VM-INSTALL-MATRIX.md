@@ -1,6 +1,6 @@
 # Clean-machine install matrix: ARGUS-1 server edition
 
-Status: **prepared, not run** (2026-11-02). This is the first blocker to the paid observed server
+Status: **harness built; runs in progress** (2026-11-02). This is the first blocker to the paid observed server
 review (PMF-2026-11.md, Phase 5) and QC blocker 2 (`docs/security/QC-ARGUS-1-2026-10-27.md`).
 Nothing in `jarvis/core/assurance.py` moves until a row below has a measured result.
 
@@ -61,20 +61,67 @@ Footprint budget to accept (owner may change): idle RSS under 150 MB, idle cgrou
 300 MB, idle CPU under 60 s per hour on 1 vCPU, state under 50 MB after an hour. A miss is
 recorded, not hidden; the review offer then states the measured figure.
 
-## Harness changes needed (not made yet)
+## Harness (built 2026-11-02, owner-approved)
 
-1. `jarvis/lab/vmlab.py`: make the image a parameter (`name`, checksum file, hash algorithm)
-   instead of the `IMAGE_NAME` constant; keep `verify_base_image` fail-closed per image.
-2. `vmtest.py`: accept the signed release directory (tarball and native `.deb`), verify
-   `SHA256SUMS.sig` before building the payload, and take `--distro` and `--package`.
-3. `vmtest_guest.py`: call `/usr/local/bin/argus` (native) instead of Python entry points; add
-   S4 (60-minute idle sampling), S5, S6 (reboot through the serial console), S7.
-4. Move the harness from `archymedes-site` into Argus-1 (`release/vmtest/`) so the release and
-   its validation are versioned together.
+Lives in this repository, versioned with the release it checks:
 
-Each change is non-trivial (lab isolation, release verification): it needs invariant tests
-(image hash mismatch refused, unsigned release refused, interrupted run leaves no overlay) and a
-Jev review before it is used for evidence.
+| File | Role |
+|---|---|
+| `jarvis/lab/vmlab.py` | `IMAGES` registry (file, checksum list, sha256/sha512) and `Config.image`; unknown or mismatched image fails closed; `Config.allow_reboot` (off by default) drops `-no-reboot` without touching isolation |
+| `release/vmtest/fetch_image.py` | Downloads an image to a `.part` file, checks it, then renames. Ubuntu lists must carry a gpg signature by the pinned Canonical cloud-image key (lab-only keyring); Debian signs nothing, so its image comes from the fixed dated build `20261026-2643` and is recorded **https-only** |
+| `release/vmtest/vmtest.py` | One cell per run: verifies the release signature (pinned releaser) and package digest before any guest starts, builds the payload, boots the guest, checks the result hash and the harness hash, writes `vmtest-<distro>-<package>-<time>.json` with a per-scenario summary against the budget |
+| `release/vmtest/guest.py` | Phase 1: S1, S7 (if `--upgrade-from`), S2, S3 (16 planted checks, neutral `vmuser`), S4, S5, then one reboot. Phase 2 (one-shot unit that marks itself started first): S6, S8, S9 |
+| `tests/test_vmtest.py` | 35 tests: refusals (unsigned, unpinned, mismatched, unlisted, unknown image), fail-closed fetch, cleanup on helper failure, timeout and Ctrl-C, verdict rules. Mutation checks: 5 of 6 deliberate breaks caught; the sixth (S1) is covered by a duplicate comparison |
+
+Image trust, measured 2026-11-02: Ubuntu 24.04 list signature verified (signer
+`D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81`; it had only been hash-checked before); Debian 12
+hash verified, **https-only**.
+
+Run a cell (serially, never two at once):
+
+    python3 release/vmtest/fetch_image.py debian-12            # once per image
+    python3 release/vmtest/vmtest.py --release DIR --distro ubuntu-24.04 --package tarball
+
+`v2026.10.30-2` is the only signed release, so S7 (upgrade) reports "not run" until a newer
+signed release exists. That release has no `argus review`, so S5 also reports "not run".
+
+Jev (jev-1.14.0, advisory, `scripts/reviews/vm_matrix_advisory.py`): Debian https-only with
+the label acceptable 0.83; top remaining gap "not yet run end to end" 0.35 (low confidence,
+Debian trust 0.32 close behind); smoke run before the hour-long runs 0.61.
+
+## Smoke runs, 2026-11-02 (Ubuntu 24.04, tarball, signed `v2026.10.30-2`, 2-minute idle)
+
+First installs of the signed native release on any VM. Measured, short windows only:
+
+| Run | S1 | S2 | S3 | S4 | S5 | S6 | S7 | S8 | S9 | Isolation |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 (09:19Z) | pass | pass | 2/16 | within budget | not in release | fail | not run | pass | pass | ok |
+| 2 (11:44Z) | pass | fail | **16/16** | over CPU | not in release | fail | not run | pass | pass | ok |
+| 3 | killed by a Windows host crash during S4 | | | | | | | | | orphans swept |
+
+What the failures were (all harness bugs, fixed after each run, none in the product so far):
+- Runs 1 and 2: the release requires a credential on every API route; the guest read
+  `/api/state` without one, saw no jobs, and so failed S3 (run 1) and could not see receipts
+  after the reboot (S6). The guest now sends the token on every request.
+- Run 2 S2: the health check then sent the token too; the authenticated body does not carry
+  the `"ARGUS"` service name the check looks for. The check is now anonymous, as an outside
+  probe (and `release/install_test.sh`) sees it.
+- Run 2 S6: `/api/state` still listed no jobs after the reboot, cause not yet known. S6 now
+  also reads the newest run receipt straight from the store (read-only) and records the API
+  shape and the journal for this boot.
+- Run 2 S4 "over CPU" (366 s/h) is a 2-minute window right after the planted scenario, not
+  idle. Only the 60-minute run decides S4.
+
+Measured so far: install 36.5 s (run 2), first API answer 37.6 s, RSS at most 120 MB,
+cgroup at most 194 MB, state 5 MB, no tracebacks, removal and purge clean, 16/16 planted
+checks, no secret value in findings.
+
+**Host stability (owner decision before more runs).** Windows restarted uncleanly three
+times on 2026-11-02 (Kernel-Power 41, no bug check recorded): before 12:15, at 12:14 and about
+13:54 local. The 13:54 one ended smoke run 3; the two earlier ones had no VM running. Nested
+KVM adds load to a host that already hard-resets, so the hour-long cells wait for the owner's
+go-ahead, or move to another machine or a real VPS. `vmtest.py` now sweeps run folders a
+killed run leaves behind (only run-id folders, older than an hour, with no container).
 
 ## Run order and host limits
 

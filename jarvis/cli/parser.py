@@ -74,6 +74,7 @@ from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
 from .commands import lifecycle as lifecycle_cli
 from .commands import mesh as mesh_cli
+from .commands import model as model_cli
 from .commands import native as native_cli
 from .commands import notify as notify_cli
 from .commands import pixel as pixel_cli
@@ -116,6 +117,7 @@ def build_parser():
     server_cli.add_parser(sub)
     notify_cli.add_parser(sub)
     update_cli.add_parser(sub)
+    model_cli.add_parser(sub)
     privacy_cli.add_parser(sub)
     timeline_cli.add_parser(sub)
     history_cli.add_parser(sub)

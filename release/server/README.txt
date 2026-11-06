@@ -6,6 +6,12 @@ of it: SSH keys and logins, sudo, accounts, systemd and cron persistence,
 hidden processes, web shells, exposure and package integrity. It is one native
 program (bin/argus-server) and needs no Python or other runtime.
 
+Licence: ARGUS-1 is proprietary, commercial software of Archymedes, Inc. It is
+not open-source software. LICENSE.txt is its End User Licence Agreement (still a
+draft pending counsel review); installing or using it means accepting those
+terms. THIRD-PARTY-NOTICES.txt lists the third-party components it includes and
+the licence of each.
+
 Before installing, check the download (see the documentation for the commands):
 SHA256SUMS lists every file's SHA-256, and SHA256SUMS.sig is the release
 signature, made with a release key whose fingerprint is published on the site.

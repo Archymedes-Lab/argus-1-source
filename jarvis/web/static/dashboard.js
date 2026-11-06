@@ -117,89 +117,89 @@ function kindOf(f) { return MON_CATEGORIES.has(f.category) || MON_JOBS.has(f.job
 // -> {key, label, note}. ARGUS-INSTINCT never labels a finding a confirmed attack; it says what was observed.
 function stateOf(f) {
   if (kindOf(f) === "monitoring")
-    return { key: "monitoring", label: "Monitoring problem",
-             note: "This is about ARGUS-INSTINCT's own checks. It does not mean your computer has been attacked." };
+    return { key: "monitoring", label: "A problem with ARGUS-INSTINCT",
+             note: "This is about ARGUS-INSTINCT itself, not your computer. It does not mean anything bad has happened." };
   const sev = f.severity;
   if (sev !== "critical" && sev !== "high" && sev !== "medium")
-    return { key: "info", label: "For information", note: "Recorded for awareness; it does not lower the score." };
+    return { key: "info", label: "Just so you know", note: "Saved for your information. It does not lower your score." };
   if (CONFIG_CATEGORIES.has(f.category))
-    return { key: "confirmed", label: "Confirmed setting",
-             note: "ARGUS-INSTINCT read this setting directly. Whether it is a problem depends on how you use this computer." };
-  return { key: "suspicious", label: "Suspicious - needs review",
-           note: "ARGUS-INSTINCT observed this behaviour. It has not been confirmed as malicious, and it may be expected." };
+    return { key: "confirmed", label: "A setting on your computer",
+             note: "ARGUS-INSTINCT looked at this setting directly. Whether it is a problem depends on how you use your computer." };
+  return { key: "suspicious", label: "Worth a closer look",
+           note: "ARGUS-INSTINCT noticed something unusual. It is not proven to be harmful, and it may be perfectly normal." };
 }
 // How a person should read each severity. Severity is potential impact, never a verdict or a likelihood.
-const SEVERITY_WORDS = { critical: "Serious", high: "Serious", medium: "Worth reviewing", low: "For information" };
+const SEVERITY_WORDS = { critical: "Serious", high: "Serious", medium: "Worth a look", low: "Just so you know" };
 const severityWord = sev => SEVERITY_WORDS[sev] || "Not rated";
 
 // GUIDE[category] = [what it usually means, why it may matter, a safe next step]. General background only.
 const GUIDE = {
-  "data at rest": ["A file appears to contain a credential, such as an API key or password.",
-    "If it is a real, active credential and the file can be read by others, it could be misused.",
-    "Review the affected file and decide whether the credential is real. If it is, revoke or rotate it using the service's own process."],
-  persistence: ["Something is set up to start automatically or run on a trigger, such as a scheduled task or a WMI subscription.",
-    "Legitimate software does this, but so can malware that wants to survive a restart.",
-    "Check whether you recognise the item and the program it runs. If you do not, investigate before removing anything."],
-  staging: ["A new, unsigned program was recently written to a place where programs are often dropped.",
-    "Installers and developer tools do this too, but unexpected unsigned programs are a common way malware arrives.",
-    "Check whether you installed or built something just before this appeared."],
-  rules: ["A firewall rule allows connections in a permissive way.",
-    "Broad rules can let other computers reach programs on this one.",
-    "Review who the rule allows and whether the program needs it."],
-  remote: ["A rule or setting allows connections into this computer.",
-    "Remote access you did not set up could let someone else in.",
-    "Confirm you expect this remote access."],
-  access: ["An app is using or can use a sensitive device such as the camera or microphone.",
-    "That is normal during a call, but unexpected if you are not using it.",
-    "Check which app it is and whether you started it."],
-  internet: ["A program is listening for connections beyond this computer, or traffic monitoring is limited.",
-    "Programs reachable from the network are a way in if they have flaws.",
-    "Check whether you want this program reachable from other devices."],
-  impersonation: ["Credentials stored on this computer could be used to sign in as you.",
-    "Anyone who can run programs as you could use them.",
-    "Review which stored sign-ins you still need."],
-  accounts: ["An account is hidden from the sign-in screen or looks unusual.",
-    "Hidden accounts are sometimes used to keep access, though some are created by software on purpose.",
-    "Identify what created the account before changing anything."],
-  interception: ["A trusted root certificate that is not a standard one was found.",
-    "A trusted certificate can let its owner read protected web traffic.",
-    "Check that the certificate belongs to software you installed on purpose."],
-  "injected code": ["A program has executable memory that is not backed by a file on disk.",
-    "Some software does this legitimately; malware uses it to hide.",
-    "See whether the program is one you know and run."],
-  clickfix: ["The Run dialog history shows commands that may have been pasted from a website.",
-    "Fake 'fix it' pages trick people into running commands themselves.",
-    "Check whether you ran these commands on purpose."],
-  av: ["Windows Defender reported a detection.",
-    "Defender has already flagged this item, so it deserves a look.",
-    "Open Windows Security to see what it found and what it did."],
-  posture: ["A Windows protection setting is off or could not be read.",
-    "Protections that are off leave less between you and an attack.",
-    "Open the details to see which setting and whether you want it on."],
-  "malware defense": ["A malware protection feature is not enabled.",
-    "That feature would otherwise help block threats.",
-    "Decide whether you want it enabled."],
-  defense: ["A Windows Defender setting could not be read.",
-    "ARGUS-INSTINCT cannot confirm protection it cannot read.",
-    "Open the details to see which setting."],
-  mitigations: ["A program runs without a hardening feature that limits what attackers can do.",
-    "This makes that program easier to exploit if it has a flaw.",
-    "Usually informational; keep the program updated."],
-  screen: ["An app may capture the screen without showing a capture border.",
-    "Screen capture can reveal anything on your display.",
-    "Check whether you use a screen-sharing or recording app."],
-  extension: ["A browser extension is installed.",
-    "Extensions can read pages you visit, so each one is trusted with that.",
-    "Keep only extensions you recognise."],
-  daemon: ["ARGUS-INSTINCT's own monitor or one of its services is not running as expected.",
-    "While it is not running, ARGUS-INSTINCT cannot watch that area.",
-    "Open Monitoring to see the reason and the steps to restore it."],
-  collectors: ["One of ARGUS-INSTINCT's checks could not complete.",
-    "ARGUS-INSTINCT cannot currently confirm the security of that area.",
-    "Open Monitoring to see the reason."],
-  visibility: ["ARGUS-INSTINCT has limited visibility into part of this computer.",
-    "It cannot report on what it cannot see.",
-    "Open Monitoring to see what is limited and why."],
+  "data at rest": ["A file on your computer seems to have a password or secret key written inside it in plain text.",
+    "If anyone else can open that file, they could use that password or key as if they were you.",
+    "Open the file and see if you put it there on purpose. If it is a real password you still use, change it on the website or service it belongs to."],
+  persistence: ["A program is set up to start by itself, for example every time you turn on your computer.",
+    "Many normal apps do this, like updaters. But harmful programs also do this so they come back after a restart.",
+    "Look at the name. If you recognise the app, you can ignore this. If you do not, do not delete anything yet. Ask someone you trust to check it."],
+  staging: ["A new program, from a maker nobody has vouched for, was just saved in a folder where programs often end up.",
+    "Installers and tools you download do this too. Harmful programs also arrive this way.",
+    "Think back: did you just install or download something? If yes, this is probably it. If not, ask someone you trust to check."],
+  rules: ["A setting on your computer lets other devices connect to a program here, and it is quite open.",
+    "An open door like this makes it easier for other devices on the network to reach that program.",
+    "Check which program it is. If you do not use it, ask someone you trust whether it can be closed."],
+  remote: ["Your computer is set up so someone can connect to it from far away and use it.",
+    "If you did not turn this on, someone else could possibly get in.",
+    "If you set this up yourself, you can ignore this. If not, ask someone you trust to check it soon."],
+  access: ["An app is using, or is allowed to use, your camera or microphone.",
+    "That is normal during a video call. It is unexpected if you are not on a call or recording.",
+    "Check which app it is. If you did not start it, close it and ask someone you trust to look."],
+  internet: ["A program on your computer is waiting for other devices to connect to it, or ARGUS-INSTINCT cannot fully watch your internet traffic.",
+    "Programs that can be reached from outside are an easier target if they have a mistake in them.",
+    "If you know this program and want it open, there is nothing to do. If not, ask someone you trust."],
+  impersonation: ["Sign-ins you saved on this computer, like passwords kept in your browser, could be used to log in as you.",
+    "Any program that runs on your account could use them.",
+    "Remove saved sign-ins for accounts you no longer use."],
+  accounts: ["A user account on this computer is hidden from the sign-in screen or looks unusual.",
+    "Hidden accounts are sometimes used to keep access to a computer. Some apps also make them for normal reasons.",
+    "Do not delete it. First find out which app made it, or ask someone you trust."],
+  interception: ["Your computer trusts a security certificate that does not come from the usual list.",
+    "A certificate like this can let its owner read private web traffic, such as sign-ins.",
+    "Companies and some developer tools add these on purpose. If you do not know where it came from, ask someone you trust."],
+  "injected code": ["A program has hidden instructions running in its memory that are not from a file on your computer.",
+    "Browsers and game tools do this for normal reasons. Harmful programs also use it to hide.",
+    "Check whether it is a program you know and use. If it is not, ask someone you trust."],
+  clickfix: ["Your computer's history shows commands that look like they were copied from a website and pasted in.",
+    "Fake \"fix this problem\" pages trick people into running a harmful command themselves.",
+    "Think: did you paste a command from a website lately? If you did not, tell someone you trust right away."],
+  av: ["Windows' built-in protection, called Defender, found something it did not like.",
+    "Defender has already raised a flag, so it is worth a look.",
+    "Open Windows Security to see what it found and what it already did about it."],
+  posture: ["A protection feature in Windows is turned off, or ARGUS-INSTINCT could not read whether it is on.",
+    "A protection that is off gives you less cover.",
+    "Open the details to see which one. If you did not switch it off, turn it back on."],
+  "malware defense": ["A feature that helps stop harmful programs is switched off.",
+    "With it off, your computer has one fewer guard.",
+    "Decide if you want it on. Most people do."],
+  defense: ["ARGUS-INSTINCT could not check one of Windows' protection settings.",
+    "ARGUS-INSTINCT cannot say whether that protection is working if it cannot read it.",
+    "Open the details to see which one."],
+  mitigations: ["A program is running without an extra safety feature that makes it harder to attack.",
+    "If that program has a mistake in it, it would be easier to break into.",
+    "You usually do not need to do anything. Keep the program up to date."],
+  screen: ["An app may be able to record what is on your screen without showing you.",
+    "A screen recording can capture anything you have open, like messages or passwords.",
+    "Check whether you use a screen-sharing or recording app. If you do not, ask someone you trust."],
+  extension: ["An add-on is installed in your web browser.",
+    "Add-ons can see the web pages you visit, so each one has to be trusted.",
+    "Keep only the add-ons you know. Remove the rest from your browser's add-ons page."],
+  daemon: ["The part of ARGUS-INSTINCT that watches your computer is not running the way it should.",
+    "ARGUS-INSTINCT cannot watch that part of your computer until it is fixed.",
+    "Open the Monitoring page. It tells you why and how to fix it."],
+  collectors: ["One of ARGUS-INSTINCT's checks could not finish.",
+    "Until it does, ARGUS-INSTINCT cannot tell you whether that part of your computer is okay.",
+    "Open the Monitoring page to see why."],
+  visibility: ["ARGUS-INSTINCT can only see part of what is going on in one area of your computer.",
+    "It cannot tell you about anything it cannot see.",
+    "Open the Monitoring page to see what is hidden from it, and why."],
 };
 // Ordinary reasons the same observation can appear on a healthy computer. Offered as possibilities, never as a finding.
 const BENIGN = {
@@ -221,45 +221,45 @@ const BENIGN = {
 };
 const DEFAULT_BENIGN = ["It may be software you installed, or a change you made yourself"];
 const SEVERITY_WHY = {
-  critical: "ARGUS-INSTINCT rates this critical: if it is real it can seriously harm the computer or your data.",
-  high: "ARGUS-INSTINCT rates this high: it deserves attention soon.",
-  medium: "ARGUS-INSTINCT rates this medium: worth a look, rarely urgent.",
-  low: "ARGUS-INSTINCT rates this low: informational.",
+  critical: "ARGUS-INSTINCT thinks this is very serious: if it is real, it could badly harm your computer or your files.",
+  high: "ARGUS-INSTINCT thinks this is serious: it is worth looking at soon.",
+  medium: "ARGUS-INSTINCT thinks this is worth a look, but it is rarely urgent.",
+  low: "ARGUS-INSTINCT thinks this is minor. It is just so you know.",
 };
 // Short definitions shown on hover or keyboard focus. Terms are matched in static guidance text only.
 const GLOSSARY = {
-  WMI: "Windows Management Instrumentation: a built-in way for Windows and programs to run things when events happen.",
-  persistence: "A way for a program to start again after a restart. Normal software uses it, and so does malware.",
-  "scheduled task": "A job Windows runs automatically at set times or events.",
-  "firewall rule": "A setting that allows or blocks network connections for a program or port.",
-  unsigned: "Without a publisher's digital signature. Many developer tools are unsigned, so it is a reason to look, not proof of harm.",
-  collector: "One of ARGUS-INSTINCT's checks. Each looks at one area and reports what it found.",
-  credential: "A password, key or token that proves who you are to a service.",
-  certificate: "A digital ID a computer uses to prove who it is, or that it is trusted.",
-  "process injection": "Running code inside another program's memory. Some software does this legitimately; malware uses it to hide.",
-  "privilege escalation": "Gaining more access than a program was given.",
+  WMI: "A built-in part of Windows that lets programs run things automatically when something happens.",
+  persistence: "When a program is set up to start again by itself after a restart. Normal apps do this, and so do harmful ones.",
+  "scheduled task": "A job that Windows runs by itself at set times.",
+  "firewall rule": "A setting that decides which programs may talk to other devices over the network.",
+  unsigned: "Missing the maker's digital signature, which is like a stamp showing who made it. Many tools you download have none, so it is a reason to look, not proof of harm.",
+  collector: "One of ARGUS-INSTINCT's checks. Each one looks at one part of your computer.",
+  credential: "A password or secret key that proves to a service that you are you.",
+  certificate: "A digital ID card that a computer uses to prove who it is.",
+  "process injection": "When one program hides instructions inside another program. Some normal software does this, and harmful programs use it to hide.",
+  "privilege escalation": "When a program gets more power on your computer than it was given.",
 };
 // -> {means, why, next, general}. `general` is true when the wording is category background, not the finding itself.
 function guideFor(f) {
   const g = GUIDE[f.category];
   if (g) return { means: g[0], why: g[1], next: g[2], general: true };
   if (kindOf(f) === "monitoring") return { means: GUIDE.collectors[0], why: GUIDE.collectors[1], next: GUIDE.collectors[2], general: true };
-  return { means: "ARGUS-INSTINCT reported this observation.", why: SEVERITY_WHY[f.severity] || "ARGUS-INSTINCT has not rated this observation.",
-           next: "View the details and decide whether you expect this on your computer.", general: true };
+  return { means: "ARGUS-INSTINCT noticed something and wants you to know.", why: SEVERITY_WHY[f.severity] || "ARGUS-INSTINCT has not said how serious this is.",
+           next: "Open the details and think about whether you expect this on your computer.", general: true };
 }
 
 // One sentence saying what ARGUS-INSTINCT found, in plain words, from the real title and category.
 function whatWasFound(f) {
   const t = String(f.title || "").trim();
-  if (/scheduled task/i.test(t)) return "ARGUS-INSTINCT found a scheduled task that runs a program automatically.";
-  if (/WMI event subscription/i.test(t)) return "ARGUS-INSTINCT found a Windows (WMI) rule that runs something when an event happens.";
-  if (/unsigned executable/i.test(t)) return "ARGUS-INSTINCT found a recently written program that is not digitally signed.";
+  if (/scheduled task/i.test(t)) return "ARGUS-INSTINCT found a program that is set to run by itself at certain times.";
+  if (/WMI event subscription/i.test(t)) return "ARGUS-INSTINCT found a Windows rule that runs something automatically when a certain thing happens.";
+  if (/unsigned executable/i.test(t)) return "ARGUS-INSTINCT found a new program with no maker's signature to prove who made it.";
   if (/api key|credential|password|secret|token/i.test(t) && f.category === "data at rest")
-    return "ARGUS-INSTINCT found a file that appears to contain a credential.";
-  const by = { persistence: "an item that starts or runs automatically", rules: "a firewall rule that allows connections",
-    remote: "a setting that allows connections into this computer", access: "an app using a sensitive device",
-    internet: "a program reachable from the network", accounts: "an unusual account", interception: "a trusted certificate that is not a standard one",
-    "injected code": "a program with code that is not backed by a file", posture: "a protection setting that is off or unreadable" };
+    return "ARGUS-INSTINCT found a file that seems to have a password or secret key inside it.";
+  const by = { persistence: "something that starts by itself", rules: "a setting that lets other devices connect",
+    remote: "a setting that lets someone connect to this computer from far away", access: "an app using your camera or microphone",
+    internet: "a program that other devices can reach", accounts: "an unusual account", interception: "a security certificate your computer trusts that is not a usual one",
+    "injected code": "a program running hidden instructions that are not from a file", posture: "a protection setting that is off or could not be checked" };
   return by[f.category] ? `ARGUS-INSTINCT found ${by[f.category]}.` : `ARGUS-INSTINCT reported “${clip(t, 90)}”.`;
 }
 
@@ -269,29 +269,29 @@ function evidenceBasis(f, others) {
   const same = (others || []).filter(o => o.title === f.title && o.where === f.where && o.job !== f.job);
   const collectors = 1 + new Set(same.map(o => o.job)).size;
   const forensics = (f.forensics || []).length;
-  const points = [`reported by ${plural(collectors, "collector")}`,
-    forensics ? `${plural(forensics, "supporting forensic record")} attached` : "no supporting forensic records attached",
-    f.where ? "a location was recorded" : "no location was recorded"];
-  const strength = collectors > 1 || forensics ? "Some supporting evidence" : "A single observation";
+  const points = [`noticed by ${plural(collectors, "check")}`,
+    forensics ? `${plural(forensics, "extra piece", "extra pieces")} of proof saved` : "no extra proof saved",
+    f.where ? "ARGUS-INSTINCT saved where it was" : "ARGUS-INSTINCT did not save where it was"];
+  const strength = collectors > 1 || forensics ? "More than one sign" : "Only one sign";
   return { level: "unscored", strength, points, collectors, forensics,
-    text: `ARGUS-INSTINCT does not score confidence for this kind of finding. Evidence on hand: ${points.join("; ")}. ` +
-      "Severity shows potential impact, not how likely it is to be real." };
+    text: `ARGUS-INSTINCT cannot say how sure it is about this kind of finding. What it has: ${points.join("; ")}. ` +
+      "How serious it is shows how much harm it could do, not how likely it is to be real." };
 }
 
 // The seven-part explanation, from real fields only. Unknowns are listed, not filled in.
 function explainFinding(f, others) {
   const gd = guideFor(f), st = stateOf(f), basis = evidenceBasis(f, others);
-  const facts = [`Collector: ${f.job}`, f.host ? `Host: ${f.host}` : null, f.where ? `Location: ${clip(f.where, 140)}` : null,
+  const facts = [`Found by: ${f.job}`, f.host ? `Host: ${f.host}` : null, f.where ? `Location: ${clip(f.where, 140)}` : null,
                  f.detail ? `Detail: ${clip(f.detail, 200)}` : null].filter(Boolean);
-  const unknown = ["Whether you installed it or expect it", "Whether it is doing anything harmful right now"];
-  if (!f.where) unknown.push("Where exactly it is (no location was recorded)");
+  const unknown = ["Whether you installed it yourself or expected it", "Whether it is doing anything harmful right now"];
+  if (!f.where) unknown.push("Exactly where it is (ARGUS-INSTINCT did not save a location)");
   return {
     what: whatWasFound(f), where: f.where ? clip(f.where, 300) : "", whereRaw: f.where ? redact(f.where) : "",
-    why: gd.why, whyFlagged: `${gd.means} ARGUS-INSTINCT flags this kind of item because ${gd.why.charAt(0).toLowerCase() + gd.why.slice(1)}`,
+    why: gd.why, whyFlagged: `${gd.means} ARGUS-INSTINCT points this out because ${gd.why.charAt(0).toLowerCase() + gd.why.slice(1)}`,
     facts, risks: [gd.why], benign: BENIGN[f.category] || DEFAULT_BENIGN, unknown,
     confidence: basis, severity: severityWord(f.severity), state: st, next: gd.next,
-    steps: ["Read what was observed and where.", "Ask the assistant to explain it, or compare it with software you know.",
-            gd.next, "Do not delete, disable or stop anything until you understand it."],
+    steps: ["Read what ARGUS-INSTINCT saw, and where.", "Ask the assistant to explain it, or think about whether it matches an app you know.",
+            gd.next, "Do not delete or turn off anything until you understand what it is."],
   };
 }
 
@@ -442,8 +442,8 @@ function attentionItems(s, limit = 5) {
   const rest = out.filter(i => !sev.includes(i));
   const mon = m.problems.slice().sort((a, b) => (a.coverage === "blind" ? 0 : 1) - (b.coverage === "blind" ? 0 : 1))
     .map(p => ({ kind: "monitor", problem: p, state: { key: p.state === "never_ran" || p.state === "stale" ? "unverified" : "monitoring",
-      label: p.state === "never_ran" || p.state === "stale" ? "Not verified" : "Monitoring problem",
-      note: "This is about ARGUS-INSTINCT's own checks. It does not mean your computer has been attacked." } }));
+      label: p.state === "never_ran" || p.state === "stale" ? "Not verified" : "A problem with ARGUS-INSTINCT",
+      note: "This is about ARGUS-INSTINCT itself, not your computer. It does not mean anything bad has happened." } }));
   const items = [...sev.slice(0, limit), ...mon.slice(0, 2), ...rest];
   return { items: items.slice(0, limit), total: out.length + mon.length, model: m };
 }
@@ -532,7 +532,7 @@ function approvalSpecForFix(f, choice) {
 // Derived from the same state the page already polls; nothing here talks to the server. A key is notified once:
 // an unchanged finding or monitoring problem never produces a second notification. The first time the page is
 // opened, what is already there is recorded as known, not announced.
-const NOTIF_TYPES = { finding: "Security finding", monitoring: "Monitoring problem", approval: "Needs your approval",
+const NOTIF_TYPES = { finding: "Security finding", monitoring: "A problem with ARGUS-INSTINCT", approval: "Needs your approval",
                       investigation: "Investigation update", result: "Action result", info: "Information" };
 const NOTIF_MAX = 100;
 function emptyNotifStore() { return { seen: {}, items: [], baseline: false }; }
@@ -2105,7 +2105,7 @@ function findingCardHTML(g, compact) {
   </article>`;
 }
 function monitorCardHTML(p) {
-  const st = (p.state === "never_ran" || p.state === "stale") ? { key: "unverified", label: "Not verified" } : { key: "monitoring", label: "Monitoring problem" };
+  const st = (p.state === "never_ran" || p.state === "stale") ? { key: "unverified", label: "Not verified" } : { key: "monitoring", label: "A problem with ARGUS-INSTINCT" };
   const ex = explainMonitor(p), sec = (t, b) => `<section class="fxs"><h4>${esc(t)}</h4>${b}</section>`;
   return `<article class="fx k-${st.key}">
     <div class="fxh"><span class="kind k-${st.key}">${ico(KIND_ICON[st.key])}${esc(st.label)}</span>
@@ -2618,19 +2618,20 @@ async function loadLicence() {
   $("lic-state").textContent = on ? `active until ${until}` : "not active";
   $("lic-state").className = "lic" + (on ? " on" : "");
   $("nav-lic").textContent = on ? "" : "!";
-  $("lic-buy").hidden = on;
-  $("lic-buy").disabled = !licence.can_purchase;
+  for (const id of ["lic-buy-month", "lic-buy-year"]) {
+    $(id).hidden = on;
+    $(id).disabled = !licence.can_purchase;
+  }
   if (!on && !licence.can_purchase) $("lic-msg").textContent = "Payments are not set up on this computer yet (see docs/BILLING.md).";
   const bar = $("licbar");
   bar.hidden = on;
-  $("licbar-text").textContent = licence.required
-    ? "ARGUS-INSTINCT needs an active licence ($79/year). The assistant and checks are locked until you subscribe."
-    : "No active licence. ARGUS-INSTINCT is $79/year.";
+  // A licence never gates protection (tests/test_licence_never_gates_core.py): no locked wording.
+  $("licbar-text").textContent = "No active licence. Protection works the same without one; ARGUS-INSTINCT is $15/month or $79/year.";
 }
-async function subscribe() {
+async function subscribe(plan) {
   const msg = $("lic-msg"); msg.textContent = "Opening secure checkout…";
   try {
-    const r = await postJSON("/api/billing/checkout", {});
+    const r = await postJSON("/api/billing/checkout", { plan: plan === "month" ? "month" : "year" });
     if (r.ok && r.data.url) { location.href = r.data.url; return; }
     msg.textContent = (r.data && r.data.error) || "Could not start checkout.";
   } catch (e) { msg.textContent = "Could not start checkout. Please try again."; }
@@ -2735,7 +2736,7 @@ const UI_CALLS = {
   morefindings: () => showMoreFindings(),
   protocol: el => answerProtocol(el),
   go: el => go(el.dataset.arg),
-  subscribe: () => subscribe(),
+  subscribe: el => subscribe(el.dataset.arg),
 };
 function uiDispatch(attr, ev) {
   // Every matching ancestor, innermost first: the order inline handlers ran in.

@@ -292,6 +292,71 @@ class BootIntegrityTests(unittest.TestCase):
         gap = [f for f in findings if "boot counter gap" in f["title"]]
         self.assertEqual([f["severity"] for f in gap], ["low"])
 
+    # Bug check 0x20001 as Windows recorded it on this host 2026-10-30.
+    KP41 = ["131073", "17", "3836698", "4103"]
+    WER = ["0x00020001 (0x0000000000000011, 0x00000000003a8b1a, 0x0000000000001007, "
+           "0xffffe80000c4af00)", "C:\\WINDOWS\\Minidump\\103026-21578-01.dmp",
+           "a42c40a3-0b69-48fb-a98a-c7b6423b03ef"]
+
+    def stops(self, events):
+        self.write_log(1, boot())
+        _obs, findings = self.run_audit(probe(events=events))
+        return [f for f in findings if f["title"] in bootintegrity.BUGCHECK_TITLE.values()]
+
+    def test_hypervisor_crash_is_one_finding_with_code_parameters_and_dump(self):
+        found = self.stops([
+            event(41, self.KP41, "Kernel-Power", "2026-10-30T18:16:51.2Z"),
+            event(1001, self.WER, "WER-SystemErrorReporting", "2026-10-30T18:17:06.9Z")])
+        self.assertEqual([(f["title"], f["severity"]) for f in found],
+                         [("the hypervisor under Windows crashed", "medium")])
+        detail = found[0]["detail"]
+        for part in ("1 stop error(s)", "0x20001 HYPERVISOR_ERROR", "0x0000000000000011",
+                     "103026-21578-01.dmp", "not a compromise verdict"):
+            self.assertIn(part, detail)
+
+    def test_repeated_hypervisor_crashes_escalate(self):
+        found = self.stops([
+            event(1001, self.WER, "WER-SystemErrorReporting", "2026-10-30T18:17:06Z"),
+            event(41, self.KP41, "Kernel-Power", "2026-10-28T09:00:00Z")])
+        self.assertEqual([f["severity"] for f in found], ["high"])
+        self.assertIn("2 stop error(s)", found[0]["detail"])   # far apart: never merged
+
+    def test_boot_loop_of_identical_crashes_is_never_folded(self):
+        # Crash 1 left no WER record; crash 2, minutes later, did. Two crashes.
+        found = self.stops([
+            event(41, self.KP41, "Kernel-Power", "2026-10-30T18:10:00Z"),
+            event(41, self.KP41, "Kernel-Power", "2026-10-30T18:13:00Z"),
+            event(1001, self.WER, "WER-SystemErrorReporting", "2026-10-30T18:13:15Z")])
+        self.assertIn("2 stop error(s)", found[0]["detail"])
+        self.assertEqual(len(bootintegrity.crashes([
+            event(41, self.KP41, "Kernel-Power", "2026-10-30T18:13:00Z"),
+            event(1001, self.WER, "WER-SystemErrorReporting", "2026-10-30T18:13:15Z"),
+            event(1001, self.WER, "WER-SystemErrorReporting", "2026-10-30T18:14:00Z")])), 2)
+
+    def test_kernel_integrity_violation_is_high_even_once(self):
+        found = self.stops([event(41, [str(0x109), "0"], "Kernel-Power")])
+        self.assertEqual([(f["title"], f["severity"]) for f in found],
+                         [("Windows stopped because protected kernel code or data changed", "high")])
+        self.assertIn("no dump recorded", found[0]["detail"])
+
+    def test_unknown_code_is_named_by_number_and_low(self):
+        found = self.stops([event(41, [str(0xABC)], "Kernel-Power")])
+        self.assertEqual([(f["severity"], "0xABC" in f["detail"]) for f in found], [("low", True)])
+
+    def test_malformed_zero_and_foreign_records_raise_no_stop_error(self):
+        found = self.stops([
+            event(41, ["0"], "Kernel-Power"), event(41, ["-5"], "Kernel-Power"),
+            event(41, ["garbage"], "Kernel-Power"), event(41, [], "Kernel-Power"),
+            event(41, [str(2 ** 40)], "Kernel-Power"),
+            event(1001, ["nonsense"], "WER-SystemErrorReporting"),
+            event(1001, ["0x00020001 (0x1, 0x2, 0x3, 0x4, 0x5)"], "WER-SystemErrorReporting"),
+            event(1001, self.WER, "Kernel-Boot")])
+        self.assertEqual(found, [])
+
+    def test_probe_reads_stop_error_records(self):
+        self.assertIn("Microsoft-Windows-WER-SystemErrorReporting'; ids=@(1001)",
+                      bootintegrity.PS_BOOT)
+
     def test_disabled_windows_is_visibility_loss(self):
         with collection.observe() as observation:
             findings = bootintegrity.audit(self.store, hosts=("wsl",))

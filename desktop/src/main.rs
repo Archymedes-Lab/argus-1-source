@@ -29,6 +29,8 @@ mod lifecycle;
 mod pairing;
 mod provision;
 mod pulse;
+#[allow(dead_code)] // rules only; capture arrives in a later slice
+mod screenguard;
 mod settings;
 mod startmenu;
 mod update;

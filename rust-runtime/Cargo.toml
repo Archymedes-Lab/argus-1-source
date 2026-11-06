@@ -3,7 +3,9 @@ name = "jarvis-runtime"
 version = "0.1.0"
 edition = "2021"
 description = "JARVIS Runtime prototype: event ingest, buffering, segment compression, integrity chains, resource metrics/governance. Python remains JARVIS Intelligence."
-license = "MIT"
+# Proprietary: the ARGUS-1 EULA in ../LICENSE.txt.
+license = "LicenseRef-Archymedes-Proprietary"
+publish = false
 
 [[bin]]
 name = "jarvis-runtime"

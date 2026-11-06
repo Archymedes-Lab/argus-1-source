@@ -23,7 +23,7 @@ import os
 import re
 import time
 
-from jarvis.core import collection
+from jarvis.core import bugcheck, collection
 from jarvis.core.finding import win_finding
 from jarvis.core.paths import load_win_script
 from jarvis.platform import host
@@ -53,6 +53,18 @@ DANGEROUS_OPTIONS = ("TESTSIGNING", "NOINTEGRITYCHECKS", "DISABLE_INTEGRITY_CHEC
 # Kernel-Boot event 27 boot types: only a cold boot runs the whole chain.
 COLD_BOOT = "0"
 FRESH_LOG_SLACK_S = 15 * 60
+# Kernel-Power 41 is written at the next boot, WER 1001 seconds later (15 s
+# on this host 2026-10-30). Each 1001 absorbs at most one 41: the nearest one
+# before it with the same code, inside this window, so a boot loop of
+# identical crashes is never folded into one.
+SAME_CRASH_S = 5 * 60
+BUGCHECK_TITLE = {
+    "integrity": "Windows stopped because protected kernel code or data changed",
+    "hypervisor": "the hypervisor under Windows crashed",
+    "security_check": "a kernel security check stopped Windows",
+    "hardware": "a hardware error stopped Windows",
+    "other": "Windows crashed with a stop error",
+}
 
 
 def _f(severity, title, detail, category="boot integrity"):
@@ -248,6 +260,70 @@ def _event_findings(events, boots_seen):
     return out
 
 
+def _epoch(iso):
+    try:
+        return calendar.timegm(time.strptime(str(iso)[:19], "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return None
+
+
+def crashes(events):
+    """Stop errors in the retained events, newest first: {time, code, params, dump}.
+
+    WER 1001 carries the parameters and dump; a Kernel-Power 41 with a nonzero
+    BugcheckCode counts on its own only when no 1001 records the same crash
+    (WER can fail to run). Malformed values are dropped, never read as clean.
+    """
+    out, wer = [], []
+    for e in events:
+        if e["id"] == 1001 and e["source"] == "WER-SystemErrorReporting":
+            parsed = bugcheck.from_wer((e["values"] + [""])[0])
+            if parsed:
+                dump = os.path.basename(str((e["values"] + ["", ""])[1]).replace("\\", "/"))
+                wer.append({"time": e["time"], "code": parsed[0], "params": parsed[1],
+                            "dump": dump})
+    out.extend(wer)
+    power = []
+    for e in events:
+        if e["id"] != 41 or e["source"] != "Kernel-Power":
+            continue
+        code = bugcheck.from_kernel_power((e["values"] + [""])[0])
+        at = _epoch(e["time"])
+        if code is not None and at is not None:
+            power.append({"time": e["time"], "at": at, "code": code})
+    for w in wer:
+        at = _epoch(w["time"])
+        near = [p for p in power if at is not None and p["code"] == w["code"]
+                and 0 <= at - p["at"] <= SAME_CRASH_S]
+        if near:
+            power.remove(max(near, key=lambda p: p["at"]))
+    out.extend({"time": p["time"], "code": p["code"], "params": [], "dump": ""} for p in power)
+    return sorted(out, key=lambda c: c["time"], reverse=True)
+
+
+def _bugcheck_findings(events):
+    by_class = {}
+    for crash in crashes(events):
+        by_class.setdefault(bugcheck.describe(crash["code"])[1], []).append(crash)
+    out = []
+    for kind, found in by_class.items():
+        severity, meaning = bugcheck.CLASSES[kind]
+        if kind in bugcheck.BELOW_KERNEL and len(found) > 1:
+            severity = "high"
+        last = found[0]
+        codes = sorted({bugcheck.label(c["code"]) for c in found})
+        params = f" parameters {', '.join(last['params'])};" if last["params"] else ""
+        dump = f" dump {last['dump']};" if last["dump"] else " no dump recorded;"
+        out.append(_f(severity, BUGCHECK_TITLE[kind],
+                      f"{len(found)} stop error(s): {'; '.join(codes)}. {meaning}. Most recent "
+                      f"recorded at the restart {last['time'][:19]}Z (the crash itself was "
+                      f"earlier);{params}{dump} a stop error is not a compromise verdict: "
+                      "only analysis of the dump names what faulted. Memory integrity "
+                      "and Credential Guard run on the hypervisor, so their state is "
+                      "checked separately"))
+    return out
+
+
 def _int(values):
     try:
         return int(values[0])
@@ -371,6 +447,7 @@ def audit(store, hosts=("wsl", "win"), directory=LOG_DIR):
     if data:
         findings.extend(_platform_findings(data))
         findings.extend(_event_findings(data["events"], seen))
+        findings.extend(_bugcheck_findings(data["events"]))
         # Freshness: Windows booted after the newest log was written.
         if cold and seen.get("last"):
             try:

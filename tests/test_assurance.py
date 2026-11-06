@@ -78,11 +78,13 @@ class AssuranceTests(unittest.TestCase):
         # Recomputed on the merged release tree (release/argus-instinct, 2026-11-03).
         # 2026-11-04: +1 unverified phone_approvals (scheduler housekeeping, no job;
         # local end to end only, never against the deployed relay or a real phone).
-        self.assertEqual(gaps['implementation_unverified'], 35)
+        # 2026-11-06: +1 unverified daemon_stop_attribution (restarts job, merged from 810217b).
+        # 2026-11-06: +1 unverified osquery_cross_view (osquery job, merged from 88f1fac).
+        self.assertEqual(gaps['implementation_unverified'], 37)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 24)   # +1 phone_approvals (2026-11-04)
-        self.assertEqual(gaps['containment_not_validated'], 60)   # +1 phone_approvals (2026-11-04)
-        self.assertEqual(gaps['validation_date_missing'], 60)   # +1 phone_approvals (2026-11-04)
+        self.assertEqual(gaps['containment_not_validated'], 62)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
+        self.assertEqual(gaps['validation_date_missing'], 62)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
         self.assertFalse(result['complete'])
 
     def test_bruteforce_deterrence_claims_no_live_ban(self):

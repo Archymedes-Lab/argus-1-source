@@ -118,7 +118,7 @@ class FindingExplanationTests(unittest.TestCase):
 
     def test_every_part_is_present_and_in_plain_language(self):
         e = self.ex(F())
-        self.assertEqual(e["what"], "ARGUS-INSTINCT found a scheduled task that runs a program automatically.")
+        self.assertEqual(e["what"], "ARGUS-INSTINCT found a program that is set to run by itself at certain times.")
         self.assertIn("System32", e["where"])
         for key in ("whyFlagged", "facts", "risks", "benign", "unknown", "confidence", "steps", "next"):
             self.assertTrue(e[key], key)
@@ -130,36 +130,36 @@ class FindingExplanationTests(unittest.TestCase):
         text = json.dumps(e).lower()
         for banned in ("is malware", "is malicious", "has been hacked", "you are infected"):
             self.assertNotIn(banned, text)
-        self.assertIn("Whether you installed it or expect it", e["unknown"])
+        self.assertIn("Whether you installed it yourself or expected it", e["unknown"])
         self.assertTrue(any("installed" in b or "maintenance" in b for b in e["benign"]))
 
     def test_a_missing_location_is_an_explicit_unknown_not_a_guess(self):
         e = self.ex(F(where=""))
         self.assertEqual(e["where"], "")
-        self.assertTrue(any("no location was recorded" in u for u in e["unknown"]))
+        self.assertTrue(any("did not save a location" in u for u in e["unknown"]))
 
     def test_confidence_is_never_a_number_and_is_kept_apart_from_severity(self):
         for sev in ("critical", "high", "medium", "low"):
             c = self.ex(F(severity=sev))["confidence"]
             self.assertEqual(c["level"], "unscored")
             self.assertNotRegex(c["text"], r"\d+\s*%")
-            self.assertIn("does not score confidence", c["text"])
-            self.assertIn("potential impact, not how likely", c["text"])
+            self.assertIn("cannot say how sure it is", c["text"])
+            self.assertIn("how much harm it could do, not how likely", c["text"])
 
     def test_evidence_basis_counts_only_real_corroboration(self):
         alone = self.ex(F())["confidence"]
-        self.assertEqual((alone["collectors"], alone["forensics"], alone["strength"]), (1, 0, "A single observation"))
+        self.assertEqual((alone["collectors"], alone["forensics"], alone["strength"]), (1, 0, "Only one sign"))
         other = F(job="intrusion")
         both = self.ex(F(), [F(), other])["confidence"]
         self.assertEqual(both["collectors"], 2)
-        self.assertEqual(both["strength"], "Some supporting evidence")
-        self.assertIn("reported by 2 collectors", both["text"])
+        self.assertEqual(both["strength"], "More than one sign")
+        self.assertIn("noticed by 2 checks", both["text"])
         self.assertEqual(self.ex(F(forensics=["a", "b"]))["confidence"]["forensics"], 2)
 
     def test_unknown_categories_fall_back_to_the_real_title_and_severity(self):
         e = self.ex(F(category="never-heard-of-it", title="odd thing", severity="medium"))
         self.assertIn("“odd thing”", e["what"])
-        self.assertEqual(e["severity"], "Worth reviewing")
+        self.assertEqual(e["severity"], "Worth a look")
         self.assertTrue(e["benign"])
 
     def test_secrets_never_reach_the_explanation(self):

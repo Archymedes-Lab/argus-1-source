@@ -148,12 +148,16 @@ def parse_brew(text):
         doc = json.loads(text or "{}")
     except ValueError:
         return None
+    if not isinstance(doc, dict):           # unreadable, not "no updates" (FZ-10)
+        return None
     out = []
     for kind in ("formulae", "casks"):
-        for f in doc.get(kind) or []:
+        rows = doc.get(kind) or []
+        for f in rows if isinstance(rows, list) else []:
             if not isinstance(f, dict) or not f.get("name"):
                 continue
             inst = f.get("installed_versions") or []
+            inst = inst if isinstance(inst, list) else [str(inst)]
             out.append(_item("brew", f["name"], f["name"], (inst[-1] if inst else ""),
                              str(f.get("current_version") or ""), scope="user",
                              pinned=bool(f.get("pinned"))))
@@ -176,10 +180,14 @@ def parse_winget(text, scope=""):
         if not line.strip():
             continue
         low = line.lower()
-        if re.match(r"^\d+ upgrades? available", low) or "require explicit targeting" in low \
-                or "cannot be determined" in low or low.startswith("the following"):
-            break
         tok = line.split()
+        # Footer phrases end the table only on a line that is not a row: a row ends in
+        # its source. An installed program names itself (user-scope ones included), and
+        # a display name such as "The following ..." used to drop every later row (FZ-08).
+        if tok and tok[-1].lower() not in WINGET_SOURCES and (
+                re.match(r"^\d+ upgrades? available", low) or "require explicit targeting" in low
+                or "cannot be determined" in low or low.startswith("the following")):
+            break
         if len(tok) < 4:
             continue
         if tok[-1].lower() in WINGET_SOURCES:

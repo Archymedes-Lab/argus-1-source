@@ -260,7 +260,9 @@ def status_findings(conf, timeout=PING_TIMEOUT):
             "detail": f"No answer from {where} after {seconds:.1f}s. The deterministic "
                       "assistant still answers operational questions; only the local-model "
                       "features (voice, open questions, plan notes) are affected. "
-                      "Start Ollama on the Windows host to restore them.",
+                      "Start Ollama on the Windows host to restore them, or, if it is not "
+                      "installed, run `jarvis model install`: it shows what it would "
+                      "download and asks before changing anything.",
             "where": where}
 
 

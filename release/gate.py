@@ -47,7 +47,10 @@ HERE = Path(__file__).resolve().parent
 POLICY = HERE / "policy.json"
 # Release metadata that sits next to the artifacts; checked, not unpacked.
 META = {"manifest.json", "SHA256SUMS", "SHA256SUMS.txt", "SHA256SUMS.sig", "allowed_signers",
-        "release-report.json", "release-report.md", "sbom.cdx.json"}
+        "release-report.json", "release-report.md", "sbom.cdx.json",
+        # The licence and third-party notices travel beside every artifact, including
+        # the Windows .exe, which cannot carry files of its own.
+        "LICENSE.txt", "THIRD-PARTY-NOTICES.txt"}
 SIGS = re.compile(r"^SHA256SUMS\.[A-Za-z0-9_-]+\.sig$")  # one signature per releaser
 MAX_MEMBER = 512 * 1024 * 1024
 CHUNK = 8 * 1024 * 1024
@@ -202,6 +205,13 @@ def _ar_members(data):
         header = data[pos:pos + 60]
         name = header[:16].decode().strip().rstrip("/")
         size = int(header[48:58].decode().strip())
+        # A negative size moved pos backwards and looped for ever (FZ-01). A
+        # repeated name was overwritten here while dpkg-deb unpacks the first
+        # one, so the gate checked a different data.tar than dpkg installs (FZ-02).
+        if size < 0 or pos + 60 + size > len(data):
+            raise ValueError(f"ar member {name!r}: size {size} is outside the archive")
+        if name in out:
+            raise ValueError(f"ar member {name!r} appears twice")
         out[name] = data[pos + 60:pos + 60 + size]
         pos += 60 + size + (size % 2)
     return out
@@ -380,6 +390,8 @@ def denied_path(path, policy):
     parts = path.split("/")
     if any(p in policy["deny_path_parts"] for p in parts[:-1]):
         return "denied folder"
+    if any(fnmatch.fnmatchcase(parts[-1], pat) for pat in policy.get("deny_copyleft_names", [])):
+        return "copyleft library in a proprietary release"
     return None
 
 

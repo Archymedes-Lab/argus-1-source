@@ -100,7 +100,8 @@ def verify(store, token):
     want = _digest(token)
     for r in _load(store):
         if r["id"] == m.group(1) and not r.get("revoked_at"):
-            if secrets.compare_digest(str(r.get("sha256") or ""), want):
+            # Bytes, not str: compare_digest raises TypeError on non-ASCII text (FZ-09).
+            if secrets.compare_digest(str(r.get("sha256") or "").encode("utf-8", "replace"), want.encode()):
                 return r["id"]
             return None
     return None

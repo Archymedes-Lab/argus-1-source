@@ -43,7 +43,7 @@
   {#if error}<div class="card p-4 text-copy-13 text-amber-900 selectable">{error}</div>{/if}
 
   {#if status && !status.crypto}
-    <div class="card p-4 text-copy-13 text-amber-900">{tr("Phone alerts need an encryption library that is missing here.")} <span class="selectable">{status.crypto_error}</span></div>
+    <div class="card p-4 text-copy-13 text-amber-900">{app.mode === "simple" ? tr("Phone alerts cannot be used on this computer yet, because a required part is missing.") : tr("Phone alerts need an encryption library that is missing here.")}{#if app.mode === "expert"} <span class="selectable">{status.crypto_error}</span>{/if}</div>
   {:else}
     <PhonePairing onchange={load} />
   {/if}

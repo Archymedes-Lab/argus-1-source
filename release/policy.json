@@ -1,10 +1,14 @@
 {
   "_comment": "Deny by default. Every published file must match exactly one artifact rule below, and every file inside it must match that rule's allow list. Changing this file changes what the public can download: it needs the same two-person review as a release.",
+  "_copyleft_comment": "ARGUS-1 is proprietary (LICENSE.txt). A library whose licence would extend to the whole program must never ship inside it: GNU Readline (GPL-3.0) was found bundled in v2026.10.30-2 on 2026-11-02. Matched against each member's file name.",
+  "deny_copyleft_names": ["libreadline.so*", "readline*.so", "libhistory.so*"],
   "artifacts": [
     {
       "name": "argus-server-linux-x86_64.tar.gz",
       "kind": "tar",
       "allow": [
+        "argus-server/LICENSE.txt",
+        "argus-server/THIRD-PARTY-NOTICES.txt",
         "argus-server/bin/argus-server",
         "argus-server/bin/*.so",
         "argus-server/bin/*.so.*",
@@ -41,6 +45,8 @@
       "name": "argus-server_*_amd64.deb",
       "kind": "deb",
       "allow": [
+        "usr/share/argus-server/LICENSE.txt",
+        "usr/share/argus-server/THIRD-PARTY-NOTICES.txt",
         "usr/share/argus-server/bin/argus-server",
         "usr/share/argus-server/bin/*.so",
         "usr/share/argus-server/bin/*.so.*",
@@ -84,6 +90,8 @@
       "name": "argus-desktop_*_amd64.deb",
       "kind": "deb",
       "allow": [
+        "usr/share/doc/argus-desktop/LICENSE.txt",
+        "usr/share/doc/argus-desktop/THIRD-PARTY-NOTICES.txt",
         "usr/bin/argus-desktop",
         "usr/share/applications/argus-desktop.desktop",
         "usr/share/icons/hicolor/*/apps/argus-desktop.png",

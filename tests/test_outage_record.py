@@ -231,6 +231,23 @@ class WindowsTests(Base):
         r.read_windows(runner=run)
         self.assertEqual(r.read_windows(runner=run), [])
 
+    def test_stop_error_names_the_bug_check_and_not_a_vm(self):
+        r = self.recorder()
+        rows = [{"log": "System", "id": 1001, "record": 97700, "time": "2026-10-30T18:17:06Z",
+                 "provider": "Microsoft-Windows-WER-SystemErrorReporting",
+                 "line": "The computer has rebooted from a bugcheck.  The bugcheck was: 0x00020001 "
+                         "(0x0000000000000011, 0x00000000003a8b1a, 0x0000000000001007, "
+                         "0xffffe80000c4af00). A dump was saved in: C:\\WINDOWS\\Minidump\\"
+                         "103026-21578-01.dmp. Report Id: a42c40a3-0b69-48fb-a98a-c7b6423b03ef."},
+                {"log": "System", "id": 1001, "record": 97701, "time": "2026-10-30T18:18:00Z",
+                 "provider": "Microsoft-Windows-WER-SystemErrorReporting", "line": "garbled"}]
+        recs = r.read_windows(runner=lambda s: {"rows": rows, "failed": []})
+        self.assertEqual([x["transition"] for x in recs], ["host_bugcheck", "host_bugcheck"])
+        self.assertIn("0x20001 HYPERVISOR_ERROR (0x0000000000000011", recs[0]["cause"])
+        self.assertNotIn("vm", recs[0])
+        self.assertEqual(recs[1]["cause"], "Windows restarted after a stop error")
+        self.assertLessEqual(len(recs[0]["cause"]), outages.MAX_CAUSE)
+
     def test_cursor_reaches_the_script(self):
         r = self.recorder()
         r.state["windows"] = {"System": 41}

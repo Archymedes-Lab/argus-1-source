@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 # Read-only, unelevated pre-OS evidence: firmware identity, Secure Boot and TPM
 # state, virtualization-based security, and what the boot manager logged about
-# recent boots. Nothing is changed and no UEFI variable is written or read
+# recent boots and stop errors. Nothing is changed and no UEFI variable is written or read
 # through a privileged path. Bounded: at most 40 events per event id.
 $o = @{ firmware=$null; secureBoot=@{}; tpm=@{}; deviceGuard=$null; events=@(); errors=@() }
 function Step($name, $block) {
@@ -42,7 +42,8 @@ $wanted = @(
   @{ p='Microsoft-Windows-Kernel-General'; ids=@(12) },
   @{ p='Microsoft-Windows-Kernel-Boot'; ids=@(18, 20, 25, 27, 32) },
   @{ p='Microsoft-Windows-Kernel-Power'; ids=@(41) },
-  @{ p='Microsoft-Windows-WHEA-Logger'; ids=@(1, 17, 18, 19, 20, 46, 47) }
+  @{ p='Microsoft-Windows-WHEA-Logger'; ids=@(1, 17, 18, 19, 20, 46, 47) },
+  @{ p='Microsoft-Windows-WER-SystemErrorReporting'; ids=@(1001) }
 )
 foreach ($w in $wanted) {
   foreach ($id in $w.ids) {

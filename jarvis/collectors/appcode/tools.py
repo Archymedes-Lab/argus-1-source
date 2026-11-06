@@ -11,6 +11,7 @@ import os
 import subprocess
 import time
 
+from jarvis.core import thirdparty
 from jarvis.core.finding import LOCAL_HOST
 
 TIMEOUT_S = 180
@@ -86,6 +87,14 @@ def run(projects, *, which, run=_run, semgrep_rules=None, stop=None):
     out = []
     bandit = which("bandit")
     semgrep = which("semgrep") if semgrep_rules and os.path.exists(semgrep_rules) else None
+    if semgrep and thirdparty.rules_licence_conflict(semgrep_rules):
+        # Semgrep's own rules are licensed for internal business use only and not
+        # "available to others as a service" (core/thirdparty.py): never in an audit.
+        semgrep = None
+        out.append(_f("low", "semgrep not run: its rules path carries the Semgrep Rules License",
+                      f"{semgrep_rules} holds rules licensed only for the licensee's internal "
+                      "business purposes, which excludes client audits. Point semgrep_rules at "
+                      "rules you wrote or that are licensed for this use.", "appcode"))
     if not (bandit or semgrep):
         return out
     for n, project in enumerate(projects):

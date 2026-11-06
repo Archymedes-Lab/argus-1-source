@@ -23,7 +23,7 @@ export const ROUTES: Record<string, (a: Args) => Route> = {
   score_coach: () => ({ method: "POST", path: "/api/score-coach", body: {} }),
   decide_fix: (a) => ({ method: "POST", path: `/api/fix/${a.decision}`, body: { id: a.id, reason: a.reason ?? "" } }),
   billing_status: () => ({ method: "GET", path: "/api/billing/status" }),
-  billing_checkout: () => ({ method: "POST", path: "/api/billing/checkout", body: {} }),
+  billing_checkout: (a) => ({ method: "POST", path: "/api/billing/checkout", body: { plan: a?.plan } }),
   billing_confirm: (a) => ({ method: "POST", path: "/api/billing/confirm", body: { session_id: a.sessionId } }),
   autopilot_status: () => ({ method: "GET", path: "/api/autopilot" }),
   autopilot_decide: (a) => ({ method: "POST", path: "/api/autopilot/decide", body: { key: a.key, choice: a.choice } }),
@@ -125,7 +125,7 @@ export type Reply = { ok?: boolean; message?: string; answer?: string; source?: 
 
 export type Protection = { available: boolean; level: "on" | "off" | "stale" | "unknown"; summary: string; signature_age_days?: number | null; last_quick_scan?: string };
 export type AppSettings = { notify_findings: boolean; notify_health: boolean; notify_outage: boolean };
-export type Billing = { licensed: boolean; expires: number | null; email: string | null; can_purchase: boolean; required: boolean; price_usd: number; interval: string };
+export type Billing = { licensed: boolean; expires: number | null; email: string | null; can_purchase: boolean; required: boolean; price_usd: number; interval: string; plans?: { month: number; year: number }; plan?: string | null };
 export type Case = { key: string; title: string; severity: string; count: number; what_happened: string; recommended: string; ai_note?: string; established: string[]; uncertain: string[] };
 export type Autopilot = { needs_me: Case[]; policy?: { auto_handle: boolean; min_age_days: number }; handled: { investigated: number } };
 
@@ -176,7 +176,7 @@ export const api = {
   setSettings: (settings: AppSettings) => call<AppSettings>("set_settings", { settings }),
   scoreCoach: () => call<Reply>("score_coach"),
   billingStatus: () => call<Billing>("billing_status"),
-  billingCheckout: () => call<Reply>("billing_checkout"),
+  billingCheckout: (plan: "month" | "year") => call<Reply>("billing_checkout", { plan }),
   billingConfirm: (sessionId: string) => call<Reply>("billing_confirm", { sessionId }),
   autopilot: () => call<Autopilot>("autopilot_status"),
   decideCase: (key: string, choice: "recognise" | "not_recognise" | "investigate_further") =>

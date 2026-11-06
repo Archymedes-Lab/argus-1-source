@@ -10,7 +10,7 @@
 import { DEV, DPK, NONCE, SKEW, signJws, signedMessage, verifyDevice } from "./cert";
 import { deriveKey, emailHash, keyHash, parseKey, randomId, sha256Hex } from "./keys";
 import { PACKS } from "./packs";
-import { idOf, periodEnd, stripe, StripeError } from "./stripe";
+import { idOf, periodEnd, stripe, StripeError, subscriptionQuantity } from "./stripe";
 import { type Activation, audit, CLAIM_BIND_WINDOW, CLAIM_TTL, type Deps, type Env, fail, iso, json, LEASE, type Licence,
          limited, OFFERS, payOrigin, pepper, RELEASE_WINDOW, RELEASES_ALLOWED, RENEW_BEFORE, sec, standing,
          SUBSCRIPTION_GRACE, support, constantTimeEqual } from "./env";
@@ -44,6 +44,7 @@ export async function issue(env: Env, deps: Deps, session: any): Promise<{ lic: 
   if (!offer) throw new Error("session has no known offer");
   const now = sec(deps);
   let expires: number;
+  let seats = offer.seats;
   const subId = idOf(session.subscription);
   if (offer.mode === "payment") {
     expires = (typeof session.created === "number" ? session.created : now) + (offer.days ?? 30) * 86400;
@@ -54,6 +55,7 @@ export async function issue(env: Env, deps: Deps, session: any): Promise<{ lic: 
     const end = periodEnd(sub);
     if (end == null) throw new Error("subscription has no period end");
     expires = end + SUBSCRIPTION_GRACE;
+    if (offer.fleet) seats = subscriptionQuantity(sub) ?? offer.seats;
   }
   const key = await deriveKey(pepper(env), session.id, 0, offer.kind);
   const ref = typeof session.metadata?.ref === "string" && REF.test(session.metadata.ref) ? session.metadata.ref : null;
@@ -62,7 +64,7 @@ export async function issue(env: Env, deps: Deps, session: any): Promise<{ lic: 
     `INSERT OR IGNORE INTO licences_v2 (id, key_hash, key_last4, key_gen, session_id, offer, plan, seats, status, lic_exp,
        email_hash, customer, subscription, payment_intent, livemode, ref, created_at, updated_at)
      VALUES (?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, await keyHash(pepper(env), key), key.slice(-4), session.id, offerId, offer.plan, offer.seats, expires, eh,
+    .bind(id, await keyHash(pepper(env), key), key.slice(-4), session.id, offerId, offer.plan, seats, expires, eh,
           idOf(session.customer), subId, idOf(session.payment_intent), session.livemode ? 1 : 0, ref, now, now).run();
   // A concurrent call may have won the insert; the session's row is the answer either way.
   const lic = await env.DB.prepare("SELECT * FROM licences_v2 WHERE session_id = ?").bind(session.id).first<Licence>();
@@ -72,6 +74,10 @@ export async function issue(env: Env, deps: Deps, session: any): Promise<{ lic: 
   return { lic, created };
 }
 
+/** "one server", "12 servers", "one computer". */
+export const covers = (plan: string, seats: number) =>
+  seats === 1 ? (plan === "server" ? "one server" : "one computer") : `${seats} ${plan === "server" ? "servers" : "computers"}`;
+
 export function keyEmail(env: Env, lic: Licence, key: string): { subject: string; text: string } {
   const offer = OFFERS[lic.offer];
   const pay = payOrigin(env);
@@ -80,10 +86,10 @@ export function keyEmail(env: Env, lic: Licence, key: string): { subject: string
     `Your licence key: ${key}`, "",
     "To activate it:",
     offer.plan === "server"
-      ? `  On the server, run:  argus licence activate ${key}`
+      ? `  On ${lic.seats > 1 ? `each server (up to ${lic.seats})` : "the server"}, run:  argus licence activate ${key}`
       : "  In Argus, open Licence, paste the key and choose Activate.",
     `  Or open this on the computer that runs Argus: argus://activate?key=${key}`, "",
-    `It covers ${offer.seats === 1 ? (offer.plan === "server" ? "one server" : "one computer") : `${offer.seats} machines`}. ` +
+    `It covers ${covers(offer.plan, lic.seats)}. ` +
       "Argus renews its licence by itself while the subscription is paid.", "",
     `Move it to another machine, see where it is active, or manage billing: ${pay}/manage`,
     `Lost this email? ${pay}/recover`,

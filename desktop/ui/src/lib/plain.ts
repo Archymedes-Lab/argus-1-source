@@ -1,5 +1,5 @@
 // Plain-language wording for the Simple mode. The category guidance is the
-// dashboard's own (lib/guide.json, generated from jarvis/web/static/dashboard.html),
+// dashboard's own (lib/guide.json, kept in step with the GUIDE in jarvis/web/static/dashboard.js),
 // so both interfaces tell the same story. General background, never a verdict.
 import guide from "./guide.json";
 import type { Finding } from "./model";
@@ -29,6 +29,8 @@ export interface Headline { tone: "ok" | "warn" | "bad" | "unknown"; title: stri
 export const PARTIAL = "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.";
 
 /** One calm sentence about the whole computer, from the numbers the daemon reports.
+ *  With nothing found it never says the computer is fine or safe: the absence of alerts
+ *  does not prove safety (honesty rule carried over from the Normal/Pro views, d50ac10).
  *  `title` and `body` are English keys with {n} placeholders; the view translates them. */
 export function headline(score: number | null | undefined, critical: number, high: number, notReporting: number): Headline {
   if (score === null || score === undefined) {
@@ -43,7 +45,7 @@ export function headline(score: number | null | undefined, critical: number, hig
     return { tone: "warn", title: "Nothing urgent, but a few things are worth a look",
       body: high === 1 ? "1 item could use your attention when you have a minute." : "{n} items could use your attention when you have a minute.", vars: { n: high }, partial };
   }
-  return { tone: "ok", title: "Your computer looks fine", body: "Nothing needs you right now.", vars: {}, partial };
+  return { tone: "ok", title: "No signs of trouble right now", body: "Nothing needs you right now.", vars: {}, partial };
 }
 
 /** A friendly opener for the time of day. */

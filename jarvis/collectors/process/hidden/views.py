@@ -1,65 +1,20 @@
 """Independent views of the process list, so one can be lied to and
 disagree with the others."""
 
-import ctypes
-import ctypes.util
 import errno
 import os
 import re
-import struct
 
 from jarvis.platform.linux import signal_zero
 
-from .common import DEFAULT_SWEEP, PROC, _read
+# Shared with the osquery cross-view (collectors may not import each other).
+from jarvis.platform.procfs import SYS_getdents64, is_thread, view_getdents, view_readdir  # noqa: F401
 
-SYS_getdents64 = {"x86_64": 217, "aarch64": 61, "armv7l": 217, "i686": 220}
+from .common import DEFAULT_SWEEP, PROC, _read
 
 _SCHED_ROW = re.compile(r"^\s*[RS>]?\s+(\S+)\s+(\d+)\s+\d")
 
 
-def view_readdir():
-    try:
-        return {int(e) for e in os.listdir(PROC) if e.isdigit()}
-    except OSError:
-        return set()
-
-
-def view_getdents():
-    """List /proc through the syscall directly, so an LD_PRELOAD hook on
-    readdir cannot filter the result."""
-    nr = SYS_getdents64.get(os.uname().machine)
-    if nr is None:
-        return None  # unknown ABI; caller treats None as "view unavailable"
-    try:
-        libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
-    except OSError:
-        return None
-
-    fd = os.open(PROC, os.O_RDONLY | os.O_DIRECTORY)
-    pids = set()
-    buf = ctypes.create_string_buffer(65536)
-    try:
-        while True:
-            n = libc.syscall(nr, ctypes.c_int(fd), buf, ctypes.c_uint(len(buf)))
-            if n <= 0:
-                break
-            off = 0
-            raw = buf.raw
-            while off < n:
-                # struct linux_dirent64 { u64 d_ino; s64 d_off; u16 d_reclen;
-                #                         u8 d_type; char d_name[]; }
-                reclen = struct.unpack_from("H", raw, off + 16)[0]
-                if reclen == 0:
-                    break
-                name = raw[off + 19 : off + reclen].split(b"\x00", 1)[0]
-                if name.isdigit():
-                    pids.add(int(name))
-                off += reclen
-    except OSError:
-        return None
-    finally:
-        os.close(fd)
-    return pids
 
 
 def view_stat_sweep(limit=DEFAULT_SWEEP):
@@ -189,15 +144,3 @@ def _alive(pid):
         return False
 
 
-def is_thread(pid):
-    """/proc/<tid> stats successfully for every thread, but readdir only lists
-    thread-group leaders. A thread showing up in the stat sweep and not in the
-    listing is how Linux is supposed to work, not something hiding."""
-    try:
-        with open(f"{PROC}/{pid}/status", errors="replace") as fh:
-            for line in fh:
-                if line.startswith("Tgid:"):
-                    return int(line.split()[1]) != pid
-    except OSError:
-        pass
-    return False

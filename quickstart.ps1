@@ -92,7 +92,7 @@ $active = (& wsl.exe -d $Distro --exec systemctl is-active jarvis.service 2>$nul
 Say "jarvis.service: $active"
 if ($active -ne 'active') {
     Say "asking systemd to start it"
-    & wsl.exe -d $Distro --exec bash -lc 'systemctl restart jarvis.service 2>/dev/null || sudo -n systemctl restart jarvis.service' | Out-Null
+    & wsl.exe -d $Distro --exec bash -lc 'if [ -x /usr/local/sbin/jarvis-restart-gate ]; then exec sudo -n /usr/local/sbin/jarvis-restart-gate --actor quickstart --reason unit-down; fi; systemctl restart jarvis.service 2>/dev/null || sudo -n systemctl restart jarvis.service' | Out-Null
 }
 
 Write-Host "`n2/3  Wake watchdog (scheduled task)" -ForegroundColor Cyan

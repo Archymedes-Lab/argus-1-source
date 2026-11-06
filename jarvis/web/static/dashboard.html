@@ -297,7 +297,7 @@ body[data-detail="simple"] .adv { display: none; }
     <a href="#network" data-view="network" title="Connections, traffic and location"><svg class="ico" aria-hidden="true"><use href="#i-network"/></svg><span>Network</span></a>
     <a href="#monitoring" data-view="monitoring" title="Is ARGUS-INSTINCT's own checking working"><svg class="ico" aria-hidden="true"><use href="#i-monitoring"/></svg><span>Monitoring</span><span class="n" id="nav-mon"></span></a>
     <a href="#assistant" data-view="assistant" title="Ask questions in plain language"><svg class="ico" aria-hidden="true"><use href="#i-assistant"/></svg><span>Assistant</span></a>
-    <a href="#pricing" data-view="pricing" title="ARGUS-INSTINCT yearly licence, $79 a year"><svg class="ico" aria-hidden="true"><use href="#i-security"/></svg><span>Pricing</span><span class="n" id="nav-lic"></span></a>
+    <a href="#pricing" data-view="pricing" title="ARGUS-INSTINCT licence, $15 a month or $79 a year"><svg class="ico" aria-hidden="true"><use href="#i-security"/></svg><span>Pricing</span><span class="n" id="nav-lic"></span></a>
     <a href="#settings" data-view="settings" title="Setup, privacy and data on this computer"><svg class="ico" aria-hidden="true"><use href="#i-settings"/></svg><span>Settings</span></a>
   </nav>
   <div class="side-group">Also</div>
@@ -560,11 +560,23 @@ body[data-detail="simple"] .adv { display: none; }
   </details>
 
   <div class="pagehead" data-views="pricing"><h1 id="h-pricing" tabindex="-1">Pricing</h1>
-    <p>One plan. Your data stays on this computer; the licence only unlocks ARGUS-INSTINCT.</p></div>
+    <p>Pay monthly or save with a year. Your data stays on this computer, and protection works the same with or without a licence.</p></div>
   <section class="card" data-views="pricing" aria-labelledby="pr-h"><h2 id="pr-h">ARGUS-INSTINCT licence <span class="lic" id="lic-state">checking…</span></h2>
     <div class="plans">
+      <div class="plan"><h3>ARGUS-INSTINCT Monthly</h3>
+        <div class="price">$15 <small>per month</small></div>
+        <ul>
+          <li>Continuous monitoring of this computer</li>
+          <li>Plain-language assistant, with local AI</li>
+          <li>Investigate any finding with one click</li>
+          <li>Approvals, reports and daily briefing</li>
+          <li>Cancel any time; renews monthly</li>
+        </ul>
+        <button id="lic-buy-month" data-click="subscribe" data-arg="month">Subscribe — $15/month</button>
+      </div>
       <div class="plan feat"><h3>ARGUS-INSTINCT Yearly</h3>
         <div class="price">$79 <small>per year</small></div>
+        <p class="faint">Best value: save $101 a year compared with paying monthly.</p>
         <ul>
           <li>Continuous monitoring of this computer</li>
           <li>Plain-language assistant, with local AI</li>
@@ -572,7 +584,7 @@ body[data-detail="simple"] .adv { display: none; }
           <li>Approvals, reports and daily briefing</li>
           <li>Cancel any time; renews yearly</li>
         </ul>
-        <button id="lic-buy" data-click="subscribe">Subscribe — $79/year</button>
+        <button id="lic-buy-year" data-click="subscribe" data-arg="year">Subscribe — $79/year</button>
         <p id="lic-msg" role="status" aria-live="polite"></p>
       </div>
     </div>
