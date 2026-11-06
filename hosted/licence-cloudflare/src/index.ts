@@ -11,7 +11,7 @@
 // - Certificates are Ed25519 JWS (src/cert.ts); the app verifies them offline with embedded public keys.
 import { contentRoute, issue, keyEmail, keyOf, bindClaim, CLAIM_ID, licenceRoute, type Claim } from "./licence";
 import { manage, manageHome, recover, link, thanks } from "./manage";
-import { idOf, invoiceMetadata, invoicePeriodEnd, invoiceSubscription, stripe, StripeError, verifyStripeSignature } from "./stripe";
+import { idOf, invoiceMetadata, invoicePeriodEnd, invoiceSubscription, stripe, StripeError, subscriptionQuantity, verifyStripeSignature } from "./stripe";
 import { sha256Hex } from "./keys";
 import { audit, type Deps, type Env, fail, json, limited, managed, type Offer, OFFERS, payOrigin, pricingUrl, REVEAL_WINDOW,
          sec, SECURITY_HEADERS, siteOrigin, SUBSCRIPTION_GRACE, type Licence } from "./env";
@@ -72,7 +72,16 @@ export function checkoutForm(env: Env, offerId: string, offer: Offer, price: str
   const f = new URLSearchParams();
   f.set("mode", offer.mode);
   f.set("line_items[0][price]", price);
-  f.set("line_items[0][quantity]", "1");
+  // A fleet offer opens with ?servers=N or ?computers=N (default 1) and the buyer can change it on the Stripe page.
+  const asked = Number.parseInt(url.searchParams.get("servers") || url.searchParams.get("computers") || "1", 10);
+  const qty = offer.fleet && Number.isFinite(asked) ? Math.min(Math.max(asked, 1), offer.fleet.max) : 1;
+  f.set("line_items[0][quantity]", String(qty));
+  if (offer.fleet) {
+    f.set("line_items[0][adjustable_quantity][enabled]", "true");
+    f.set("line_items[0][adjustable_quantity][minimum]", "1");
+    f.set("line_items[0][adjustable_quantity][maximum]", String(offer.fleet.max));
+  }
+  f.set("allow_promotion_codes", "true");
   if (managed(env)) f.set("managed_payments[enabled]", "true");
   else f.set("automatic_tax[enabled]", "true");
   if (ref && REF.test(ref)) f.set("client_reference_id", ref);
@@ -225,6 +234,18 @@ async function handleEvent(env: Env, deps: Deps, type: string, obj: any): Promis
         .bind(end + SUBSCRIPTION_GRACE, now, lic.id).run();
       await audit(env, deps, lic.id, "extended", "stripe");
       return "extended";
+    }
+    case "customer.subscription.updated": {
+      // A fleet licence follows the subscription quantity (servers added or removed in the billing portal).
+      const subId = idOf(obj);
+      const lic = subId ? await env.DB.prepare("SELECT id, offer, seats FROM licences_v2 WHERE subscription = ?").bind(subId).first<{ id: string; offer: string; seats: number }>() : null;
+      if (!lic) return ours(obj.metadata) ? "no licence yet" : "ignored";
+      if (!OFFERS[lic.offer]?.fleet) return "not a fleet";
+      const qty = subscriptionQuantity(obj);
+      if (qty == null || qty === lic.seats) return "unchanged";
+      await env.DB.prepare("UPDATE licences_v2 SET seats = ?, updated_at = ? WHERE id = ?").bind(qty, now, lic.id).run();
+      await audit(env, deps, lic.id, `seats ${lic.seats}->${qty}`, "stripe");
+      return "seats";
     }
     case "customer.subscription.deleted": {
       const subId = idOf(obj);
