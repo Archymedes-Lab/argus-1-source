@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "Через {n} дн. без изменений пункты, которым нужно лишь ваше согласие, принимаются и записываются в журнал. Критические — никогда.",
  "Checks one public file. Sends nothing, installs nothing.": "Проверяет один публичный файл. Ничего не отправляет и не устанавливает.",
  "Public news reports. A zone is a cluster of reports, not proof.": "Публичные новости. Зона — это скопление сообщений, а не доказательство.",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Оплата через Stripe. Данные карты никогда не попадают в ARGUS-INSTINCT."
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Оплата через Stripe. Данные карты никогда не попадают в ARGUS-INSTINCT.",
+ "Details": "Подробности",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "Техники атак, которые ARGUS-INSTINCT пока не видит",
+ "Attacker techniques that do not apply here": "Техники атак, неприменимые здесь",
+ "Gaps in what is watched": "Пробелы в наблюдении",
+ "Known flaws in your code's dependencies": "Известные уязвимости в зависимостях вашего кода",
+ "Container settings and versions": "Настройки и версии контейнеров",
+ "Earlier items that came back or are still open": "Прежние пункты, которые вернулись или ещё открыты",
+ "Programs that ran at startup": "Программы, запущенные при старте",
+ "Passwords and keys stored in plain text": "Пароли и ключи, хранящиеся открытым текстом",
+ "Possible tampering": "Возможное вмешательство",
+ "Things ARGUS-INSTINCT could not fully see": "То, что ARGUS-INSTINCT не смог увидеть полностью",
+ "Activity on the Linux side": "Активность на стороне Linux",
+ "Programs launched from startup places": "Программы, запущенные из мест автозагрузки",
+ "Programs named like known malware": "Программы с именами известного вредоносного ПО",
+ "Connections to listed attacker addresses": "Подключения к адресам из списков атакующих",
+ "Passwords and keys in plain text, already reported": "Пароли и ключи открытым текстом, о которых уже сообщалось"
 }

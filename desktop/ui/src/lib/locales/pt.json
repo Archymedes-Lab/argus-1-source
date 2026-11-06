@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "Após {n} dias sem mudanças, itens que só precisam do seu OK são aceitos e registrados. Nunca os críticos.",
  "Checks one public file. Sends nothing, installs nothing.": "Consulta um único arquivo público. Não envia nada, não instala nada.",
  "Public news reports. A zone is a cluster of reports, not proof.": "Notícias públicas. Uma zona é um agrupamento de notícias, não uma prova.",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Pagamento pela Stripe. Os dados do cartão nunca chegam ao ARGUS-INSTINCT."
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Pagamento pela Stripe. Os dados do cartão nunca chegam ao ARGUS-INSTINCT.",
+ "Details": "Detalhes",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "Técnicas de ataque que o ARGUS-INSTINCT ainda não vê",
+ "Attacker techniques that do not apply here": "Técnicas de ataque que não se aplicam aqui",
+ "Gaps in what is watched": "Lacunas na vigilância",
+ "Known flaws in your code's dependencies": "Falhas conhecidas nas dependências do seu código",
+ "Container settings and versions": "Configurações e versões de contêineres",
+ "Earlier items that came back or are still open": "Itens anteriores que voltaram ou continuam abertos",
+ "Programs that ran at startup": "Programas que rodaram na inicialização",
+ "Passwords and keys stored in plain text": "Senhas e chaves guardadas em texto simples",
+ "Possible tampering": "Possível adulteração",
+ "Things ARGUS-INSTINCT could not fully see": "Coisas que o ARGUS-INSTINCT não conseguiu ver por completo",
+ "Activity on the Linux side": "Atividade no lado Linux",
+ "Programs launched from startup places": "Programas iniciados a partir de locais de inicialização",
+ "Programs named like known malware": "Programas com nome de malware conhecido",
+ "Connections to listed attacker addresses": "Conexões a endereços de atacantes listados",
+ "Passwords and keys in plain text, already reported": "Senhas e chaves em texto simples, já relatadas"
 }

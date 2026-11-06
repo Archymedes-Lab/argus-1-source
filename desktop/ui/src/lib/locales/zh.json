@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "连续 {n} 天未变化、只需您确认的项目会被接受并记录。严重项目除外。",
  "Checks one public file. Sends nothing, installs nothing.": "只读取一个公开文件。不发送任何内容，也不安装任何东西。",
  "Public news reports. A zone is a cluster of reports, not proof.": "公开新闻报道。区域只是报道的聚集，并非证据。",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "通过 Stripe 付款。银行卡信息永远不会到达 ARGUS-INSTINCT。"
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "通过 Stripe 付款。银行卡信息永远不会到达 ARGUS-INSTINCT。",
+ "Details": "详情",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "ARGUS-INSTINCT 暂时看不到的攻击手法",
+ "Attacker techniques that do not apply here": "不适用于此处的攻击手法",
+ "Gaps in what is watched": "监控中的空白",
+ "Known flaws in your code's dependencies": "代码依赖中的已知漏洞",
+ "Container settings and versions": "容器设置与版本",
+ "Earlier items that came back or are still open": "再次出现或仍未解决的旧项目",
+ "Programs that ran at startup": "开机时运行的程序",
+ "Passwords and keys stored in plain text": "以明文保存的密码和密钥",
+ "Possible tampering": "可能的篡改",
+ "Things ARGUS-INSTINCT could not fully see": "ARGUS-INSTINCT 未能完全看清的内容",
+ "Activity on the Linux side": "Linux 端的活动",
+ "Programs launched from startup places": "从启动位置启动的程序",
+ "Programs named like known malware": "与已知恶意软件同名的程序",
+ "Connections to listed attacker addresses": "连接到列表中的攻击者地址",
+ "Passwords and keys in plain text, already reported": "已报告过的明文密码和密钥"
 }

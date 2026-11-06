@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "بعد {n} أيام دون تغيير، تُقبل العناصر التي تحتاج موافقتك فقط وتُسجَّل. لا تشمل الحرجة أبدًا.",
  "Checks one public file. Sends nothing, installs nothing.": "يتحقق من ملف عام واحد فقط. لا يرسل شيئًا ولا يثبّت شيئًا.",
  "Public news reports. A zone is a cluster of reports, not proof.": "تقارير إخبارية عامة. المنطقة تجمّع للتقارير وليست دليلًا.",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "الدفع عبر Stripe. لا تصل بيانات البطاقة إلى ARGUS-INSTINCT أبدًا."
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "الدفع عبر Stripe. لا تصل بيانات البطاقة إلى ARGUS-INSTINCT أبدًا.",
+ "Details": "التفاصيل",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "أساليب هجوم لا يراها ARGUS-INSTINCT بعد",
+ "Attacker techniques that do not apply here": "أساليب هجوم لا تنطبق هنا",
+ "Gaps in what is watched": "ثغرات في المراقبة",
+ "Known flaws in your code's dependencies": "ثغرات معروفة في اعتماديات شيفرتك",
+ "Container settings and versions": "إعدادات الحاويات وإصداراتها",
+ "Earlier items that came back or are still open": "عناصر سابقة عادت أو ما زالت مفتوحة",
+ "Programs that ran at startup": "برامج عملت عند بدء التشغيل",
+ "Passwords and keys stored in plain text": "كلمات مرور ومفاتيح محفوظة كنص صريح",
+ "Possible tampering": "عبث محتمل",
+ "Things ARGUS-INSTINCT could not fully see": "أشياء لم يتمكن ARGUS-INSTINCT من رؤيتها بالكامل",
+ "Activity on the Linux side": "النشاط على جانب Linux",
+ "Programs launched from startup places": "برامج شُغّلت من مواضع بدء التشغيل",
+ "Programs named like known malware": "برامج تحمل أسماء برمجيات خبيثة معروفة",
+ "Connections to listed attacker addresses": "اتصالات بعناوين مهاجمين مدرجة",
+ "Passwords and keys in plain text, already reported": "كلمات مرور ومفاتيح كنص صريح، أُبلغ عنها سابقًا"
 }

@@ -24,6 +24,7 @@ const FALLBACK_MS = 60000;     // if the stream is quiet, still refresh once a m
 export const app = $state({
   data: null as any,
   coverage: null as Coverage | null,   // shared by the sidebar and the Coverage view
+  casesWaiting: 0,                     // grouped cases that need a decision (sidebar badge)
   loading: false,
   error: "",
   daemon: "connecting" as "connecting" | "live" | "down",
@@ -95,6 +96,14 @@ export function applyTheme() {
 
 /** The shell's own account of the daemon: running, degraded, stopped, not installed. */
 export async function refreshStatus() {
+  if (!inApp) {
+    // Served by the daemon in a browser there is no shell to ask: the last state
+    // call is the status. Without this the footer said "Starting" forever.
+    app.status = app.daemon === "live"
+      ? { phase: "live", message: "Watching", detail: "" }
+      : { phase: "stopped", message: "Not answering", detail: app.error };
+    return;
+  }
   try { app.status = await api.status(); } catch { /* the shell is the source; keep the last */ }
 }
 
@@ -125,6 +134,8 @@ export async function refreshCoverage() {
   coverageInFlight = true;
   try { app.coverage = await api.coverage(); }
   catch { /* keep the last map; the view says when it cannot read */ }
+  try { app.casesWaiting = (await api.autopilot()).needs_me?.length ?? 0; }
+  catch { /* older daemons have no cases */ }
   finally { coverageInFlight = false; }
 }
 

@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "Nach {n} unveränderten Tagen werden Einträge, die nur Ihre Zustimmung brauchen, akzeptiert und protokolliert. Nie kritische.",
  "Checks one public file. Sends nothing, installs nothing.": "Prüft eine öffentliche Datei. Sendet nichts, installiert nichts.",
  "Public news reports. A zone is a cluster of reports, not proof.": "Öffentliche Nachrichtenmeldungen. Eine Zone ist eine Häufung von Meldungen, kein Beweis.",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Zahlung über Stripe. Kartendaten erreichen ARGUS-INSTINCT nie."
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Zahlung über Stripe. Kartendaten erreichen ARGUS-INSTINCT nie.",
+ "Details": "Details",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "Angriffstechniken, die ARGUS-INSTINCT noch nicht sieht",
+ "Attacker techniques that do not apply here": "Angriffstechniken, die hier nicht zutreffen",
+ "Gaps in what is watched": "Lücken in der Überwachung",
+ "Known flaws in your code's dependencies": "Bekannte Schwachstellen in den Abhängigkeiten Ihres Codes",
+ "Container settings and versions": "Container-Einstellungen und -Versionen",
+ "Earlier items that came back or are still open": "Frühere Einträge, die wiederkamen oder noch offen sind",
+ "Programs that ran at startup": "Programme, die beim Start liefen",
+ "Passwords and keys stored in plain text": "Passwörter und Schlüssel im Klartext gespeichert",
+ "Possible tampering": "Mögliche Manipulation",
+ "Things ARGUS-INSTINCT could not fully see": "Dinge, die ARGUS-INSTINCT nicht ganz sehen konnte",
+ "Activity on the Linux side": "Aktivität auf der Linux-Seite",
+ "Programs launched from startup places": "Aus Autostart-Orten gestartete Programme",
+ "Programs named like known malware": "Programme mit Namen bekannter Schadsoftware",
+ "Connections to listed attacker addresses": "Verbindungen zu gelisteten Angreiferadressen",
+ "Passwords and keys in plain text, already reported": "Passwörter und Schlüssel im Klartext, bereits gemeldet"
 }

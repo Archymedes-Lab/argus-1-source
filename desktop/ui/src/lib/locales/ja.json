@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "{n} 日間変化がなく、確認だけが必要な項目は承認され記録されます。重大な項目は対象外です。",
  "Checks one public file. Sends nothing, installs nothing.": "公開ファイルを 1 つ確認するだけです。何も送信せず、何もインストールしません。",
  "Public news reports. A zone is a cluster of reports, not proof.": "公開ニュース報道です。ゾーンは報道が集中している場所で、証拠ではありません。",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "お支払いは Stripe で行われます。カード情報が ARGUS-INSTINCT に届くことはありません。"
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "お支払いは Stripe で行われます。カード情報が ARGUS-INSTINCT に届くことはありません。",
+ "Details": "詳細",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "ARGUS-INSTINCT がまだ見えない攻撃手法",
+ "Attacker techniques that do not apply here": "ここには当てはまらない攻撃手法",
+ "Gaps in what is watched": "監視の抜け",
+ "Known flaws in your code's dependencies": "コードの依存関係にある既知の欠陥",
+ "Container settings and versions": "コンテナの設定とバージョン",
+ "Earlier items that came back or are still open": "再発した、またはまだ未解決の以前の項目",
+ "Programs that ran at startup": "起動時に実行されたプログラム",
+ "Passwords and keys stored in plain text": "平文で保存されたパスワードとキー",
+ "Possible tampering": "改ざんの可能性",
+ "Things ARGUS-INSTINCT could not fully see": "ARGUS-INSTINCT が完全には見られなかったもの",
+ "Activity on the Linux side": "Linux 側の活動",
+ "Programs launched from startup places": "スタートアップの場所から起動したプログラム",
+ "Programs named like known malware": "既知のマルウェアと同じ名前のプログラム",
+ "Connections to listed attacker addresses": "リストにある攻撃者アドレスへの接続",
+ "Passwords and keys in plain text, already reported": "報告済みの平文のパスワードとキー"
 }

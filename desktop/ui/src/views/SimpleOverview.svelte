@@ -88,7 +88,7 @@
           {#each top as f, i}
             <button class="card row-click flex w-full items-start gap-4 p-4 text-left transition-transform hover:-translate-y-0.5 anim-rise"
                     style:animation-delay="{i * 60}ms"
-                    onclick={() => go("findings", { query: f.title, severity: null })}>
+                    onclick={() => { go("findings", { query: "", severity: null }); app.selected = f; }}>
               <Pill severity={f.severity} />
               <span class="min-w-0 flex-1">
                 {#if hasGuide(f)}

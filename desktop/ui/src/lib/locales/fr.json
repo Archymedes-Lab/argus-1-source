@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "Après {n} jours sans changement, les éléments qui n'attendent que votre accord sont acceptés et consignés. Jamais les critiques.",
  "Checks one public file. Sends nothing, installs nothing.": "Consulte un seul fichier public. N'envoie rien, n'installe rien.",
  "Public news reports. A zone is a cluster of reports, not proof.": "Articles d'actualité publics. Une zone est un regroupement d'articles, pas une preuve.",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Paiement par Stripe. Les données de carte n'arrivent jamais à ARGUS-INSTINCT."
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Paiement par Stripe. Les données de carte n'arrivent jamais à ARGUS-INSTINCT.",
+ "Details": "Détails",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "Techniques d'attaque qu'ARGUS-INSTINCT ne voit pas encore",
+ "Attacker techniques that do not apply here": "Techniques d'attaque qui ne s'appliquent pas ici",
+ "Gaps in what is watched": "Lacunes dans la surveillance",
+ "Known flaws in your code's dependencies": "Failles connues dans les dépendances de votre code",
+ "Container settings and versions": "Réglages et versions des conteneurs",
+ "Earlier items that came back or are still open": "Éléments antérieurs revenus ou toujours ouverts",
+ "Programs that ran at startup": "Programmes lancés au démarrage",
+ "Passwords and keys stored in plain text": "Mots de passe et clés stockés en clair",
+ "Possible tampering": "Altération possible",
+ "Things ARGUS-INSTINCT could not fully see": "Éléments qu'ARGUS-INSTINCT n'a pas pu voir entièrement",
+ "Activity on the Linux side": "Activité côté Linux",
+ "Programs launched from startup places": "Programmes lancés depuis les emplacements de démarrage",
+ "Programs named like known malware": "Programmes nommés comme des logiciels malveillants connus",
+ "Connections to listed attacker addresses": "Connexions vers des adresses d'attaquants répertoriées",
+ "Passwords and keys in plain text, already reported": "Mots de passe et clés en clair, déjà signalés"
 }

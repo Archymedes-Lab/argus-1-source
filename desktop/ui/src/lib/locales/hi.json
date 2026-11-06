@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "{n} दिन तक न बदलने वाले, केवल आपकी मंज़ूरी चाहने वाले आइटम स्वीकार और दर्ज किए जाते हैं। गंभीर कभी नहीं।",
  "Checks one public file. Sends nothing, installs nothing.": "केवल एक सार्वजनिक फ़ाइल जाँचता है। न कुछ भेजता है, न कुछ इंस्टॉल करता है।",
  "Public news reports. A zone is a cluster of reports, not proof.": "सार्वजनिक समाचार रिपोर्टें। क्षेत्र रिपोर्टों का समूह है, प्रमाण नहीं।",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "भुगतान Stripe से होता है। कार्ड का विवरण कभी ARGUS-INSTINCT तक नहीं पहुँचता।"
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "भुगतान Stripe से होता है। कार्ड का विवरण कभी ARGUS-INSTINCT तक नहीं पहुँचता।",
+ "Details": "विवरण",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "हमले की तकनीकें जिन्हें ARGUS-INSTINCT अभी नहीं देख सकता",
+ "Attacker techniques that do not apply here": "हमले की तकनीकें जो यहाँ लागू नहीं होतीं",
+ "Gaps in what is watched": "निगरानी में कमियाँ",
+ "Known flaws in your code's dependencies": "आपके कोड की निर्भरताओं में ज्ञात खामियाँ",
+ "Container settings and versions": "कंटेनर सेटिंग्स और संस्करण",
+ "Earlier items that came back or are still open": "पुराने आइटम जो लौट आए या अभी खुले हैं",
+ "Programs that ran at startup": "स्टार्टअप पर चले प्रोग्राम",
+ "Passwords and keys stored in plain text": "सादे पाठ में रखे पासवर्ड और कुंजियाँ",
+ "Possible tampering": "संभावित छेड़छाड़",
+ "Things ARGUS-INSTINCT could not fully see": "चीज़ें जिन्हें ARGUS-INSTINCT पूरी तरह नहीं देख सका",
+ "Activity on the Linux side": "Linux की ओर की गतिविधि",
+ "Programs launched from startup places": "स्टार्टअप स्थानों से शुरू हुए प्रोग्राम",
+ "Programs named like known malware": "ज्ञात मैलवेयर जैसे नाम वाले प्रोग्राम",
+ "Connections to listed attacker addresses": "सूचीबद्ध हमलावर पतों से कनेक्शन",
+ "Passwords and keys in plain text, already reported": "सादे पाठ में पासवर्ड और कुंजियाँ, पहले ही बताई गईं"
 }

@@ -10,7 +10,8 @@
 
   const counts = $derived(app.data ? problemCounts(app.data.findings ?? []) : null);
   const coll = $derived(app.data ? collectorSummary(app.data.jobs ?? []) : null);
-  const review = $derived(app.data ? groupQuestions(app.data.questions ?? []).length + (app.data.fix ?? []).length : 0);
+  // Same count as the home page: questions, fix proposals and grouped cases.
+  const review = $derived(app.data ? groupQuestions(app.data.questions ?? []).length + (app.data.fix ?? []).length + app.casesWaiting : 0);
   const cov = $derived(summarize(app.coverage));
   const simple = $derived(app.mode === "simple");
   const LEVEL_NAME = $derived((simple

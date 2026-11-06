@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "{n}일 동안 변화가 없고 확인만 필요한 항목은 수락되고 기록됩니다. 심각한 항목은 제외됩니다.",
  "Checks one public file. Sends nothing, installs nothing.": "공개 파일 하나만 확인합니다. 아무것도 보내거나 설치하지 않습니다.",
  "Public news reports. A zone is a cluster of reports, not proof.": "공개 뉴스 보도입니다. 구역은 보도가 모인 곳일 뿐 증거가 아닙니다.",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "결제는 Stripe에서 처리됩니다. 카드 정보는 ARGUS-INSTINCT에 절대 전달되지 않습니다."
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "결제는 Stripe에서 처리됩니다. 카드 정보는 ARGUS-INSTINCT에 절대 전달되지 않습니다.",
+ "Details": "자세히",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "ARGUS-INSTINCT가 아직 볼 수 없는 공격 기법",
+ "Attacker techniques that do not apply here": "여기에는 해당하지 않는 공격 기법",
+ "Gaps in what is watched": "감시의 빈틈",
+ "Known flaws in your code's dependencies": "코드 의존성의 알려진 결함",
+ "Container settings and versions": "컨테이너 설정과 버전",
+ "Earlier items that came back or are still open": "다시 나타났거나 아직 열려 있는 이전 항목",
+ "Programs that ran at startup": "시작할 때 실행된 프로그램",
+ "Passwords and keys stored in plain text": "평문으로 저장된 비밀번호와 키",
+ "Possible tampering": "변조 가능성",
+ "Things ARGUS-INSTINCT could not fully see": "ARGUS-INSTINCT가 완전히 보지 못한 것",
+ "Activity on the Linux side": "Linux 쪽 활동",
+ "Programs launched from startup places": "시작 위치에서 실행된 프로그램",
+ "Programs named like known malware": "알려진 악성코드와 이름이 같은 프로그램",
+ "Connections to listed attacker addresses": "목록에 있는 공격자 주소로의 연결",
+ "Passwords and keys in plain text, already reported": "이미 보고된 평문 비밀번호와 키"
 }

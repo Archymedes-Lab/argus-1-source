@@ -521,5 +521,21 @@
  "After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.": "Tras {n} días sin cambios, los elementos que solo necesitan su visto bueno se aceptan y se registran. Nunca los críticos.",
  "Checks one public file. Sends nothing, installs nothing.": "Consulta un único archivo público. No envía nada ni instala nada.",
  "Public news reports. A zone is a cluster of reports, not proof.": "Noticias públicas. Una zona es un grupo de noticias, no una prueba.",
- "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Pago con Stripe. Los datos de la tarjeta nunca llegan a ARGUS-INSTINCT."
+ "Payment by Stripe. Card details never reach ARGUS-INSTINCT.": "Pago con Stripe. Los datos de la tarjeta nunca llegan a ARGUS-INSTINCT.",
+ "Details": "Detalles",
+ "Attacker techniques ARGUS-INSTINCT cannot see yet": "Técnicas de ataque que ARGUS-INSTINCT aún no ve",
+ "Attacker techniques that do not apply here": "Técnicas de ataque que no se aplican aquí",
+ "Gaps in what is watched": "Huecos en la vigilancia",
+ "Known flaws in your code's dependencies": "Fallos conocidos en las dependencias de su código",
+ "Container settings and versions": "Configuración y versiones de contenedores",
+ "Earlier items that came back or are still open": "Elementos anteriores que volvieron o siguen abiertos",
+ "Programs that ran at startup": "Programas que se ejecutaron al iniciar",
+ "Passwords and keys stored in plain text": "Contraseñas y claves guardadas en texto plano",
+ "Possible tampering": "Posible manipulación",
+ "Things ARGUS-INSTINCT could not fully see": "Cosas que ARGUS-INSTINCT no pudo ver del todo",
+ "Activity on the Linux side": "Actividad en el lado Linux",
+ "Programs launched from startup places": "Programas lanzados desde lugares de inicio",
+ "Programs named like known malware": "Programas con nombre de malware conocido",
+ "Connections to listed attacker addresses": "Conexiones a direcciones de atacantes listadas",
+ "Passwords and keys in plain text, already reported": "Contraseñas y claves en texto plano, ya notificadas"
 }

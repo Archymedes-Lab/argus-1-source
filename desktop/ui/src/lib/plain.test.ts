@@ -28,3 +28,12 @@ test("plain wording uses the dashboard guide, and falls back without inventing a
   expect(other.why).toContain("seriously harm");
   expect(other.means).not.toMatch(/malware|compromised/i);
 });
+
+import { groupLabel, CATEGORY_LABEL } from "./plain";
+test("a group always has a specific name, never the generic sentence", () => {
+  expect(groupLabel("present")).toBe("Passwords and keys stored in plain text");
+  expect(groupLabel("tracked")).not.toBe(groupLabel("present"));   // two groups, two names
+  expect(groupLabel("weird thing")).toBe("Weird thing");
+  expect(groupLabel(null)).toBe(CATEGORY_LABEL[""]);
+  for (const v of Object.values(CATEGORY_LABEL)) expect(v).not.toContain("noticed something");
+});

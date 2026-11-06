@@ -123,3 +123,18 @@ export function scoreTone(score: number | null | undefined): Tone {
 export function sentence(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
+
+/** A model note sometimes arrives as a JSON object such as {"security": "..."}; show its
+ *  text, never the braces. Anything else is returned trimmed. */
+export function noteText(note: unknown): string {
+  const s = typeof note === "string" ? note.trim() : "";
+  if (!s.startsWith("{")) return s;
+  try {
+    const v = JSON.parse(s);
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const parts = Object.values(v).filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+      if (parts.length) return parts.join(" ").trim();
+    }
+  } catch { /* not JSON after all */ }
+  return s;
+}

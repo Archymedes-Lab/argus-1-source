@@ -2,7 +2,7 @@
   import Pill from "../components/Pill.svelte";
   import { api } from "../lib/api";
   import { app, refresh, toast } from "../lib/store.svelte";
-  import { groupQuestions } from "../lib/model";
+  import { groupQuestions, noteText } from "../lib/model";
   import { t } from "../lib/words";
   import { tr, sev, agoT } from "../lib/i18n";
   import { onMount } from "svelte";
@@ -13,7 +13,13 @@
   let ap = $state<Autopilot | null>(null);
   async function loadCases() { try { ap = await api.autopilot(); } catch { ap = null; } }
   onMount(loadCases);
-  const cases = $derived(ap?.needs_me ?? []);
+  const allCases = $derived(ap?.needs_me ?? []);
+  // Simple: one decision at a time (skip moves on). Expert: the first ten, then more.
+  let caseStep = $state(0);
+  let caseLimit = $state(10);
+  const cases = $derived(app.mode === "simple"
+    ? allCases.slice(caseStep % Math.max(1, allCases.length), (caseStep % Math.max(1, allCases.length)) + 1)
+    : allCases.slice(0, caseLimit));
   let caseBusy = $state("");
   async function decideCase(key: string, choice: "recognise" | "not_recognise" | "investigate_further") {
     caseBusy = key;
@@ -75,14 +81,20 @@
     {#if !cases.length}
       <div class="card empty">{tr("No cases need a decision.")}</div>
     {:else}
+      {#if app.mode === "simple" && allCases.length > 1}
+        <p class="mb-3 text-copy-13 text-gray-900">{tr("Question {i} of {n}.", { i: (caseStep % allCases.length) + 1, n: allCases.length })} <button class="link" onclick={() => caseStep++}>{tr("Skip for now")}</button></p>
+      {/if}
       <div class="flex flex-col gap-3">
         {#each cases as c (c.key)}
           <div class="card p-5">
             <div class="flex items-center gap-2"><Pill severity={c.severity} /><span class="text-copy-13 text-gray-900">{c.count === 1 ? tr("1 observation") : tr("{n} observations", { n: c.count })}</span></div>
             <p class="selectable mt-2.5 text-label-14">{c.title}</p>
-            <p class="selectable mt-1 text-copy-13 text-gray-900">{c.what_happened}</p>
+            {#if app.mode === "expert"}<p class="selectable mt-1 text-copy-13 text-gray-900">{c.what_happened}</p>{/if}
             {#if c.recommended}<p class="selectable mt-1 text-copy-13">{c.recommended}</p>{/if}
-            {#if c.ai_note}<p class="selectable mt-1 text-copy-13 text-gray-900">{c.ai_note}</p>{/if}
+            {#if noteText(c.ai_note)}
+              <details class="mt-2 text-copy-13 text-gray-900"><summary class="cursor-default text-label-12 text-gray-900">{tr("Details")}</summary>
+                <p class="selectable mt-1">{noteText(c.ai_note)}</p></details>
+            {/if}
             <div class="mt-4 flex flex-wrap gap-2">
               <button class="btn" disabled={!!caseBusy} onclick={() => decideCase(c.key, "recognise")}>{c.count > 1 ? t("review.recognise.many") : t("review.recognise")}</button>
               <button class="btn" disabled={!!caseBusy} onclick={() => decideCase(c.key, "not_recognise")}>{c.count > 1 ? t("review.unknown.many") : t("review.unknown")}</button>
@@ -91,6 +103,9 @@
           </div>
         {/each}
       </div>
+      {#if app.mode === "expert" && allCases.length > caseLimit}
+        <div class="mt-3 text-center"><button class="btn btn-sm" onclick={() => (caseLimit += 10)}>{tr("Show {n} more", { n: Math.min(10, allCases.length - caseLimit) })}</button></div>
+      {/if}
     {/if}
   </section>
   {/if}
