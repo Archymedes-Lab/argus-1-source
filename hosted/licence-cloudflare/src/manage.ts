@@ -11,7 +11,7 @@
 import { emailHash, randomId, sha256Hex } from "./keys";
 import { type Activation, audit, constantTimeEqual, type Deps, EMAIL_PER_HOUR, type Env, type Licence, limited,
          MAGIC_TTL, OFFERS, payOrigin, pepper, REVEAL_WINDOW, sec, SESSION_TTL, standing, support } from "./env";
-import { bindClaim, issue, keyEmail, keyOf, normCode, portalUrl, release, releaseLimitText, releasesLeft, type Claim } from "./licence";
+import { bindClaim, covers, issue, keyEmail, keyOf, normCode, portalUrl, release, releaseLimitText, releasesLeft, type Claim } from "./licence";
 import { esc, formOf, page, redirect, sameOrigin, seal, sendMail, simplePage, unseal } from "./web";
 import { stripe, StripeError } from "./stripe";
 
@@ -62,14 +62,14 @@ export async function thanks(env: Env, deps: Deps, url: URL): Promise<Response> 
     ? `<div class="card ok"><b>Argus on “${esc(claimedLabel)}” is already activated.</b> Go back to Argus; it picks the licence up within a few seconds.</div>`
     : "";
   const how = offer.plan === "server"
-    ? `<p>On the server, run:</p><div class="key" id="cmd">argus licence activate ${esc(key)}</div>`
+    ? `<p>${lic.seats > 1 ? `On each server (up to ${lic.seats}), run the same command:` : "On the server, run:"}</p><div class="key" id="cmd">argus licence activate ${esc(key)}</div>`
     : `<p>In Argus, open <b>Licence</b>, paste the key and choose <b>Activate</b>, or use the button below on that computer.</p>`;
   const body = `<h1>Thank you for buying ${esc(offer.product)}</h1>${done}
 <p>Your licence key:</p><div class="key" id="key">${esc(key)}</div>
 <div class="row"><button class="primary" id="copy" type="button">Copy key</button>
 <a class="btn" href="argus://activate?key=${encodeURIComponent(key)}">Open in Argus</a><span id="copied" class="muted" aria-live="polite"></span></div>
 ${claimedLabel ? "<h2>Another computer instead?</h2><p>Keep the key: release this one at Manage your licence, then activate the key there.</p>" : `<h2>Activate it</h2>${how}`}
-<p class="muted">The key covers ${offer.seats === 1 ? (offer.plan === "server" ? "one server" : "one computer") : `${offer.seats} machines`}. We also emailed it to ${esc(masked)}. ` +
+<p class="muted">The key covers ${covers(offer.plan, lic.seats)}. We also emailed it to ${esc(masked)}. ` +
     `It is shown here only today; keep the email.</p>
 <h2>Later</h2><p><a href="${pay}/manage">Manage your licence</a> (see where it is active, move it, billing) · <a href="${pay}/recover">Lost your key?</a></p>`;
   const script = `document.getElementById("copy").addEventListener("click",function(){var k=document.getElementById("key").textContent;` +

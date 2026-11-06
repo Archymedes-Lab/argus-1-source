@@ -12,8 +12,8 @@
   // Requests carry licence keys and Stripe payloads with emails: no request logging.
   "observability": { "enabled": false },
   "d1_databases": [
-    // `wrangler d1 create argus-licence`, then paste the id it prints here.
-    { "binding": "DB", "database_name": "argus-licence", "database_id": "REPLACE_WITH_D1_ID" }
+    // Created 2026-11-05 with `wrangler d1 create argus-licence` (region WEUR).
+    { "binding": "DB", "database_name": "argus-licence", "database_id": "9326e139-6234-4db4-aebb-cb219a60df4f" }
   ],
   // Per-IP request limits at the edge (Workers rate limiting).
   "ratelimits": [

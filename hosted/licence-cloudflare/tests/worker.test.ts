@@ -109,8 +109,12 @@ describe("GET /buy", () => {
     const f = new URLSearchParams(c.body);
     expect(f.get("managed_payments[enabled]")).toBe("true");
     expect(f.get("mode")).toBe("subscription");
-    expect(f.get("line_items[0][price]")).toBe("price_for_argus_server_usd_5000_year");
+    expect(f.get("line_items[0][price]")).toBe("price_for_argus_server_fleet_usd_year_v1");
     expect(f.get("line_items[0][quantity]")).toBe("1");
+    expect(f.get("line_items[0][adjustable_quantity][enabled]")).toBe("true");
+    expect(f.get("line_items[0][adjustable_quantity][minimum]")).toBe("1");
+    expect(f.get("line_items[0][adjustable_quantity][maximum]")).toBe("1000");
+    expect(f.get("allow_promotion_codes")).toBe("true");
     expect(f.get("client_reference_id")).toBe("hn_launch");
     for (const prefix of ["metadata", "subscription_data[metadata]"]) {
       expect(f.get(`${prefix}[app]`)).toBe("argus");
@@ -135,6 +139,31 @@ describe("GET /buy", () => {
     expect(f.get("client_reference_id")).toBeNull();
     expect(f.get("metadata[ref]")).toBeNull();
     expect(f.get("success_url")).toEndWith("&lang=en");
+    for (const k of f.keys()) for (const bad of FORBIDDEN) expect(k.startsWith(bad)).toBe(false);
+  });
+
+  test("fleet: ?servers=N opens checkout at N, clamped to 1..1000; desktop teams 1..100 with ?computers=N", async () => {
+    for (const [q, want] of [["25", "25"], ["0", "1"], ["5000", "1000"], ["abc", "1"]]) {
+      stripe.calls = [];
+      await call(`/buy/argus-server?servers=${q}`);
+      expect(new URLSearchParams(stripe.stripeCalls("/v1/checkout/sessions")[0].body).get("line_items[0][quantity]")).toBe(want);
+    }
+    for (const [path, want] of [["/buy/argus-desktop?computers=30", "30"], ["/buy/argus-desktop-monthly?computers=500", "100"], ["/buy/argus-desktop", "1"]]) {
+      stripe.calls = [];
+      await call(path);
+      const f = new URLSearchParams(stripe.stripeCalls("/v1/checkout/sessions")[0].body);
+      expect(f.get("line_items[0][quantity]")).toBe(want);
+      expect(f.get("line_items[0][adjustable_quantity][maximum]")).toBe("100");
+      expect(f.get("allow_promotion_codes")).toBe("true");
+    }
+  });
+
+  test("desktop monthly is on sale ($15/month)", async () => {
+    const res = await call("/buy/argus-desktop-monthly");
+    expect(res.status).toBe(303);
+    const f = new URLSearchParams(stripe.stripeCalls("/v1/checkout/sessions")[0].body);
+    expect(f.get("line_items[0][price]")).toBe("price_for_argus_desktop_usd_1500_month");
+    expect(f.get("subscription_data[metadata][offer]")).toBe("argus-desktop-monthly");
     for (const k of f.keys()) for (const bad of FORBIDDEN) expect(k.startsWith(bad)).toBe(false);
   });
 
@@ -278,6 +307,30 @@ describe("issuing", () => {
     stripe.resendOk = true;
     expect((await signed(event("evt_1", "checkout.session.completed", s))).status).toBe(200);
     expect(licences()[0].emailed_at).not.toBeNull();
+  });
+
+  test("fleet: seats = subscription quantity at purchase, then follow customer.subscription.updated", async () => {
+    stripe.subscriptions.set("sub_s", { id: "sub_s", items: { data: [{ quantity: 12, current_period_end: YEAR_END }] }, metadata: { app: "argus" } });
+    expect((await signed(event("evt_f1", "checkout.session.completed", serverSession()))).status).toBe(200);
+    expect(licences()[0].seats).toBe(12);
+    const updated = (q: number) => ({ id: "sub_s", object: "subscription", metadata: { app: "argus", offer: "argus-server" },
+                                      items: { data: [{ quantity: q, current_period_end: YEAR_END }] } });
+    await signed(event("evt_f2", "customer.subscription.updated", updated(40)));
+    expect(licences()[0].seats).toBe(40);
+    await signed(event("evt_f3", "customer.subscription.updated", updated(40)));
+    await signed(event("evt_f4", "customer.subscription.updated", updated(5)));
+    expect(licences()[0].seats).toBe(5);
+    const audits = store.db.query("SELECT action FROM audit WHERE action LIKE 'seats%' ORDER BY rowid").all() as any[];
+    expect(audits.map((a) => a.action)).toEqual(["seats 12->40", "seats 40->5"]);
+  });
+
+  test("a desktop team licence: 30 computers at purchase, 9 after the team shrinks", async () => {
+    stripe.subscriptions.set("sub_1", { id: "sub_1", items: { data: [{ quantity: 30, current_period_end: YEAR_END }] }, metadata: { app: "argus" } });
+    await signed(event("evt_d1", "checkout.session.completed", desktopSession()));
+    expect(licences()[0].seats).toBe(30);
+    await signed(event("evt_d2", "customer.subscription.updated",
+      { id: "sub_1", metadata: { app: "argus", offer: "argus-desktop" }, items: { data: [{ quantity: 9 }] } }));
+    expect(licences()[0].seats).toBe(9);
   });
 
   test("events of another app (Orion) are ignored and recorded nowhere", async () => {

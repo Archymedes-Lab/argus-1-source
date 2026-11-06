@@ -82,6 +82,12 @@ export function periodEnd(sub: any): number | null {
   return ends.length ? Math.max(...ends) : null;
 }
 
+/** Machines a subscription pays for: the quantity of its (single) item. */
+export function subscriptionQuantity(sub: any): number | null {
+  const q = sub?.items?.data?.[0]?.quantity;
+  return Number.isInteger(q) && q >= 1 ? q : null;
+}
+
 /** Subscription id of an invoice, for both the older and the `parent.subscription_details` shape. */
 export function invoiceSubscription(inv: any): string | null {
   const s = inv?.parent?.subscription_details?.subscription ?? inv?.subscription;

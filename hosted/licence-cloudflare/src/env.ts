@@ -23,15 +23,26 @@ export interface Deps { fetch: Fetch; now: () => number /* ms */ }
 
 export type Mode = "payment" | "subscription";
 export type Plan = "server" | "desktop";
-export type Offer = { lookup: string; mode: Mode; kind: Kind; product: string; plan: Plan; seats: number; days?: number };
+/** fleet: the buyer picks how many machines at checkout (1..max); the licence's seats follow the subscription quantity. */
+export type Offer = { lookup: string; mode: Mode; kind: Kind; product: string; plan: Plan; seats: number; days?: number; fleet?: { max: number } };
 
-// Owner decision 2026-11-04 (archymedes-gtm docs/PRICE-BOOK.md, catalog/stripe.ts): two yearly plans only.
-// Seats live here and nowhere else: Server covers one server, Desktop one computer.
+/** Above this many machines the buyer talks to us (enterprise terms, invoicing). */
+export const FLEET_MAX = 1000;
+export const TEAM_MAX = 100;
+
+// Owner decisions (archymedes-gtm docs/PRICE-BOOK.md, catalog/stripe.ts):
+//   2026-11-04  Desktop $79/year per computer.
+//   2026-11-05  Desktop also $15/month. Server is one fleet licence priced by size, graduated per server per year:
+//               1-10 $50, 11-50 $40, 51-250 $30, 251-1000 $20; above 1000, enterprise terms by contact.
+//   2026-11-06  Desktop can be bought for a team: 1-100 computers on one key, same price per computer.
+// Seats live here, except for a fleet offer, where they are the subscription quantity.
 export const OFFERS: Record<string, Offer> = {
-  "argus-server": { lookup: "argus_server_usd_5000_year", mode: "subscription", kind: "SERVER", product: "Argus Server",
-                    plan: "server", seats: 1 },
+  "argus-server": { lookup: "argus_server_fleet_usd_year_v1", mode: "subscription", kind: "SERVER", product: "Argus Server",
+                    plan: "server", seats: 1, fleet: { max: FLEET_MAX } },
   "argus-desktop": { lookup: "argus_desktop_usd_7900_year", mode: "subscription", kind: "DESKTOP", product: "Argus Desktop",
-                     plan: "desktop", seats: 1 },
+                     plan: "desktop", seats: 1, fleet: { max: TEAM_MAX } },
+  "argus-desktop-monthly": { lookup: "argus_desktop_usd_1500_month", mode: "subscription", kind: "DESKTOP", product: "Argus Desktop",
+                             plan: "desktop", seats: 1, fleet: { max: TEAM_MAX } },
 };
 
 export const SUBSCRIPTION_GRACE = 3 * 86400;

@@ -9,4 +9,5 @@ Values are raw 32-byte Ed25519 public keys, base64url without padding.
 """
 
 PUBLIC_KEYS = {
+    '2026-11-a': 'nEZq9X9fM6WzvAJYY3dZHZkrX0uLVOL4NZXU8DM-zC4',
 }
