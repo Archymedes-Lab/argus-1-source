@@ -48,7 +48,7 @@
   <div class="flex items-start gap-4">
     <div>
       <h2 class="text-heading-24">{tr("Where this computer is")}</h2>
-      <p class="mt-1 text-copy-14 text-gray-900">{tr("ARGUS-INSTINCT works out roughly where this computer is, so it can tell when it is somewhere unusual. This page loads no map from other websites; the full map opens in your browser.")}</p>
+      <p class="mt-1 text-copy-14 text-gray-900">{tr("Approximate location. No outside map is loaded here.")}</p>
     </div>
     <button class="btn btn-sm ml-auto shrink-0" onclick={full}>{tr("Open full map")}</button>
   </div>

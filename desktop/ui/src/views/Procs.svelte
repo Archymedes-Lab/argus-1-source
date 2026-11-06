@@ -49,7 +49,7 @@
   <div class="flex items-start gap-4">
     <div class="max-w-[760px]">
       <h2 class="text-heading-24">{tr("Running programs")}</h2>
-      <p class="mt-1 text-copy-14 text-gray-900">{tr("Every program running right now. A New name is one ARGUS-INSTINCT has never seen on this computer before. That is a reason to look, not proof of harm.")}</p>
+      <p class="mt-1 text-copy-14 text-gray-900">{tr("\"New\" means never seen on this computer, not harmful.")}</p>
     </div>
     <button class="btn btn-sm ml-auto shrink-0" onclick={full}>{tr("Open full view")}</button>
   </div>

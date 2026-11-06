@@ -124,6 +124,8 @@
 @utility text-label-12 { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0; }
 @utility text-copy-14 { font-size: 14px; line-height: 20px; font-weight: 400; }
 @utility text-copy-13 { font-size: 13px; line-height: 18px; font-weight: 400; }
+@utility text-eyebrow { font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+@utility text-figure { font-size: 28px; line-height: 28px; font-weight: 600; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
 @utility text-display { font-size: 44px; line-height: 44px; font-weight: 600; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
 @utility tabular { font-variant-numeric: tabular-nums; }
 @utility material {
@@ -167,8 +169,15 @@ html[data-mode="simple"] { font-size: 17px; }
   .seg-item { @apply inline-flex h-7 cursor-default items-center gap-1.5 rounded-[5px] px-2.5 text-label-12 text-gray-900 transition-colors hover:text-gray-1000; }
   .seg-item[data-state="on"] { @apply bg-bg-100 text-gray-1000; box-shadow: 0 1px 2px oklch(0% 0 0 / 0.12), 0 0 0 0.5px oklch(0% 0 0 / 0.06); }
 
-  .nav-item { @apply flex h-8 cursor-default items-center gap-2.5 rounded-md px-2.5 text-label-13 text-gray-900 transition-colors hover:bg-gray-200 hover:text-gray-1000; }
-  .nav-item[aria-current="page"] { @apply bg-gray-300 text-gray-1000; }
+  /* Sidebar, Swiss: one column on a 4 px grid, flush left; hierarchy from type and
+     hairline rules, not boxes. The current page is a 2 px rule and full-strength text. */
+  .nav-item { @apply relative flex h-8 cursor-default items-center gap-3 pr-4 pl-5 text-label-13 text-gray-900 transition-colors hover:text-gray-1000; }
+  .nav-item::before { content: ""; @apply absolute top-1.5 bottom-1.5 left-0 w-0.5 bg-transparent transition-colors; }
+  .nav-item[aria-current="page"] { @apply font-semibold text-gray-1000; }
+  .nav-item[aria-current="page"]::before { @apply bg-gray-1000; }
+  .nav-item:focus-visible { @apply outline-none; box-shadow: inset 0 0 0 2px var(--blue-700); }
+  .side-section { @apply border-t border-gray-300 pt-3 pb-2; }
+  .side-label { @apply px-5 pb-1.5 text-eyebrow text-gray-700; }
 
   /* Floating surfaces: menus, palette, sheets, tooltips. */
   .popover { @apply rounded-xl bg-bg-100; box-shadow: var(--shadow-pop); }

@@ -85,3 +85,12 @@ describe("reminders are not new problems", () => {
     expect(severityCounts(list).critical).toBe(3);   // the full list is unchanged
   });
 });
+
+import { noteText } from "./model";
+test("a JSON-wrapped model note shows its text, never braces", () => {
+  expect(noteText('{"security": "This may indicate a scheduled task."}')).toBe("This may indicate a scheduled task.");
+  expect(noteText("  plain note ")).toBe("plain note");
+  expect(noteText("{not json")).toBe("{not json");
+  expect(noteText('{"n": 3}')).toBe('{"n": 3}');
+  expect(noteText(undefined)).toBe("");
+});

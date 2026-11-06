@@ -9,7 +9,7 @@
   import { app } from "../lib/store.svelte";
   import { tr, agoT } from "../lib/i18n";
   import { sevWord, t } from "../lib/words";
-  import { plainFinding } from "../lib/plain";
+  import { groupLabel, hasGuide, plainFinding } from "../lib/plain";
   import { filterFindings, sentence, severityCounts, SEVERITIES, type Finding } from "../lib/model";
 
   const all = $derived((app.data?.findings ?? []) as Finding[]);
@@ -66,8 +66,13 @@
         <button class="row row-click w-full items-start gap-4 py-4 text-left" onclick={() => (app.query = g.category)}>
           <span class="w-[76px] shrink-0 pt-px"><Pill severity={g.worst} /></span>
           <span class="min-w-0 flex-1">
-            <span class="block text-label-14">{tr(p.means)}</span>
-            <span class="mt-0.5 block text-copy-13 text-gray-900">{g.count === 1 ? tr("1 item like this.") : tr("{n} items like this.", { n: g.count })} {tr(p.next)}</span>
+            {#if hasGuide(g.sample)}
+              <span class="block text-label-14">{tr(p.means)}</span>
+              <span class="mt-0.5 block text-copy-13 text-gray-900">{g.count === 1 ? tr("1 item like this.") : tr("{n} items like this.", { n: g.count })} {tr(p.next)}</span>
+            {:else}
+              <span class="block text-label-14">{tr(groupLabel(g.category))}</span>
+              <span class="mt-0.5 block text-copy-13 text-gray-900">{g.count === 1 ? tr("1 item like this.") : tr("{n} items like this.", { n: g.count })}</span>
+            {/if}
           </span>
         </button>
       {/each}
@@ -83,8 +88,8 @@
             <span class="w-[76px] shrink-0 pt-px"><Pill severity={f.severity} /></span>
             <span class="min-w-0 flex-1">
               {#if app.mode === "simple"}
-                <span class="block truncate text-label-13">{tr(plainFinding(f).means)}</span>
-                <span class="block truncate text-copy-13 text-gray-900">{brand(f.title)}</span>
+                <span class="block truncate text-label-13">{brand(f.title)}</span>
+                {#if hasGuide(f)}<span class="block truncate text-copy-13 text-gray-900">{tr(plainFinding(f).means)}</span>{/if}
               {:else}
                 <span class="block truncate text-label-13">{f.title}</span>
                 <span class="block truncate text-copy-13 text-gray-900">{f.detail}</span>

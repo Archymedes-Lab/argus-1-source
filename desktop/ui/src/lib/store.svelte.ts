@@ -1,6 +1,6 @@
 // Application state. The daemon owns the truth; this holds the last copy the
 // shell fetched and refreshes it when the pulse stream says something changed.
-import { api, inApp, onDaemon, type UpdateInfo, type AppStatus } from "./api";
+import { api, inApp, onDaemon, type Coverage, type UpdateInfo, type AppStatus } from "./api";
 import { tr } from "./i18n";
 
 export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "licence" | "settings";
@@ -23,6 +23,8 @@ const FALLBACK_MS = 60000;     // if the stream is quiet, still refresh once a m
 
 export const app = $state({
   data: null as any,
+  coverage: null as Coverage | null,   // shared by the sidebar and the Coverage view
+  casesWaiting: 0,                     // grouped cases that need a decision (sidebar badge)
   loading: false,
   error: "",
   daemon: "connecting" as "connecting" | "live" | "down",
@@ -94,6 +96,14 @@ export function applyTheme() {
 
 /** The shell's own account of the daemon: running, degraded, stopped, not installed. */
 export async function refreshStatus() {
+  if (!inApp) {
+    // Served by the daemon in a browser there is no shell to ask: the last state
+    // call is the status. Without this the footer said "Starting" forever.
+    app.status = app.daemon === "live"
+      ? { phase: "live", message: "Watching", detail: "" }
+      : { phase: "stopped", message: "Not answering", detail: app.error };
+    return;
+  }
   try { app.status = await api.status(); } catch { /* the shell is the source; keep the last */ }
 }
 
@@ -113,6 +123,20 @@ export async function refresh() {
   } finally {
     inFlight = false; app.loading = false;
   }
+}
+
+const COVERAGE_EVERY_MS = 120000;   // coverage moves slowly; the map costs the daemon a build
+let coverageInFlight = false;
+
+/** Coverage for the sidebar and the Coverage view; keeps the last answer on failure. */
+export async function refreshCoverage() {
+  if (coverageInFlight) return;
+  coverageInFlight = true;
+  try { app.coverage = await api.coverage(); }
+  catch { /* keep the last map; the view says when it cannot read */ }
+  try { app.casesWaiting = (await api.autopilot()).needs_me?.length ?? 0; }
+  catch { /* older daemons have no cases */ }
+  finally { coverageInFlight = false; }
 }
 
 const UPDATE_EVERY_MS = 6 * 3600 * 1000;       // the service caches its answer for as long
@@ -158,6 +182,8 @@ export async function start() {
   applyTheme();
   applyMode();
   await refresh();
+  void refreshCoverage();
+  setInterval(() => void refreshCoverage(), COVERAGE_EVERY_MS);
   void confirmReturnFromCheckout();
   void checkUpdate();
   setInterval(() => void checkUpdate(), UPDATE_EVERY_MS);

@@ -61,7 +61,7 @@
   <div class="flex items-start gap-4">
     <div class="max-w-[760px]">
       <h2 class="text-heading-24">{tr("World events")}</h2>
-      <p class="mt-1 text-copy-14 text-gray-900">{tr("News reports from public sources, placed on the map. A zone is where reports cluster; it is not proof of what is happening there.")}</p>
+      <p class="mt-1 text-copy-14 text-gray-900">{tr("Public news reports. A zone is a cluster of reports, not proof.")}</p>
     </div>
     <button class="btn btn-sm ml-auto shrink-0" onclick={full}>{tr("Open full globe")}</button>
   </div>

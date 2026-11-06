@@ -14,6 +14,9 @@ const SEVERITY_WHY: Record<string, string> = {
 
 export interface Plain { means: string; why: string; next: string }
 
+/** True when the category has plain wording of its own; otherwise show the finding's own title. */
+export function hasGuide(f: Finding): boolean { return Boolean(G[f.category ?? ""]); }
+
 export function plainFinding(f: Finding): Plain {
   const g = G[f.category ?? ""];
   if (g) return { means: g[0], why: g[1], next: g[2] };
@@ -48,8 +51,29 @@ export function headline(score: number | null | undefined, critical: number, hig
   return { tone: "ok", title: "No signs of trouble right now", body: "Nothing needs you right now.", vars: {}, partial };
 }
 
-/** A friendly opener for the time of day. */
-export function greeting(now = new Date()): string {
-  const h = now.getHours();
-  return h < 5 ? "Still up?" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+
+/** A short name for categories the guide does not cover, so a group never reads as
+ *  "noticed something". Labels follow what the findings in that category say. */
+export const CATEGORY_LABEL: Record<string, string> = {
+  "not observable": "Attacker techniques ARGUS-INSTINCT cannot see yet",
+  "not applicable": "Attacker techniques that do not apply here",
+  "coverage gap": "Gaps in what is watched",
+  "appcode": "Known flaws in your code's dependencies",
+  "containers": "Container settings and versions",
+  "ledger": "Earlier items that came back or are still open",
+  "ran": "Programs that ran at startup",
+  "present": "Passwords and keys stored in plain text",
+  "tampering": "Possible tampering",
+  "": "Things ARGUS-INSTINCT could not fully see",
+  "sysmon-linux": "Activity on the Linux side",
+  "history": "Programs launched from startup places",
+  "named process": "Programs named like known malware",
+  "c2 match": "Connections to listed attacker addresses",
+  "tracked": "Passwords and keys in plain text, already reported",
+};
+
+/** The group's name: its plain sentence when the guide has one, else its label or category. */
+export function groupLabel(category: string | null | undefined): string {
+  const c = category ?? "";
+  return CATEGORY_LABEL[c] ?? (c ? c.charAt(0).toUpperCase() + c.slice(1) : CATEGORY_LABEL[""]);
 }
