@@ -18,6 +18,18 @@ STATE = {
                               'installs it; measured only in a container',
         'ollama_install': 'download and install Ollama only after explicit owner approval',
     },
+    'second_pass': {
+        'fuzz_harness': 'coverage-guided fuzzer plus 15 earlier findings; a new run found FZ-16 (huge numeric '
+                        'EventID crashed the Sysmon parser), fixed with a regression test',
+        'vm_matrix': 'clean-machine install harness, run by hand, not in CI',
+        'normal_pro': 'superseded by Simple/Expert mode; only its no-safety-claim headline rule ported',
+        'screen_guard': 'Rust sampling and privacy rules only, no capture',
+        'eula_bundle': 'proprietary licence and third-party notices beside every artifact; gate refuses GNU '
+                       'Readline by file name',
+        'pricing_copy': 'no interface text says a licence unlocks or locks protection, test-guarded',
+        'live_runs': 'restart autopsy ran read-only on this host with no stops to judge; osquery live run '
+                     'not permitted here (external binary), still container-only',
+    },
     'invariants': [
         'a licence never gates protection (existing test kept green)',
         'every new capability declared unverified in the assurance register, gap counts raised, '
@@ -43,6 +55,10 @@ QUESTIONS = {
         'live, given the suite, the CI install tests and the honest assurance labels?',
         'criteria': {'true': 'Reasonable to ship labelled as unverified',
                      'false': 'Hold them until soaked'}},
+    'eula_breaks_release': {'type': 'noul', 'instructions':
+        'Could adding the licence files and the readline refusal to the release gate make the next dry run '
+        'fail on artifacts it has not been tested against (the Windows Setup, zip and engine)?',
+        'criteria': {'true': 'Likely to fail the dry run', 'false': 'Unlikely to fail it'}},
     'next_gate': {'type': 'choice', 'instructions':
         'After the suite and the static gate pass, which validation adds the most before tagging?',
         'criteria': {'dry_run': 'The CI dry run with clean Windows install tests',
