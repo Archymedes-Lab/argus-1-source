@@ -1,92 +1,120 @@
 <script lang="ts">
+  // Prices from the price book (lib/prices.ts). Buying goes through the licence service at
+  // pay.archymedes.xyz: this computer opens a claim, the browser pays, and the computer
+  // activates by itself. No seller key is ever on this machine. A licence never turns
+  // protection on or off (tests/test_licence_never_gates_core.py).
   import { onMount, onDestroy } from "svelte";
-  import { api, type Billing } from "../lib/api";
+  import { api, type LicenceState } from "../lib/api";
   import { app, toast } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
+  import Segmented from "../components/Segmented.svelte";
+  import { DESKTOP, FLEET_MAX, fleetCents, SERVER_TIERS, usd, yearlySavingCents } from "../lib/prices";
 
-  let b = $state<Billing | null>(null);
-  let err = $state("");
-  let busy = $state<"" | "month" | "year">("");
+  const PAY = "https://pay.archymedes.xyz";
+  let st = $state<LicenceState | null>(null);
+  let interval = $state("year");
+  let servers = $state(10);
+  let busy = $state(false);
   let waiting = $state(false);
-  let timer: ReturnType<typeof setInterval> | undefined;
+  let problem = $state("");
+  let timer: ReturnType<typeof setInterval> | null = null;
 
-  async function load() {
-    try { b = await api.billingStatus(); err = ""; if (b.licensed) stopWaiting(); }
-    catch (e) { err = String((e as Error).message ?? e); }
-  }
-  function stopWaiting() { waiting = false; clearInterval(timer); }
+  onMount(async () => { try { st = await api.licence(); if (st.purchase_waiting) poll(); } catch { st = null; } });
+  onDestroy(() => { if (timer) clearInterval(timer); });
 
-  async function subscribe(plan: "month" | "year") {
-    busy = plan;
+  const yearly = $derived(interval === "year");
+  const desktopCents = $derived(yearly ? DESKTOP.yearCents : DESKTOP.monthCents);
+  const fleet = $derived(fleetCents(Math.floor(Number(servers))));
+  const fmt = (c: number) => usd(c, app.lang);
+  const until = $derived(st?.expires_at ? new Date(st.expires_at * 1000).toLocaleDateString(app.lang) : "");
+
+  async function buyHere() {
+    busy = true; problem = "";
     try {
-      await api.billingCheckout(plan);
-      toast(tr("Checkout opened in your browser"), "ok");
-      // The browser tab confirms the payment with Stripe; this window just watches for the licence.
-      waiting = true; clearInterval(timer);
-      let n = 0; timer = setInterval(() => { load(); if (++n > 120) stopWaiting(); }, 5000);
-    } catch (e) { toast(String((e as Error).message ?? e), "bad"); }
-    finally { busy = ""; }
+      const r = await api.licenceAction("upgrade", undefined, yearly ? "desktop" : "desktop-monthly");
+      if (!r.ok || !r.open) { problem = r.error ?? tr("Checkout could not be opened."); return; }
+      await api.openLicencePage(r.open);
+      poll();
+    } catch (e) { problem = String((e as Error).message ?? e); }
+    finally { busy = false; }
   }
-  onMount(load);
-  onDestroy(() => clearInterval(timer));
-  const until = $derived(b?.expires ? new Date(b.expires * 1000).toLocaleDateString(app.lang) : "");
-  const monthly = $derived(b?.plans?.month ?? 15);
-  const yearly = $derived(b?.plans?.year ?? b?.price_usd ?? 79);
-  const saving = $derived(monthly * 12 - yearly);
-  const features = [
-    "Continuous monitoring of this computer",
-    "Plain-language assistant",
-    "Investigate any finding with one click",
-    "Approvals, reports and daily briefing",
-  ];
+  function poll() {
+    waiting = true;
+    if (timer) return;
+    timer = setInterval(async () => {
+      try {
+        const r = await api.licenceAction("poll");
+        if (r.active && r.state) { st = r.state; waiting = false; if (timer) clearInterval(timer); timer = null; toast(tr("Licensed"), "ok"); }
+      } catch { /* keep waiting; the daemon may be busy */ }
+    }, 5000);
+  }
+  async function website(path: string) {
+    try { await api.openLicencePage(`${PAY}/${path}`); } catch (e) { toast(String((e as Error).message ?? e), "bad"); }
+  }
 </script>
 
-<div class="mx-auto flex max-w-[760px] flex-col gap-6">
-  <div>
+<div class="mx-auto flex max-w-[880px] flex-col gap-8">
+  <header>
     <h2 class="text-heading-24">{tr("Pricing")}</h2>
-    <p class="mt-1 text-copy-14 text-gray-900">{tr("Pay monthly or save with a year. Your data stays on this computer, and protection works the same with or without a licence.")}</p>
-  </div>
+    <p class="mt-1 text-copy-14 text-gray-900">{tr("A licence adds the full review report. Protection works the same without one.")}</p>
+  </header>
 
-  {#if err}
-    <p class="text-copy-13 text-amber-900">{err}</p>
-  {:else if b?.licensed}
-    <div class="card p-6">
-      <div class="flex items-center gap-2">
-        <h3 class="text-heading-20">{b.plan === "month" ? tr("ARGUS-INSTINCT Monthly") : tr("ARGUS-INSTINCT Yearly")}</h3>
-        <span class="pill pill-ok">{tr("Licensed")}</span>
-      </div>
-      <p class="mt-3 text-copy-14">{tr("Active")}{b.email ? ` · ${b.email}` : ""}{until ? ` · ${tr("until {date}", { date: until })}` : ""}</p>
-    </div>
-  {:else}
-    <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-      {#each [["month", monthly, tr("per month"), tr("Subscribe — ${price}/month", { price: monthly }), false], ["year", yearly, tr("per year"), tr("Subscribe — ${price}/year", { price: yearly }), true]] as [plan, amount, per, label, best] (plan)}
-        <div class="card flex flex-col p-6 {best ? 'ring-2 ring-blue-700' : ''}">
-          <div class="flex items-center gap-2">
-            <h3 class="text-heading-20">{plan === "month" ? tr("ARGUS-INSTINCT Monthly") : tr("ARGUS-INSTINCT Yearly")}</h3>
-            {#if best}<span class="pill pill-ok">{tr("Best value")}</span>{/if}
-          </div>
-          <p class="mt-3 text-heading-32 tabular">${amount}<span class="ml-1.5 text-copy-14 text-gray-900">{per}</span></p>
-          <p class="mt-1 h-5 text-copy-13 text-gray-900">{best && saving > 0 ? tr("Save ${amount} a year compared with paying monthly", { amount: saving }) : ""}</p>
-          <ul class="mt-4 flex flex-col gap-1.5 text-copy-14">
-            {#each features as f}<li>{tr(f)}</li>{/each}
-            <li>{plan === "month" ? tr("Cancel any time; renews monthly") : tr("Cancel any time; renews yearly")}</li>
-          </ul>
-          <div class="mt-auto pt-6">
-            {#if b && !b.can_purchase}
-              {#if app.mode === "simple"}
-                <p class="text-copy-14 text-gray-900">{tr("Buying a licence is not switched on yet. It will be available here soon.")}</p>
-              {:else}
-                <p class="text-copy-13 text-gray-900">{tr("Stripe is not configured on this computer. Add STRIPE_SECRET_KEY to ~/.jarvis/billing.env (see docs/STRIPE-HANDOFF.md).")} <button class="link" onclick={load}>{tr("Check again")}</button></p>
-              {/if}
-            {:else}
-              <button class="btn {best ? 'btn-primary' : ''} h-10 px-5" disabled={!!busy || !b} onclick={() => subscribe(plan as "month" | "year")}>{label}</button>
-            {/if}
-          </div>
-        </div>
-      {/each}
-    </div>
-    {#if waiting}<p class="text-copy-13 text-gray-900" role="status"><span class="dot dot-run mr-2"></span>{tr("Waiting for payment to complete in your browser…")} <button class="link" onclick={load}>{tr("I have paid, check now")}</button></p>{/if}
+  {#if st?.licensed}
+    <p class="flex items-center gap-2 text-copy-14" role="status">
+      <span class="pill pill-ok">{tr("Active")}</span>
+      <span>{st.product ?? ""}{until ? ` · ${tr("until {date}", { date: until })}` : ""}</span>
+    </p>
   {/if}
 
-  <p class="text-copy-13 text-gray-900">{tr("Payment by Stripe. Card details never reach ARGUS-INSTINCT.")}</p>
+  <div class="grid grid-cols-2 gap-x-10 gap-y-8 max-md:grid-cols-1">
+    <!-- Desktop -->
+    <section class="flex flex-col border-t-2 border-gray-1000 pt-4" aria-label="Argus Desktop">
+      <p class="text-eyebrow text-gray-1000">Argus Desktop</p>
+      <div class="mt-4">
+        <Segmented items={[{ value: "year", label: tr("Yearly") }, { value: "month", label: tr("Monthly") }]} bind:value={interval} label={tr("Billing period")} />
+      </div>
+      <p class="mt-5 flex items-baseline gap-2">
+        <span class="text-display">{fmt(desktopCents)}</span>
+        <span class="text-copy-13 text-gray-900">{yearly ? tr("per computer per year") : tr("per computer per month")}</span>
+      </p>
+      <p class="mt-1 h-5 text-copy-13 text-green-900">{yearly ? tr("Save ${amount} a year compared with paying monthly", { amount: yearlySavingCents / 100 }) : ""}</p>
+      <div class="mt-5">
+        {#if waiting}
+          <p class="flex items-center gap-2 text-copy-13" role="status"><span class="dot dot-run"></span>{tr("Waiting for payment to complete in your browser…")}</p>
+        {:else}
+          <button class="btn btn-primary h-10 px-5" disabled={busy || st?.licensed} onclick={buyHere}>{tr("Buy for this computer")}</button>
+        {/if}
+        {#if problem}<p class="mt-2 text-copy-13 text-red-900" role="alert">{problem}</p>{/if}
+      </div>
+      <p class="mt-4 text-copy-13 text-gray-900">
+        {tr("For a team of up to {n} computers, buy on the website.", { n: DESKTOP.teamMax })}
+        <button class="link" onclick={() => website(yearly ? "buy/argus-desktop" : "buy/argus-desktop-monthly")}>{tr("Buy on the website")}</button>
+      </p>
+    </section>
+
+    <!-- Server -->
+    <section class="flex flex-col border-t-2 border-gray-1000 pt-4" aria-label="Argus Server">
+      <p class="text-eyebrow text-gray-1000">Argus Server</p>
+      <p class="mt-4 text-copy-13 text-gray-900">{tr("One key for all your servers. Price per server per year:")}</p>
+      <dl class="mt-3 grid grid-cols-[1fr_auto] border-t border-gray-300 text-copy-14">
+        {#each SERVER_TIERS as t, i}
+          {@const from = i === 0 ? 1 : SERVER_TIERS[i - 1].upTo + 1}
+          <dt class="border-b border-gray-300 py-2 tabular text-gray-900">{tr("{a}–{b} servers", { a: from, b: t.upTo })}</dt>
+          <dd class="border-b border-gray-300 py-2 text-right tabular text-label-14">{fmt(t.usdCents)}</dd>
+        {/each}
+      </dl>
+      <p class="mt-2 text-copy-13 text-gray-900">{tr("Above {n} servers: enterprise terms by contact.", { n: FLEET_MAX })}</p>
+      <label class="mt-5 flex items-center gap-3 text-copy-13">
+        <span class="text-gray-900">{tr("Servers")}</span>
+        <input class="input w-24 tabular" type="number" min="1" max={FLEET_MAX} bind:value={servers} />
+        <span class="ml-auto text-label-14 tabular">{fleet === null ? "—" : tr("{total} a year", { total: fmt(fleet) })}</span>
+      </label>
+      <div class="mt-5">
+        <button class="btn h-10 px-5" onclick={() => website("buy/argus-server")}>{tr("Buy on the website")}</button>
+        <p class="mt-2 text-copy-13 text-gray-900">{tr("The key arrives by email.")}</p>
+      </div>
+    </section>
+  </div>
+
+  <p class="border-t border-gray-300 pt-4 text-copy-13 text-gray-900">{tr("Payment by Stripe. Card details never reach ARGUS-INSTINCT.")}</p>
 </div>

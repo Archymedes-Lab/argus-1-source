@@ -203,7 +203,7 @@ export const api = {
   checkUpdate: () => call<UpdateInfo>("check_update"),
   openDownloadPage: () => call<void>("open_download_page"),
   licence: () => call<LicenceState>("licence_state"),
-  licenceAction: (action: "activate" | "deactivate" | "refresh" | "upgrade" | "poll", key?: string, plan?: "server" | "desktop") =>
+  licenceAction: (action: "activate" | "deactivate" | "refresh" | "upgrade" | "poll", key?: string, plan?: "server" | "desktop" | "desktop-monthly") =>
     call<LicenceReply>("licence_action", { action, key, plan }),
   openLicencePage: (url: string) => call<void>("open_licence_page", { url }),
 };
