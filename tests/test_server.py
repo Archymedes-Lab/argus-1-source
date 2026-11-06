@@ -338,6 +338,9 @@ class SchedulerLaneTests(unittest.TestCase):
             while self.scheduler.current != "secrets" and time.monotonic() < deadline:
                 time.sleep(0.01)
             self.scheduler.force("bridge")
+            # Its own deadline: under load (load average 6, 2026-11-06) the first wait could
+            # use most of a shared 3 s and leave the forced bridge no time to be picked up.
+            deadline = time.monotonic() + 10
             while "bridge" not in ran and time.monotonic() < deadline:
                 time.sleep(0.01)
             busy = self.scheduler.current
