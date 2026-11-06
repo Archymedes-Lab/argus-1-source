@@ -144,6 +144,16 @@ temp dir, to confirm FZ-02.
   `__REALTIME_TIMESTAMP` of 400 digits (`OverflowError`). journalctl does not emit these, so low.
 - Fix: such a line is skipped or coerced; the rest of the read is kept.
 
+### FZ-16: a huge numeric EventID loses the Sysmon read (sysmon_linux), fixed 2026-11-06
+
+Found by a 120 s run (seed 20261106) on the release integration tree. FZ-06 accepted any
+ASCII digit string as an EventID; one longer than Python's 4300-digit int conversion limit
+passed `isdigit()` and `int()` raised `ValueError`, losing every event in the window. The
+syslog fallback is writable by any account. Fix: event ids longer than five digits are
+treated like a non-numeric one (that record only); regression
+`test_fz16_huge_numeric_event_id_skips_that_record_only`. The parser now lives in
+`jarvis/platform/sysmon_records.py`.
+
 ## Targets fuzzed with no finding
 
 Budget: three passes, 8 s, 15 s and 15 s per target (21 targets, about 13 minutes of CPU), run

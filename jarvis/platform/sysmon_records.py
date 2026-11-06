@@ -54,7 +54,9 @@ def parse(text):
         # A non-numeric EventID (syslog fallback lines are written by anyone) raised
         # ValueError and lost every event in the window (FZ-06); skip that record only.
         raw_id = (sysd.findtext("EventID") or "0").strip() if sysd is not None else "0"
-        ev = {"id": int(raw_id) if raw_id.isascii() and raw_id.isdigit() else 0}
+        # Real event ids are small; a digit string past Python's int conversion limit
+        # (4300 digits) raised ValueError the same way (FZ-16, fuzz run 2026-11-06).
+        ev = {"id": int(raw_id) if raw_id.isascii() and raw_id.isdigit() and len(raw_id) <= 5 else 0}
         # UtcTime in EventData is the process/event timestamp reported by
         # Sysmon. It can lag journal ingestion substantially while Sysmon is
         # draining its own queue, so retain TimeCreated separately for journal

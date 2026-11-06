@@ -191,6 +191,12 @@ class SysmonLinuxFindings(unittest.TestCase):
         events = sysmon_journal._parse(bad + "\n" + self.GOOD)
         self.assertEqual([e.get("Image") for e in events], ["/tmp/real"])
 
+    def test_fz16_huge_numeric_event_id_skips_that_record_only(self):
+        # Found by the 2026-11-06 fuzz run: 5121 digits passed isdigit() and int() raised.
+        bad = "<Event><System><EventID>" + "9" * 5121 + "</EventID></System></Event>"
+        events = sysmon_journal._parse(bad + "\n" + self.GOOD)
+        self.assertEqual([e.get("Image") for e in events], ["/tmp/real"])
+
     def test_fz06_unclosed_event_tags_are_linear(self):
         with _Deadline(5):
             t0 = time.perf_counter()
