@@ -29,7 +29,7 @@ export function collectKeys(root = "src"): string[] {
     "Start with the most urgent one below. This is not proof that something is wrong, only that it is worth a look.",
     "Nothing urgent, but a few things are worth a look",
     "1 item could use your attention when you have a minute.", "{n} items could use your attention when you have a minute.",
-    "Your computer looks fine", "Nothing needs you right now.",
+    "No signs of trouble right now", "Nothing needs you right now.",
     "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.",
     // Pricing plan features reach tr() through a list.
     "Continuous monitoring of this computer", "Plain-language assistant", "Investigate any finding with one click",

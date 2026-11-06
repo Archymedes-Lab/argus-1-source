@@ -490,7 +490,7 @@
  "You usually do not need to do anything. Keep the program up to date.": "보통은 할 일이 없습니다. 프로그램을 최신 상태로 유지하세요.",
  "Your answer tells ARGUS-INSTINCT whether something is expected on this machine. It records intent; it changes nothing on the system.": "답변은 어떤 것이 이 컴퓨터에서 예상된 것인지 ARGUS-INSTINCT에게 알려 줍니다. 의도만 기록하며 시스템은 아무것도 바뀌지 않습니다.",
  "Your computer is set up so someone can connect to it from far away and use it.": "컴퓨터가 누군가 멀리서 연결해 사용할 수 있도록 설정되어 있습니다.",
- "Your computer looks fine": "컴퓨터 상태가 양호합니다",
+ "No signs of trouble right now": "현재 문제의 징후가 없습니다",
  "Your computer trusts a security certificate that does not come from the usual list.": "컴퓨터가 일반 목록에 없는 보안 인증서를 신뢰하고 있습니다.",
  "Your computer's history shows commands that look like they were copied from a website and pasted in.": "컴퓨터의 기록에 웹사이트에서 복사해 붙여 넣은 것처럼 보이는 명령이 있습니다.",
  "Your phone gets alerts": "휴대폰이 알림을 받습니다",

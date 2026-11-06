@@ -490,7 +490,7 @@
  "You usually do not need to do anything. Keep the program up to date.": "En général, vous n'avez rien à faire. Gardez le programme à jour.",
  "Your answer tells ARGUS-INSTINCT whether something is expected on this machine. It records intent; it changes nothing on the system.": "Votre réponse indique à ARGUS-INSTINCT si quelque chose est attendu sur cet ordinateur. Elle enregistre une intention ; elle ne modifie rien sur le système.",
  "Your computer is set up so someone can connect to it from far away and use it.": "Votre ordinateur est configuré pour que quelqu'un puisse s'y connecter de loin et l'utiliser.",
- "Your computer looks fine": "Votre ordinateur semble en bonne santé",
+ "No signs of trouble right now": "Aucun signe de problème pour le moment",
  "Your computer trusts a security certificate that does not come from the usual list.": "Votre ordinateur fait confiance à un certificat de sécurité qui ne figure pas dans la liste habituelle.",
  "Your computer's history shows commands that look like they were copied from a website and pasted in.": "L'historique de votre ordinateur montre des commandes qui semblent avoir été copiées depuis un site web puis collées.",
  "Your phone gets alerts": "Votre téléphone reçoit les alertes",

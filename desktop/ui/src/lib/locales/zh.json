@@ -490,7 +490,7 @@
  "You usually do not need to do anything. Keep the program up to date.": "通常您不需要做任何事。请保持该程序为最新版本。",
  "Your answer tells ARGUS-INSTINCT whether something is expected on this machine. It records intent; it changes nothing on the system.": "您的回答告诉 ARGUS-INSTINCT 某项内容在这台电脑上是否在预期之内。它只记录意图，不会更改系统中的任何内容。",
  "Your computer is set up so someone can connect to it from far away and use it.": "您的电脑被设置为允许有人从远处连接并使用它。",
- "Your computer looks fine": "您的电脑状态良好",
+ "No signs of trouble right now": "目前没有发现问题的迹象",
  "Your computer trusts a security certificate that does not come from the usual list.": "您的电脑信任一个不在常规名单中的安全证书。",
  "Your computer's history shows commands that look like they were copied from a website and pasted in.": "您电脑的历史记录显示了一些看起来是从网站复制后粘贴进来的命令。",
  "Your phone gets alerts": "您的手机会收到警报",

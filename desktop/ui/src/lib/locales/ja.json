@@ -490,7 +490,7 @@
  "You usually do not need to do anything. Keep the program up to date.": "通常は何もする必要はありません。プログラムを最新に保ってください。",
  "Your answer tells ARGUS-INSTINCT whether something is expected on this machine. It records intent; it changes nothing on the system.": "回答は、それがこのコンピューターで想定内かどうかを ARGUS-INSTINCT に伝えます。意思を記録するだけで、システムは何も変更されません。",
  "Your computer is set up so someone can connect to it from far away and use it.": "パソコンが、遠くから誰かが接続して使えるように設定されています。",
- "Your computer looks fine": "コンピューターは問題なさそうです",
+ "No signs of trouble right now": "現在、問題の兆候はありません",
  "Your computer trusts a security certificate that does not come from the usual list.": "パソコンが、通常の一覧にないセキュリティ証明書を信頼しています。",
  "Your computer's history shows commands that look like they were copied from a website and pasted in.": "パソコンの履歴に、ウェブサイトからコピーして貼り付けたように見えるコマンドがあります。",
  "Your phone gets alerts": "スマートフォンにアラートが届きます",
