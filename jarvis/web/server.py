@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from jarvis.collectors.network import internetwatch
-from jarvis.core import incidents, mechanisms
+from jarvis.core import incidents, mechanisms, memory
 from jarvis.core.paths import SOURCE_ROOT, STATIC_DIR
 from jarvis.core.store import DEFAULT_DB, Store
 from jarvis.core.util import now
@@ -559,6 +559,14 @@ class Handler(BaseHTTPRequestHandler):
     # daemon's threads for ever. Live streams only block on a write the viewer
     # is not reading, and a viewer that stalled that long has gone.
     timeout = 30
+
+    def finish(self):
+        try:
+            super().finish()
+        finally:
+            # A request (state builds especially) frees its connection's cache
+            # and its answer; hand that back to the kernel (core/memory.py).
+            memory.trim()
 
     def log_message(self, *a):
         pass  # the dashboard polls constantly; access logs would be noise
@@ -1410,6 +1418,9 @@ def serve(db_path=DEFAULT_DB, port=8787, hosts=("wsl", "win")):
     privilege.drop_ambient()
     # Before any child exists: children must not inherit the notify socket.
     sdnotify.capture()
+    # Before any thread exists: a few shared malloc arenas instead of one per
+    # lane and request thread, so freed memory can be returned (core/memory.py).
+    memory.limit_arenas()
     scheduler = Scheduler(db_path, hosts)
     scheduler.start()
     # Execution identities (docs/architecture/EVIDENCE-FABRIC.md): issued only
