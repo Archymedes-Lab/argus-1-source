@@ -44,7 +44,7 @@
 <div class="mx-auto flex max-w-[760px] flex-col gap-6">
   <div>
     <h2 class="text-heading-24">{tr("Pricing")}</h2>
-    <p class="mt-1 text-copy-14 text-gray-900">{tr("Pay monthly or save with a year. Your data stays on this computer; the licence only unlocks ARGUS-INSTINCT.")}</p>
+    <p class="mt-1 text-copy-14 text-gray-900">{tr("Pay monthly or save with a year. Your data stays on this computer, and protection works the same with or without a licence.")}</p>
   </div>
 
   {#if err}
@@ -89,5 +89,4 @@
   {/if}
 
   <p class="text-copy-13 text-gray-900">{tr("Payment is handled by Stripe in your browser. ARGUS-INSTINCT never sees or stores your card details.")}</p>
-  {#if b?.required && !b.licensed}<p class="text-copy-13 text-amber-900">{tr("This build asks for a licence before the assistant and checks can be used.")}</p>{/if}
 </div>

@@ -2625,9 +2625,8 @@ async function loadLicence() {
   if (!on && !licence.can_purchase) $("lic-msg").textContent = "Payments are not set up on this computer yet (see docs/BILLING.md).";
   const bar = $("licbar");
   bar.hidden = on;
-  $("licbar-text").textContent = licence.required
-    ? "ARGUS-INSTINCT needs an active licence ($15/month or $79/year). The assistant and checks are locked until you subscribe."
-    : "No active licence. ARGUS-INSTINCT is $15/month or $79/year.";
+  // A licence never gates protection (tests/test_licence_never_gates_core.py): no locked wording.
+  $("licbar-text").textContent = "No active licence. Protection works the same without one; ARGUS-INSTINCT is $15/month or $79/year.";
 }
 async function subscribe(plan) {
   const msg = $("lic-msg"); msg.textContent = "Opening secure checkout…";
