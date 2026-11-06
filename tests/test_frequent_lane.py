@@ -262,7 +262,10 @@ class FailurePathTests(unittest.TestCase):
             for t in threads:
                 t.start()
             deadline = time.monotonic() + 8
-            while time.monotonic() < deadline and not {"controls", "audio"} <= set(ran):
+            # Wait for the main lane to have started the long audit too: the frequent lane
+            # can finish both jobs before the main thread is scheduled at all under load
+            # (seen 1 in 5 with five copies in parallel, 2026-11-06).
+            while time.monotonic() < deadline and not {"intrusion", "controls", "audio"} <= set(ran):
                 time.sleep(0.05)
             main_still_busy = s.current == "intrusion"
             release.set()
