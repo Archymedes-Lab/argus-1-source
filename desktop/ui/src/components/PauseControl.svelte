@@ -36,7 +36,7 @@
       <DropdownMenu.Content class="popover z-50 min-w-[220px] p-1.5" align="end" sideOffset={6}>
         <p class="px-2.5 py-1.5 text-copy-13 text-gray-900">{tr("While paused, ARGUS-INSTINCT does not check your computer. It starts again by itself.")}</p>
         {#each lengths as [m, label]}
-          <DropdownMenu.Item class="nav-item" onSelect={() => pause(m)}>{tr(label)}</DropdownMenu.Item>
+          <DropdownMenu.Item class="menu-item" onSelect={() => pause(m)}>{tr(label)}</DropdownMenu.Item>
         {/each}
       </DropdownMenu.Content>
     </DropdownMenu.Portal>

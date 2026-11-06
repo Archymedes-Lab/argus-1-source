@@ -35,8 +35,8 @@
     <h1 class="text-heading-24">{app.mode === "simple" ? tr("Alerts on your phone") : tr("Phone alerts")}</h1>
     <p class="mt-1 text-copy-14 text-gray-900">
       {app.mode === "simple"
-        ? tr("Pair your phone once. ARGUS-INSTINCT then sends important alerts to it, and nobody else can read them.")
-        : tr("Alerts are sealed for each paired phone on this computer and passed through the relay, which cannot read them. Pairing is confirmed by comparing a 6-digit code on both screens.")}
+        ? tr("Important alerts, readable only on your paired phone.")
+        : tr("Important alerts, readable only on your paired phone.")}
     </p>
   </div>
 

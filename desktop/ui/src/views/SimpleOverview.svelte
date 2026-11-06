@@ -14,7 +14,7 @@
   import { app, go } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
   import { collectorSummary, distinct, groupQuestions, isReminder, problemCounts, type Finding } from "../lib/model";
-  import { greeting, headline, plainFinding } from "../lib/plain";
+  import { hasGuide, headline, plainFinding } from "../lib/plain";
 
   let ap = $state<(Autopilot & { health?: { okay: string; monitoring_line: string } }) | null>(null);
   let phones = $state<number | null>(null);
@@ -55,10 +55,9 @@
           </div>
         </div>
         <div class="min-w-0">
-          <p class="text-label-13 text-gray-900">{tr(greeting())}</p>
-          <h2 class="mt-1 text-heading-32">{tr(h.title, h.vars)}</h2>
-          <p class="mt-2 text-copy-14 text-gray-900">{tr(h.body, h.vars)}{#if h.partial} {tr(h.partial)}{/if}</p>
-          {#if ap?.health}<p class="mt-3 flex items-center gap-1.5 text-copy-13 text-gray-900"><Sparkles size={14} />{ap.health.okay} {ap.health.monitoring_line}</p>{/if}
+          <h2 class="text-heading-32">{tr(h.title, h.vars)}</h2>
+          <p class="mt-2 text-copy-14 text-gray-900">{tr(h.body, h.vars)}</p>
+          {#if h.partial}<p class="mt-1 text-copy-14 text-amber-900">{tr(h.partial)}</p>{/if}
         </div>
       </div>
     </section>
@@ -92,8 +91,12 @@
                     onclick={() => go("findings", { query: f.title, severity: null })}>
               <Pill severity={f.severity} />
               <span class="min-w-0 flex-1">
-                <span class="block text-label-14">{tr(plainFinding(f).means)}</span>
-                <span class="mt-0.5 block text-copy-13 text-gray-900">{tr(plainFinding(f).next)}</span>
+                {#if hasGuide(f)}
+                  <span class="block text-label-14">{tr(plainFinding(f).means)}</span>
+                  <span class="mt-0.5 block text-copy-13 text-gray-900">{tr(plainFinding(f).next)}</span>
+                {:else}
+                  <span class="block text-label-14">{f.title}</span>
+                {/if}
               </span>
               <ChevronRight size={16} class="mt-1 shrink-0 text-gray-700" />
             </button>
@@ -109,7 +112,6 @@
         <span class="grid size-10 place-items-center rounded-xl {phones ? 'bg-green-100 text-green-900' : 'bg-blue-100 text-blue-900'}"><Smartphone size={20} /></span>
         <span class="flex-1">
           <span class="block text-label-14">{phones ? (phones === 1 ? tr("Your phone gets alerts") : tr("{n} phones get alerts", { n: phones })) : tr("Get alerts on your phone")}</span>
-          <span class="block text-copy-13 text-gray-900">{phones ? tr("Add another phone or send a test.") : tr("Pair your phone in a minute. Alerts reach it even when you are away.")}</span>
         </span>
         <ChevronRight size={16} class="text-gray-700" />
       </button>
@@ -119,7 +121,6 @@
       <span class="grid size-10 place-items-center rounded-xl bg-blue-100 text-blue-900"><Sparkles size={20} /></span>
       <span class="flex-1">
         <span class="block text-label-14">{tr("Not sure what something means?")}</span>
-        <span class="block text-copy-13 text-gray-900">{tr("Ask ARGUS-INSTINCT in your own words. It explains in plain language.")}</span>
       </span>
       <ChevronRight size={16} class="text-gray-700" />
     </button>

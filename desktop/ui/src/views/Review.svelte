@@ -71,7 +71,7 @@
       {/if}
     </div>
     <p class="mb-4 text-copy-13 text-gray-900">{t("review.cases.sub")}
-      {#if ap.policy?.auto_handle}{app.mode === "simple" ? tr("Auto-handle is on: things that stayed the same for {n} days and only need your OK are marked as expected for you, and written down. If anything changes, you are asked again.", { n: ap.policy.min_age_days }) : tr("Auto-handle is on: groups rated high (never critical) that only need your confirmation and have stayed unchanged for {n} days are recognised for you and logged. Changed evidence asks again.", { n: ap.policy.min_age_days })}{/if}</p>
+      {#if ap.policy?.auto_handle}{tr("Auto-handle is on: after {n} unchanged days, items that only need your OK are accepted and logged. Never critical.", { n: ap.policy.min_age_days })}{/if}</p>
     {#if !cases.length}
       <div class="card empty">{tr("No cases need a decision.")}</div>
     {:else}

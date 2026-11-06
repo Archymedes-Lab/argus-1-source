@@ -5,18 +5,19 @@
   import { app, toast } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
 
-  let data = $state<Coverage | null>(null);
+  const data = $derived(app.coverage as Coverage | null);
   let err = $state("");
   let level = $state("");
   let stage = $state("");
   let query = $state("");
   let limit = $state(60);
-  let timer: ReturnType<typeof setInterval> | undefined;
 
+  // Fresh on open, then every 30 s while open; the sidebar shares the same map.
   async function load() {
-    try { data = await api.coverage(); err = ""; }
+    try { app.coverage = await api.coverage(); err = ""; }
     catch (e) { err = String((e as Error).message ?? e); }
   }
+  let timer: ReturnType<typeof setInterval> | undefined;
   onMount(() => { load(); timer = setInterval(load, 30000); });
   onDestroy(() => clearInterval(timer));
   $effect(() => { level; query; stage; limit = 60; });
@@ -45,10 +46,7 @@
 
 <div class="flex flex-col gap-6">
   <div class="flex items-start gap-4">
-    <div class="max-w-[760px]">
-      <h2 class="text-heading-24">{tr("What Argus can see")}</h2>
-      <p class="mt-1 text-copy-14 text-gray-900">{app.mode === "simple" ? tr("Each row is a trick that attackers use. Working means ARGUS-INSTINCT has shown it can spot that trick. Should work means it ought to, but this has not been tested. Cannot see yet means it would miss it. Stopped working means it used to spot it and no longer does.") : tr("Each row is a way attackers work. Proven means ARGUS-INSTINCT has shown it can see it, Expected means it should but has not been proven, a Blind spot means it cannot see it yet, and Got worse means it used to see it.")}</p>
-    </div>
+    <h2 class="text-heading-24">{tr("What Argus can see")}</h2>
     <button class="btn btn-sm ml-auto shrink-0" onclick={full}>{tr("Open full map")}</button>
   </div>
 
@@ -62,7 +60,7 @@
         <h3 class="text-heading-20 tabular">{app.mode === "simple" ? tr("{n} attacker tricks", { n: data.totals.total }) : tr("{n} techniques", { n: data.totals.total })}</h3>
         <p class="ml-auto text-copy-13 text-gray-900">{tr("Watched {n}% of the last 24 hours", { n: watched })}</p>
       </div>
-      <div class="mt-5 flex h-3 overflow-hidden rounded-full bg-gray-200" role="img"
+      <div class="mt-5 flex h-1.5 overflow-hidden bg-gray-200" role="img"
            aria-label={LEVELS.map((l) => `${label[l]} ${data?.totals[l] ?? 0}`).join(", ")}>
         {#each LEVELS as l}<i style:width="{share(data.totals[l])}%" style:background={tone[l]}></i>{/each}
       </div>
@@ -85,7 +83,7 @@
           <button class="-mx-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-gray-100 {stage === id ? 'bg-gray-100 ring-2 ring-blue-700' : ''}"
                   onclick={() => (stage = stage === id ? "" : id)} aria-pressed={stage === id}>
             <div class="mb-1 flex justify-between text-copy-13"><span>{pretty(id)}</span><span class="tabular text-gray-900">{c.total}</span></div>
-            <div class="flex h-2 overflow-hidden rounded-full bg-gray-200" role="img" aria-label="{pretty(id)}: {LEVELS.map((l) => `${label[l]} ${c[l] ?? 0}`).join(', ')}">
+            <div class="flex h-1 overflow-hidden bg-gray-200" role="img" aria-label="{pretty(id)}: {LEVELS.map((l) => `${label[l]} ${c[l] ?? 0}`).join(', ')}">
               {#each LEVELS as l}<i style:width="{((c[l] ?? 0) / total) * 100}%" style:background={tone[l]}></i>{/each}
             </div>
           </button>

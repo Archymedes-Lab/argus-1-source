@@ -88,5 +88,5 @@
     {#if waiting}<p class="text-copy-13 text-gray-900" role="status"><span class="dot dot-run mr-2"></span>{tr("Waiting for payment to complete in your browser…")} <button class="link" onclick={load}>{tr("I have paid, check now")}</button></p>{/if}
   {/if}
 
-  <p class="text-copy-13 text-gray-900">{tr("Payment is handled by Stripe in your browser. ARGUS-INSTINCT never sees or stores your card details.")}</p>
+  <p class="text-copy-13 text-gray-900">{tr("Payment by Stripe. Card details never reach ARGUS-INSTINCT.")}</p>
 </div>

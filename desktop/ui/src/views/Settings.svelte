@@ -65,7 +65,7 @@
           {/if}
         </div>
       </div>
-      <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("ARGUS-INSTINCT reads one public file to learn the newest version and sends nothing about this computer. It never installs anything by itself: the button opens the download page.")}</p>
+      <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("Checks one public file. Sends nothing, installs nothing.")}</p>
     </section>
   {/if}
 
@@ -74,7 +74,6 @@
     <div class="card row justify-between gap-4">
       <div>
         <p class="text-label-13">{tr("Interface language")}</p>
-        <p class="mt-0.5 text-copy-13 text-gray-900">{tr("The assistant also answers in this language. Findings and evidence from your computer are shown as ARGUS-INSTINCT recorded them.")}</p>
       </div>
       <Select items={LANGS.map((l) => ({ value: l.code, label: l.name }))} label={tr("Interface language")} width="w-44"
               bind:value={() => app.lang, (v) => setLang(v || app.lang)} />
@@ -108,9 +107,7 @@
       <div class="row justify-between gap-4">
         <div>
           <p class="text-label-13">{t("review.auto")}</p>
-          <p class="mt-0.5 text-copy-13 text-gray-900">{app.mode === "simple"
-            ? tr("If something has been the same for {n} days and only needs your OK, ARGUS-INSTINCT notes it as expected so you are not asked. It never does this for the most serious items, and asks again if anything changes.", { n: days })
-            : tr("Recognise groups rated high (never critical) that only need your confirmation and have been unchanged for {n} days. Each one is logged; changed evidence asks again.", { n: days })}</p>
+          <p class="mt-0.5 text-copy-13 text-gray-900">{tr("After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.", { n: days })}</p>
         </div>
         {#if ap?.policy}
           <input type="checkbox" checked={ap.policy.auto_handle} onchange={toggleAuto} aria-label={t("review.auto")} />

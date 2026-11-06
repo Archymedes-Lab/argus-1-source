@@ -1,6 +1,6 @@
 // Application state. The daemon owns the truth; this holds the last copy the
 // shell fetched and refreshes it when the pulse stream says something changed.
-import { api, inApp, onDaemon, type UpdateInfo, type AppStatus } from "./api";
+import { api, inApp, onDaemon, type Coverage, type UpdateInfo, type AppStatus } from "./api";
 import { tr } from "./i18n";
 
 export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "licence" | "settings";
@@ -23,6 +23,7 @@ const FALLBACK_MS = 60000;     // if the stream is quiet, still refresh once a m
 
 export const app = $state({
   data: null as any,
+  coverage: null as Coverage | null,   // shared by the sidebar and the Coverage view
   loading: false,
   error: "",
   daemon: "connecting" as "connecting" | "live" | "down",
@@ -115,6 +116,18 @@ export async function refresh() {
   }
 }
 
+const COVERAGE_EVERY_MS = 120000;   // coverage moves slowly; the map costs the daemon a build
+let coverageInFlight = false;
+
+/** Coverage for the sidebar and the Coverage view; keeps the last answer on failure. */
+export async function refreshCoverage() {
+  if (coverageInFlight) return;
+  coverageInFlight = true;
+  try { app.coverage = await api.coverage(); }
+  catch { /* keep the last map; the view says when it cannot read */ }
+  finally { coverageInFlight = false; }
+}
+
 const UPDATE_EVERY_MS = 6 * 3600 * 1000;       // the service caches its answer for as long
 
 /** Ask whether a newer release is published. `loud` (a click) says the result; the quiet check does not. */
@@ -158,6 +171,8 @@ export async function start() {
   applyTheme();
   applyMode();
   await refresh();
+  void refreshCoverage();
+  setInterval(() => void refreshCoverage(), COVERAGE_EVERY_MS);
   void confirmReturnFromCheckout();
   void checkUpdate();
   setInterval(() => void checkUpdate(), UPDATE_EVERY_MS);

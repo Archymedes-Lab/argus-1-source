@@ -14,6 +14,9 @@ const SEVERITY_WHY: Record<string, string> = {
 
 export interface Plain { means: string; why: string; next: string }
 
+/** True when the category has plain wording of its own; otherwise show the finding's own title. */
+export function hasGuide(f: Finding): boolean { return Boolean(G[f.category ?? ""]); }
+
 export function plainFinding(f: Finding): Plain {
   const g = G[f.category ?? ""];
   if (g) return { means: g[0], why: g[1], next: g[2] };
@@ -48,8 +51,3 @@ export function headline(score: number | null | undefined, critical: number, hig
   return { tone: "ok", title: "No signs of trouble right now", body: "Nothing needs you right now.", vars: {}, partial };
 }
 
-/** A friendly opener for the time of day. */
-export function greeting(now = new Date()): string {
-  const h = now.getHours();
-  return h < 5 ? "Still up?" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-}

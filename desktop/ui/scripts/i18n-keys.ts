@@ -23,7 +23,6 @@ export function collectKeys(root = "src"): string[] {
   const extra = [
     "Automatic", "Light", "Dark", "15 minutes", "1 hour", "4 hours", "24 hours",
     "Critical", "High", "Medium", "Low", "Ok", "never",
-    "Good morning", "Good afternoon", "Good evening", "Still up?",
     "ARGUS-INSTINCT is still getting a look at your computer", "Check back in a minute.",
     "1 thing needs your attention", "{n} things need your attention",
     "Start with the most urgent one below. This is not proof that something is wrong, only that it is worth a look.",
