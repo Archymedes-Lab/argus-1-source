@@ -11,6 +11,17 @@ from .util import now
 
 DEFAULT_DB = os.path.expanduser("~/.jarvis/jarvis.db")
 
+# Per-connection SQLite memory. Connections here are short-lived (one per job,
+# one per API request), so a large private page cache is filled once and thrown
+# away, and a memory map pins up to its size of the database file into every
+# reader's resident set. The kernel page cache already holds the file once,
+# shared and reclaimable. Measured 2026-11-06 on a 961 MB copy of the live store:
+#   hunt          64 MiB cache + 256 MiB mmap: peak 305 MB;  4 MiB, no mmap: 38-44 MB
+#   sysmon_linux  360 MB -> 87 MB;  /api/state build_state 406 MB -> 91 MB
+# with CPU per call unchanged within noise (state 3-4 s in every setting).
+CACHE_KIB = 4096          # 4 MiB private page cache per connection
+MMAP_BYTES = 0            # no memory map: reads go through the shared page cache
+
 
 class Store:
     def __init__(self, path=DEFAULT_DB):
@@ -24,8 +35,8 @@ class Store:
         # This database also contains response authority and incident evidence;
         # it is not just a replaceable feed cache. FULL syncs committed WAL data.
         for pragma in ("journal_mode=WAL", "synchronous=FULL",
-                       "cache_size=-65536", "temp_store=MEMORY",
-                       "mmap_size=268435456", "busy_timeout=10000"):
+                       f"cache_size=-{CACHE_KIB}", "temp_store=MEMORY",
+                       f"mmap_size={MMAP_BYTES}", "busy_timeout=10000"):
             try:
                 self.db.execute(f"PRAGMA {pragma}")
             except sqlite3.Error:

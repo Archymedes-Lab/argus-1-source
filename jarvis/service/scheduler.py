@@ -29,7 +29,7 @@ import threading
 import time
 import traceback
 
-from jarvis.core import collection, incidents, mechanisms
+from jarvis.core import collection, incidents, mechanisms, memory
 from jarvis.core.store import Store
 from jarvis.response import alert, defense, remediation
 from jarvis.response.reporting import notifications
@@ -953,6 +953,9 @@ class Scheduler(threading.Thread):
                     self.next_run[name] = time.time() + (
                         min(RETRY_S, JOBS[name][0]) if soon or failed else JOBS[name][0])
                     self.cold_start_pending.discard(name)
+                    # Freed job memory goes back to the kernel instead of
+                    # staying resident until the next peak (core/memory.py).
+                    memory.trim()
                 if failed:
                     time.sleep(LANE_ERROR_PAUSE_S)
                     continue
