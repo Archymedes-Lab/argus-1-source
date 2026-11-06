@@ -17,6 +17,7 @@ export const W = {
   "nav.procs": ["Running programs", "Processes"],
   "nav.phone": ["Alerts on my phone", "Phone"],
   "nav.pricing": ["Plan", "Pricing"],
+  "nav.licence": ["Licence", "Licence"],
   "nav.settings": ["Settings", "Settings"],
   // severity: Simple says how soon, Expert keeps the daemon's level
   "sev.critical": ["Urgent", "Critical"],
