@@ -117,14 +117,14 @@
         {:else}<span class="text-copy-13 text-gray-900">{tr("Needs the newer ARGUS-INSTINCT service")}</span>{/if}
       </div>
       <div class="row justify-between"><span class="text-label-13">{tr("Critical findings")}</span><span class="text-copy-13 text-gray-900">{tr("Always ask")}</span></div>
-      <div class="row justify-between"><span class="text-label-13">{tr("Applying a fix")}</span><span class="text-copy-13 text-gray-900">{tr("Never from this app")}</span></div>
+      <div class="row justify-between"><span class="text-label-13">{app.mode === "simple" ? tr("Fixing problems") : tr("Applying a fix")}</span><span class="text-copy-13 text-gray-900">{app.mode === "simple" ? tr("This app never changes your computer for you") : tr("Never from this app")}</span></div>
     </div>
   </section>
 
   {@render group(tr("Assistant"), [
-    [tr("Where answers come from"), tr("ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed")],
-    [tr("Where it runs"), tr("This computer only; nothing is sent to other addresses")],
-    [tr("What it can do"), tr("Reads and explains; it cannot act on what it says")],
+    [tr("Where answers come from"), app.mode === "simple" ? tr("What ARGUS-INSTINCT has seen on your computer, plus a built-in safety guide") : tr("ARGUS-INSTINCT's own data and a built-in safety guide; no extra software needed")],
+    [tr("Where it runs"), app.mode === "simple" ? tr("Only on your computer. Nothing is sent anywhere else.") : tr("This computer only; nothing is sent to other addresses")],
+    [tr("What it can do"), app.mode === "simple" ? tr("It explains things. It never changes anything on your computer.") : tr("Reads and explains; it cannot act on what it says")],
   ])}
 
   <section>
@@ -149,7 +149,7 @@
           {:else}<span class="text-copy-13 text-gray-900">{tr("Unavailable")}</span>{/if}
         </div>
       {/each}
-      <div class="row justify-between gap-4"><span class="text-label-13">{tr("Tray icon")}</span><span class="text-right text-copy-13 text-gray-900">{app.mode === "simple" ? tr("A coloured dot shows how things are going") : tr("Green, amber, orange; grey when unreachable")}</span></div>
+      <div class="row justify-between gap-4"><span class="text-label-13">{app.mode === "simple" ? tr("Icon near the clock") : tr("Tray icon")}</span><span class="text-right text-copy-13 text-gray-900">{app.mode === "simple" ? tr("A coloured dot shows how things are going") : tr("Green, amber, orange; grey when unreachable")}</span></div>
     </div>
     <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("These only control pop-ups from this app. ARGUS-INSTINCT keeps watching either way.")}</p>
   </section>
@@ -157,8 +157,8 @@
 
   {@render group(tr("Connection"), [
     [tr("Service"), app.daemon === "live" ? tr("Answering") : app.daemon === "down" ? tr("Not answering") : tr("Connecting")],
-    [tr("Address"), tr("127.0.0.1 only (port 8787, or JARVIS_DESKTOP_PORT)")],
-    [tr("Closing the window"), tr("Hides it to the tray; monitoring continues")],
+    [app.mode === "simple" ? tr("Who can reach it") : tr("Address"), app.mode === "simple" ? tr("Only this computer. Nobody else on your network can.") : tr("127.0.0.1 only (port 8787, or JARVIS_DESKTOP_PORT)")],
+    [tr("Closing the window"), app.mode === "simple" ? tr("ARGUS-INSTINCT keeps watching from the icon near the clock") : tr("Hides it to the tray; monitoring continues")],
   ])}
   {@render group(tr("Shortcuts"), [[tr("Search"), "Ctrl K  /  /"], [tr("Close a panel"), "Esc"]])}
 </div>

@@ -305,9 +305,11 @@ pub fn is_checkout_url(u: &str) -> bool {
 }
 
 #[tauri::command]
-pub async fn billing_checkout() -> Result<Value, String> {
-    blocking(|| {
-        let v = post_json("/api/billing/checkout", &json!({}), ACTION_TIMEOUT)?;
+pub async fn billing_checkout(plan: Option<String>) -> Result<Value, String> {
+    // Only the two known plans are ever sent; anything else falls back to the yearly one.
+    let plan = if plan.as_deref() == Some("month") { "month" } else { "year" };
+    blocking(move || {
+        let v = post_json("/api/billing/checkout", &json!({ "plan": plan }), ACTION_TIMEOUT)?;
         let url = v.get("url").and_then(Value::as_str).unwrap_or_default().to_string();
         if !is_checkout_url(&url) {
             return Err("ARGUS-INSTINCT did not return a Stripe checkout address".into());

@@ -1,5 +1,5 @@
 // Plain-language wording for the Simple mode. The category guidance is the
-// dashboard's own (lib/guide.json, generated from jarvis/web/static/dashboard.html),
+// dashboard's own (lib/guide.json, kept in step with the GUIDE in jarvis/web/static/dashboard.js),
 // so both interfaces tell the same story. General background, never a verdict.
 import guide from "./guide.json";
 import type { Finding } from "./model";

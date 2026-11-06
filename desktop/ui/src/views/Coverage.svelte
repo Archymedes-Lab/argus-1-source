@@ -22,7 +22,9 @@
   $effect(() => { level; query; stage; limit = 60; });
 
   const LEVELS = ["validated", "claimed", "blind", "regressed"] as const;
-  const label = $derived({ validated: tr("Proven"), claimed: tr("Expected"), blind: tr("Blind spot"), regressed: tr("Got worse") } as Record<string, string>);
+  const label = $derived((app.mode === "simple"
+    ? { validated: tr("Working"), claimed: tr("Should work"), blind: tr("Cannot see yet"), regressed: tr("Stopped working") }
+    : { validated: tr("Proven"), claimed: tr("Expected"), blind: tr("Blind spot"), regressed: tr("Got worse") }) as Record<string, string>);
   const tone: Record<string, string> = { validated: "var(--green-700)", claimed: "var(--blue-700)", blind: "var(--amber-700)", regressed: "var(--red-700)" };
   const pill: Record<string, string> = { validated: "pill-ok", claimed: "pill-info", blind: "pill-high", regressed: "pill-critical" };
   const pretty = (id: string) => id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
@@ -45,7 +47,7 @@
   <div class="flex items-start gap-4">
     <div class="max-w-[760px]">
       <h2 class="text-heading-24">{tr("What Argus can see")}</h2>
-      <p class="mt-1 text-copy-14 text-gray-900">{tr("Each row is a way attackers work. Proven means ARGUS-INSTINCT has shown it can see it, Expected means it should but has not been proven, a Blind spot means it cannot see it yet, and Got worse means it used to see it.")}</p>
+      <p class="mt-1 text-copy-14 text-gray-900">{app.mode === "simple" ? tr("Each row is a trick that attackers use. Working means ARGUS-INSTINCT has shown it can spot that trick. Should work means it ought to, but this has not been tested. Cannot see yet means it would miss it. Stopped working means it used to spot it and no longer does.") : tr("Each row is a way attackers work. Proven means ARGUS-INSTINCT has shown it can see it, Expected means it should but has not been proven, a Blind spot means it cannot see it yet, and Got worse means it used to see it.")}</p>
     </div>
     <button class="btn btn-sm ml-auto shrink-0" onclick={full}>{tr("Open full map")}</button>
   </div>
@@ -57,7 +59,7 @@
   {:else}
     <section class="card p-6">
       <div class="flex flex-wrap items-baseline gap-x-8 gap-y-1">
-        <h3 class="text-heading-20 tabular">{tr("{n} techniques", { n: data.totals.total })}</h3>
+        <h3 class="text-heading-20 tabular">{app.mode === "simple" ? tr("{n} attacker tricks", { n: data.totals.total }) : tr("{n} techniques", { n: data.totals.total })}</h3>
         <p class="ml-auto text-copy-13 text-gray-900">{tr("Watched {n}% of the last 24 hours", { n: watched })}</p>
       </div>
       <div class="mt-5 flex h-3 overflow-hidden rounded-full bg-gray-200" role="img"
@@ -76,7 +78,7 @@
     </section>
 
     <section class="card">
-      <div class="card-head">{tr("By stage of an attack")}</div>
+      <div class="card-head">{app.mode === "simple" ? tr("Steps of an attack") : tr("By stage of an attack")}</div>
       <div class="grid grid-cols-2 gap-x-8 gap-y-3 px-5 pb-5 max-md:grid-cols-1">
         {#each Object.entries(data.tactics) as [id, c]}
           {@const total = Math.max(1, c.total ?? 0)}
@@ -95,7 +97,7 @@
       <div class="flex items-center gap-3">
         <label class="relative w-72">
           <Search size={14} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-gray-700" />
-          <input class="input pl-8" bind:value={query} placeholder={tr("Search techniques")} aria-label={tr("Search techniques")} />
+          <input class="input pl-8" bind:value={query} placeholder={app.mode === "simple" ? tr("Search") : tr("Search techniques")} aria-label={app.mode === "simple" ? tr("Search") : tr("Search techniques")} />
         </label>
         {#if level || stage}<button class="btn btn-ghost btn-sm" onclick={() => { level = ""; stage = ""; }}>{tr("Clear filters")}</button>{/if}
         <span class="ml-auto text-copy-13 text-gray-900 tabular">{tr("{n} of {total}", { n: rows.length, total: data.techniques.length })}</span>

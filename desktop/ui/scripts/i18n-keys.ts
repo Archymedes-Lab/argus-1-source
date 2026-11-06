@@ -31,6 +31,9 @@ export function collectKeys(root = "src"): string[] {
     "1 item could use your attention when you have a minute.", "{n} items could use your attention when you have a minute.",
     "Your computer looks fine", "Nothing needs you right now.",
     "Some of ARGUS-INSTINCT's checks are not reporting right now, so this picture may be incomplete.",
+    // Pricing plan features reach tr() through a list.
+    "Continuous monitoring of this computer", "Plain-language assistant", "Investigate any finding with one click",
+    "Approvals, reports and daily briefing",
   ];
   for (const k of extra) keys.add(k);
   return [...keys].sort();
