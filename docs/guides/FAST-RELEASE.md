@@ -23,6 +23,10 @@ A newer push to the branch cancels the run in progress, so push once and wait.
 ## The flow
 
 1. Merge to `main` as usual (CI runs on every push).
+   **Before the dry run**, make and sign the host attestation and commit it
+   (`python3 release/host_attest.py make`, then `ssh-keygen -Y sign` with your release key; see
+   release/host_attest.py). A tag's `verify` requires it, and the tag must sit on the dry run's
+   exact commit, so the attestation commit comes first: attest, push `main`, dry run, tag.
 2. Push `main` to the dry-run branch (above). The dry run builds everything, installs the Setup
    on clean Windows hosts (one scenario per host, in parallel), assembles and gates the release,
    and keeps `release-out` and `build-records` for seven days.
