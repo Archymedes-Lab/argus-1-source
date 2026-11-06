@@ -470,6 +470,14 @@ class DaemonApi(Base):
         self.assertTrue(body['active'])
         self.assertTrue(body['state']['licensed'])
 
+    def test_monthly_desktop_opens_its_own_offer_with_the_same_claim(self):
+        code, body = self.api.action(self.db, 'upgrade', {'plan': 'desktop-monthly'})
+        self.assertRegex(body['open'], r'^https://pay\.archymedes\.xyz/buy/argus-desktop-monthly\?claim=clm_[0-9A-Z]{32}$')
+
+    def test_an_unknown_plan_falls_back_to_yearly_desktop_never_an_arbitrary_offer(self):
+        code, body = self.api.action(self.db, 'upgrade', {'plan': '../../evil'})
+        self.assertTrue(body['open'].startswith('https://pay.archymedes.xyz/buy/argus-desktop?claim=clm_'))
+
     def test_unknown_action_is_404(self):
         self.assertEqual(self.api.action(self.db, '../x', {})[0], 404)
 

@@ -582,10 +582,10 @@ pub fn valid_licence_action(a: &str) -> bool {
 pub fn valid_licence_page(url: &str) -> bool {
     const BASE: &str = "https://pay.archymedes.xyz/";
     let Some(rest) = url.strip_prefix(BASE) else { return false };
-    if matches!(rest, "manage" | "recover" | "buy/argus-server" | "buy/argus-desktop") {
+    if matches!(rest, "manage" | "recover" | "buy/argus-server" | "buy/argus-desktop" | "buy/argus-desktop-monthly") {
         return true;
     }
-    for offer in ["buy/argus-server?claim=clm_", "buy/argus-desktop?claim=clm_"] {
+    for offer in ["buy/argus-server?claim=clm_", "buy/argus-desktop?claim=clm_", "buy/argus-desktop-monthly?claim=clm_"] {
         if let Some(id) = rest.strip_prefix(offer) {
             return id.len() == 32 && id.bytes().all(|b| b.is_ascii_digit() || b.is_ascii_uppercase());
         }
@@ -604,7 +604,7 @@ pub async fn licence_action(action: String, key: Option<String>, plan: Option<St
         return Err("unknown licence action".into());
     }
     let key: String = key.unwrap_or_default().chars().take(200).collect();
-    let plan = match plan.as_deref() { Some("server") => "server", _ => "desktop" };
+    let plan = match plan.as_deref() { Some("server") => "server", Some("desktop-monthly") => "desktop-monthly", _ => "desktop" };
     blocking(move || post_json(&format!("/api/licence/{action}"), &json!({ "key": key, "plan": plan }), ASK_TIMEOUT)).await
 }
 
@@ -649,6 +649,9 @@ mod tests {
     fn licence_pages_and_actions_are_allow_listed() {
         assert!(valid_licence_page("https://pay.archymedes.xyz/manage"));
         assert!(valid_licence_page("https://pay.archymedes.xyz/buy/argus-desktop"));
+        assert!(valid_licence_page("https://pay.archymedes.xyz/buy/argus-desktop-monthly"));
+        assert!(valid_licence_page("https://pay.archymedes.xyz/buy/argus-desktop-monthly?claim=clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ"));
+        assert!(!valid_licence_page("https://pay.archymedes.xyz/buy/argus-desktop-monthly?claim=clm_short"));
         assert!(valid_licence_page("https://pay.archymedes.xyz/buy/argus-server?claim=clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ"));
         for bad in ["https://evil.example/manage", "http://pay.archymedes.xyz/manage", "https://pay.archymedes.xyz/manage/../x",
                     "https://pay.archymedes.xyz/buy/argus-server?claim=clm_short", "https://pay.archymedes.xyz.evil/manage",

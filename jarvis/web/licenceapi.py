@@ -15,6 +15,11 @@ _last_renew_try = [0.0]
 RENEW_CHECK_EVERY = 3600
 
 
+# What the in-app purchase may open (hosted/licence-cloudflare OFFERS). The service's claim
+# answer names server and desktop; the monthly Desktop offer takes the same claim id.
+UPGRADE_OFFERS = {'server': 'argus-server', 'desktop': 'argus-desktop', 'desktop-monthly': 'argus-desktop-monthly'}
+
+
 def _links():
     return {'buy_server': licence.SERVER_CHECKOUT, 'buy_desktop': licence.DESKTOP_CHECKOUT,
             'manage': licence.MANAGE_URL, 'recover': licence.RECOVER_URL}
@@ -52,9 +57,11 @@ def action(db_path, name, payload):
         elif name == 'refresh':
             licence.refresh(path)
         elif name == 'upgrade':
-            plan = payload.get('plan') if payload.get('plan') in ('server', 'desktop') else 'desktop'
+            plan = payload.get('plan') if payload.get('plan') in UPGRADE_OFFERS else 'desktop'
             claim = licence.claim_start(path)
-            return 200, {'ok': True, 'open': claim['buy'][plan], 'interval': claim.get('interval', 5)}
+            link = (claim.get('buy') or {}).get(plan) or \
+                f"{licence.PAY_ORIGIN}/buy/{UPGRADE_OFFERS[plan]}?claim={claim['claim_id']}"
+            return 200, {'ok': True, 'open': link, 'interval': claim.get('interval', 5)}
         elif name == 'poll':
             done = licence.claim_poll(path) == 'active'
             return 200, {'ok': True, 'active': done, **({'state': state(db_path)} if done else {})}
