@@ -106,7 +106,7 @@ CANDIDATES = (
 # tooling, not security integrations: no licence question for the product.
 PLATFORM = frozenset({
     "systemctl", "dpkg", "git", "docker", "podman", "ssh-keygen", "npm",
-    "powershell.exe", "pwsh.exe", "opencode", "friday", "journalctl",
+    "powershell.exe", "pwsh.exe", "opencode", "friday", "journalctl", "zstd", "unzstd",
 })
 
 # The program name each integrated source is invoked by.

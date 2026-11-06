@@ -50,9 +50,9 @@ import subprocess
 import time
 from datetime import datetime, timezone
 
-from jarvis.collectors.telemetry.sysmon_linux.journal import _parse
 from jarvis.core.finding import finding as _finding
 from jarvis.platform import host
+from jarvis.platform.sysmon_records import parse as _parse
 
 UNIT = "jarvis.service"
 STATE_META = "restart_autopsy_v1"   # {"cursor", "pending": {inv: tries}, "verdicts": [...]}
