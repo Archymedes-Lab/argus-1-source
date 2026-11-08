@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 
+from jarvis.platform.sysmon_records import TRUSTED_MATCH  # noqa: F401  (re-exported for sensorprobe and tests)
 from jarvis.platform.sysmon_records import parse as _parse  # noqa: F401  (this package's name for it)
 
 CHANNEL = "journal:sysmon"
@@ -31,12 +32,8 @@ def active():
     return installed and running
 
 
-# Only records journald itself attributes to the sysmon unit running as root.
-# `-t sysmon` alone matches SYSLOG_IDENTIFIER, which any account sets freely:
-# `logger -t sysmon ...` from uid 1000 was returned beside real events on
-# 2026-11-01. Trusted (underscore) fields are written by journald, not the
-# client, and journalctl ANDs matches on different fields.
-TRUSTED_MATCH = ("_SYSTEMD_UNIT=sysmon.service", "_UID=0", "-t", "sysmon")
+# Only records journald itself attributes to the root sysmon unit; why: see
+# jarvis/platform/sysmon_records.TRUSTED_MATCH (shared with host/restarts.py).
 
 
 def trusted_text(since_ts, until_ts=None, timeout=40):

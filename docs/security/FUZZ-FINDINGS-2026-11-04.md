@@ -78,7 +78,7 @@ temp dir, to confirm FZ-02.
   and is reported; negative controls: a root record beside it still counts and is learned.
 - Same rule applied to the other journal readers whose output is evidence:
   `host/restarts.py read_sysmon` (`-t sysmon` alone: a forged Sysmon process record could
-  name a known restarter and explain a stop away) now uses `sysmon_linux.journal.TRUSTED_MATCH`;
+  name a known restarter and explain a stop away) now uses `TRUSTED_MATCH` (moved to `platform/sysmon_records.py`, shared);
   `host/opshealth.py boot_endings` reads only `_UID=0` records, so `logger "Journal stopped"`
   cannot mark a crashed boot clean. Readers already safe: `bruteforce` (`_UID`), sysmon_linux
   (`TRUSTED_MATCH`), `-u UNIT`, `-k` and `_SYSTEMD_INVOCATION_ID=` matches (journald-set fields).

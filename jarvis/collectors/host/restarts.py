@@ -50,9 +50,9 @@ import subprocess
 import time
 from datetime import datetime, timezone
 
-from jarvis.collectors.telemetry.sysmon_linux.journal import TRUSTED_MATCH
 from jarvis.core.finding import finding as _finding
 from jarvis.platform import host
+from jarvis.platform.sysmon_records import TRUSTED_MATCH
 from jarvis.platform.sysmon_records import parse as _parse
 
 UNIT = "jarvis.service"
@@ -239,7 +239,7 @@ def started_at(e):
 def read_sysmon(t, run=_run):
     """(process-create events started in [t-LOOKBACK_S, t+AFTER_S], newest
     Sysmon event time read, problem)."""
-    # Only records journald attributes to the root sysmon unit (FZ-04, TRUSTED_MATCH):
+    # Only records journald attributes to the root sysmon unit (FZ-04, platform/sysmon_records.TRUSTED_MATCH):
     # a `logger -t sysmon` line from any account could otherwise name a known
     # restarter as the issuer and explain a stop away. Forged lines are counted
     # and reported by the sensor probe (collectors/telemetry/sensorprobe.py).
