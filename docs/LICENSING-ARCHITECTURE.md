@@ -215,3 +215,12 @@ Premium content on the server: the review report is built on the customer's serv
 observation, so no part of it could move to the server without sending host data. `/content/sample` proves the
 path; candidates for real packs are curated detection/rule packs, per-finding review guidance text, and intel
 updates.
+
+## Retention (2026-11-09)
+
+Licence records are deleted one year after the licence ends (owner decision; stated in the privacy
+policy and EULA §6). A daily Worker cron (`17 3 * * *`, `src/retention.ts`) deletes, in batches of 200,
+each licence revoked more than a year ago or whose `lic_exp` (paid-through plus the 14-day grace) is more
+than a year past, together with its activations, releases, claims and audit rows (children first). The
+purge leaves one audit row with the count and no licence id. Licences with no end are never purged.
+Stripe keeps its own payment records under its own policy.

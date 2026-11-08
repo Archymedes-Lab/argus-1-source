@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { clearPriceCache, handle, maskEmail, stripeMode, type Deps, type Env } from "../src/index";
 import { hmacHex, STRIPE_VERSION, verifyStripeSignature } from "../src/stripe";
+import { SUBSCRIPTION_GRACE } from "../src/env";
 import { b64url, decodeJws, signedMessage, unb64url } from "../src/cert";
 import { ALPHABET, checkChar, deriveKey, formatKey, parseKey } from "../src/keys";
 
@@ -285,7 +286,7 @@ describe("issuing", () => {
     const rows = licences();
     expect(rows.length).toBe(1);
     expect(body).toEqual({ status: "paid", offer: "argus-server", key, key_hint: `…${key.slice(-4)}`, email_hint: "a***@example.com" });
-    expect(rows[0]).toMatchObject({ plan: "server", seats: 1, lic_exp: YEAR_END + 3 * 86400, key_last4: key.slice(-4), subscription: "sub_s" });
+    expect(rows[0]).toMatchObject({ plan: "server", seats: 1, lic_exp: YEAR_END + SUBSCRIPTION_GRACE, key_last4: key.slice(-4), subscription: "sub_s" });
     const dump = JSON.stringify(store.db.query("SELECT * FROM licences_v2").all()) + JSON.stringify(store.db.query("SELECT * FROM audit").all());
     expect(dump).not.toContain(key);
     expect(dump).not.toContain(key.replace(/-/g, ""));
@@ -365,7 +366,7 @@ describe("activation and certificates", () => {
     expect(header).toEqual({ alg: "EdDSA", kid: "test-k1", typ: "argus-licence+jwt" });
     expect(Object.keys(claims).sort()).toEqual(["act", "aud", "dev", "dpk", "exp", "iat", "iss", "kid", "lic_exp", "plan", "renew_after", "seats", "sub"]);
     expect(claims).toMatchObject({ iss: "pay.archymedes.xyz", aud: "argus", kid: "test-k1", plan: "server", seats: 1, dev: d.dev, dpk: d.dpk,
-                                   iat: NOW, exp: NOW + 30 * 86400, lic_exp: YEAR_END + 3 * 86400, renew_after: NOW + 23 * 86400 });
+                                   iat: NOW, exp: NOW + 30 * 86400, lic_exp: YEAR_END + SUBSCRIPTION_GRACE, renew_after: NOW + 23 * 86400 });
     expect(claims.sub).toBe(licences()[0].id);
     expect(body.certificate).not.toContain(key);
   });
@@ -374,8 +375,8 @@ describe("activation and certificates", () => {
     stripe.subscriptions.set("sub_s", { id: "sub_s", items: { data: [{ current_period_end: NOW + 5 * 86400 }] } });
     const { key } = await buyServer();
     const { claims } = decodeJws((await (await (await device("a")).activate(key)).json() as any).certificate)!;
-    expect(claims.exp).toBe(NOW + 8 * 86400);
-    expect(claims.renew_after).toBe(NOW + 1 * 86400);
+    expect(claims.exp).toBe(NOW + 19 * 86400);   // period end 5 d + 14 d grace
+    expect(claims.renew_after).toBe(NOW + 12 * 86400);
   });
 
   test("same device again: same activation, fresh certificate; another machine: 409 seat_taken with the manage URL", async () => {
@@ -448,7 +449,7 @@ describe("renewal and release (device-signed)", () => {
     const res = await d.renew(act);
     expect(res.status).toBe(200);
     const { claims } = decodeJws((await res.json() as any).certificate)!;
-    expect(claims.lic_exp).toBe(nextEnd + 3 * 86400);
+    expect(claims.lic_exp).toBe(nextEnd + SUBSCRIPTION_GRACE);
     expect(claims.exp).toBe(NOW + 55 * 86400);
   });
 
@@ -710,5 +711,13 @@ describe("misc", () => {
     expect(res.status).toBe(400);
     expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect((await post("/licence/activate", { key: "x".repeat(5000) })).status).toBe(400);
+  });
+});
+
+describe("grace period matches the EULA", () => {
+  test("a lapsed subscription keeps paid features for 14 days (EULA §3)", () => {
+    expect(SUBSCRIPTION_GRACE).toBe(14 * 86400);
+    const eula = readFileSync(new URL("../../../LICENSE.txt", import.meta.url), "utf8");
+    expect(eula).toMatch(/grace period of fourteen \(14\) days/);
   });
 });

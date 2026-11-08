@@ -9,6 +9,7 @@
 // - Customer machines call /licence/* with the key or a device signature: no secret leaves this worker.
 // - Keys, emails, machine ids and IPs are never stored or logged (D1 holds HMACs; see schema.sql).
 // - Certificates are Ed25519 JWS (src/cert.ts); the app verifies them offline with embedded public keys.
+import { purgeEnded } from "./retention";
 import { contentRoute, issue, keyEmail, keyOf, bindClaim, CLAIM_ID, licenceRoute, type Claim } from "./licence";
 import { manage, manageHome, recover, link, thanks } from "./manage";
 import { idOf, invoiceMetadata, invoicePeriodEnd, invoiceSubscription, stripe, StripeError, subscriptionQuantity, verifyStripeSignature } from "./stripe";
@@ -333,5 +334,9 @@ export function upstream(env: Env & { DEV_FAKE_UPSTREAM?: string }): (u: string,
 export default {
   fetch(req: Request, env: Env): Promise<Response> {
     return handle(req, env, { fetch: upstream(env), now: () => Date.now() });
+  },
+  // Daily retention purge (src/retention.ts; cron in wrangler.jsonc).
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    await purgeEnded(env, Math.floor(Date.now() / 1000));
   },
 };

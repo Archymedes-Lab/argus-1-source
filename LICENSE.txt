@@ -35,12 +35,14 @@ licensed to you under this Agreement.
 non-exclusive, non-transferable, non-sublicensable, revocable licence to
 install and use the Software, without charge, on devices you own or control,
 for your own personal or internal business security purposes. The free tier
-includes the Software's core protection (detection, response, alerts and the
-rules shipped with the Software). It does not include paid features such as
-rule-pack updates.
+includes the Software's core monitoring features (its detections, alerts,
+bounded response actions and the rules shipped with the Software), which are
+early-access features whose coverage is described in the Software's own
+coverage view. It does not include paid features such as rule-pack updates.
 
 2.2 Paid licence. If you hold a valid, unexpired licence key issued by
-Archymedes (a "Licence Key") for a paid plan (for example "Pro" or "Team"),
+Archymedes (a "Licence Key") for a paid plan (for example "Argus Desktop" or
+"Argus Server"),
 Archymedes additionally grants you, for the term of that plan and up to the
 number of seats it states, a non-exclusive, non-transferable,
 non-sublicensable licence to use the paid features that plan includes, for
@@ -50,7 +52,8 @@ the plan describes.
 2.3 Term and expiry. A paid licence lasts for the term you paid for. After it
 expires, a grace period of fourteen (14) days applies; after that, paid
 features stop and the free tier in section 2.1 continues to apply. Expiry or
-termination of a paid licence does not disable the Software's core protection.
+termination of a paid licence does not disable the Software's core monitoring
+features.
 
 3. RESTRICTIONS
 
@@ -92,14 +95,20 @@ rights you have under those licences.
 
 The Software is designed to run locally. Where it contacts Archymedes services
 (for example, to fetch rule packs), it sends your Licence Key and the minimum
-technical information needed to provide the service. [PRIVACY POLICY LINK:
-founders to provide.]
+technical information needed to provide the service. The privacy policy at
+https://www.archymedes.xyz/privacy describes what is collected and for how
+long; licence records are deleted one year after a licence ends.
 
 7. FEES AND REFUNDS
 
 Fees for paid plans are set at purchase and are payable in advance through
-our payment provider. [REFUND POLICY: founders to choose.] Taxes are your
-responsibility unless the payment provider collects them.
+our payment provider. Refunds: you may ask for a full refund within fourteen
+(14) days of your first purchase or of any renewal by writing to
+support@archymedes.xyz; the licence ends when the refund is made. Outside that
+window, payments are non-refundable except where the law requires otherwise.
+You may cancel a subscription at any time; it then ends at the close of the
+period already paid for. Taxes are your responsibility unless the payment
+provider collects them.
 
 8. TERMINATION
 
@@ -136,10 +145,13 @@ and nothing here limits liability that cannot be limited by law.
 
 11. GOVERNING LAW AND DISPUTES
 
-[GOVERNING LAW: founders to choose.] This Agreement is governed by the laws of
-[JURISDICTION], without regard to its conflict-of-laws rules. [VENUE /
-ARBITRATION: founders to choose.] The United Nations Convention on Contracts
-for the International Sale of Goods does not apply.
+This Agreement is governed by the laws of the State of Delaware, United
+States of America, without regard to its conflict-of-laws rules. The state
+and federal courts located in Delaware have exclusive jurisdiction over any
+dispute arising from it, and both parties consent to that jurisdiction. This
+does not deprive a consumer of the protection of mandatory laws of the
+country where they live. The United Nations Convention on Contracts for the
+International Sale of Goods does not apply.
 
 12. GENERAL
 
@@ -153,4 +165,5 @@ the rest remains in effect. Waiver: failing to enforce a provision is not a
 waiver. Changes: we may update this Agreement for future versions of the
 Software; the version accompanying a release governs that release.
 
-Contact: Archymedes, Inc. [ADDRESS AND CONTACT EMAIL: founders to provide.]
+Contact: Archymedes, Inc., support@archymedes.xyz. [COMPANY ADDRESS: to be
+added once the company is registered.]

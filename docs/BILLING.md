@@ -12,7 +12,7 @@ receipts and invoices through Link. Checkout and licences are served by one Clou
 | `argus-server` (Argus Server, $50 per server per year) | `argus_server_usd_5000_year` | 1 server | `ARGUS-SRV-` |
 | `argus-desktop` (Argus Desktop, $79 per computer per year) | `argus_desktop_usd_7900_year` | 1 computer | `ARGUS-DSK-` |
 
-Both are yearly subscriptions. A licence runs to the current period end plus 3 days and moves forward on
+Both are yearly subscriptions. A licence runs to the current period end plus a 14-day grace period (EULA §2.3) and moves forward on
 every paid invoice. Seat counts live in one place: `OFFERS` in `hosted/licence-cloudflare/src/env.ts`.
 Prices come from archymedes-gtm `scripts/stripe-setup.ts` (price book `catalog/stripe.ts`); the Worker only
 looks them up by lookup key. Retired offers (Server Review, Watch, the free desktop beta) answer 404.
