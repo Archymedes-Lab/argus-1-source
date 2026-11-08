@@ -17,6 +17,15 @@ Reported (each kept for a day, so it does not vanish on the next run):
 The first run learns: it pages only for root, guessed and password logins.
 A journal that cannot be read, or a cursor the journal no longer has, is
 reported as not observed, never as "no logins" (I1, I7).
+
+Trusted origin (FZ-04): `-t sshd` matches SYSLOG_IDENTIFIER, which the
+client chooses (`logger -t sshd "Accepted publickey for ..."` from any
+account). Only records whose _UID, written by journald itself, is root are
+evidence; sshd and sshd-session log as root (the privsep child's messages go
+through the root monitor). This is bruteforce._journal_messages' rule. A
+record from any other account is never evidence and never trains the
+baseline, but it is counted and reported, not silently dropped: something is
+writing as sshd, or this host's sshd runs unprivileged.
 """
 
 import ipaddress
@@ -61,8 +70,16 @@ def network_of(ip):
     return str(ipaddress.ip_network(f"{addr}/{24 if addr.version == 4 else 48}", strict=False))
 
 
+class Records(list):
+    """(ts, message) records from root; `untrusted` counts sshd-tagged records
+    from any other account and `untrusted_ts` is the newest one's time."""
+    untrusted = 0
+    untrusted_ts = 0.0
+
+
 def read_journal(cursor, run=subprocess.Popen, max_lines=MAX_LINES):
-    """(records, new cursor, problem). records are (ts, message)."""
+    """(records, new cursor, problem). records are (ts, message) from root only
+    (a Records list carrying the count of rejected non-root ones)."""
     argv = ["journalctl", "-o", "json", "--no-pager", "-q"]
     for ident in IDENTIFIERS:
         argv += ["-t", ident]
@@ -71,7 +88,7 @@ def read_journal(cursor, run=subprocess.Popen, max_lines=MAX_LINES):
         proc = run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace")
     except OSError as exc:
         return [], cursor, f"journalctl could not run: {exc.strerror or exc}"
-    records, last, truncated = [], cursor, False
+    records, last, truncated = Records(), cursor, False
     try:
         for n, line in enumerate(proc.stdout):
             if n >= max_lines:
@@ -90,7 +107,11 @@ def read_journal(cursor, run=subprocess.Popen, max_lines=MAX_LINES):
                 ts = int(rec.get("__REALTIME_TIMESTAMP", 0)) / 1e6
             except (TypeError, ValueError, OverflowError):
                 ts = 0.0
-            if isinstance(msg, str):
+            if rec.get("_UID") != "0":
+                # Forgeable: counted and reported, never evidence (FZ-04).
+                records.untrusted += 1
+                records.untrusted_ts = max(records.untrusted_ts, ts)
+            elif isinstance(msg, str):
                 records.append((ts, msg))
             last = rec.get("__CURSOR") or last
     finally:
@@ -175,6 +196,10 @@ TITLES = {
                  "from {ip}; accounts on this server otherwise log in with keys"),
     "new_key": ("high", "new SSH key used for {user}", "{fp} from {ip}: not seen for {user} before"),
     "new_net": ("medium", "{user} logged in from a new network", "{ip} ({net}) by {method}"),
+    "untrusted": ("medium", "sshd journal records written by a non-root process",
+                  "{count} record(s) tagged sshd came from an account other than root: not used as "
+                  "login evidence or to learn the baseline, because any local account can write them "
+                  "(logger -t sshd). Find the writer; if this host's sshd runs unprivileged they may be real"),
 }
 
 
@@ -206,6 +231,10 @@ def audit(store, hosts=None, now=None, reader=read_journal):
     failures = _load(store, FAILS_META, {})
     records, cursor, problem = reader(state.get("cursor"))
     events, state, failures = evaluate(records, state, failures, now)
+    untrusted = getattr(records, "untrusted", 0)
+    if untrusted:
+        events.append({"ts": getattr(records, "untrusted_ts", 0.0) or now, "kind": "untrusted",
+                       "count": untrusted, "net": "journal (SYSLOG_IDENTIFIER=sshd, _UID!=0)"})
     state["cursor"] = cursor
     kept = [e for e in _load(store, EVENTS_META, []) if isinstance(e, dict) and now - e.get("ts", 0) <= KEEP_S]
     kept = (kept + events)[-MAX_EVENTS:]

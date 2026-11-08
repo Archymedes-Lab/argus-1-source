@@ -54,13 +54,13 @@ python3 -m tests.fuzz.run --budget-seconds 60      # all targets; --list, --targ
 
 A run fails only on findings not yet listed in `tests/fuzz/known.json`.
 
-**First results (2026-11-04, 21 targets, ~13 CPU-minutes):** 15 findings, 10
-fixed with regression tests (`tests/test_fuzz_findings.py`), 5 open. Full write-up:
+**First results (2026-11-04, 21 targets, ~13 CPU-minutes):** 15 findings, 11
+fixed with regression tests (`tests/test_fuzz_findings.py`), 4 open. Full write-up:
 [docs/security/FUZZ-FINDINGS-2026-11-04.md](docs/security/FUZZ-FINDINGS-2026-11-04.md).
 
 | id | finding | severity | status |
 |----|---------|----------|--------|
-| FZ-04 | a local, unprivileged process can write a fake sshd "Accepted publickey" line to the journal and it counts as login evidence, teaching the baseline an attacker's network and key | high | open |
+| FZ-04 | a local, unprivileged process can write a fake sshd "Accepted publickey" line to the journal and it counts as login evidence, teaching the baseline an attacker's network and key | high | fixed (non-root lines counted and reported, never evidence) |
 | FZ-01 | a crafted `.deb` (negative member size) makes the release gate loop forever | medium | fixed |
 | FZ-02 | a `.deb` with two data members: the gate checked the last, `dpkg` installs the first | medium | fixed |
 | FZ-03 | a chosen SSH username (`bob from 203.0.113.9`) framed an innocent address in the login log | medium | fixed |

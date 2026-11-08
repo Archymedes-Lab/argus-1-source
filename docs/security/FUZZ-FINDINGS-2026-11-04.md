@@ -18,7 +18,7 @@ temp dir, to confirm FZ-02.
 | FZ-01 | release/gate.py `_ar_members` | hang | medium | fixed + test |
 | FZ-02 | release/gate.py `_ar_members` / `_deb_members` | blind spot | medium | fixed + test |
 | FZ-03 | collectors/identity/logins.py `FAILED` | misattribution | medium | fixed + test |
-| FZ-04 | collectors/identity/logins.py `read_journal` | forged evidence | high | **open** (expectedFailure) |
+| FZ-04 | collectors/identity/logins.py `read_journal` | forged evidence | high | fixed + tests (2026-11-08) |
 | FZ-05 | release/versioning.py `TAG`/`LEGACY` | grammar bypass | low | fixed + test |
 | FZ-06 | collectors/telemetry/sysmon_linux/journal.py `_parse` | crash + quadratic hang | medium | fixed + tests |
 | FZ-07 | collectors/identity/sshwatch.py `parse_sshd_config` | crash | low-medium | fixed + tests |
@@ -60,7 +60,7 @@ temp dir, to confirm FZ-02.
   `bruteforce._LINUX_FAIL` had already been fixed for this; `logins` had not.
 - Fix: anchored to sshd's own trailing ` from IP port N[ ssh2][: TYPE FP][ [preauth]]`.
 
-### FZ-04 (open): `logins` accepts sshd lines written by any local account
+### FZ-04 (fixed 2026-11-08): `logins` accepted sshd lines written by any local account
 - Reproducer: a journal record `{"_UID": "1000", "MESSAGE": "Accepted publickey for chris from
   203.0.113.50 port 1 ssh2: ED25519 SHA256:evil"}` (what `logger -t sshd ...` produces).
 - Observed: `read_journal` filters with `-t sshd` (SYSLOG_IDENTIFIER, client-chosen) and never
@@ -69,8 +69,21 @@ temp dir, to confirm FZ-02.
 - Why: any local process can forge root logins (false criticals) and, worse, pre-train the
   per-account baseline with an attacker's network and key so the real login later raises no
   `new_key`/`new_net` alert.
-- Not fixed here: dropping non-root lines changes what counts as evidence; it should copy
-  bruteforce's design (count and show untrusted lines, never use them) and be reviewed.
+- Fix (2026-11-08): bruteforce's design. `read_journal` uses only records whose `_UID`
+  (written by journald, not the client) is `0`; sshd and sshd-session log as root. Any other
+  record tagged sshd is counted (`Records.untrusted`), never used as evidence and never trains
+  the baseline, and is reported as a medium "sshd journal records written by a non-root
+  process" finding kept for a day. The cursor still moves past it. Tests: the forged record
+  and a record with no `_UID` are not evidence, the forgery leaves the learned baseline empty
+  and is reported; negative controls: a root record beside it still counts and is learned.
+- Same rule applied to the other journal readers whose output is evidence:
+  `host/restarts.py read_sysmon` (`-t sysmon` alone: a forged Sysmon process record could
+  name a known restarter and explain a stop away) now uses `sysmon_linux.journal.TRUSTED_MATCH`;
+  `host/opshealth.py boot_endings` reads only `_UID=0` records, so `logger "Journal stopped"`
+  cannot mark a crashed boot clean. Readers already safe: `bruteforce` (`_UID`), sysmon_linux
+  (`TRUSTED_MATCH`), `-u UNIT`, `-k` and `_SYSTEMD_INVOCATION_ID=` matches (journald-set fields).
+- Remains: a root process can still write anything; an sshd that runs unprivileged would have
+  its real lines reported as untrusted rather than used.
 
 ### FZ-05: tag versions with a trailing newline or non-ASCII digits (versioning)
 - Reproducer: `candidate_key("v2026.10.31\n")`, `candidate_key("v2026.11.0٤")`.
@@ -178,7 +191,7 @@ here), NSIS via 7z (no 7z on this machine), the Rust and PowerShell code, the ph
 `sysmon.py` Windows rows (input is our own normalised events), appcode lockfile parsers.
 
 ## Next targets (most promising)
-1. FZ-04 fix plus the same `_UID`/unit check for every other `journalctl -t` reader (grep `-t`).
+1. ~~FZ-04 fix plus the same `_UID`/unit check for every other `journalctl -t` reader~~ done 2026-11-08.
 2. Gate: nested archives and streaming with a total budget (FZ-11..14) — needs a look at the
    real Windows zip contents first.
 3. `jarvis/collectors/appcode/lockfiles.py` (parses untrusted repositories, XML + JSON + TOML).

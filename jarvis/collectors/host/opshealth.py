@@ -229,7 +229,10 @@ def boot_endings(run=_run):
         bid = b.get("boot_id") or ""
         if not bid:
             continue
-        _c, tail = run(["journalctl", "-b", bid, "-n", "60", "-o", "cat", "--no-pager"], timeout=30)
+        # Root's records only (_UID is written by journald): the clean-shutdown
+        # markers come from systemd and journald, and `logger "Journal stopped"`
+        # from any account must not turn a crashed boot into a clean one (FZ-04's rule).
+        _c, tail = run(["journalctl", "-b", bid, "-n", "60", "-o", "cat", "--no-pager", "_UID=0"], timeout=30)
         result[bid] = "clean" if any(s in (tail or "") for s in CLEAN_END) else "unclean"
     if len(boots) <= 1 and not os.path.isdir("/var/log/journal"):
         return result, "only the current boot is in the journal (it is not persistent): earlier crashes are not visible"
