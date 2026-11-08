@@ -15,7 +15,7 @@ import { idOf, invoiceMetadata, invoicePeriodEnd, invoiceSubscription, stripe, S
 import { sha256Hex } from "./keys";
 import { audit, type Deps, type Env, fail, json, limited, managed, type Offer, OFFERS, payOrigin, pricingUrl, REVEAL_WINDOW,
          sec, SECURITY_HEADERS, siteOrigin, SUBSCRIPTION_GRACE, type Licence } from "./env";
-import { sendMail, simplePage } from "./web";
+import { esc, page, sendMail, simplePage } from "./web";
 
 export type { Env, Deps } from "./env";
 export { OFFERS } from "./env";
@@ -62,7 +62,8 @@ async function priceId(env: Env, deps: Deps, lookup: string): Promise<string> {
 // ---------------------------------------------------------------------------------------------
 // GET /buy/:offer[?claim=clm_…]
 // ---------------------------------------------------------------------------------------------
-export function checkoutForm(env: Env, offerId: string, offer: Offer, price: string, url: URL): URLSearchParams {
+export function checkoutForm(env: Env, offerId: string, offer: Offer, price: string, url: URL,
+                             promotionCode: string | null = null): URLSearchParams {
   const lang = LANGS.has(url.searchParams.get("lang") || "") ? url.searchParams.get("lang")! : "en";
   const ref = url.searchParams.get("ref");
   const claim = url.searchParams.get("claim");
@@ -81,7 +82,10 @@ export function checkoutForm(env: Env, offerId: string, offer: Offer, price: str
     f.set("line_items[0][adjustable_quantity][minimum]", "1");
     f.set("line_items[0][adjustable_quantity][maximum]", String(offer.fleet.max));
   }
-  f.set("allow_promotion_codes", "true");
+  // Stripe refuses `discounts` together with `allow_promotion_codes`: a prefilled code replaces the box, otherwise
+  // the buyer can always type one. Amounts and rules live on the code in the Stripe Dashboard, never here.
+  if (promotionCode) f.set("discounts[0][promotion_code]", promotionCode);
+  else f.set("allow_promotion_codes", "true");
   if (managed(env)) f.set("managed_payments[enabled]", "true");
   else f.set("automatic_tax[enabled]", "true");
   if (ref && REF.test(ref)) f.set("client_reference_id", ref);
@@ -98,6 +102,59 @@ export function checkoutForm(env: Env, offerId: string, offer: Offer, price: str
   return f;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Promotion codes (?promo=CODE on /buy). Created by the owner in the Stripe Dashboard (docs/STRIPE-HANDOFF.md).
+// A code never fails a purchase: malformed, unknown, inactive, expired, used up, refused by Stripe for this
+// price, or a failed lookup all give the ordinary session where the buyer can type a code, plus a notice that
+// it was not applied. The raw code is sent to Stripe's lookup only, and never logged, stored or put in a page.
+// ---------------------------------------------------------------------------------------------
+export const PROMO = /^[A-Za-z0-9_-]{1,40}$/;
+const PROMO_ID = /^promo_[A-Za-z0-9]{1,255}$/;
+/** A slow lookup must not hold up checkout: past this, the code counts as not applied. */
+export const PROMO_LOOKUP_MS = 4000;
+
+/** asked: the link carried a promo; id: the active Stripe promotion code it names, or null. At most one Stripe call. */
+export async function promotion(env: Env, deps: Deps, url: URL): Promise<{ asked: boolean; id: string | null }> {
+  const raw = url.searchParams.get("promo");
+  if (raw === null || raw === "") return { asked: false, id: null };
+  if (!PROMO.test(raw)) return { asked: true, id: null };            // never reaches Stripe
+  try {
+    const q = new URLSearchParams({ code: raw, active: "true", limit: "1" });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new StripeError(0, "promo_lookup_timeout")), deps.promoLookupMs ?? PROMO_LOOKUP_MS);
+    });
+    const list = await Promise.race([
+      stripe<{ data?: any[] }>(deps.fetch, env.STRIPE_SECRET_KEY, "GET", "/promotion_codes", q), late,
+    ]).finally(() => clearTimeout(timer));
+    const p = list?.data?.[0];
+    const now = sec(deps);
+    const usable = p?.active === true && typeof p.id === "string" && PROMO_ID.test(p.id)
+      && typeof p.code === "string" && p.code.toLowerCase() === raw.toLowerCase()
+      && !(typeof p.expires_at === "number" && p.expires_at <= now)
+      && !(typeof p.max_redemptions === "number" && typeof p.times_redeemed === "number" && p.times_redeemed >= p.max_redemptions);
+    return { asked: true, id: usable ? p.id : null };
+  } catch (err) {
+    console.log(`promotion lookup: ${err instanceof StripeError ? err.message : "error"}`);
+    return { asked: true, id: null };
+  }
+}
+
+async function openSession(env: Env, deps: Deps, form: URLSearchParams): Promise<string> {
+  const session = await stripe<{ url?: string }>(deps.fetch, env.STRIPE_SECRET_KEY, "POST", "/checkout/sessions", form);
+  if (typeof session.url !== "string" || !session.url.startsWith("https://")) throw new StripeError(502, "no_url");
+  return session.url;
+}
+
+/** The buyer asked for a code that is not applied: say so, then go on to the same payment page. */
+function promoNotApplied(checkout: string): Response {
+  return page("Promo code not applied",
+    `<h1>Your promo code was not applied</h1>` +
+    `<p>It may be mistyped, expired, used up, or not valid for this plan. You can still enter a promo code on the payment page.</p>` +
+    `<p class="row"><a class="btn primary" href="${esc(checkout)}">Continue to payment</a></p>` +
+    `<p class="muted">Payment by Stripe. Nothing has been charged.</p>`);
+}
+
 async function buy(req: Request, env: Env, deps: Deps, offerId: string, url: URL): Promise<Response> {
   const lang = LANGS.has(url.searchParams.get("lang") || "") ? url.searchParams.get("lang")! : "en";
   const offer = OFFERS[offerId];
@@ -105,10 +162,18 @@ async function buy(req: Request, env: Env, deps: Deps, offerId: string, url: URL
   if (await limited(env.RL_BUY, req)) return simplePage(429, "Please wait a moment", "Too many checkout attempts from this network. Try again in a minute.", pricingUrl(env, lang), "Back to pricing");
   try {
     const price = await priceId(env, deps, offer.lookup);
-    const session = await stripe<{ url?: string }>(deps.fetch, env.STRIPE_SECRET_KEY, "POST", "/checkout/sessions",
-                                                   checkoutForm(env, offerId, offer, price, url));
-    if (!session.url) throw new StripeError(502, "no_url");
-    return new Response(null, { status: 303, headers: { Location: session.url, ...SECURITY_HEADERS } });
+    const promo = await promotion(env, deps, url);
+    let checkout: string | null = null;
+    if (promo.id) {
+      // Stripe can still refuse an active code here (restricted to other products, customers or amounts):
+      // one retry without it, so the code can never cost the sale.
+      try { checkout = await openSession(env, deps, checkoutForm(env, offerId, offer, price, url, promo.id)); }
+      catch (err) { console.log(`buy ${offerId}: promotion refused: ${err instanceof StripeError ? err.message : "error"}`); }
+    }
+    const applied = checkout !== null;
+    checkout ??= await openSession(env, deps, checkoutForm(env, offerId, offer, price, url));
+    if (promo.asked && !applied) return promoNotApplied(checkout);
+    return new Response(null, { status: 303, headers: { Location: checkout, ...SECURITY_HEADERS } });
   } catch (err) {
     console.log(`buy ${offerId}: ${err instanceof StripeError ? err.message : "error"}`);
     return simplePage(502, "Checkout is not available right now",

@@ -70,8 +70,30 @@ export async function issue(env: Env, deps: Deps, session: any): Promise<{ lic: 
   const lic = await env.DB.prepare("SELECT * FROM licences_v2 WHERE session_id = ?").bind(session.id).first<Licence>();
   if (!lic) throw new Error("licence was not stored");
   const created = lic.id === id;
-  if (created) { await audit(env, deps, lic.id, "issued", "stripe"); console.log(`issued ${offerId} …${lic.key_last4}`); }
+  if (created) {
+    await audit(env, deps, lic.id, "issued", "stripe");
+    console.log(`issued ${offerId} …${lic.key_last4}`);
+    const d = discountOf(session);
+    if (d) {
+      // Bookkeeping only: a failure here must never cost the buyer their licence.
+      try { await audit(env, deps, lic.id, `discount ${d.promotion ?? "coupon"} ${d.amount} ${d.currency}`, "stripe"); }
+      catch { console.log("discount audit failed"); }
+    }
+  }
   return { lic, created };
+}
+
+/**
+ * The discount a paid session carried, for the audit trail: Stripe's promotion code id (never the code a buyer
+ * typed) and the amount taken off, in minor units. Null when the session had no discount or an odd shape.
+ * Not a licence column: adding one needs an ALTER TABLE on the live D1 that must land before this code.
+ */
+export function discountOf(session: any): { promotion: string | null; amount: number; currency: string } | null {
+  const amount = session?.total_details?.amount_discount;
+  if (!Number.isInteger(amount) || amount <= 0) return null;
+  const promo = idOf(session?.discounts?.[0]?.promotion_code);
+  const currency = typeof session?.currency === "string" && /^[a-z]{3}$/.test(session.currency) ? session.currency : "xxx";
+  return { promotion: promo && /^promo_[A-Za-z0-9]{1,255}$/.test(promo) ? promo : null, amount, currency };
 }
 
 /** "one server", "12 servers", "one computer". */

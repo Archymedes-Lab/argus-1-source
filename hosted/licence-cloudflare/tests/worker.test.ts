@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { clearPriceCache, handle, maskEmail, stripeMode, type Deps, type Env } from "../src/index";
@@ -40,6 +40,11 @@ class FakeStripe {
   subscriptions = new Map<string, any>();
   failCheckout = false;
   resendOk = true;
+  /** Promotion codes the fake Stripe account holds, by code; `failPromoLookup` makes the lookup answer 500. */
+  promos = new Map<string, any>();
+  failPromoLookup = false;
+  /** Refuse a session that carries discounts (a code restricted to another product, say). */
+  refuseDiscounts = false;
   fetch = async (url: string, init: RequestInit = {}) => {
     const call = { url, method: init.method || "GET", headers: init.headers as Record<string, string>, body: String(init.body ?? "") };
     this.calls.push(call);
@@ -47,7 +52,20 @@ class FakeStripe {
     const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
     if (u.host === "api.resend.com") return new Response("{}", { status: this.resendOk ? 200 : 500 });
     if (u.pathname === "/v1/prices") return ok({ data: [{ id: `price_for_${u.searchParams.get("lookup_keys[0]")}` }] });
+    if (u.pathname === "/v1/promotion_codes" && call.method === "GET") {
+      if (this.failPromoLookup) return new Response(JSON.stringify({ error: { code: "api_error" } }), { status: 500 });
+      const want = (u.searchParams.get("code") || "").toLowerCase();
+      const hit = [...this.promos.values()].filter((p) => p.code.toLowerCase() === want
+        && (u.searchParams.get("active") !== "true" || p.active));
+      return ok({ object: "list", data: hit.slice(0, 1) });
+    }
     if (u.pathname === "/v1/checkout/sessions" && call.method === "POST") {
+      const form = new URLSearchParams(call.body);
+      // Stripe's own rule: a prefilled discount and the promotion-code box cannot be combined.
+      if (form.has("discounts[0][promotion_code]") && form.has("allow_promotion_codes"))
+        return new Response(JSON.stringify({ error: { code: "parameter_invalid" } }), { status: 400 });
+      if (this.refuseDiscounts && form.has("discounts[0][promotion_code]"))
+        return new Response(JSON.stringify({ error: { code: "promotion_code_invalid" } }), { status: 400 });
       if (this.failCheckout)
         return new Response(JSON.stringify({ error: { code: "x", message: "customer jane@example.com is blocked" } }), { status: 400 });
       return ok({ id: "cs_test_new", url: "https://checkout.stripe.com/c/pay/cs_test_new" });
@@ -192,6 +210,178 @@ describe("GET /buy", () => {
     const html = await res.text();
     expect(html).toContain("#pricing");
     expect(html).not.toContain("jane@example.com");
+  });
+});
+
+describe("promotion codes", () => {
+  const promo = (code: string, over: any = {}) =>
+    stripe.promos.set(code, { id: `promo_1Qx${stripe.promos.size}`, object: "promotion_code", code, active: true,
+                              expires_at: null, max_redemptions: null, times_redeemed: 0, livemode: false, ...over });
+  const sessionForm = (i = 0) => new URLSearchParams(stripe.stripeCalls("/v1/checkout/sessions")[i].body);
+  const logs: string[] = [];
+  const realLog = console.log;
+  beforeEach(() => { logs.length = 0; console.log = (...a: unknown[]) => { logs.push(a.join(" ")); }; });
+  afterEach(() => { console.log = realLog; });
+
+  test("without ?promo every session lets the buyer type a code, and no lookup is made", async () => {
+    for (const offer of ["argus-server", "argus-desktop", "argus-desktop-monthly"]) {
+      stripe.calls = [];
+      expect((await call(`/buy/${offer}`)).status).toBe(303);
+      expect(sessionForm().get("allow_promotion_codes")).toBe("true");
+      expect(sessionForm().has("discounts[0][promotion_code]")).toBe(false);
+      expect(stripe.stripeCalls("/v1/promotion_codes").length).toBe(0);
+    }
+  });
+
+  test("an active code is prefilled as the session's discount, without the box (Stripe forbids both)", async () => {
+    promo("LAUNCH20");
+    const res = await call("/buy/argus-desktop?claim=clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ&promo=launch20");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("Location")).toBe("https://checkout.stripe.com/c/pay/cs_test_new");
+    const [lookup] = stripe.stripeCalls("/v1/promotion_codes");
+    const q = new URL(lookup.url).searchParams;
+    expect([q.get("code"), q.get("active"), q.get("limit"), lookup.method]).toEqual(["launch20", "true", "1", "GET"]);
+    const f = sessionForm();
+    expect(f.get("discounts[0][promotion_code]")).toBe("promo_1Qx0");
+    expect(f.has("allow_promotion_codes")).toBe(false);
+    expect(f.get("metadata[claim]")).toBe("clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ");
+    // The code itself goes nowhere but the lookup: not in the session, its metadata, or the logs.
+    expect(f.toString().toLowerCase()).not.toContain("launch20");
+    expect(logs.join("\n").toLowerCase()).not.toContain("launch20");
+    expect(stripe.stripeCalls("/v1/checkout/sessions").length).toBe(1);
+  });
+
+  for (const [name, raw] of [["too long", "A".repeat(41)], ["a space", "SAVE 20"], ["markup", "<b>x</b>"],
+                             ["a query", "X&allow_promotion_codes=false"], ["unicode", "ÉTÉ20"], ["a dot", "a.b"]] as const) {
+    test(`a malformed code (${name}) is never sent to Stripe; checkout opens with the box and a notice`, async () => {
+      const res = await call(`/buy/argus-desktop?promo=${encodeURIComponent(raw)}`);
+      expect(stripe.stripeCalls("/v1/promotion_codes").length).toBe(0);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("Your promo code was not applied");
+      expect(html).toContain('href="https://checkout.stripe.com/c/pay/cs_test_new"');
+      expect(html).not.toContain(raw);
+      expect(sessionForm().get("allow_promotion_codes")).toBe("true");
+      expect(sessionForm().has("discounts[0][promotion_code]")).toBe(false);
+    });
+  }
+
+  test("unknown, inactive, expired and used-up codes fall back to the box, with a notice that never echoes the code", async () => {
+    promo("OLD", { active: false });
+    promo("PAST", { expires_at: NOW - 1 });
+    promo("GONE", { max_redemptions: 5, times_redeemed: 5 });
+    for (const code of ["NOPE", "OLD", "PAST", "GONE"]) {
+      stripe.calls = [];
+      const res = await call(`/buy/argus-desktop-monthly?promo=${code}`);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("Continue to payment");
+      expect(html).not.toContain(code);
+      expect(stripe.stripeCalls("/v1/promotion_codes").length).toBe(1);
+      expect(stripe.stripeCalls("/v1/checkout/sessions").length).toBe(1);
+      expect(sessionForm().get("allow_promotion_codes")).toBe("true");
+      expect(sessionForm().has("discounts[0][promotion_code]")).toBe(false);
+    }
+  });
+
+  test("a lookup answering for another code, or with a malformed id, is not applied", async () => {
+    stripe.fetch = ((orig) => async (url: string, init?: RequestInit) => {
+      if (new URL(url).pathname === "/v1/promotion_codes")
+        return new Response(JSON.stringify({ data: [{ id: "promo_abc", code: "SOMETHINGELSE", active: true }] }), { status: 200 });
+      return orig(url, init);
+    })(stripe.fetch);
+    deps.fetch = stripe.fetch;
+    expect((await call("/buy/argus-desktop?promo=MINE")).status).toBe(200);
+    expect(sessionForm().has("discounts[0][promotion_code]")).toBe(false);
+  });
+
+  test("a failed lookup never fails the purchase", async () => {
+    promo("LAUNCH20");
+    stripe.failPromoLookup = true;
+    const res = await call("/buy/argus-server?promo=LAUNCH20&servers=12");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Continue to payment");
+    const f = sessionForm();
+    expect(f.get("allow_promotion_codes")).toBe("true");
+    expect(f.get("line_items[0][quantity]")).toBe("12");
+    expect(logs.join("\n")).not.toContain("LAUNCH20");
+  });
+
+  test("a lookup that hangs is cut short: checkout opens with the box and a notice", async () => {
+    promo("LAUNCH20");
+    const inner = stripe.fetch;
+    deps.fetch = (url: string, init?: RequestInit) =>
+      new URL(url).pathname === "/v1/promotion_codes" ? new Promise<Response>(() => {}) : inner(url, init);
+    deps.promoLookupMs = 30;
+    const started = performance.now();
+    const res = await call("/buy/argus-desktop?promo=LAUNCH20");
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Your promo code was not applied");
+    expect(sessionForm().get("allow_promotion_codes")).toBe("true");
+    expect(logs.join("\n")).toContain("promo_lookup_timeout");
+  });
+
+  test("a code Stripe refuses at session time (restricted price or customer): one retry without it, with the box", async () => {
+    promo("SERVERONLY");
+    stripe.refuseDiscounts = true;
+    const res = await call("/buy/argus-desktop?promo=SERVERONLY");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Your promo code was not applied");
+    const sessions = stripe.stripeCalls("/v1/checkout/sessions");
+    expect(sessions.length).toBe(2);
+    expect(new URLSearchParams(sessions[0].body).get("discounts[0][promotion_code]")).toBe("promo_1Qx0");
+    expect(new URLSearchParams(sessions[1].body).get("allow_promotion_codes")).toBe("true");
+    expect(new URLSearchParams(sessions[1].body).has("discounts[0][promotion_code]")).toBe(false);
+  });
+
+  test("if Stripe is down, a promo link fails like any other checkout (nothing charged), after at most 2 session calls", async () => {
+    promo("LAUNCH20");
+    stripe.failCheckout = true;
+    const res = await call("/buy/argus-desktop?promo=LAUNCH20");
+    expect(res.status).toBe(502);
+    expect(stripe.stripeCalls("/v1/checkout/sessions").length).toBe(2);   // the discounted try, then one plain try
+  });
+
+  test("an empty ?promo= is the same as none", async () => {
+    expect((await call("/buy/argus-desktop?promo=")).status).toBe(303);
+    expect(stripe.stripeCalls("/v1/promotion_codes").length).toBe(0);
+    expect(sessionForm().get("allow_promotion_codes")).toBe("true");
+  });
+
+  test("the discount of a paid session is in the audit trail as Stripe's id and amount; the licence is unchanged", async () => {
+    const s = desktopSession({ currency: "usd", total_details: { amount_discount: 1580 },
+                               discounts: [{ coupon: "cpn_x", promotion_code: "promo_LAUNCH201" }] });
+    stripe.subscriptions.set("sub_1", { id: "sub_1", items: { data: [{ current_period_end: YEAR_END }] } });
+    await signed(event("evt_disc", "checkout.session.completed", s));
+    expect(licences().length).toBe(1);
+    const actions = (store.db.query("SELECT action FROM audit ORDER BY rowid").all() as any[]).map((r) => r.action);
+    expect(actions).toEqual(["issued", "discount promo_LAUNCH201 1580 usd"]);
+    // a replay does not write it twice
+    await signed(event("evt_disc2", "checkout.session.completed", s));
+    expect((store.db.query("SELECT COUNT(*) AS n FROM audit WHERE action LIKE 'discount%'").get() as any).n).toBe(1);
+  });
+
+  test("a failing discount audit never costs the buyer the licence", async () => {
+    const s = desktopSession({ currency: "usd", total_details: { amount_discount: 500 }, discounts: [{ promotion_code: "promo_A1" }] });
+    stripe.subscriptions.set("sub_1", { id: "sub_1", items: { data: [{ current_period_end: YEAR_END }] } });
+    const prepare = (env.DB as any).prepare;
+    env.DB = { prepare: (sql: string) => {
+      const st = prepare(sql);
+      if (!sql.startsWith("INSERT INTO audit")) return st;
+      return { bind: (...a: any[]) => ({ run: async () => { if (String(a[2]).startsWith("discount")) throw new Error("d1 down"); return st.bind(...a).run(); } }) };
+    } } as unknown as D1Database;
+    const res = await signed(event("evt_disc3", "checkout.session.completed", s));
+    expect(res.status).toBe(200);
+    expect(licences().length).toBe(1);
+    expect(mails().length).toBe(1);
+    expect(logs).toContain("discount audit failed");
+  });
+
+  test("no discount, or an odd shape, writes nothing extra", async () => {
+    await buyServer({ total_details: { amount_discount: 0 } });
+    await buyServer({ id: "cs_test_server2", subscription: "sub_s", total_details: { amount_discount: "lots" } });
+    expect((store.db.query("SELECT COUNT(*) AS n FROM audit WHERE action LIKE 'discount%'").get() as any).n).toBe(0);
   });
 });
 
