@@ -178,6 +178,19 @@ class Kernel(unittest.TestCase):
         out = opshealth.audit(store, root="/x", run=crash)
         self.assertEqual(len([f for f in out if "went down without shutting down" in f["title"]]), 1)
 
+    def test_a_forged_shutdown_marker_does_not_make_a_crash_clean(self):
+        # The journal as journalctl would filter it: the only "Journal stopped" in
+        # boot c was written by uid 1000 (`logger "Journal stopped"`), so it is
+        # returned only when the read is not limited to root's records.
+        def tail(argv):
+            if argv[2] == "c" * 32:
+                return (0, "kernel: something\n") if "_UID=0" in argv else (0, "Journal stopped\n")
+            return 0, "Journal stopped\n"
+        boots = (0, json.dumps([{"boot_id": "a" * 32}, {"boot_id": "c" * 32}, {"boot_id": "d" * 32}]))
+        endings, _p = opshealth.boot_endings(FakeRun({**HEALTHY, ("journalctl", "--list-boots"): boots,
+                                                      ("journalctl", "-b"): tail}))
+        self.assertEqual(endings, {"a" * 32: "clean", "c" * 32: "unclean"})
+
     def test_each_unclean_boot_has_its_own_identity(self):
         store = MetaStore()
         opshealth.audit(store, root="/x", run=FakeRun(HEALTHY))          # learn

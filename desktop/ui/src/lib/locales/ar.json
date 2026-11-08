@@ -281,7 +281,6 @@
  "Pairing code": "رمز الاقتران",
  "Pairing did not work.": "لم ينجح الاقتران.",
  "Pause": "إيقاف مؤقت",
- "Payment confirmed. Thank you.": "تم تأكيد الدفع. شكراً لك.",
  "Phone": "الهاتف",
  "Phone alerts": "تنبيهات الهاتف",
  "Phone alerts cannot be used on this computer yet, because a required part is missing.": "لا يمكن استخدام تنبيهات الهاتف على هذا الحاسوب بعد، لأن جزءًا مطلوبًا مفقود.",
@@ -538,5 +537,9 @@
  "per computer per month": "لكل حاسوب شهريًا",
  "per computer per year": "لكل حاسوب سنويًا",
  "{a}–{b} servers": "{a}–{b} خادم",
- "{total} a year": "{total} سنويًا"
+ "{total} a year": "{total} سنويًا",
+ "Detection gaps": "ثغرات الكشف",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "تقنيات تصفها معلومات التهديدات الحالية ولا يتحقق منها ARGUS-INSTINCT بعد. وهي تخص الأداة، لا هذا الحاسوب.",
+ "Came back": "عاد مجددًا",
+ "Open for {age}": "مفتوح منذ {age}"
 }

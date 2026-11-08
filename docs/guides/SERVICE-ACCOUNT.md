@@ -28,7 +28,7 @@ directory and still hands its token to every local account.
 | Desktop app on Windows | paired token in `%APPDATA%\local.jarvis.desktop\client.token` | the same |
 | Windows supervisors (reviver, health monitor) | liveness without a token; details and `/api/run` need a paired token in `%LOCALAPPDATA%\Jarvis\client.token` | the same |
 | Browser on Windows | `/pair` page, once per browser | the same |
-| Browser on this Linux account | dashboard cookie (your uid is named in the unit) | the same |
+| Browser on this Linux account | dashboard cookie, on a browser navigation only | `/pair` page, once per browser: your account cannot read the token file, so handing it the cookie would grant it to every process you run (QC blocker 4) |
 | Self-check timer | user timer as you | system timer as `jarvis` |
 
 The daemon refuses to start under the service account if its state directory
@@ -58,7 +58,7 @@ That check is in `jarvis/core/statedir.py`, and it runs from `serve()`.
    - copies `~/.jarvis` to `/var/lib/jarvis/.jarvis` (your copy is kept);
    - makes every directory 0700 and every file 0600;
    - writes `/etc/jarvis/service-account.json` and `/usr/local/sbin/jarvis-svc`;
-   - installs the drop-in, with your uid for the Linux browser cookie;
+   - installs the drop-in;
    - moves the self-check to `jarvis`;
    - starts the daemon and waits for `/api/live`.
 

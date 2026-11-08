@@ -95,6 +95,7 @@
                 <span class="block truncate text-copy-13 text-gray-900">{f.detail}</span>
               {/if}
             </span>
+            {#if f.ledger && f.ledger.state !== "open"}<span class="tag shrink-0">{f.ledger.state === "recurring" ? tr("Came back") : tr("Open for {age}", { age: f.ledger.age })}</span>{/if}
             {#if app.mode === "expert"}<span class="flex shrink-0 items-center gap-1.5 pt-px"><span class="tag">{f.job}</span><span class="tag">{f.host}</span></span>{/if}
           </button>
         {/each}

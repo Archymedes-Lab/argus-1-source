@@ -19,7 +19,7 @@ import threading
 import time
 
 from jarvis.core.store import Store
-from jarvis.response import acknowledge
+from jarvis.response import acknowledge, alert
 from jarvis.response.reporting import score
 from jarvis.service.protection import health
 from jarvis.service.schedule import JOBS
@@ -111,8 +111,8 @@ def render(db_path, scheduler, stamp=None, jobs=JOBS):
     for job, snap in snaps.items():
         for f in (snap or {}).get("findings") or ():
             sev = f.get("severity")
-            if sev not in open_by:
-                continue
+            if sev not in open_by or alert.is_coverage_gap(f):
+                continue    # coverage gaps are about Argus, not the machine
             if acknowledge.is_acknowledged(acks, f, job, now=stamp):
                 acked_by[sev] += 1
             else:

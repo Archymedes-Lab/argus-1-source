@@ -505,6 +505,20 @@ REPORT_ERROR_META = "advisory_report_last_error"
 NOPAGE_CATEGORIES = {"process", "peer", "coverage gap", "not observable",
                       "ledger"}
 
+# Findings about Argus's own detection coverage against current intel (the
+# `gaps` job): "nothing here checks T1001" is a statement about the tool, not
+# an observation about the machine. They belong in the coverage view
+# (/api/coverage "intel_gaps"), never in the machine's findings list, its
+# severity totals, the pulse's urgent list or autopilot investigations
+# (QC-ARGUS-1-2026-10-27 blocker 3; docs/security/ALERT-QUALITY-2026-11-08.md).
+# They are moved, not dropped: every one stays listed there with its priority.
+COVERAGE_CATEGORIES = frozenset({"coverage gap", "not observable", "not applicable"})
+
+
+def is_coverage_gap(f):
+    """True for a finding about Argus's detection coverage, not about the machine."""
+    return isinstance(f, dict) and f.get("category") in COVERAGE_CATEGORIES
+
 # Volatile tokens that must not be part of a dedupe key, or every occurrence is
 # a "new" alert: pids, the NEW marker, repeat counts, long hex/base64 blobs,
 # and the timestamped names in Claude Code's shell snapshots.

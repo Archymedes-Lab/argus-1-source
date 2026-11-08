@@ -43,3 +43,17 @@ export function checkKey(input: string): KeyCheck {
 }
 
 export const PRODUCT = { server: "Argus Server", desktop: "Argus Desktop" } as const;
+
+/** The licence service: the only place a purchase is made (hosted/licence-cloudflare). */
+export const PAY_ORIGIN = "https://pay.archymedes.xyz";
+const PAGES = new Set(["manage", "recover", "buy/argus-server", "buy/argus-desktop", "buy/argus-desktop-monthly"]);
+const CLAIM = /^buy\/argus-(server|desktop|desktop-monthly)\?claim=clm_[0-9A-Z]{32}$/;
+
+/** The pages the interface may open, in the app and in a browser alike. The same list as
+ *  `valid_licence_page` in desktop/src/api.rs: the licence pages, or a checkout carrying the
+ *  claim id this computer opened. No other address, and never a seller's own checkout. */
+export function validLicencePage(url: string): boolean {
+  if (typeof url !== "string" || !url.startsWith(PAY_ORIGIN + "/")) return false;
+  const rest = url.slice(PAY_ORIGIN.length + 1);
+  return PAGES.has(rest) || CLAIM.test(rest);
+}

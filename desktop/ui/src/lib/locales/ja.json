@@ -281,7 +281,6 @@
  "Pairing code": "ペアリングコード",
  "Pairing did not work.": "ペアリングできませんでした。",
  "Pause": "一時停止",
- "Payment confirmed. Thank you.": "お支払いを確認しました。ありがとうございます。",
  "Phone": "スマートフォン",
  "Phone alerts": "スマートフォン通知",
  "Phone alerts cannot be used on this computer yet, because a required part is missing.": "必要な部分が足りないため、このパソコンではまだスマートフォンへの通知を使えません。",
@@ -538,5 +537,9 @@
  "per computer per month": "コンピューター 1 台あたり月額",
  "per computer per year": "コンピューター 1 台あたり年額",
  "{a}–{b} servers": "{a}–{b} 台のサーバー",
- "{total} a year": "年額 {total}"
+ "{total} a year": "年額 {total}",
+ "Detection gaps": "検知のすき間",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "現在の脅威インテリジェンスが記述しているが、ARGUS-INSTINCT がまだ確認していない手法です。これはツールについてであり、このコンピューターについてではありません。",
+ "Came back": "再発",
+ "Open for {age}": "{age} 未解決"
 }

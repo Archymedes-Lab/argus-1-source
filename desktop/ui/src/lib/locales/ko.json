@@ -281,7 +281,6 @@
  "Pairing code": "페어링 코드",
  "Pairing did not work.": "페어링에 실패했습니다.",
  "Pause": "일시 중지",
- "Payment confirmed. Thank you.": "결제가 확인되었습니다. 감사합니다.",
  "Phone": "휴대폰",
  "Phone alerts": "휴대폰 알림",
  "Phone alerts cannot be used on this computer yet, because a required part is missing.": "필요한 부분이 없어서 이 컴퓨터에서는 아직 휴대폰 알림을 쓸 수 없습니다.",
@@ -538,5 +537,9 @@
  "per computer per month": "컴퓨터당 월",
  "per computer per year": "컴퓨터당 연",
  "{a}–{b} servers": "서버 {a}–{b}대",
- "{total} a year": "연 {total}"
+ "{total} a year": "연 {total}",
+ "Detection gaps": "탐지 공백",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "현재 위협 인텔리전스가 설명하지만 ARGUS-INSTINCT가 아직 확인하지 않는 기법입니다. 이 컴퓨터가 아니라 도구에 관한 것입니다.",
+ "Came back": "재발",
+ "Open for {age}": "{age} 동안 미해결"
 }

@@ -7,6 +7,13 @@ export const SEVERITIES: Severity[] = ["critical", "high", "medium", "low"];
 export interface Finding {
   severity: string; title: string; detail?: string; where?: string;
   category?: string; job: string; host?: string; forensics?: string[];
+  /** Ledger facts on the original finding: how long it has been open, and
+   *  whether it came back after a clear (daemon 2026-11-08 and later). */
+  ledger?: { state: "open" | "overdue" | "recurring"; age: string; age_days: number;
+             deadline_days?: number | null; sent_count?: number; reopened?: number };
+  /** On a ledger note: true when the original is not listed, so the note is
+   *  the only place the problem shows and it keeps its full severity. */
+  orphan?: boolean;
 }
 export interface Job {
   name: string; label: string; ts?: number | null; error?: string; stale?: boolean;
@@ -45,14 +52,25 @@ export function severityCounts(findings: Finding[]): Record<Severity, number> {
   return out;
 }
 
-/** A reminder re-raises an unresolved or returning finding at the original's
- *  severity (job "ledger"), so its emails escalate. On screen it is the same
- *  problem again: counted on its own, never as another problem. */
-export const isReminder = (f: Finding): boolean => f.job === "ledger";
+/** A reminder is a ledger note about a finding that is listed on its own
+ *  (job "ledger"): the same problem again, counted on its own, never as
+ *  another problem. Since 2026-11-08 the daemon marks a note whose original
+ *  is no longer listed as `orphan`; that one is the only place the problem
+ *  shows, so it counts. An older daemon sends no flag: every note is a reminder. */
+export const isReminder = (f: Finding): boolean => f.job === "ledger" && f.orphan !== true;
 
-/** Severity counts of distinct problems: reminders left out. */
+/** Argus's own detection gaps against intel (job "gaps"): about the tool, not
+ *  the machine. A current daemon lists them under /api/coverage only; this
+ *  keeps an older daemon's copy out of the problem counts. */
+const COVERAGE_CATEGORIES = new Set(["coverage gap", "not observable", "not applicable"]);
+export const isCoverageGap = (f: Finding): boolean => f.job === "gaps" || COVERAGE_CATEGORIES.has(f.category ?? "");
+
+/** A finding about this machine that is not a restatement of another one. */
+export const isProblem = (f: Finding): boolean => !isReminder(f) && !isCoverageGap(f);
+
+/** Severity counts of distinct problems: reminders and coverage gaps left out. */
 export function problemCounts(findings: Finding[]): Record<Severity, number> {
-  return severityCounts(findings.filter((f) => !isReminder(f)));
+  return severityCounts(findings.filter(isProblem));
 }
 
 /** One row per distinct (job, title), with how many places it occurs. */

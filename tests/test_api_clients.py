@@ -22,7 +22,7 @@ from jarvis.core import statedir
 from jarvis.core.store import Store
 from jarvis.web import apiclient, clients, server
 from jarvis.web import token as api_token
-from tests.test_api_hardening import _Server
+from tests.test_api_hardening import NAV, _Server
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,19 +30,17 @@ ROOT = Path(__file__).resolve().parent.parent
 # added to server.py without an entry here fails test_every_route_is_in_the_table.
 #   token    a credential is required (403 without one)
 #   live     open, liveness fields only without a credential
-#   page     open HTML shell; the token cookie only for an identified peer
+#   page     open HTML shell; the token cookie only for an identified peer's browser navigation
 #   asset    open static file
 #   session  POST, same-origin, validates a paired client token itself
 #   veil     POST, the extension's own pairing token
-#   stripe   POST from Stripe, authenticated by its HMAC signature (billing.handle_webhook)
-#   redirect 302 to the interface; the token cookie only for an identified peer
+#   redirect 302 to the interface; the token cookie as for a page
 LICENCE_POSTS = ("/api/licence/activate", "/api/licence/deactivate", "/api/licence/refresh",
                  "/api/licence/upgrade", "/api/licence/poll")
 ROUTES = {
     "/": "redirect", "/index.html": "redirect", "/ui": "redirect",
     "/ui/": "page", "/ui/index.html": "page", "/classic": "page",
     "/geo": "page", "/pair": "page",
-    "/api/billing/webhook": "stripe",
     "/api/health": "live", "/api/live": "live",
     "/api/session": "session", "/api/veil/events": "veil",
     "/metrics": "token",
@@ -55,10 +53,9 @@ ROUTES = {
         "/api/posture/path-to-100", "/api/procs/baseline", "/api/procs/stream",
         "/api/pulse", "/api/run", "/api/score-coach", "/api/state", "/api/stream",
         "/api/voice", "/api/world",
-        # added by the interface, autopilot, billing and pause work (2026-10-30..11-02)
+        # added by the interface, autopilot and pause work (2026-10-30..11-02)
         "/api/autopilot", "/api/autopilot/authorize", "/api/autopilot/decide",
-        "/api/autopilot/notices", "/api/autopilot/policy", "/api/billing/checkout",
-        "/api/billing/confirm", "/api/billing/status", "/api/pause", "/api/protection",
+        "/api/autopilot/notices", "/api/autopilot/policy", "/api/pause", "/api/protection",
         "/api/protection/scan", "/api/resume",
         # the desktop app's update notice (service/selfupdate.py)
         "/api/update")},
@@ -68,7 +65,7 @@ POST_ONLY = {*LICENCE_POSTS, "/api/answer", "/api/ask", "/api/assistant/action",
              "/api/geo/here", "/api/geo/zone", "/api/score-coach", "/api/voice",
              "/api/session", "/api/veil/events",
              "/api/autopilot/authorize", "/api/autopilot/decide", "/api/autopilot/policy",
-             "/api/billing/checkout", "/api/billing/confirm", "/api/pause", "/api/resume",
+             "/api/pause", "/api/resume",
              "/api/protection/scan"}
 
 
@@ -189,11 +186,11 @@ class PairedClientTests(_ServerBase):
                     "POST", "/api/answer", {"id": "x"}, hdr)[0], 403)
 
     def test_an_unidentified_browser_pairs_through_the_session_route(self):
-        status, headers, _ = self.srv.request("GET", "/")
+        status, headers, _ = self.srv.request("GET", "/", headers=NAV)
         self.assertIn(status, (200, 302))                       # 302 to /ui/ when it is built
         self.assertNotIn("Set-Cookie", headers)                 # fail closed
         if status == 302:
-            status, headers, _ = self.srv.request("GET", "/ui/")
+            status, headers, _ = self.srv.request("GET", "/ui/", headers=NAV)
             self.assertEqual(status, 200)
             self.assertNotIn("Set-Cookie", headers)             # the interface fails closed too
         self.assertEqual(self.srv.request("GET", "/api/state")[0], 403)
@@ -207,6 +204,10 @@ class PairedClientTests(_ServerBase):
         self.assertNotIn(self.client.encode(), body)
         jar = {"Cookie": f"{api_token.CLIENT_COOKIE}={self.client}"}
         self.assertEqual(self.srv.request("GET", "/api/defender", headers=jar)[0], 200)
+        # The paired browser's own POSTs carry same-origin metadata; a replay does not.
+        self.assertEqual(self.srv.request("POST", "/api/answer", {"id": "x", "choice": "yes"},
+                                          {**jar, "Sec-Fetch-Site": "same-origin"})[0], 400)
+        self.assertEqual(self.srv.request("POST", "/api/answer", {"id": "x", "choice": "yes"}, jar)[0], 403)
 
     def test_the_session_route_refuses_bad_tokens_and_cross_site_calls(self):
         for body, extra in (({"token": "jc1_" + "0" * 12 + "_" + "A" * 43}, {}),
@@ -274,9 +275,9 @@ class RouteTableTests(_ServerBase):
         with mock.patch.object(api_token, "peer_uid", return_value=os.geteuid()):
             for path in ("/", "/coverage", "/procs", "/world"):
                 with self.subTest(path=path):
-                    _, headers, _ = self.srv.request("GET", path)
+                    _, headers, _ = self.srv.request("GET", path, headers=NAV)
                     self.assertIn(f"{api_token.COOKIE}={self.token}", headers.get("Set-Cookie", ""))
-            _, headers, _ = self.srv.request("GET", "/static/pair.js")
+            _, headers, _ = self.srv.request("GET", "/static/pair.js", headers=NAV)
             self.assertNotIn("Set-Cookie", headers)
 
 
@@ -452,8 +453,10 @@ class ServiceAccountInstallTests(unittest.TestCase):
     def test_dropin_runs_as_jarvis_with_a_private_state_directory(self):
         for line in ("User=jarvis", "Group=jarvis", "Environment=HOME=/var/lib/jarvis",
                      "StateDirectoryMode=0700", "UMask=0077",
-                     "Environment=JARVIS_OWNER_UID=@OWNER_UID@", "NoNewPrivileges=yes"):
+                     "NoNewPrivileges=yes"):
             self.assertIn(line + "\n", self.dropin)
+        # The owner pairs its browser; it is not handed the token (QC blocker 4).
+        self.assertNotIn("JARVIS_OWNER_UID", self.dropin)
         # The old readers group exposed the store and token to the owner's processes.
         self.assertNotIn("jarvis-readers", self.dropin)
         self.assertNotIn("JARVIS_CONFIG", self.dropin)       # read by nothing

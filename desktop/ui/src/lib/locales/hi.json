@@ -281,7 +281,6 @@
  "Pairing code": "पेयरिंग कोड",
  "Pairing did not work.": "पेयरिंग नहीं हो सकी।",
  "Pause": "रोकें",
- "Payment confirmed. Thank you.": "भुगतान की पुष्टि हो गई। धन्यवाद।",
  "Phone": "फ़ोन",
  "Phone alerts": "फ़ोन अलर्ट",
  "Phone alerts cannot be used on this computer yet, because a required part is missing.": "इस कंप्यूटर पर फ़ोन अलर्ट अभी इस्तेमाल नहीं हो सकते, क्योंकि एक ज़रूरी हिस्सा मौजूद नहीं है।",
@@ -538,5 +537,9 @@
  "per computer per month": "प्रति कंप्यूटर प्रति माह",
  "per computer per year": "प्रति कंप्यूटर प्रति वर्ष",
  "{a}–{b} servers": "{a}–{b} सर्वर",
- "{total} a year": "{total} प्रति वर्ष"
+ "{total} a year": "{total} प्रति वर्ष",
+ "Detection gaps": "पहचान में कमियाँ",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "वर्तमान ख़तरा-सूचना में बताई गई तकनीकें जिन्हें ARGUS-INSTINCT अभी जाँचता नहीं है। ये टूल के बारे में हैं, इस कंप्यूटर के बारे में नहीं।",
+ "Came back": "फिर से आया",
+ "Open for {age}": "{age} से खुला"
 }

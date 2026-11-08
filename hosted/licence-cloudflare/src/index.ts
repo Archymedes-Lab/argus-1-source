@@ -268,13 +268,22 @@ async function handleEvent(env: Env, deps: Deps, type: string, obj: any): Promis
   }
 }
 
+/** Read-only: which Stripe mode the configured key is for ("live", "test" or "none"). Only the mode word
+ *  derived from the key's prefix is reported, never the key. Each licence row also records the paying
+ *  session's own `livemode` (licences_v2.livemode), which is the authority for a given purchase. */
+export function stripeMode(env: Pick<Env, "STRIPE_SECRET_KEY">): "live" | "test" | "none" {
+  const m = /^(?:sk|rk)_(live|test)_/.exec(env.STRIPE_SECRET_KEY || "");
+  return m ? (m[1] as "live" | "test") : "none";
+}
+
 // ---------------------------------------------------------------------------------------------
 export async function handle(req: Request, env: Env, deps: Deps): Promise<Response> {
   const url = new URL(req.url);
   const p = url.pathname.replace(/\/+$/, "") || "/";
   try {
     if (p === "/health" && req.method === "GET")
-      return json({ ok: true, stripe: /^(sk|rk)_(test|live)_/.test(env.STRIPE_SECRET_KEY || ""), managed_payments: managed(env),
+      return json({ ok: true, stripe: /^(sk|rk)_(test|live)_/.test(env.STRIPE_SECRET_KEY || ""), stripe_mode: stripeMode(env),
+                    managed_payments: managed(env),
                     signing: !!env.LICENCE_SIGNING_KEY, pepper: (env.KEY_PEPPER || "").length >= 32 });
     let m = p.match(/^\/buy\/([a-z-]{1,40})$/);
     if (m && req.method === "GET") return await buy(req, env, deps, m[1], url);

@@ -249,8 +249,6 @@ fn main() {
             api::ask_jarvis,
             api::score_coach,
             api::decide_fix,
-            api::billing_status,
-            api::billing_checkout,
             api::autopilot_status,
             api::autopilot_decide,
             api::autopilot_policy,

@@ -13,7 +13,7 @@
   import { api, type Autopilot } from "../lib/api";
   import { app, go } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
-  import { collectorSummary, distinct, groupQuestions, isReminder, problemCounts, type Finding } from "../lib/model";
+  import { collectorSummary, distinct, groupQuestions, isProblem, problemCounts, type Finding } from "../lib/model";
   import { hasGuide, headline, plainFinding } from "../lib/plain";
 
   let ap = $state<(Autopilot & { health?: { okay: string; monitoring_line: string } }) | null>(null);
@@ -27,7 +27,7 @@
   const coll = $derived(collectorSummary(d?.jobs ?? []));
   const look = $derived(counts.critical + counts.high);
   const h = $derived(headline(d?.security?.score, counts.critical, counts.high, coll.stale + coll.error));
-  const top = $derived(distinct(findings.filter((f) => !isReminder(f) && (f.severity === "critical" || f.severity === "high")), 3));
+  const top = $derived(distinct(findings.filter((f) => isProblem(f) && (f.severity === "critical" || f.severity === "high")), 3));
   const waiting = $derived(groupQuestions(d?.questions ?? []).length + (d?.fix ?? []).length + (ap?.needs_me?.length ?? 0));
   const score = $derived(d?.security?.score as number | undefined);
   const C = 2 * Math.PI * 52;

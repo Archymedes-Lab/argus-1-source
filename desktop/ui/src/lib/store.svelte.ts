@@ -167,16 +167,6 @@ function schedule() {
   queued = setTimeout(refresh, wait);
 }
 
-/** Stripe sends the browser back to /?session_id=...; the daemon asks Stripe whether it was paid. */
-async function confirmReturnFromCheckout() {
-  const id = new URLSearchParams(location.search).get("session_id");
-  if (!id) return;
-  history.replaceState(null, "", location.pathname);
-  app.view = "pricing";
-  try { await api.billingConfirm(id); toast(tr("Payment confirmed. Thank you."), "ok"); }
-  catch (e) { toast(String((e as Error).message ?? e), "bad"); }
-}
-
 export async function start() {
   applyLang();
   applyTheme();
@@ -184,7 +174,6 @@ export async function start() {
   await refresh();
   void refreshCoverage();
   setInterval(() => void refreshCoverage(), COVERAGE_EVERY_MS);
-  void confirmReturnFromCheckout();
   void checkUpdate();
   setInterval(() => void checkUpdate(), UPDATE_EVERY_MS);
   await onDaemon(() => { refreshStatus(); schedule(); }, () => { app.daemon = "down"; refreshStatus(); });

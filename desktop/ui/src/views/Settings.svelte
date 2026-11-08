@@ -2,18 +2,18 @@
   import { onMount } from "svelte";
   import Segmented from "../components/Segmented.svelte";
   import Select from "../components/Select.svelte";
-  import { api, inApp, type AppSettings, type Autopilot, type Billing } from "../lib/api";
+  import { api, inApp, type AppSettings, type Autopilot, type LicenceState } from "../lib/api";
   import { t } from "../lib/words";
   import { LANGS, tr } from "../lib/i18n";
   import { app, checkUpdate, go, setLang, setMode, setTheme, toast, type Mode, type Theme } from "../lib/store.svelte";
   const themes: [Theme, string][] = [["auto", "Automatic"], ["light", "Light"], ["dark", "Dark"]];
 
   let ap = $state<Autopilot | null>(null);
-  let bill = $state<Billing | null>(null);
+  let bill = $state<LicenceState | null>(null);
   let prefs = $state<AppSettings | null>(null);
   onMount(async () => {
     try { ap = await api.autopilot(); } catch { ap = null; }
-    try { bill = await api.billingStatus(); } catch { bill = null; }
+    try { bill = await api.licence(); } catch { bill = null; }
     if (inApp) { try { prefs = await api.getSettings(); } catch { prefs = null; } }
   });
   async function flip(key: keyof AppSettings) {

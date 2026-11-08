@@ -37,6 +37,7 @@ from jarvis.response import (
     questions,
     remediation,
 )
+from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting import score, voice
 from jarvis.service import attackmap, autopilot, avguard, detectorhealth, sdnotify, selfupdate
 from jarvis.service import posture as posture_mod
@@ -49,7 +50,7 @@ from jarvis.service.scheduler import (
     running_jobs,
     watchdog_loop,
 )
-from jarvis.web import billing, clients, phone, procview, stream
+from jarvis.web import clients, phone, procview, stream
 from jarvis.web import token as api_token
 
 PAGE = str(STATIC_DIR / "dashboard.html")
@@ -324,12 +325,23 @@ def build_state(db_path, scheduler):
     store = Store(db_path)
     try:
         snaps = store.get_snapshots()
-        jobs, all_findings, all_checks = [], [], []
+        jobs, all_findings, all_checks, coverage_gaps = [], [], [], []
+        try:
+            ledger_rows = ledger_mod.open_rows(store)
+        except Exception:       # an unreadable ledger only loses the annotation
+            ledger_rows = {}
         for name, (interval, label) in JOBS.items():
             s = snaps.get(name)
             counts, ok_count = {}, 0
             if s:
-                for f in s["findings"]:
+                for f in ledger_mod.annotate(s["findings"], name, ledger_rows):
+                    if alert.is_coverage_gap(f):
+                        # About Argus's own detection, not this machine: listed
+                        # under coverage_gaps and /api/coverage, never counted
+                        # among the machine's findings (ALERT-QUALITY-2026-11-08).
+                        if f.get("severity") != "ok":
+                            coverage_gaps.append({**f, "job": name})
+                        continue
                     sev = f.get("severity")
                     if sev == "ok":
                         # "Checked and found clean" is a result, not an absence
@@ -393,6 +405,12 @@ def build_state(db_path, scheduler):
             "jobs": jobs,
             "findings": all_findings[:1000],
             "findings_total": len(all_findings),
+            # Moved out of the findings list, not dropped; the coverage view
+            # (/api/coverage "intel_gaps") is their home.
+            "coverage_gaps": {"total": len(coverage_gaps),
+                              "by_priority": {s: sum(1 for g in coverage_gaps
+                                                     if g.get("severity") == s)
+                                              for s in ("high", "medium", "low")}},
             "checks": all_checks,
             "history": store.get_history(24),
             "internet": internetwatch.latest(store),
@@ -603,8 +621,12 @@ class Handler(BaseHTTPRequestHandler):
         """The token cookie for this page load, or None.
 
         The page hands the API token to whoever loads it, so it is withheld from
-        a local peer owned by another account (see web/token.py may_receive).
+        a local peer owned by an account that cannot read the token file (see
+        web/token.py may_receive) and from anything that is not a browser's
+        top-level navigation (fetch metadata; forgeable, see web/token.py).
         """
+        if not api_token.is_browser_navigation(self.headers):
+            return None
         try:
             uid = api_token.peer_uid(self.client_address, self.server.server_address)
         except (AttributeError, TypeError, ValueError, IndexError):
@@ -627,6 +649,20 @@ class Handler(BaseHTTPRequestHandler):
             return True  # curl and friends send no Origin at all
         return any(origin == f"http://{h}:{self.server.server_address[1]}"
                    for h in ("localhost", "127.0.0.1"))
+
+    def _cookie_only_from_elsewhere(self):
+        """True when a request's only credential is a cookie and it carries no
+        same-origin browser evidence (Sec-Fetch-Site same-origin, or a matching
+        Origin). Browsers send one of these on every same-origin POST; a
+        cookie replayed by something that is not our page does not. Clients
+        that are not browsers present their token in a header instead."""
+        if api_token.header_credentials(self.headers) or not api_token.candidates(self.headers):
+            return False
+        if (self.headers.get("Sec-Fetch-Site") or "").strip().lower() == "same-origin":
+            return False
+        origin = self.headers.get("Origin")
+        port = self.server.server_address[1]
+        return not (origin and any(origin == f"http://{h}:{port}" for h in ("localhost", "127.0.0.1")))
 
     def _json_body(self, limit):
         """The request's JSON object, or None when it is missing, oversized or malformed."""
@@ -831,23 +867,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(202, json.dumps({"accepted": True, "findings": len(findings)}))
             finally:
                 store.close()
-        if url.path == "/api/billing/webhook":
-            # Stripe calls this, not the browser: no cookie or origin, so it is
-            # authenticated by Stripe's HMAC signature alone (billing.handle_webhook).
-            try:
-                length = int(self.headers.get("Content-Length") or "0")
-            except ValueError:
-                length = 0
-            if length <= 0 or length > 262_144:
-                return self._send(400, json.dumps({"error": "invalid request"}))
-            body = self.rfile.read(length)
-            store = Store(self.db_path)
-            try:
-                code, result = billing.handle_webhook(
-                    store, body, self.headers.get("Stripe-Signature", ""))
-            finally:
-                store.close()
-            return self._send(code, json.dumps(result))
         if not self._same_origin():
             return self._send(403, json.dumps({"error": "cross-site request"}))
         if url.path == "/api/session":
@@ -868,6 +887,11 @@ class Handler(BaseHTTPRequestHandler):
         # Every state-changing route needs a credential: the per-start token
         # (header or the dashboard's cookie) or a paired client token. See
         # jarvis/web/token.py for what this does and does not close.
+        if self._cookie_only_from_elsewhere():
+            # QC blocker 4: a cookie is a browser credential; outside our own
+            # page it must come with a header token instead.
+            return self._send(403, json.dumps({"error": "a token cookie is accepted only from this "
+                                                        "dashboard's own pages; send the token as a header"}))
         if not self._authorized():
             return self._send(403, json.dumps({"error": "missing or wrong API token"}))
         if url.path in phone.ROUTES_POST:
@@ -920,19 +944,6 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
-        if url.path == "/api/billing/checkout":
-            origin = "http://%s" % (self.headers.get("Host") or "localhost")
-            payload = self._json_body(2048) or {}
-            result = billing.checkout(origin, billing.plan_of(payload.get("plan")))
-            return self._send(200 if "url" in result else 400, json.dumps(result))
-        if url.path == "/api/billing/confirm":
-            payload = self._json_body(2048) or {}
-            store = Store(self.db_path)
-            try:
-                result = billing.confirm(store, str(payload.get("session_id") or "")[:200])
-            finally:
-                store.close()
-            return self._send(200 if result.get("ok") else 400, json.dumps(result))
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]
             ok = self.scheduler.force(job)
@@ -1169,8 +1180,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(500, "pair.html missing", "text/plain")
         if url.path in ("/", "/index.html") and (UI_DIR / "index.html").is_file():
-            # Same address as before for the Stripe return and for bookmarks:
-            # the query (for example ?session_id=...) carries over.
+            # Same address as before for bookmarks: the query carries over.
             self.send_response(302)
             self.send_header("Location", "/ui/" + ("?" + url.query if url.query else ""))
             cookie = self._token_cookie()
@@ -1224,13 +1234,6 @@ class Handler(BaseHTTPRequestHandler):
 
         if url.path == "/api/protection":
             return self._send(200, json.dumps(avguard.status()))
-
-        if url.path == "/api/billing/status":
-            store = Store(self.db_path)
-            try:
-                return self._send(200, json.dumps(billing.status(store)))
-            finally:
-                store.close()
 
         if url.path == "/api/greeting":
             store = Store(self.db_path)

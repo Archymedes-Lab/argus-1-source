@@ -40,7 +40,8 @@ def _current(store):
     out = []
     for job, snap in store.get_snapshots().items():
         for finding in snap.get("findings") or []:
-            if isinstance(finding, dict) and finding.get("severity") != "ok":
+            if (isinstance(finding, dict) and finding.get("severity") != "ok"
+                    and not alert.is_coverage_gap(finding)):
                 out.append({**finding, "job": job})
     out.sort(key=lambda f: (alert.SEV_RANK.get(f.get("severity"), 9), f.get("job", "")))
     return out

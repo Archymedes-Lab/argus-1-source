@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ago, collectorSummary, distinct, every, filterFindings, groupQuestions, isReminder, problemCounts,
+  ago, collectorSummary, distinct, every, filterFindings, groupQuestions, isCoverageGap, isProblem, isReminder, problemCounts,
   jobHealth, matches, scoreTone, sevRank, severityCounts, type Finding,
 } from "./model";
 
@@ -83,6 +83,21 @@ describe("reminders are not new problems", () => {
     expect(problemCounts(list)).toEqual({ critical: 1, high: 1, medium: 0, low: 0 });
     expect(list.filter(isReminder).length).toBe(2);
     expect(severityCounts(list).critical).toBe(3);   // the full list is unchanged
+  });
+
+  test("an orphan ledger note is the only copy of its problem, so it counts", () => {
+    const orphan = { ...F("high", "unresolved for 49d: svchost.exe exists without a start event", { job: "ledger" }), orphan: true };
+    const attached = { ...F("low", "unresolved for 16d: OpenAI API key in plaintext", { job: "ledger" }), orphan: false };
+    expect(isReminder(orphan)).toBe(false);
+    expect(isReminder(attached)).toBe(true);
+    expect(problemCounts([orphan, attached]).high).toBe(1);
+  });
+
+  test("coverage gaps are about the tool, never counted as problems on this machine", () => {
+    const gap = F("high", "T1001 Data Obfuscation", { job: "gaps", category: "coverage gap" });
+    expect(isCoverageGap(gap)).toBe(true);
+    expect(isProblem(gap)).toBe(false);
+    expect(problemCounts([gap, ...list]).high).toBe(1);
   });
 });
 

@@ -281,7 +281,6 @@
  "Pairing code": "Código de pareamento",
  "Pairing did not work.": "O pareamento não funcionou.",
  "Pause": "Pausar",
- "Payment confirmed. Thank you.": "Pagamento confirmado. Obrigado.",
  "Phone": "Telefone",
  "Phone alerts": "Alertas no telefone",
  "Phone alerts cannot be used on this computer yet, because a required part is missing.": "Os alertas no celular ainda não podem ser usados neste computador, porque falta uma peça necessária.",
@@ -538,5 +537,9 @@
  "per computer per month": "por computador por mês",
  "per computer per year": "por computador por ano",
  "{a}–{b} servers": "{a}–{b} servidores",
- "{total} a year": "{total} por ano"
+ "{total} a year": "{total} por ano",
+ "Detection gaps": "Lacunas de deteção",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "Técnicas descritas pela inteligência de ameaças atual que o ARGUS-INSTINCT ainda não verifica. Dizem respeito à ferramenta, não a este computador.",
+ "Came back": "Voltou",
+ "Open for {age}": "Aberto há {age}"
 }
