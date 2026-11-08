@@ -603,8 +603,12 @@ class Handler(BaseHTTPRequestHandler):
         """The token cookie for this page load, or None.
 
         The page hands the API token to whoever loads it, so it is withheld from
-        a local peer owned by another account (see web/token.py may_receive).
+        a local peer owned by an account that cannot read the token file (see
+        web/token.py may_receive) and from anything that is not a browser's
+        top-level navigation (fetch metadata; forgeable, see web/token.py).
         """
+        if not api_token.is_browser_navigation(self.headers):
+            return None
         try:
             uid = api_token.peer_uid(self.client_address, self.server.server_address)
         except (AttributeError, TypeError, ValueError, IndexError):
@@ -627,6 +631,20 @@ class Handler(BaseHTTPRequestHandler):
             return True  # curl and friends send no Origin at all
         return any(origin == f"http://{h}:{self.server.server_address[1]}"
                    for h in ("localhost", "127.0.0.1"))
+
+    def _cookie_only_from_elsewhere(self):
+        """True when a request's only credential is a cookie and it carries no
+        same-origin browser evidence (Sec-Fetch-Site same-origin, or a matching
+        Origin). Browsers send one of these on every same-origin POST; a
+        cookie replayed by something that is not our page does not. Clients
+        that are not browsers present their token in a header instead."""
+        if api_token.header_credentials(self.headers) or not api_token.candidates(self.headers):
+            return False
+        if (self.headers.get("Sec-Fetch-Site") or "").strip().lower() == "same-origin":
+            return False
+        origin = self.headers.get("Origin")
+        port = self.server.server_address[1]
+        return not (origin and any(origin == f"http://{h}:{port}" for h in ("localhost", "127.0.0.1")))
 
     def _json_body(self, limit):
         """The request's JSON object, or None when it is missing, oversized or malformed."""
@@ -868,6 +886,11 @@ class Handler(BaseHTTPRequestHandler):
         # Every state-changing route needs a credential: the per-start token
         # (header or the dashboard's cookie) or a paired client token. See
         # jarvis/web/token.py for what this does and does not close.
+        if self._cookie_only_from_elsewhere():
+            # QC blocker 4: a cookie is a browser credential; outside our own
+            # page it must come with a header token instead.
+            return self._send(403, json.dumps({"error": "a token cookie is accepted only from this "
+                                                        "dashboard's own pages; send the token as a header"}))
         if not self._authorized():
             return self._send(403, json.dumps({"error": "missing or wrong API token"}))
         if url.path in phone.ROUTES_POST:

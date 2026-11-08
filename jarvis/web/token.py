@@ -7,18 +7,37 @@ token as the `X-JARVIS-Token` header, `Authorization: Bearer`, or the
 or as the `jarvis_client` cookie a browser gets from the /pair page.
 
 The dashboard's HTML pages hand the per-start token to whoever loads them, so
-that hand-over is gated: on Linux the connecting socket's owner is looked up in
-/proc/net/tcp{,6} and the cookie goes only to the daemon's own account, root
-(both can read the file) and the owner account named in JARVIS_OWNER_UID when
-the daemon runs under its own service account. Any other account, and any peer
-whose owner cannot be determined -- a Windows program reaching the daemon
-through WSL networking -- gets no cookie: it pairs explicitly instead
-(`jarvis desktop pair`, then the app's token file or the /pair page).
+that hand-over is gated (QC-ARGUS-1-2026-10-27 blocker 4):
+
+  * Only accounts that can already read the token file receive it: the
+    connecting socket's owner is looked up in /proc/net/tcp{,6} and the cookie
+    goes only to the daemon's own account and root. Any other account, any peer
+    whose owner cannot be determined (a Windows program reaching the daemon
+    through WSL networking) and, since 2026-11-08, the owner account of a
+    service-account install (formerly JARVIS_OWNER_UID) get no cookie: they pair
+    explicitly (`jarvis desktop pair`, then the app's token file or the /pair
+    page). The hand-over therefore grants nothing a process did not already have.
+  * Only a browser's top-level navigation receives it (fetch metadata:
+    Sec-Fetch-Mode navigate, Sec-Fetch-Site none or same-origin). And a
+    state-changing request whose only credential is a cookie must carry
+    same-origin browser metadata (server.Handler). These are headers a local
+    process can forge: they stop tools and confused deputies that fetch a URL
+    without choosing its headers, not a process that targets this API.
+
+What remains, stated plainly: a process running as the daemon's own account
+can read the token file and send it as a header, so in the default install
+(daemon runs as the user) same-user malware can still trigger runs and fixes.
+Under the service account, a process running as the owner cannot get the
+per-start token from the daemon, but it can still read a paired client token
+the owner saved (the desktop app's client.token, a browser profile's cookie
+store), drive or inspect the owner's own browser (debugging port, injection),
+or replay a stolen cookie with forged fetch metadata. Reads (GET) with a
+cookie are not held to the same-origin rule. Only separate accounts (the
+service account) and, eventually, per-action owner confirmation close these;
+this is a gate, not a wall (docs/guides/SERVICE-ACCOUNT.md).
 
 With no token issued (serve() not started) nothing is accepted: the gate fails
-closed. A process running as the daemon's own account can still read the file;
-that is why the daemon is meant to run as its own account
-(docs/guides/SERVICE-ACCOUNT.md).
+closed.
 """
 
 import os
@@ -108,6 +127,12 @@ def candidates(headers):
         if cookies.get(name):
             out.append(cookies[name])
     return [v[:256] for v in out]
+
+
+def header_credentials(headers):
+    """The credentials a request carries in headers a browser page cannot set
+    for another origin (X-JARVIS-Token, Authorization: Bearer), not cookies."""
+    return candidates({HEADER: headers.get(HEADER), "Authorization": headers.get("Authorization")})
 
 
 def presented(headers):
@@ -204,26 +229,26 @@ def peer_uid(client, server, tables=PROC_NET):
     return None
 
 
-def owner_uids(environ=None):
-    """Extra accounts that may receive the dashboard cookie: the owner named by
-    the service-account install (JARVIS_OWNER_UID, comma separated)."""
-    raw = (environ if environ is not None else os.environ).get("JARVIS_OWNER_UID", "")
-    out = set()
-    for part in raw.split(","):
-        part = part.strip()
-        if part.isdigit():
-            out.add(int(part))
-    return out
-
-
-def may_receive(uid, environ=None):
+def may_receive(uid):
     """Whether a peer owned by `uid` may be handed the token with the page.
 
-    This account, root (both can read the token file anyway) and a configured
-    owner account may. Any other account may not, and neither may a peer whose
-    owner cannot be determined (None): it pairs explicitly instead. Fails closed.
+    Only accounts that can read the 0600 token file anyway: this account and
+    root. Every other account, including a service-account install's owner, and
+    a peer whose owner cannot be determined (None) pairs explicitly. Fails closed.
     """
     if uid is None:
         return False
     euid = os.geteuid() if hasattr(os, "geteuid") else None
-    return uid == 0 or uid == euid or uid in owner_uids(environ)
+    return uid == 0 or uid == euid
+
+
+# Fetch metadata of a browser's top-level load of one of our pages: typed,
+# bookmarked or opened by the OS (none), or followed from our own pages.
+NAV_SITES = ("none", "same-origin")
+
+
+def is_browser_navigation(headers):
+    """True when the request says it is a browser's own top-level (or framed)
+    navigation. Forgeable by a local process; see the module docstring."""
+    return ((headers.get("Sec-Fetch-Mode") or "").strip().lower() == "navigate"
+            and (headers.get("Sec-Fetch-Site") or "").strip().lower() in NAV_SITES)
