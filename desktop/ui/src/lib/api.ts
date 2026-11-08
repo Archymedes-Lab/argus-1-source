@@ -8,6 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { brandDeep } from "./brand";
+import { validLicencePage } from "./licence";
 
 export const inApp = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -22,9 +23,10 @@ export const ROUTES: Record<string, (a: Args) => Route> = {
   ask_jarvis: (a) => ({ method: "POST", path: "/api/ask", body: { question: a.question, level: a.level, lang: a.lang } }),
   score_coach: () => ({ method: "POST", path: "/api/score-coach", body: {} }),
   decide_fix: (a) => ({ method: "POST", path: `/api/fix/${a.decision}`, body: { id: a.id, reason: a.reason ?? "" } }),
-  billing_status: () => ({ method: "GET", path: "/api/billing/status" }),
-  billing_checkout: (a) => ({ method: "POST", path: "/api/billing/checkout", body: { plan: a?.plan } }),
-  billing_confirm: (a) => ({ method: "POST", path: "/api/billing/confirm", body: { session_id: a.sessionId } }),
+  // Licences and purchases: the hosted claim flow (jarvis/web/licenceapi.py), the same in the
+  // app and in a browser. No route here ever carries a payment secret.
+  licence_state: () => ({ method: "GET", path: "/api/licence" }),
+  licence_action: (a) => ({ method: "POST", path: `/api/licence/${encodeURIComponent(String(a.action))}`, body: { key: a.key ?? "", plan: a.plan } }),
   autopilot_status: () => ({ method: "GET", path: "/api/autopilot" }),
   autopilot_decide: (a) => ({ method: "POST", path: "/api/autopilot/decide", body: { key: a.key, choice: a.choice } }),
   autopilot_policy: (a) => ({ method: "POST", path: "/api/autopilot/policy", body: { auto_handle: a.autoHandle } }),
@@ -53,6 +55,7 @@ export const PAGES: Record<string, string> = { coverage: "/coverage", world: "/w
 async function http<T>(cmd: string, args: Args = {}): Promise<T> {
   if (cmd === "open_page") { window.open(PAGES[args.page] ?? "/", "_blank", "noopener"); return { ok: true } as T; }
   if (cmd === "procs_snapshot") return procsSnapshotHttp() as Promise<T>;
+  if (cmd === "open_licence_page") return openLicencePageHttp(args.url) as Promise<T>;
   const route = ROUTES[cmd]?.(args);
   if (!route) throw new Error("This action is only available in the ARGUS-INSTINCT app.");
   const res = await fetch(route.path, {
@@ -67,11 +70,13 @@ async function http<T>(cmd: string, args: Args = {}): Promise<T> {
     window.location.assign("/pair?next=" + encodeURIComponent(window.location.pathname + window.location.search));
   }
   if (!res.ok) throw new Error(data?.message ?? data?.error ?? `HTTP ${res.status}`);
-  if (cmd === "billing_checkout" && data?.url) {
-    window.location.assign(data.url);
-    return { ok: true, message: "Opening checkout" } as T;
-  }
   return data as T;
+}
+
+/** In a browser: the same allow-list as the app (desktop/src/api.rs), then a new tab. */
+async function openLicencePageHttp(url: unknown): Promise<void> {
+  if (typeof url !== "string" || !validLicencePage(url)) throw new Error("that page is not an Archymedes licence page");
+  window.open(url, "_blank", "noopener");
 }
 
 async function call<T>(cmd: string, args?: Args): Promise<T> {
@@ -125,7 +130,6 @@ export type Reply = { ok?: boolean; message?: string; answer?: string; source?: 
 
 export type Protection = { available: boolean; level: "on" | "off" | "stale" | "unknown"; summary: string; signature_age_days?: number | null; last_quick_scan?: string };
 export type AppSettings = { notify_findings: boolean; notify_health: boolean; notify_outage: boolean };
-export type Billing = { licensed: boolean; expires: number | null; email: string | null; can_purchase: boolean; required: boolean; price_usd: number; interval: string; plans?: { month: number; year: number }; plan?: string | null };
 export type Case = { key: string; title: string; severity: string; count: number; what_happened: string; recommended: string; ai_note?: string; established: string[]; uncertain: string[] };
 export type Autopilot = { needs_me: Case[]; policy?: { auto_handle: boolean; min_age_days: number }; handled: { investigated: number } };
 
@@ -175,9 +179,6 @@ export const api = {
   getSettings: () => call<AppSettings>("get_settings"),
   setSettings: (settings: AppSettings) => call<AppSettings>("set_settings", { settings }),
   scoreCoach: () => call<Reply>("score_coach"),
-  billingStatus: () => call<Billing>("billing_status"),
-  billingCheckout: (plan: "month" | "year") => call<Reply>("billing_checkout", { plan }),
-  billingConfirm: (sessionId: string) => call<Reply>("billing_confirm", { sessionId }),
   autopilot: () => call<Autopilot>("autopilot_status"),
   decideCase: (key: string, choice: "recognise" | "not_recognise" | "investigate_further") =>
     call<Reply>("autopilot_decide", { key, choice }),

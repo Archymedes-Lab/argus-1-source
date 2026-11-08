@@ -49,7 +49,7 @@ from jarvis.service.scheduler import (
     running_jobs,
     watchdog_loop,
 )
-from jarvis.web import billing, clients, phone, procview, stream
+from jarvis.web import clients, phone, procview, stream
 from jarvis.web import token as api_token
 
 PAGE = str(STATIC_DIR / "dashboard.html")
@@ -831,23 +831,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(202, json.dumps({"accepted": True, "findings": len(findings)}))
             finally:
                 store.close()
-        if url.path == "/api/billing/webhook":
-            # Stripe calls this, not the browser: no cookie or origin, so it is
-            # authenticated by Stripe's HMAC signature alone (billing.handle_webhook).
-            try:
-                length = int(self.headers.get("Content-Length") or "0")
-            except ValueError:
-                length = 0
-            if length <= 0 or length > 262_144:
-                return self._send(400, json.dumps({"error": "invalid request"}))
-            body = self.rfile.read(length)
-            store = Store(self.db_path)
-            try:
-                code, result = billing.handle_webhook(
-                    store, body, self.headers.get("Stripe-Signature", ""))
-            finally:
-                store.close()
-            return self._send(code, json.dumps(result))
         if not self._same_origin():
             return self._send(403, json.dumps({"error": "cross-site request"}))
         if url.path == "/api/session":
@@ -920,19 +903,6 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 store.close()
             return self._send(200, json.dumps(result))
-        if url.path == "/api/billing/checkout":
-            origin = "http://%s" % (self.headers.get("Host") or "localhost")
-            payload = self._json_body(2048) or {}
-            result = billing.checkout(origin, billing.plan_of(payload.get("plan")))
-            return self._send(200 if "url" in result else 400, json.dumps(result))
-        if url.path == "/api/billing/confirm":
-            payload = self._json_body(2048) or {}
-            store = Store(self.db_path)
-            try:
-                result = billing.confirm(store, str(payload.get("session_id") or "")[:200])
-            finally:
-                store.close()
-            return self._send(200 if result.get("ok") else 400, json.dumps(result))
         if url.path == "/api/run":
             job = (parse_qs(url.query).get("job") or [""])[0]
             ok = self.scheduler.force(job)
@@ -1169,8 +1139,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(500, "pair.html missing", "text/plain")
         if url.path in ("/", "/index.html") and (UI_DIR / "index.html").is_file():
-            # Same address as before for the Stripe return and for bookmarks:
-            # the query (for example ?session_id=...) carries over.
+            # Same address as before for bookmarks: the query carries over.
             self.send_response(302)
             self.send_header("Location", "/ui/" + ("?" + url.query if url.query else ""))
             cookie = self._token_cookie()
@@ -1224,13 +1193,6 @@ class Handler(BaseHTTPRequestHandler):
 
         if url.path == "/api/protection":
             return self._send(200, json.dumps(avguard.status()))
-
-        if url.path == "/api/billing/status":
-            store = Store(self.db_path)
-            try:
-                return self._send(200, json.dumps(billing.status(store)))
-            finally:
-                store.close()
 
         if url.path == "/api/greeting":
             store = Store(self.db_path)

@@ -88,7 +88,8 @@ npx wrangler deploy
 
 `wrangler.jsonc` routes the custom domain `pay.archymedes.xyz` (the archymedes.xyz zone
 must be on the same Cloudflare account). Check: `curl https://pay.archymedes.xyz/health`
-→ `{"ok":true,"stripe":true,"managed_payments":true,"signing":true,"pepper":true}`.
+→ `{"ok":true,"stripe":true,"stripe_mode":"live","managed_payments":true,"signing":true,"pepper":true}`
+(`stripe_mode` is `test` with a test key; it is derived from the key prefix and never shows the key).
 
 ## 4. Webhook endpoint
 
@@ -124,6 +125,29 @@ Stripe>`, then `npx wrangler dev --ip 127.0.0.1 --port 9477 --local-upstream 127
 pay.archymedes.xyz and the manage forms are refused), and point the client at it with
 `ARGUS_LICENCE_API=http://127.0.0.1:9477`. `DEV_FAKE_UPSTREAM` is ignored unless the Worker itself is on
 127.0.0.1.
+
+## 6. Verify live mode with one real purchase (and refund it)
+
+The customer machine holds no Stripe key at all (`tests/test_no_seller_payment_key.py`); live mode is a property
+of the Worker's secrets alone. Each licence row records the paying Checkout Session's own `livemode`
+(`licences_v2.livemode`), which is the authority for that purchase.
+
+1. Read-only first: `curl -s https://pay.archymedes.xyz/health` must say `"stripe_mode":"live"` (needs the
+   Worker version with that field deployed). Stripe Dashboard → Developers → Webhooks: the
+   `pay.archymedes.xyz/stripe/webhook` endpoint is listed in **live** mode.
+2. Buy the cheapest offer for real: in the desktop app or the web dashboard, Pricing → Monthly → **Buy for this
+   computer** (Argus Desktop monthly, $15). Pay with a real card. The computer activates by itself; the app shows
+   *Active*.
+3. Confirm it was live, read-only:
+   `npx wrangler d1 execute argus-licence --remote --command "SELECT id, offer, livemode, status, substr(session_id,1,8) AS s FROM licences_v2 ORDER BY created_at DESC LIMIT 1"`
+   → `livemode = 1`, session prefix `cs_live_`, status `active`. In the Stripe Dashboard (live), the payment
+   appears under Payments with the Argus metadata.
+4. Refund and end it: Dashboard (live) → the payment → **Refund** (full), then the subscription → **Cancel
+   immediately**. Both current plans are subscriptions, so the licence is revoked by
+   `customer.subscription.deleted` (a refund alone revokes only one-time payments).
+5. Confirm the revocation: the same D1 query shows `status = revoked`; on the computer, `argus licence refresh`
+   reports the subscription ended; protection keeps running exactly as before
+   (`tests/test_licence_never_gates_core.py`). Stripe's fee on the refunded charge is not returned.
 
 ## Support runbooks
 

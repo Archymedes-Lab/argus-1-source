@@ -113,7 +113,7 @@ ENTRIES = (
     ("safe-argus", ("is argus-1 safe", "is argus safe", "does argus-1 send", "does argus send", "is my data private",
                     "where does my data go", "does argus-1 collect", "what does argus-1 collect"),
      "ARGUS-INSTINCT works on your computer. What it observes stays here, and it talks to the network only for "
-     "things you turn on, such as payment through Stripe or optional email alerts. It reads and explains; "
+     "things you turn on, such as buying a licence at pay.archymedes.xyz or optional email alerts. It reads and explains; "
      "it does not change your computer without your approval."),
     ("what-argus", ("what is argus-1", "what is argus", "what does argus-1 do", "what does argus do"),
      "ARGUS-INSTINCT watches your computer for things that look wrong, such as programs that start by themselves, "

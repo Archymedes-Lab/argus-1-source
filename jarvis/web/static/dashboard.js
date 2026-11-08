@@ -2607,44 +2607,62 @@ document.addEventListener("click", async ev => {
 });
 loadAutopilot(); setInterval(loadAutopilot, 15000);
 
-/* licence: state, checkout, and the return from Stripe */
-let licence = null;
+/* licence: state and purchase through the Archymedes licence service (the hosted claim flow).
+   This computer opens a claim, the browser pays at pay.archymedes.xyz, and the daemon activates
+   by itself when the claim is paid. No payment key is ever on this computer, and a licence never
+   gates protection (tests/test_licence_never_gates_core.py). Prices: desktop/ui/src/lib/prices.ts
+   (tests/test_no_seller_payment_key.py keeps the amounts on this page equal to it). */
+let licence = null, licPoll = null;
+const PAY_ORIGIN = "https://pay.archymedes.xyz";
+// The same allow-list as the app (desktop/src/api.rs valid_licence_page, desktop/ui/src/lib/licence.ts).
+function licencePageOk(url) {
+  if (typeof url !== "string" || !url.startsWith(PAY_ORIGIN + "/")) return false;
+  const rest = url.slice(PAY_ORIGIN.length + 1);
+  return ["manage", "recover", "buy/argus-server", "buy/argus-desktop", "buy/argus-desktop-monthly"].includes(rest)
+    || /^buy\/argus-(server|desktop|desktop-monthly)\?claim=clm_[0-9A-Z]{32}$/.test(rest);
+}
 async function loadLicence() {
   try {
-    const r = await fetch("/api/billing/status", { cache: "no-store" });
+    const r = await fetch("/api/licence", { cache: "no-store" });
+    if (!r.ok) return;
     licence = await r.json();
   } catch (e) { return; }
-  const on = licence.licensed, until = on && licence.expires ? new Date(licence.expires * 1000).toLocaleDateString() : "";
-  $("lic-state").textContent = on ? `active until ${until}` : "not active";
+  const on = !!licence.licensed, until = on && licence.expires_at ? new Date(licence.expires_at * 1000).toLocaleDateString() : "";
+  $("lic-state").textContent = on ? (until ? `active until ${until}` : "active") : "not active";
   $("lic-state").className = "lic" + (on ? " on" : "");
   $("nav-lic").textContent = on ? "" : "!";
-  for (const id of ["lic-buy-month", "lic-buy-year"]) {
-    $(id).hidden = on;
-    $(id).disabled = !licence.can_purchase;
-  }
-  if (!on && !licence.can_purchase) $("lic-msg").textContent = "Payments are not set up on this computer yet (see docs/BILLING.md).";
+  for (const id of ["lic-buy-month", "lic-buy-year"]) $(id).hidden = on;
   const bar = $("licbar");
   bar.hidden = on;
   // A licence never gates protection (tests/test_licence_never_gates_core.py): no locked wording.
   $("licbar-text").textContent = "No active licence. Protection works the same without one; ARGUS-INSTINCT is $15/month or $79/year.";
+  if (!on && licence.purchase_waiting) waitForPayment();
+}
+function waitForPayment() {
+  $("lic-msg").textContent = "Waiting for payment to complete in your browser…";
+  if (licPoll) return;
+  licPoll = setInterval(async () => {
+    try {
+      const r = await postJSON("/api/licence/poll", {});
+      if (r.ok && r.data.active) {
+        clearInterval(licPoll); licPoll = null;
+        $("lic-msg").textContent = "Thank you. Your licence is active.";
+        loadLicence();
+      }
+    } catch (e) { /* keep waiting; the daemon may be busy */ }
+  }, 5000);
 }
 async function subscribe(plan) {
   const msg = $("lic-msg"); msg.textContent = "Opening secure checkout…";
   try {
-    const r = await postJSON("/api/billing/checkout", { plan: plan === "month" ? "month" : "year" });
-    if (r.ok && r.data.url) { location.href = r.data.url; return; }
-    msg.textContent = (r.data && r.data.error) || "Could not start checkout.";
+    const r = await postJSON("/api/licence/upgrade", { plan: plan === "month" ? "desktop-monthly" : "desktop" });
+    const link = r.ok && r.data && r.data.ok ? r.data.open : "";
+    if (!licencePageOk(link)) { msg.textContent = (r.data && r.data.error) || "Could not start checkout."; return; }
+    window.open(link, "_blank", "noopener");
+    waitForPayment();
   } catch (e) { msg.textContent = "Could not start checkout. Please try again."; }
 }
-async function finishCheckout() {
-  const sid = new URLSearchParams(location.search).get("session_id");
-  if (!sid) return;
-  history.replaceState(null, "", location.pathname + "#pricing");
-  const r = await postJSON("/api/billing/confirm", { session_id: sid });
-  $("lic-msg").textContent = r.ok ? "Thank you. Your licence is active." : ((r.data && r.data.error) || "Could not confirm the payment.");
-  loadLicence();
-}
-loadLicence(); finishCheckout();
+loadLicence();
 
 routeFromHash(true);
 
@@ -2737,6 +2755,7 @@ const UI_CALLS = {
   protocol: el => answerProtocol(el),
   go: el => go(el.dataset.arg),
   subscribe: el => subscribe(el.dataset.arg),
+  licpage: el => { const u = PAY_ORIGIN + "/" + el.dataset.arg; if (licencePageOk(u)) window.open(u, "_blank", "noopener"); },
 };
 function uiDispatch(attr, ev) {
   // Every matching ancestor, innermost first: the order inline handlers ran in.

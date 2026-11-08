@@ -16,7 +16,7 @@ collectors and on-demand checks run the same with no licence, an expired one or 
 
 | Design | Where | What it sells | Enforcement | State |
 |---|---|---|---|---|
-| A. Local yearly licence | `main` (bb6795b): `jarvis/web/billing.py`, `docs/BILLING.md` | $79/year; `ARGUS_REQUIRE_LICENSE=1` answers 402 on `/api/ask`, `/api/run`, `/api/assistant/action` ("turn it on for release builds") | local flag | not in `argus1/main` or any release |
+| A. Local yearly licence | `main` (bb6795b): `jarvis/web/billing.py`, `docs/BILLING.md` | $79/year; `ARGUS_REQUIRE_LICENSE=1` answers 402 on `/api/ask`, `/api/run`, `/api/assistant/action` ("turn it on for release builds") | local flag | not in `argus1/main` or any release; the local seller-key Stripe path was removed 2026-11-08 (`tests/test_no_seller_payment_key.py`) |
 | B. Signed tokens + rule packs | `defensibility/licensing` (a6370af, 1e9e65b): `jarvis/licensing/`, `hosted/licence-cloudflare/` | premium = signed rule-pack updates only | Ed25519 offline check; the Worker checks the token before serving packs | diverged from `argus1/main` (9 ahead, 57 behind); Worker not deployed; token delivery not built |
 | C. Orion | `src/billing/*`, `server/billing.ts` | deeper analysis per decision | server-signed licence | live code, billing off in production |
 

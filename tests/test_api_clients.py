@@ -34,7 +34,6 @@ ROOT = Path(__file__).resolve().parent.parent
 #   asset    open static file
 #   session  POST, same-origin, validates a paired client token itself
 #   veil     POST, the extension's own pairing token
-#   stripe   POST from Stripe, authenticated by its HMAC signature (billing.handle_webhook)
 #   redirect 302 to the interface; the token cookie only for an identified peer
 LICENCE_POSTS = ("/api/licence/activate", "/api/licence/deactivate", "/api/licence/refresh",
                  "/api/licence/upgrade", "/api/licence/poll")
@@ -42,7 +41,6 @@ ROUTES = {
     "/": "redirect", "/index.html": "redirect", "/ui": "redirect",
     "/ui/": "page", "/ui/index.html": "page", "/classic": "page",
     "/geo": "page", "/pair": "page",
-    "/api/billing/webhook": "stripe",
     "/api/health": "live", "/api/live": "live",
     "/api/session": "session", "/api/veil/events": "veil",
     "/metrics": "token",
@@ -55,10 +53,9 @@ ROUTES = {
         "/api/posture/path-to-100", "/api/procs/baseline", "/api/procs/stream",
         "/api/pulse", "/api/run", "/api/score-coach", "/api/state", "/api/stream",
         "/api/voice", "/api/world",
-        # added by the interface, autopilot, billing and pause work (2026-10-30..11-02)
+        # added by the interface, autopilot and pause work (2026-10-30..11-02)
         "/api/autopilot", "/api/autopilot/authorize", "/api/autopilot/decide",
-        "/api/autopilot/notices", "/api/autopilot/policy", "/api/billing/checkout",
-        "/api/billing/confirm", "/api/billing/status", "/api/pause", "/api/protection",
+        "/api/autopilot/notices", "/api/autopilot/policy", "/api/pause", "/api/protection",
         "/api/protection/scan", "/api/resume",
         # the desktop app's update notice (service/selfupdate.py)
         "/api/update")},
@@ -68,7 +65,7 @@ POST_ONLY = {*LICENCE_POSTS, "/api/answer", "/api/ask", "/api/assistant/action",
              "/api/geo/here", "/api/geo/zone", "/api/score-coach", "/api/voice",
              "/api/session", "/api/veil/events",
              "/api/autopilot/authorize", "/api/autopilot/decide", "/api/autopilot/policy",
-             "/api/billing/checkout", "/api/billing/confirm", "/api/pause", "/api/resume",
+             "/api/pause", "/api/resume",
              "/api/protection/scan"}
 
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
-import { clearPriceCache, handle, maskEmail, type Deps, type Env } from "../src/index";
+import { clearPriceCache, handle, maskEmail, stripeMode, type Deps, type Env } from "../src/index";
 import { hmacHex, STRIPE_VERSION, verifyStripeSignature } from "../src/stripe";
 import { b64url, decodeJws, signedMessage, unb64url } from "../src/cert";
 import { ALPHABET, checkChar, deriveKey, formatKey, parseKey } from "../src/keys";
@@ -696,8 +696,12 @@ describe("misc", () => {
     const { key } = await buyServer();
     expect(await (await post("/licence/portal", { key })).json() as any).toEqual({ url: "https://billing.stripe.com/p/session/test_1" });
     const body = await (await call("/health")).json() as any;
-    expect(body).toEqual({ ok: true, stripe: true, managed_payments: true, signing: true, pepper: true });
+    expect(body).toEqual({ ok: true, stripe: true, stripe_mode: "test", managed_payments: true, signing: true, pepper: true });
     expect(JSON.stringify(body)).not.toContain("sk_test");
+    // The mode is read from the key's prefix only; nothing of the key is echoed.
+    expect(stripeMode({ STRIPE_SECRET_KEY: "rk_live_" + "s".repeat(24) })).toBe("live");
+    expect(stripeMode({ STRIPE_SECRET_KEY: "sk_test_x" })).toBe("test");
+    for (const k of ["", "pk_live_x", "live", "sk_livex"]) expect(stripeMode({ STRIPE_SECRET_KEY: k })).toBe("none");
     expect(maskEmail("alice@example.com")).toBe("a***@example.com");
   });
 

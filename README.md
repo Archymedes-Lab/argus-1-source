@@ -1190,8 +1190,9 @@ review report.
 **Buying.** Argus is sold through Stripe Checkout at `https://pay.archymedes.xyz/buy/argus-server` ($50 per server
 per year, one server) and `/buy/argus-desktop` ($79 per year, one computer), with Stripe Managed Payments (Stripe is
 the merchant of record). The checkout and licence service is the Cloudflare Worker in `hosted/licence-cloudflare`.
-In the desktop app, **Licence → Buy** opens checkout and the computer activates by itself when the payment goes
-through; nothing to type. Bought on the website, the thank-you page shows the key (with Copy) and it is emailed.
+In the desktop app and in the web dashboard, **Pricing → Buy for this computer** opens that checkout (a claim
+this computer started) and the computer activates by itself when the payment goes through; nothing to type. There
+is no local payment configuration: no install reads a Stripe key (`tests/test_no_seller_payment_key.py`). Bought on the website, the thank-you page shows the key (with Copy) and it is emailed.
 
 **Activating.** In the desktop app, **Licence** has a paste box that checks the key as you type. On a server (the
 public build names the command `argus`):

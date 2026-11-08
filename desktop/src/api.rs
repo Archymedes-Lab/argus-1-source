@@ -291,35 +291,6 @@ pub async fn decide_fix(id: String, decision: String, reason: Option<String>) ->
     .await
 }
 
-#[tauri::command]
-pub async fn billing_status() -> Result<Value, String> {
-    blocking(|| get_json("/api/billing/status", ACTION_TIMEOUT)).await
-}
-
-/// Only Stripe's hosted checkout is ever opened, and only as the URL the
-/// daemon got from Stripe; anything else is refused before it reaches the OS.
-pub fn is_checkout_url(u: &str) -> bool {
-    u.starts_with("https://checkout.stripe.com/")
-        && u.len() <= 2048
-        && u.bytes().all(|b| b.is_ascii_alphanumeric() || b"-._~:/?#[]@!$&'()*+,;=%".contains(&b))
-}
-
-#[tauri::command]
-pub async fn billing_checkout(plan: Option<String>) -> Result<Value, String> {
-    // Only the two known plans are ever sent; anything else falls back to the yearly one.
-    let plan = if plan.as_deref() == Some("month") { "month" } else { "year" };
-    blocking(move || {
-        let v = post_json("/api/billing/checkout", &json!({ "plan": plan }), ACTION_TIMEOUT)?;
-        let url = v.get("url").and_then(Value::as_str).unwrap_or_default().to_string();
-        if !is_checkout_url(&url) {
-            return Err("ARGUS-INSTINCT did not return a Stripe checkout address".into());
-        }
-        open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
-        Ok(json!({ "ok": true, "message": "Checkout opened in your browser" }))
-    })
-    .await
-}
-
 #[cfg(windows)]
 fn open_in_browser(url: &str) -> io::Result<()> {
     // FileProtocolHandler takes the URL as one argument; no shell parses it.
@@ -776,16 +747,6 @@ mod tests {
         let port = { TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port() }; // bound, then freed
         let err = request_to(port, "GET", "/api/state", None, None, Duration::from_secs(2)).unwrap_err();
         assert!(unreachable(&err).contains("not running") || unreachable(&err).contains("could not reach"));
-    }
-
-    #[test]
-    fn only_stripe_checkout_addresses_are_opened() {
-        assert!(is_checkout_url("https://checkout.stripe.com/c/pay/cs_test_a1B2#fid"));
-        for bad in ["http://checkout.stripe.com/x", "https://checkout.stripe.com.evil.example/x",
-                    "https://evil.example/https://checkout.stripe.com/", "file:///c:/windows/system32/calc.exe",
-                    "https://checkout.stripe.com/x y", "https://checkout.stripe.com/x\"&calc", ""] {
-            assert!(!is_checkout_url(bad), "{bad}");
-        }
     }
 
     #[test]
