@@ -548,18 +548,34 @@ pub fn valid_licence_action(a: &str) -> bool {
     matches!(a, "activate" | "deactivate" | "refresh" | "upgrade" | "poll")
 }
 
+/// An optional promo code: 1 to 40 of A-Z a-z 0-9 - _ (jarvis/web/licenceapi.py PROMO). Codes and
+/// discounts live in Stripe; the licence service looks the code up when checkout opens.
+pub fn valid_promo(code: &str) -> bool {
+    (1..=40).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 /// The only pages this app opens in the browser: Archymedes checkout and the licence pages.
-/// A purchase started in the app carries its claim id (`clm_` and 32 Crockford symbols).
+/// A purchase started in the app carries its claim id (`clm_` and 32 Crockford symbols); a
+/// checkout may also carry a promo code (`&promo=` after the claim, or `?promo=` alone).
 pub fn valid_licence_page(url: &str) -> bool {
     const BASE: &str = "https://pay.archymedes.xyz/";
     let Some(rest) = url.strip_prefix(BASE) else { return false };
     if matches!(rest, "manage" | "recover" | "buy/argus-server" | "buy/argus-desktop" | "buy/argus-desktop-monthly") {
         return true;
     }
-    for offer in ["buy/argus-server?claim=clm_", "buy/argus-desktop?claim=clm_", "buy/argus-desktop-monthly?claim=clm_"] {
-        if let Some(id) = rest.strip_prefix(offer) {
-            return id.len() == 32 && id.bytes().all(|b| b.is_ascii_digit() || b.is_ascii_uppercase());
+    for offer in ["buy/argus-server?", "buy/argus-desktop?", "buy/argus-desktop-monthly?"] {
+        let Some(query) = rest.strip_prefix(offer) else { continue };
+        if let Some(code) = query.strip_prefix("promo=") {
+            return valid_promo(code);
         }
+        let Some(after) = query.strip_prefix("claim=clm_") else { return false };
+        let (id, promo) = match after.split_once("&promo=") {
+            Some((id, code)) => (id, Some(code)),
+            None => (after, None),
+        };
+        return id.len() == 32
+            && id.bytes().all(|b| b.is_ascii_digit() || b.is_ascii_uppercase())
+            && promo.is_none_or(valid_promo);
     }
     false
 }
@@ -570,13 +586,15 @@ pub async fn licence_state() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn licence_action(action: String, key: Option<String>, plan: Option<String>) -> Result<Value, String> {
+pub async fn licence_action(action: String, key: Option<String>, plan: Option<String>, promo: Option<String>) -> Result<Value, String> {
     if !valid_licence_action(&action) {
         return Err("unknown licence action".into());
     }
     let key: String = key.unwrap_or_default().chars().take(200).collect();
     let plan = match plan.as_deref() { Some("server") => "server", Some("desktop-monthly") => "desktop-monthly", _ => "desktop" };
-    blocking(move || post_json(&format!("/api/licence/{action}"), &json!({ "key": key, "plan": plan }), ASK_TIMEOUT)).await
+    // Passed on as typed (bounded); the daemon checks its shape and answers bad_promo.
+    let promo: String = promo.unwrap_or_default().trim().chars().take(64).collect();
+    blocking(move || post_json(&format!("/api/licence/{action}"), &json!({ "key": key, "plan": plan, "promo": promo }), ASK_TIMEOUT)).await
 }
 
 /// Open an allow-listed licence page in the default browser.
@@ -630,6 +648,23 @@ mod tests {
             assert!(!valid_licence_page(bad), "{bad}");
         }
         assert!(valid_licence_action("activate") && !valid_licence_action("../state"));
+    }
+
+    #[test]
+    fn licence_pages_may_carry_a_promo_code_and_nothing_else() {
+        const CLAIM: &str = "clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+        for ok in [format!("buy/argus-desktop?claim={CLAIM}&promo=LAUNCH_20-x"), "buy/argus-server?promo=FLEET10".into(),
+                   format!("buy/argus-desktop-monthly?claim={CLAIM}&promo={}", "A".repeat(40))] {
+            assert!(valid_licence_page(&format!("https://pay.archymedes.xyz/{ok}")), "{ok}");
+        }
+        for bad in [format!("buy/argus-desktop?claim={CLAIM}&promo="), format!("buy/argus-desktop?claim={CLAIM}&promo={}", "A".repeat(41)),
+                    format!("buy/argus-desktop?claim={CLAIM}&promo=A&x=1"), format!("buy/argus-desktop?claim={CLAIM}&promo=A B"),
+                    format!("buy/argus-desktop?claim={CLAIM}&promo=a%26b"), "buy/argus-desktop?promo=".into(),
+                    "buy/argus-desktop?promo=A&claim=x".into(), "manage?promo=A".into(), "buy/argus-watch?promo=A".into(),
+                    format!("buy/argus-desktop?promo=A&claim={CLAIM}")] {
+            assert!(!valid_licence_page(&format!("https://pay.archymedes.xyz/{bad}")), "{bad}");
+        }
+        assert!(valid_promo("a") && valid_promo("Z-9_x") && !valid_promo("") && !valid_promo("é") && !valid_promo("a.b"));
     }
 
     fn parse(raw: &str) -> io::Result<Response> {

@@ -541,5 +541,8 @@
  "Detection gaps": "Lacunas de deteção",
  "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "Técnicas descritas pela inteligência de ameaças atual que o ARGUS-INSTINCT ainda não verifica. Dizem respeito à ferramenta, não a este computador.",
  "Came back": "Voltou",
- "Open for {age}": "Aberto há {age}"
+ "Open for {age}": "Aberto há {age}",
+ "Promo code (optional)": "Código promocional (opcional)",
+ "A promo code is up to 40 letters, digits, - or _.": "Um código promocional tem até 40 letras, dígitos, - ou _.",
+ "Prices shown are before any promo code. The code is checked at checkout, where you can also enter one.": "Os preços mostrados não incluem nenhum código promocional. O código é verificado no pagamento, onde também pode introduzir um."
 }

@@ -541,5 +541,8 @@
  "Detection gaps": "ثغرات الكشف",
  "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "تقنيات تصفها معلومات التهديدات الحالية ولا يتحقق منها ARGUS-INSTINCT بعد. وهي تخص الأداة، لا هذا الحاسوب.",
  "Came back": "عاد مجددًا",
- "Open for {age}": "مفتوح منذ {age}"
+ "Open for {age}": "مفتوح منذ {age}",
+ "Promo code (optional)": "رمز ترويجي (اختياري)",
+ "A promo code is up to 40 letters, digits, - or _.": "يتكوّن الرمز الترويجي من 40 حرفًا أو رقمًا أو - أو _ كحدٍّ أقصى.",
+ "Prices shown are before any promo code. The code is checked at checkout, where you can also enter one.": "الأسعار المعروضة قبل أي رمز ترويجي. يُتحقَّق من الرمز عند الدفع، حيث يمكنك أيضًا إدخال رمز."
 }

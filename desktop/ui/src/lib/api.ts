@@ -26,7 +26,8 @@ export const ROUTES: Record<string, (a: Args) => Route> = {
   // Licences and purchases: the hosted claim flow (jarvis/web/licenceapi.py), the same in the
   // app and in a browser. No route here ever carries a payment secret.
   licence_state: () => ({ method: "GET", path: "/api/licence" }),
-  licence_action: (a) => ({ method: "POST", path: `/api/licence/${encodeURIComponent(String(a.action))}`, body: { key: a.key ?? "", plan: a.plan } }),
+  licence_action: (a) => ({ method: "POST", path: `/api/licence/${encodeURIComponent(String(a.action))}`,
+                            body: { key: a.key ?? "", plan: a.plan, ...(a.promo ? { promo: a.promo } : {}) } }),
   autopilot_status: () => ({ method: "GET", path: "/api/autopilot" }),
   autopilot_decide: (a) => ({ method: "POST", path: "/api/autopilot/decide", body: { key: a.key, choice: a.choice } }),
   autopilot_policy: (a) => ({ method: "POST", path: "/api/autopilot/policy", body: { auto_handle: a.autoHandle } }),
@@ -207,8 +208,9 @@ export const api = {
   checkUpdate: () => call<UpdateInfo>("check_update"),
   openDownloadPage: () => call<void>("open_download_page"),
   licence: () => call<LicenceState>("licence_state"),
-  licenceAction: (action: "activate" | "deactivate" | "refresh" | "upgrade" | "poll", key?: string, plan?: "server" | "desktop" | "desktop-monthly") =>
-    call<LicenceReply>("licence_action", { action, key, plan }),
+  licenceAction: (action: "activate" | "deactivate" | "refresh" | "upgrade" | "poll", key?: string, plan?: "server" | "desktop" | "desktop-monthly",
+                  promo?: string) =>
+    call<LicenceReply>("licence_action", { action, key, plan, promo }),
   openLicencePage: (url: string) => call<void>("open_licence_page", { url }),
 };
 
@@ -218,7 +220,8 @@ export type LicenceState = {
   needs_key?: boolean; needs_check?: boolean; purchase_waiting?: boolean;
   links: { buy_server: string; buy_desktop: string; manage: string; recover: string };
 };
-export type LicenceReply = { ok: boolean; code?: string; error?: string; open?: string; active?: boolean; state?: LicenceState };
+export type LicenceReply = { ok: boolean; code?: string; error?: string; open?: string; active?: boolean; state?: LicenceState;
+  promo_sent?: boolean };
 
 /** Pulses: from the shell's stream thread in the app, from the daemon's own
  *  stream in the browser. `down` when the daemon cannot be reached. */

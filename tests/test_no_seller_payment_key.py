@@ -141,6 +141,22 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(start.call_count, 3)
         self.assertEqual(licence.PAY_ORIGIN, "https://pay.archymedes.xyz")
 
+    def test_a_promo_code_rides_on_the_hosted_checkout_link_and_a_bad_one_opens_no_claim(self):
+        claim = "clm_" + "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+        with mock.patch.object(licence, "claim_start", return_value={"claim_id": claim, "interval": 5}) as start, \
+                mock.patch("urllib.request.urlopen", side_effect=AssertionError("no network in this test")):
+            status, _, body = self.srv.request("POST", "/api/licence/upgrade",
+                                               {"plan": "desktop-monthly", "promo": "SPRING-26"}, self.auth)
+            reply = json.loads(body)
+            self.assertEqual((status, reply["ok"]), (200, True))
+            self.assertEqual(reply["open"], f"{licence.PAY_ORIGIN}/buy/argus-desktop-monthly?claim={claim}&promo=SPRING-26")
+            status, _, body = self.srv.request("POST", "/api/licence/upgrade",
+                                               {"plan": "desktop", "promo": "x&allow_promotion_codes=false"}, self.auth)
+            reply = json.loads(body)
+            self.assertEqual((status, reply["ok"], reply["code"]), (200, False, "bad_promo"))
+            self.assertNotIn("open", reply)
+        self.assertEqual(start.call_count, 1)
+
     def test_a_failed_claim_is_an_ordinary_answer_not_a_local_fallback(self):
         with mock.patch.object(licence, "claim_start", side_effect=licence.LicenceError("service unreachable", "network")):
             status, _, body = self.srv.request("POST", "/api/licence/upgrade", {"plan": "desktop"}, self.auth)
@@ -178,6 +194,43 @@ class WebPricingTests(unittest.TestCase):
         self.assertEqual(shown - allowed, set(), "an amount on the classic Pricing page is not in prices.ts")
         self.assertIn(f"${self.month} <small>per month", self.html)
         self.assertIn(f"${self.year} <small>per year", self.html)
+
+    def test_the_classic_dashboard_offers_an_optional_promo_code_at_list_prices(self):
+        self.assertIn('id="lic-promo"', self.html)
+        self.assertIn("Promo code (optional)", self.html)
+        self.assertIn("Prices shown are before any promo code.", self.html)
+        self.assertIn('const PROMO = /^[A-Za-z0-9_-]{1,40}$/;', self.js)
+        self.assertIn('...(promo ? { promo } : {})', self.js)
+        # a malformed code stops before the daemon is asked
+        sub = self.js[self.js.index("async function subscribe(plan)"):]
+        self.assertLess(sub.index("if (promo === null)"), sub.index('postJSON("/api/licence/upgrade"'))
+        self.assertNotRegex(self.html + self.js, r"(?i)percent_off|amount_off")
+
+    def test_the_classic_dashboard_allow_list_accepts_a_promo_and_nothing_more(self):
+        fn = self.js[self.js.index("function licencePageOk(url)"):]
+        fn = fn[:fn.index("\n}\n")]
+        patterns = [re.compile(p.replace("\\/", "/")) for p in re.findall(r"/(\^buy.*?\$)/\.test", fn)]
+        self.assertEqual(len(patterns), 2)
+        ok = lambda rest: any(p.search(rest) for p in patterns)  # noqa: E731
+        claim = "clm_" + "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+        for good in (f"buy/argus-desktop?claim={claim}", f"buy/argus-desktop?claim={claim}&promo=LAUNCH_20-x",
+                     "buy/argus-server?promo=FLEET10", f"buy/argus-desktop-monthly?claim={claim}&promo={'A' * 40}"):
+            self.assertTrue(ok(good), good)
+        for bad in (f"buy/argus-desktop?claim={claim}&promo=", f"buy/argus-desktop?claim={claim}&promo={'A' * 41}",
+                    f"buy/argus-desktop?claim={claim}&promo=A&x=1", "buy/argus-desktop?promo=A&claim=x",
+                    "buy/argus-watch?promo=A", "buy/argus-desktop?promo=a b", f"buy/argus-desktop?promo=A&claim={claim}"):
+            self.assertFalse(ok(bad), bad)
+        # What the daemon actually hands the page passes the page's own allow-list (else the purchase stalls).
+        from jarvis.web import licenceapi
+        with mock.patch.object(licence, "claim_start", return_value={"claim_id": claim, "interval": 5}), \
+                mock.patch.object(licenceapi, "_maybe_renew_in_background", lambda path: None), \
+                tempfile.TemporaryDirectory() as tmp:
+            for plan in ("desktop", "desktop-monthly"):
+                for promo in ("", " A ", "x" * 40, "Launch_20-x"):
+                    _code, reply = licenceapi.action(os.path.join(tmp, "s.db"), "upgrade", {"plan": plan, "promo": promo})
+                    link = reply["open"]
+                    self.assertTrue(link.startswith("https://pay.archymedes.xyz/"), link)
+                    self.assertTrue(ok(link[len("https://pay.archymedes.xyz/"):]), link)
 
     def test_the_built_web_interface_carries_the_claim_flow(self):
         # The committed bundle (scripts/dev/build_web_ui.py) is what the daemon serves; a stale build
