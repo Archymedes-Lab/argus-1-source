@@ -5,12 +5,12 @@
   import ProtectionCard from "../components/ProtectionCard.svelte";
   import { app, go } from "../lib/store.svelte";
   import { tr, sev } from "../lib/i18n";
-  import { collectorSummary, distinct, groupQuestions, isReminder, jobHealth, problemCounts, scoreTone, type Finding } from "../lib/model";
+  import { collectorSummary, distinct, groupQuestions, isProblem, isReminder, jobHealth, problemCounts, scoreTone, type Finding } from "../lib/model";
 
   const d = $derived(app.data);
   const sec = $derived(d?.security ?? null);
   const findings = $derived((d?.findings ?? []) as Finding[]);
-  const problems = $derived(findings.filter((f) => !isReminder(f)));
+  const problems = $derived(findings.filter(isProblem));
   const counts = $derived(problemCounts(findings));
   const reminders = $derived(findings.filter(isReminder).length);
   const crit = $derived(distinct(problems.filter((f) => f.severity === "critical"), 4));

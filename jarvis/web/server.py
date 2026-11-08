@@ -37,6 +37,7 @@ from jarvis.response import (
     questions,
     remediation,
 )
+from jarvis.response import ledger as ledger_mod
 from jarvis.response.reporting import score, voice
 from jarvis.service import attackmap, autopilot, avguard, detectorhealth, sdnotify, selfupdate
 from jarvis.service import posture as posture_mod
@@ -324,12 +325,23 @@ def build_state(db_path, scheduler):
     store = Store(db_path)
     try:
         snaps = store.get_snapshots()
-        jobs, all_findings, all_checks = [], [], []
+        jobs, all_findings, all_checks, coverage_gaps = [], [], [], []
+        try:
+            ledger_rows = ledger_mod.open_rows(store)
+        except Exception:       # an unreadable ledger only loses the annotation
+            ledger_rows = {}
         for name, (interval, label) in JOBS.items():
             s = snaps.get(name)
             counts, ok_count = {}, 0
             if s:
-                for f in s["findings"]:
+                for f in ledger_mod.annotate(s["findings"], name, ledger_rows):
+                    if alert.is_coverage_gap(f):
+                        # About Argus's own detection, not this machine: listed
+                        # under coverage_gaps and /api/coverage, never counted
+                        # among the machine's findings (ALERT-QUALITY-2026-11-08).
+                        if f.get("severity") != "ok":
+                            coverage_gaps.append({**f, "job": name})
+                        continue
                     sev = f.get("severity")
                     if sev == "ok":
                         # "Checked and found clean" is a result, not an absence
@@ -393,6 +405,12 @@ def build_state(db_path, scheduler):
             "jobs": jobs,
             "findings": all_findings[:1000],
             "findings_total": len(all_findings),
+            # Moved out of the findings list, not dropped; the coverage view
+            # (/api/coverage "intel_gaps") is their home.
+            "coverage_gaps": {"total": len(coverage_gaps),
+                              "by_priority": {s: sum(1 for g in coverage_gaps
+                                                     if g.get("severity") == s)
+                                              for s in ("high", "medium", "low")}},
             "checks": all_checks,
             "history": store.get_history(24),
             "internet": internetwatch.latest(store),

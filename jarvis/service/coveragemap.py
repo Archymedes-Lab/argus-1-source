@@ -31,6 +31,7 @@ import time
 from pathlib import Path
 
 from jarvis.core.store import Store
+from jarvis.response import alert
 from jarvis.response.reporting import score
 from jarvis.response.reporting.commands import JOB_COMMANDS
 from jarvis.service import attackmap
@@ -210,6 +211,35 @@ def _tally(techniques, tactic_names):
     return totals, tactics
 
 
+def intel_gaps(snaps, now):
+    """Argus's detection gaps against current intel, from the `gaps` job.
+
+    These are statements about the tool ("nothing here checks T1001"), so they
+    live here, in the coverage view, rather than among the machine's findings
+    (ALERT-QUALITY-2026-11-08). Every gap is listed; `priority` is the gaps
+    job's own ranking by how many intel documents raised the technique."""
+    snap = snaps.get("gaps") or {}
+    items = []
+    for f in snap.get("findings") or ():
+        if not alert.is_coverage_gap(f):
+            continue
+        title = str(f.get("title") or "")
+        tid, _, name = title.partition(" ")
+        items.append({"tid": tid, "name": name, "kind": f.get("category"),
+                      "priority": f.get("severity"), "detail": f.get("detail", "")})
+    order = {"high": 0, "medium": 1, "low": 2}
+    items.sort(key=lambda g: (order.get(g["priority"], 9), g["tid"]))
+    by_kind = {}
+    for g in items:
+        by_kind.setdefault(g["kind"], {}).setdefault(g["priority"], 0)
+        by_kind[g["kind"]][g["priority"]] += 1
+    interval = (JOBS.get("gaps") or (21600, ""))[0]
+    ts = snap.get("ts")
+    return {"state": score.freshness(snap or None, interval, now),
+            "ts": int(ts) if ts else None, "total": len(items),
+            "by_kind": by_kind, "items": items}
+
+
 def build(db_path, scheduler=None, now=None):
     now = time.time() if now is None else now
     store = Store(db_path)
@@ -267,6 +297,7 @@ def build(db_path, scheduler=None, now=None):
         "collectors": collectors,
         "running": running,
         "uptime": fleet,
+        "intel_gaps": intel_gaps(snaps, now),
         "score": ({"score": verified.get("score"), "grade": verified.get("grade"),
                    "at": verified.get("at")} if verified else None),
     }

@@ -39,7 +39,7 @@ import time
 
 from jarvis.core.store import Store
 from jarvis.platform import admin_sensor
-from jarvis.response import acknowledge
+from jarvis.response import acknowledge, alert
 from jarvis.response.reporting import score
 from jarvis.service import reliability as reliability_mod
 from jarvis.service.protection import health
@@ -82,8 +82,8 @@ def build(db_path, scheduler, stamp=None):
                           "freshness": fresh, "error": bool(snap and snap.get("error"))})
         for f in (snap or {}).get("findings") or ():
             sev = f.get("severity") if isinstance(f, dict) else None
-            if not sev or sev == "ok":
-                continue
+            if not sev or sev == "ok" or alert.is_coverage_gap(f):
+                continue    # coverage gaps live in /api/coverage, not the pulse
             totals[sev] = totals.get(sev, 0) + 1
             if sev in URGENT:
                 acked = acknowledge.is_acknowledged(acks, f, name, now=stamp)

@@ -538,5 +538,9 @@
  "per computer per month": "por ordenador al mes",
  "per computer per year": "por ordenador al año",
  "{a}–{b} servers": "{a}–{b} servidores",
- "{total} a year": "{total} al año"
+ "{total} a year": "{total} al año",
+ "Detection gaps": "Lagunas de detección",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "Técnicas que describe la inteligencia de amenazas actual y que ARGUS-INSTINCT aún no comprueba. Se refieren a la herramienta, no a este equipo.",
+ "Came back": "Ha vuelto",
+ "Open for {age}": "Abierto desde hace {age}"
 }
