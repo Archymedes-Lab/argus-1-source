@@ -1,11 +1,11 @@
 {
-  "commit": "3ebda14a8c3d0d2810f42d4d32a94c1febf25938",
+  "commit": "2ce6740410cc483c6f613a106fcd584915c6a6cf",
   "environment": "wsl2-windows-interop",
   "host_bound_sha256": "2f253060cb37e2da9282bd243c9495911d8afd186ba6f903a88f845ab7e081d9",
   "result": {
     "environment": "wsl2-windows-interop",
     "failed": [],
-    "host": "kernel='Linux version 6.18.33.1-microsoft-standard-WSL2 (root@5e53d226653e) (gcc (GCC) 1' /mnt/c=yes",
+    "host": "kernel='Linux version 6.18.54.1-microsoft-standard-WSL2 (root@9b80f41eb17c) (gcc (GCC) 1' /mnt/c=yes",
     "python": "3.12.3",
     "ran": 66,
     "skipped": 0,
