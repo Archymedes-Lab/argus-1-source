@@ -45,7 +45,7 @@ export const OFFERS: Record<string, Offer> = {
                              plan: "desktop", seats: 1, fleet: { max: TEAM_MAX } },
 };
 
-export const SUBSCRIPTION_GRACE = 3 * 86400;
+export const SUBSCRIPTION_GRACE = 14 * 86400;   // EULA §3: 14 days past the paid-through date (owner, 2026-11-09)
 export const LEASE = 30 * 86400;              // a certificate is good offline for 30 days, never past lic_exp
 export const RENEW_BEFORE = 7 * 86400;        // renew_after = exp - 7 days
 export const RELEASES_ALLOWED = 3;            // releases (moves) per licence per RELEASE_WINDOW

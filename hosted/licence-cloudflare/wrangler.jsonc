@@ -11,6 +11,8 @@
   "routes": [{ "pattern": "pay.archymedes.xyz", "custom_domain": true }],
   // Requests carry licence keys and Stripe payloads with emails: no request logging.
   "observability": { "enabled": false },
+  // Daily: delete licence records one year after the licence ended (src/retention.ts).
+  "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
     // Created 2026-11-05 with `wrangler d1 create argus-licence` (region WEUR).
     { "binding": "DB", "database_name": "argus-licence", "database_id": "9326e139-6234-4db4-aebb-cb219a60df4f" }
