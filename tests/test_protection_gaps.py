@@ -24,7 +24,8 @@ class ChannelFindingTests(unittest.TestCase):
 def hit(ip, pname="btweb.exe", sev="critical", feed="blocklist-de", host="win"):
     return {"ip": ip, "port": 1, "pname": pname, "label": "attacking host", "feed": feed,
             "src": "u", "host": host, "severity": sev,
-            "qualifier": "known attacker" if sev == "critical" else "threat-intelligence"}
+            "qualifier": "known attacker" if sev == "critical" else "threat-intelligence",
+            "reasons": []}
 
 
 class PeerCollapseTests(unittest.TestCase):
@@ -37,7 +38,7 @@ class PeerCollapseTests(unittest.TestCase):
         out = hunt.collapse_peer_hits(hits)
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["severity"], "critical")
-        self.assertIn("btweb.exe contacted 233 listed IPs (232 known-attacker)", out[0]["title"])
+        self.assertIn("btweb.exe contacted 233 listed IPs (232 corroborated)", out[0]["title"])
         self.assertIn("blocklist-de, cins", out[0]["detail"])
         self.assertIn("10.0.0.1:1", out[0]["detail"])
 

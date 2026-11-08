@@ -537,5 +537,9 @@
  "per computer per month": "за компьютер в месяц",
  "per computer per year": "за компьютер в год",
  "{a}–{b} servers": "{a}–{b} серверов",
- "{total} a year": "{total} в год"
+ "{total} a year": "{total} в год",
+ "Detection gaps": "Пробелы в обнаружении",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "Техники из актуальной разведки угроз, которые ARGUS-INSTINCT пока не проверяет. Это о самом инструменте, а не об этом компьютере.",
+ "Came back": "Вернулось",
+ "Open for {age}": "Открыто {age}"
 }

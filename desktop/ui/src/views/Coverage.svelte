@@ -4,6 +4,7 @@
   import { api, type Coverage } from "../lib/api";
   import { app, toast } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
+  import Pill from "../components/Pill.svelte";
 
   const data = $derived(app.coverage as Coverage | null);
   let err = $state("");
@@ -39,6 +40,8 @@
         && (!q || `${t.tid} ${t.name} ${(t.tactics ?? []).join(" ")}`.toLowerCase().includes(q)))
       .sort((a, b) => (RANK[a.level] ?? 9) - (RANK[b.level] ?? 9) || a.name.localeCompare(b.name));
   });
+  const gaps = $derived((data?.intel_gaps?.items ?? []).filter((g) => g.kind === "coverage gap"));
+  let gapLimit = $state(12);
   const share = (n: number) => (data && data.totals.total ? (n / data.totals.total) * 100 : 0);
   const watched = $derived(Math.round((data?.uptime?.pct24 ?? 0) * 100));
   async function full() { try { await api.openPage("coverage"); } catch (e) { toast(String((e as Error).message ?? e), "bad"); } }
@@ -90,6 +93,26 @@
         {/each}
       </div>
     </section>
+
+    {#if gaps.length}
+      <section class="card">
+        <div class="card-head">{tr("Detection gaps")} <span class="tabular text-gray-900">{gaps.length}</span></div>
+        <p class="px-5 text-copy-13 text-gray-900">{tr("Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.")}</p>
+        <div class="divide mt-2">
+          {#each gaps.slice(0, gapLimit) as g (g.tid)}
+            <div class="row items-start">
+              <span class="w-[76px] shrink-0 pt-px"><Pill severity={g.priority} /></span>
+              <span class="min-w-0 flex-1"><span class="block truncate text-label-13">{g.name || g.tid}</span>
+                <span class="block truncate text-copy-13 text-gray-900">{g.detail}</span></span>
+              {#if app.mode === "expert"}<span class="tag shrink-0">{g.tid}</span>{/if}
+            </div>
+          {/each}
+        </div>
+        {#if gaps.length > gapLimit}
+          <div class="border-t border-gray-300 p-3 text-center"><button class="btn btn-sm" onclick={() => (gapLimit += 60)}>{tr("Show {n} more", { n: Math.min(60, gaps.length - gapLimit) })}</button></div>
+        {/if}
+      </section>
+    {/if}
 
     <section class="flex flex-col gap-3">
       <div class="flex items-center gap-3">

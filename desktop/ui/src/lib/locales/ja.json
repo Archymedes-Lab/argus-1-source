@@ -537,5 +537,9 @@
  "per computer per month": "コンピューター 1 台あたり月額",
  "per computer per year": "コンピューター 1 台あたり年額",
  "{a}–{b} servers": "{a}–{b} 台のサーバー",
- "{total} a year": "年額 {total}"
+ "{total} a year": "年額 {total}",
+ "Detection gaps": "検知のすき間",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "現在の脅威インテリジェンスが記述しているが、ARGUS-INSTINCT がまだ確認していない手法です。これはツールについてであり、このコンピューターについてではありません。",
+ "Came back": "再発",
+ "Open for {age}": "{age} 未解決"
 }

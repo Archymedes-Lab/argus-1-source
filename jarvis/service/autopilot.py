@@ -157,7 +157,10 @@ def current_findings(store):
     out = {}
     for job, snap in store.get_snapshots().items():
         for f in snap.get("findings") or []:
-            if isinstance(f, dict) and f.get("severity") not in (None, "ok"):
+            # A coverage gap is about Argus's own detection, not this machine:
+            # nothing on the host to investigate (ALERT-QUALITY-2026-11-08).
+            if (isinstance(f, dict) and f.get("severity") not in (None, "ok")
+                    and not alert.is_coverage_gap(f)):
                 out[acknowledge.finding_id(f, job)] = (f, job)
     return out
 

@@ -272,7 +272,9 @@ def _ledger(hosts, db_path):
         snaps = store.get_snapshots()
         job_ts = {k: int(v.get("ts") or 0) for k, v in snaps.items()
                   if not v.get("error")}
-        return ledger_mod.audit(store, job_ts=job_ts)
+        # The snapshots also let it attach an overdue row to the original
+        # finding instead of restating it as a second one.
+        return ledger_mod.audit(store, job_ts=job_ts, snapshots=snaps)
 
 
 def _input(deep):

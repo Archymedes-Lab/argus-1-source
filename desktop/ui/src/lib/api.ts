@@ -148,6 +148,9 @@ export type Coverage = {
   tactics: Record<string, Record<string, number>>;
   techniques: Technique[];
   uptime?: { pct24: number; buckets: number[]; tracked: number; of: number };
+  /** Argus's own detection gaps against current intel (the gaps job): about the tool, not this machine. */
+  intel_gaps?: { state: string; ts: number | null; total: number;
+                 items: { tid: string; name: string; kind: string; priority: string; detail: string }[] };
 };
 export type WorldItem = { id?: string; kind: string; src: string; source: string; title: string; summary?: string; url?: string; ts: number; lat?: number; lon?: number; place?: string; country?: string };
 export type WorldZone = { id: string; name: string; country?: string; lat: number; lon: number; radius_km?: number; reports: number; sources: number; places?: string[]; last_24h: number; prior_24h: number };

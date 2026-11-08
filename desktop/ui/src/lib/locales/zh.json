@@ -537,5 +537,9 @@
  "per computer per month": "每台电脑每月",
  "per computer per year": "每台电脑每年",
  "{a}–{b} servers": "{a}–{b} 台服务器",
- "{total} a year": "每年 {total}"
+ "{total} a year": "每年 {total}",
+ "Detection gaps": "检测缺口",
+ "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "当前威胁情报描述、但 ARGUS-INSTINCT 尚未检查的技术。这些关乎工具本身，而不是这台电脑。",
+ "Came back": "再次出现",
+ "Open for {age}": "已持续 {age}"
 }

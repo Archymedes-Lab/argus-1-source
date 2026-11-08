@@ -52,8 +52,10 @@ class BlockAddress(Action):
                 f"{target['ip']}. Reversible.")
 
     def auto_eligible(self, finding, job, target):
-        # The hunt promotes only high-confidence feed entries to critical.
-        # Lower-confidence IPs and CIDR matches remain approval proposals.
+        # The hunt promotes an address to critical only when a high-confidence
+        # C2 listing is corroborated by an independent signal
+        # (hunt.grade_ip_hit). A lone listing, a CIDR match or a shared
+        # provider address remains an approval proposal.
         return job == "hunt" and finding.get("category") == "c2 match" \
             and finding.get("severity") == "critical"
 

@@ -82,7 +82,7 @@ def _hash_cached(store, path):
 
 def _active(store, kind):
     return store.db.execute(
-        "SELECT norm, value, source_url, context, doc_count, confidence FROM indicators "
+        "SELECT norm, value, source_url, context, doc_count, confidence, source FROM indicators "
         "WHERE kind=? AND status='active'", (kind,)).fetchall()
 
 
@@ -94,6 +94,7 @@ def _active(store, kind):
 # which buried every other critical (PROTECTION-REVIEW F4). The worst
 # severity and feed still decide the finding; the count and a sample of
 # addresses stay in the detail; a process with one listed peer reads as before.
+# Flagged-network (Spamhaus DROP) hits fold into the same per-process finding.
 PEER_SAMPLE = 5
 # A process with a handful of listed peers keeps one finding per peer: a
 # genuine command-and-control contact is usually one or two addresses, and
@@ -103,8 +104,103 @@ PEER_SINGLE_THRESHOLD = 5
 
 # Feeds that list addresses seen attacking or scanning others (reputation),
 # as opposed to malware command-and-control and payload infrastructure
-# (ThreatFox, Feodo, URLhaus), which stays critical.
+# (ThreatFox, Feodo, URLhaus).
 ATTACK_SOURCE_FEEDS = frozenset({"blocklist-de", "cins", "binarydefense", "ipsum"})
+
+# Shared, reassigned infrastructure of the largest providers: one address
+# serves many tenants and changes hands, so a blocklist entry for it may be
+# about someone else entirely. Measured: firefox to 142.251.38.238 (Google,
+# 1e100.net) and 35.190.43.134 (Google Cloud) listed as attack sources
+# (QC-ARGUS-1-2026-10-27). A hit here stays listed, at medium, and says why.
+# Only ranges the provider itself publishes as Google / Google Cloud
+# (goog.json, cloud.json); add a provider only from its own published list.
+SHARED_PROVIDER_IPV4 = tuple(ipaddress.ip_network(v) for v in (
+    "8.8.4.0/24", "8.8.8.0/24", "34.64.0.0/10", "35.184.0.0/13", "35.192.0.0/12",
+    "35.208.0.0/12", "35.224.0.0/12", "35.240.0.0/13", "64.233.160.0/19",
+    "66.102.0.0/20", "66.249.64.0/19", "72.14.192.0/18", "74.125.0.0/16",
+    "108.177.0.0/17", "142.250.0.0/15", "172.217.0.0/16", "172.253.0.0/16",
+    "173.194.0.0/16", "209.85.128.0/17", "216.58.192.0/19", "216.239.32.0/19",
+))
+SHARED_PROVIDER = "Google / Google Cloud"
+
+# A blocklist entry is one source's claim about an address. It is critical
+# only with a second, independent signal (ALERT-QUALITY-2026-11-08); alone,
+# a command-and-control listing is high (still listed, still a threat-area
+# page), a reputation listing medium.
+LONE_C2_SEVERITY = "high"
+DROP_FOLDERS = ("/temp/", "/tmp/", "/downloads/")
+# Beacon-shaped contact: the same process reached the same listed address
+# and port in at least this many samples spread over at least this long. Not
+# counted for a process with peer-to-peer volume (more than
+# PEER_SINGLE_THRESHOLD listed peers), whose swarm members recur by design.
+REPEAT_MIN_SAMPLES = 3
+REPEAT_MIN_SPAN_S = 3600
+
+
+def shared_provider(ip):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return addr.version == 4 and any(addr in n for n in SHARED_PROVIDER_IPV4)
+
+
+def _process_signals(store, exe, cache):
+    """Signals about the process itself, independent of any address list:
+    its image sits in a temp or download folder, or its cached digest matches
+    a known malware sample. Read from what jarvis already holds; nothing is
+    hashed here."""
+    exe = exe or ""
+    if exe in cache:
+        return cache[exe]
+    out = []
+    norm = exe.lower().replace("\\", "/")
+    if norm and any(d in norm for d in DROP_FOLDERS):
+        out.append("its image runs from a temp or download folder")
+    if norm:
+        try:
+            row = store.db.execute(
+                "SELECT i.malware m FROM file_hashes h JOIN indicators i "
+                "ON i.kind='sha256' AND i.norm=h.sha256 AND i.status='active' "
+                "WHERE h.path=? LIMIT 1", (exe,)).fetchone()
+        except Exception:
+            row = None
+        if row is not None:
+            out.append("its image matches a known malware sample")
+    cache[exe] = out
+    return out
+
+
+def grade_ip_hit(feed, confidence, ip, process_signals=(), in_flagged_network=False):
+    """(severity, qualifier, reasons) for one address-list hit.
+
+    Pure, so the policy is testable and replayable. Severity never rises on
+    one list alone: a lone command-and-control listing is high; critical needs
+    an independent signal (about the process, its beacon-shaped repeated
+    contact, or a second provider's listing of the address); shared provider infrastructure and reputation lists are
+    medium. `reasons` names whatever corroborated or capped it."""
+    corroboration = list(process_signals)
+    if in_flagged_network:
+        corroboration.append("the address is also inside a Spamhaus DROP network")
+    shared = ([f"shared {SHARED_PROVIDER} address; the listing may concern another tenant"]
+              if shared_provider(ip) else [])
+    if feed in ATTACK_SOURCE_FEEDS:
+        # Reputation lists record hosts seen attacking or scanning others;
+        # shared and reassigned cloud addresses land there (Google and
+        # Microsoft addresses did, 2026-10-30). Reaching one is worth
+        # knowing, not proof of an attacker.
+        return "medium", "reported attack source", shared + corroboration
+    if shared:
+        return "medium", "threat-intelligence", shared + corroboration
+    if confidence != "high":
+        return "medium", "threat-intelligence", corroboration
+    if corroboration:
+        return "critical", "known attacker", corroboration
+    return LONE_C2_SEVERITY, "listed command-and-control", [
+        "one list only, no second signal"]
+
+
+_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
 def collapse_peer_hits(hits):
@@ -113,24 +209,41 @@ def collapse_peer_hits(hits):
         groups.setdefault((h["pname"], h["host"]), []).append(h)
     out = []
     for (pname, host), rows in sorted(groups.items()):
-        worst = min(rows, key=lambda h: (h["severity"] != "critical", h["ip"]))
+        rows = sorted(rows, key=lambda h: (_RANK.get(h["severity"], 9), h["ip"]))
+        worst = rows[0]
         if len(rows) <= PEER_SINGLE_THRESHOLD:
             for h in rows:                      # one finding per listed peer, as before
-                out.append(_finding(
-                    "c2 match", h["severity"],
-                    f"contacted a {h['qualifier']} IP: {h['ip']}",
-                    f"{pname} \u2192 {h['ip']}:{h['port']} \u2014 {h['label']} (via {h['feed']})",
-                    h["src"], host))
+                why = "; ".join(h.get("reasons") or ())
+                if h.get("network"):
+                    title = f"contacted a host in a flagged network: {h['network']}"
+                    detail = f"{pname} \u2192 {h['ip']}:{h['port']} \u2014 {h['label']}"
+                else:
+                    title = f"contacted a {h['qualifier']} IP: {h['ip']}"
+                    detail = (f"{pname} \u2192 {h['ip']}:{h['port']} \u2014 {h['label']} "
+                              f"(via {h['feed']})")
+                out.append(_finding("c2 match", h["severity"], title,
+                                    detail + (f" \u2014 {why}" if why else ""),
+                                    h["src"], host))
             continue
-        crit = sum(1 for h in rows if h["severity"] == "critical")
+        # Count addresses, not rows: one address reached on several ports or
+        # by several instances is one listed peer, graded by its worst hit.
+        per_ip = {}
+        for h in rows:                          # rows are worst-first
+            per_ip.setdefault(h["ip"], h)
+        ips = list(per_ip.values())
+        crit = sum(1 for h in ips if h["severity"] == "critical")
         feeds = sorted({h["feed"] for h in rows})
-        sample = ", ".join(f"{h['ip']}:{h['port']}" for h in rows[:PEER_SAMPLE])
+        sample = ", ".join(f"{h['ip']}:{h['port']}" for h in ips[:PEER_SAMPLE])
+        by_sev = ", ".join(f"{n} {s}" for s, n in (
+            (s, sum(1 for h in ips if h["severity"] == s)) for s in _RANK) if n)
+        why = "; ".join(worst.get("reasons") or ())
         out.append(_finding(
             "c2 match", worst["severity"],
-            f"{pname} contacted {len(rows)} listed IPs ({crit} known-attacker)",
-            f"{pname} on {host} reached {len(rows)} addresses on threat lists "
-            f"(via {', '.join(feeds)}); e.g. {sample}"
-            + (" \u2026" if len(rows) > PEER_SAMPLE else "")
+            f"{pname} contacted {len(ips)} listed IPs ({crit} corroborated)",
+            f"{pname} on {host} reached {len(ips)} addresses on threat lists "
+            f"(via {', '.join(feeds)}; {by_sev}); e.g. {sample}"
+            + (" \u2026" if len(ips) > PEER_SAMPLE else "")
+            + (f". Worst: {worst['ip']} \u2014 {why}" if why else "")
             + ". A peer-to-peer client does this by design; anything else should not. "
               "Each address can still be blocked individually with jarvis defend.",
             worst["src"], host))
@@ -148,11 +261,40 @@ def check_peers(store):
     """
     out = []
     peer_hits = []
+    signals_cache = {}
+
+    # Ranges cannot be indexed by value, so they are bucketed by first octet.
+    # A peer then only has to be tested against the handful of networks that
+    # could possibly contain it instead of all of them.
+    buckets = {}
+    for r in _active(store, "cidr"):
+        try:
+            net = ipaddress.ip_network(r["norm"])
+        except ValueError:
+            continue
+        if net.version != 4:
+            continue
+        first = int(str(net.network_address).split(".")[0])
+        buckets.setdefault(first, []).append((net, r))
+
+    def flagged_network(ip):
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return None
+        if addr.version != 4:
+            return None
+        for net, hit in buckets.get(int(str(addr).split(".")[0]), ()):
+            if addr in net:
+                return net, hit
+        return None
 
     # Addresses: one join, served entirely from the (kind, norm) unique index.
+    raw = []
     for r in store.db.execute(
             """SELECT p.remote_ip ip, p.remote_port port, p.host host,
-                      pr.name pname, i.context ctx, i.source_url src,
+                      p.seen_count seen, p.first_seen first, p.last_seen last,
+                      pr.name pname, pr.exe exe, i.context ctx, i.source_url src,
                       i.malware fam, i.source feed, i.confidence confidence
                  FROM peers p
                  JOIN indicators i
@@ -165,19 +307,45 @@ def check_peers(store):
         # take effect immediately rather than waiting for a manual re-vet.
         if not vet.vet_ipv4(r["ip"])[0]:
             continue
+        raw.append(dict(r))
+    listed = {}
+    for r in raw:
+        listed.setdefault((r["pname"], r["host"]), set()).add(r["ip"])
+    for r in raw:
+        signals = list(_process_signals(store, r["exe"], signals_cache))
+        seen, span = int(r["seen"] or 0), int(r["last"] or 0) - int(r["first"] or 0)
+        if (seen >= REPEAT_MIN_SAMPLES and span >= REPEAT_MIN_SPAN_S
+                and len(listed[(r["pname"], r["host"])]) <= PEER_SINGLE_THRESHOLD):
+            signals.append(f"the same process reached it repeatedly ({seen} samples "
+                           f"over {span // 3600} h), not as one of a peer-to-peer swarm")
         label = r["fam"] or r["ctx"] or "listed in threat intelligence"
-        if r["feed"] in ATTACK_SOURCE_FEEDS:
-            # Reputation lists record hosts seen attacking or scanning others;
-            # shared and reassigned cloud addresses land there (Google and
-            # Microsoft addresses did, 2026-10-30). Reaching one is worth
-            # knowing, not proof of an attacker.
-            severity, qualifier = "medium", "reported attack source"
-        else:
-            severity = "critical" if r["confidence"] == "high" else "medium"
-            qualifier = "known attacker" if severity == "critical" else "threat-intelligence"
+        severity, qualifier, reasons = grade_ip_hit(
+            r["feed"], r["confidence"], r["ip"], signals,
+            in_flagged_network=flagged_network(r["ip"]) is not None)
         peer_hits.append({"ip": r["ip"], "port": r["port"], "pname": r["pname"] or "unknown process",
                           "label": label, "feed": r["feed"], "src": r["src"], "host": r["host"],
-                          "severity": severity, "qualifier": qualifier})
+                          "severity": severity, "qualifier": qualifier, "reasons": reasons})
+
+    # Flagged networks (Spamhaus DROP): one list's claim about a whole range,
+    # so high at most; collapsed per process with the address hits above.
+    if buckets:
+        for p in store.db.execute(
+                """SELECT p.remote_ip ip, p.remote_port port, p.host host,
+                          pr.name pname FROM peers p
+                     LEFT JOIN procs pr ON pr.fp = p.fp
+                    WHERE p.scope='public'"""):
+            m = flagged_network(p["ip"])
+            if not m:
+                continue
+            net, hit = m
+            shared = shared_provider(p["ip"])
+            peer_hits.append({
+                "ip": p["ip"], "port": p["port"], "pname": p["pname"] or "unknown process",
+                "label": hit["context"] or "listed range", "feed": hit["source"] or "range",
+                "src": hit["source_url"], "host": p["host"],
+                "severity": "medium" if shared else "high", "qualifier": "flagged network",
+                "network": str(net),
+                "reasons": ([f"shared {SHARED_PROVIDER} address"] if shared else [])})
     out.extend(collapse_peer_hits(peer_hits))
 
     # Domains: exact reverse-DNS match, then parent domains. Only the distinct
@@ -194,6 +362,10 @@ def check_peers(store):
             matched[host] = m
     for host, m in matched.items():
         parent, hit, severity, qualifier = m["indicator"], m["hit"], m["severity"], m["qualifier"]
+        if severity == "critical":
+            # A peer's reverse-DNS name on one domain list is the same single
+            # claim as an address listing: high without a second signal.
+            severity, qualifier = LONE_C2_SEVERITY, "listed command-and-control"
         for p in store.db.execute(
                 """SELECT p.remote_ip ip, p.remote_port port, p.host host,
                           pr.name pname FROM peers p
@@ -207,42 +379,6 @@ def check_peers(store):
                 f"{p['pname'] or 'unknown process'} → {host} "
                 f"({p['ip']}:{p['port']}) — {label} (via {hit['source']})",
                 hit["source_url"], p["host"]))
-
-    # Ranges cannot be indexed by value, so they are bucketed by first octet.
-    # A peer then only has to be tested against the handful of networks that
-    # could possibly contain it instead of all of them.
-    buckets = {}
-    for r in _active(store, "cidr"):
-        try:
-            net = ipaddress.ip_network(r["norm"])
-        except ValueError:
-            continue
-        if net.version != 4:
-            continue
-        first = int(str(net.network_address).split(".")[0])
-        buckets.setdefault(first, []).append((net, r))
-    if buckets:
-        for p in store.db.execute(
-                """SELECT p.remote_ip ip, p.remote_port port, p.host host,
-                          pr.name pname FROM peers p
-                     LEFT JOIN procs pr ON pr.fp = p.fp
-                    WHERE p.scope='public'"""):
-            try:
-                addr = ipaddress.ip_address(p["ip"])
-            except ValueError:
-                continue
-            if addr.version != 4:
-                continue
-            for net, hit in buckets.get(int(str(addr).split(".")[0]), ()):
-                if addr in net:
-                    out.append(_finding(
-                        "c2 match", "high",
-                        f"contacted a host in a flagged network: {net}",
-                        f"{p['pname'] or 'unknown process'} → "
-                        f"{p['ip']}:{p['port']} — "
-                        f"{hit['context'] or 'listed range'}",
-                        hit["source_url"], p["host"]))
-                    break
     return out
 
 
