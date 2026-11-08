@@ -79,6 +79,11 @@ def tail(t=T):
     return [proc(t + 5, 99999, "/usr/bin/true", "true", ppid=1, cwd="/", parent_image="/usr/lib/systemd/systemd")]
 
 
+# The Sysmon read must carry journald's trusted fields, not only `-t sysmon`
+# (SYSLOG_IDENTIFIER, which any account sets): FZ-04's rule.
+SYSMON_ARGV = ["journalctl", "_SYSTEMD_UNIT=sysmon.service", "_UID=0", "-t", "sysmon"]
+
+
 def fake_run(unit_lines, sysmon_events, main_pid="275", journal_ok=True):
     calls = []
 
@@ -86,8 +91,10 @@ def fake_run(unit_lines, sysmon_events, main_pid="275", journal_ok=True):
         calls.append(argv)
         if argv[:2] == ["journalctl", "-u"]:
             return (0, "\n".join(unit_lines)) if journal_ok else (None, "the system journal is not readable")
-        if argv[:3] == ["journalctl", "-t", "sysmon"]:
+        if argv[:len(SYSMON_ARGV)] == SYSMON_ARGV:
             return 0, "\n".join(sysmon_events)
+        if "sysmon" in argv:
+            raise AssertionError(f"Sysmon read without the trusted match: {argv}")
         if argv[0] == "journalctl" and argv[1].startswith("_SYSTEMD_INVOCATION_ID="):
             return 0, json.dumps({"_PID": main_pid}) if main_pid else ""
         raise AssertionError(argv)
@@ -260,7 +267,7 @@ class EvidenceIsNeverBenign(unittest.TestCase):
         # Sysmon wrote the issuer ~80 s late; the read must reach past the stop.
         run = fake_run(restart_job(), windows_restart() + tail())
         R.audit(Store(), now=T + 600, run=run, claims_reader=claims())
-        sysmon = [a for a in run.calls if a[:3] == ["journalctl", "-t", "sysmon"]][0]
+        sysmon = [a for a in run.calls if a[:len(SYSMON_ARGV)] == SYSMON_ARGV][0]
         until = int(sysmon[sysmon.index("--until") + 1].lstrip("@"))
         self.assertGreaterEqual(until, T + R.INGEST_LAG_S)
 

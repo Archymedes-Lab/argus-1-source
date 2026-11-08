@@ -41,7 +41,8 @@ class UiServingTests(unittest.TestCase):
 
     def get(self, path):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
-        conn.request("GET", path, headers={"Host": f"127.0.0.1:{self.port}"})
+        conn.request("GET", path, headers={"Host": f"127.0.0.1:{self.port}", "Sec-Fetch-Mode": "navigate",
+                                           "Sec-Fetch-Site": "none"})
         r = conn.getresponse()
         body = r.read()
         headers = {k.lower(): v for k, v in r.getheaders()}

@@ -149,7 +149,8 @@ class LoginFindings(unittest.TestCase):
 
     def test_fz15_odd_journal_lines_do_not_lose_the_read(self):
         text = "\n".join(["0", "null", json.dumps({"MESSAGE": [70, 900, "x"], "_UID": "0"}),
-                          json.dumps({"__REALTIME_TIMESTAMP": "1" * 400, "MESSAGE": "ok", "__CURSOR": "c"})])
+                          json.dumps({"__REALTIME_TIMESTAMP": "1" * 400, "MESSAGE": "ok", "__CURSOR": "c",
+                                      "_UID": "0"})])
 
         class P:
             stdout, returncode = io.StringIO(text), 0
@@ -164,22 +165,71 @@ class LoginFindings(unittest.TestCase):
         self.assertEqual([m for _t, m in records], ["F", "ok"])
         self.assertEqual(cursor, "c")
 
-    @unittest.expectedFailure  # FZ-04 open: logins reads `-t sshd` lines from any account
-    def test_fz04_lines_written_by_a_non_root_process_are_not_evidence(self):
-        rec = {"__CURSOR": "s=1", "__REALTIME_TIMESTAMP": "1730000000000000", "_UID": "1000",
-               "MESSAGE": "Accepted publickey for chris from 203.0.113.50 port 1 ssh2: ED25519 SHA256:evil"}
+    @staticmethod
+    def _journal(*recs):
+        text = "".join(json.dumps(r) + "\n" for r in recs)
 
         class P:
-            stdout, returncode = io.StringIO(json.dumps(rec) + "\n"), 0
+            stdout, returncode = io.StringIO(text), 0
 
             def communicate(self, timeout=None):
                 return "", ""
 
             def kill(self):
                 pass
+        return lambda *a, **k: P()
 
-        records, _c, _p = logins.read_journal(None, run=lambda *a, **k: P())
-        self.assertEqual(records, [])
+    FORGED = {"__CURSOR": "s=1", "__REALTIME_TIMESTAMP": "1730000000000000", "_UID": "1000",
+              "MESSAGE": "Accepted publickey for chris from 203.0.113.50 port 1 ssh2: ED25519 SHA256:evil"}
+    REAL = {"__CURSOR": "s=2", "__REALTIME_TIMESTAMP": "1730000001000000", "_UID": "0",
+            "MESSAGE": "Accepted publickey for chris from 192.0.2.7 port 2 ssh2: ED25519 SHA256:good"}
+
+    def test_fz04_lines_written_by_a_non_root_process_are_not_evidence(self):
+        records, cursor, _p = logins.read_journal(None, run=self._journal(self.FORGED))
+        self.assertEqual(list(records), [])
+        self.assertEqual(records.untrusted, 1)          # counted, not silently dropped
+        self.assertEqual(cursor, "s=1")                 # the cursor still moves past it
+
+    def test_fz04_a_record_with_no_uid_is_not_evidence(self):
+        rec = {k: v for k, v in self.FORGED.items() if k != "_UID"}
+        records, _c, _p = logins.read_journal(None, run=self._journal(rec))
+        self.assertEqual((list(records), records.untrusted), ([], 1))
+
+    def test_fz04_negative_control_root_records_still_count(self):
+        records, cursor, _p = logins.read_journal(None, run=self._journal(self.FORGED, self.REAL))
+        self.assertEqual([m for _t, m in records], [self.REAL["MESSAGE"]])
+        self.assertEqual((records.untrusted, cursor), (1, "s=2"))
+
+    def test_fz04_a_flood_of_forged_lines_is_bounded_and_still_reported(self):
+        # Forgeries count toward the read bound: a flood is truncated (reported as
+        # not fully observed), never read without limit, and the count survives.
+        flood = [{**self.FORGED, "__CURSOR": f"s={n}"} for n in range(5)] + [self.REAL]
+        records, cursor, problem = logins.read_journal(None, run=self._journal(*flood), max_lines=3)
+        self.assertEqual((list(records), records.untrusted, cursor), ([], 3, "s=2"))
+        self.assertIn("more than 3", problem)
+
+    def test_fz04_forged_lines_cannot_pre_train_the_baseline_and_are_reported(self):
+        from tests.test_argus_server_net import MetaStore
+        store, now = MetaStore(), 1730000100.0
+        reader = lambda c: logins.read_journal(c, run=self._journal(self.FORGED))  # noqa: E731
+        out = logins.audit(store, now=now, reader=reader)
+        state = json.loads(store.get_meta(logins.STATE_META))
+        self.assertEqual(state.get("accounts"), {})     # nothing learned from the forgery
+        titles = [f["title"] for f in out]
+        self.assertIn("sshd journal records written by a non-root process", titles)
+        self.assertFalse(any("chris" in t for t in titles))
+        # Kept for a day like other login events: the next empty run still shows it.
+        out = logins.audit(store, now=now + 60, reader=lambda c: (logins.Records(), c, ""))
+        self.assertIn("sshd journal records written by a non-root process", [f["title"] for f in out])
+
+    def test_fz04_negative_control_a_real_root_login_is_learned_and_nothing_is_flagged(self):
+        from tests.test_argus_server_net import MetaStore
+        store = MetaStore()
+        out = logins.audit(store, now=1730000100.0,
+                           reader=lambda c: logins.read_journal(c, run=self._journal(self.REAL)))
+        state = json.loads(store.get_meta(logins.STATE_META))
+        self.assertIn("SHA256:good", state["accounts"]["chris"]["keys"])
+        self.assertEqual(out, [])
 
 
 class SysmonLinuxFindings(unittest.TestCase):

@@ -355,7 +355,8 @@ class LoginTests(unittest.TestCase):
         return P
 
     def test_journal_cursor_and_lost_cursor(self):
-        lines = [{"__CURSOR": "c1", "__REALTIME_TIMESTAMP": "1000000", "MESSAGE": acc("deploy", "10.0.0.5")}]
+        lines = [{"__CURSOR": "c1", "__REALTIME_TIMESTAMP": "1000000", "_UID": "0",
+                  "MESSAGE": acc("deploy", "10.0.0.5")}]
         recs, cursor, problem = logins.read_journal(None, run=self._popen(lines))
         self.assertEqual((len(recs), cursor, problem), (1, "c1", ""))
         recs, cursor, problem = logins.read_journal("old", run=self._popen([], rc=1, err="Failed to seek to cursor: x"))

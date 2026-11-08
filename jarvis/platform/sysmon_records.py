@@ -7,6 +7,13 @@ collector that reads Sysmon lineage (collectors may not import each other).
 import re
 import xml.etree.ElementTree as ET
 
+# journalctl matches for Sysmon records journald itself attributes to the sysmon
+# unit running as root. `-t sysmon` alone matches SYSLOG_IDENTIFIER, which any
+# account sets freely: `logger -t sysmon ...` from uid 1000 was returned beside
+# real events on 2026-11-01 (and FZ-04). Trusted (underscore) fields are written
+# by journald, not the client, and journalctl ANDs matches on different fields.
+TRUSTED_MATCH = ("_SYSTEMD_UNIT=sysmon.service", "_UID=0", "-t", "sysmon")
+
 _TYPE_ID = {
     "processcreate": 1, "process create": 1,
     "networkconnect": 3, "network connection": 3, "networkconnection": 3,

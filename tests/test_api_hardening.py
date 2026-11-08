@@ -108,10 +108,10 @@ class StateChangingRoutesTests(_Base):
         self.assertEqual(status, 400)            # reached questions.answer
         self.assertIn("message", json.loads(body))
 
-    def test_the_cookie_works_like_the_header(self):
+    def test_the_cookie_works_like_the_header_from_the_dashboards_own_page(self):
         status, _, _ = self.srv.request(
             "POST", "/api/answer", {"id": "unknown", "choice": "yes"},
-            {"Cookie": f"{api_token.COOKIE}={self.token}"})
+            {"Cookie": f"{api_token.COOKIE}={self.token}", "Sec-Fetch-Site": "same-origin"})
         self.assertEqual(status, 400)
 
     def test_cross_site_and_rebound_requests_are_refused_even_with_the_token(self):
@@ -155,6 +155,8 @@ class StateChangingRoutesTests(_Base):
 
 
 PAGE = "/ui/" if (server.UI_DIR / "index.html").is_file() else "/"
+# What a browser sends when the owner opens the dashboard (typed, bookmark, OS).
+NAV = {"Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "none", "Sec-Fetch-Dest": "document"}
 
 
 class DashboardCookieTests(_Base):
@@ -162,7 +164,7 @@ class DashboardCookieTests(_Base):
     # guarded cookie rides on the page and on the redirect, never to a peer of
     # another account.
     def test_page_cookie_is_httponly_strict_and_carries_the_token(self):
-        status, headers, _ = self.srv.request("GET", PAGE)
+        status, headers, _ = self.srv.request("GET", PAGE, headers=NAV)
         self.assertEqual(status, 200)
         cookie = headers.get("Set-Cookie", "")
         self.assertTrue(cookie.startswith(f"{api_token.COOKIE}={self.token};"))
@@ -178,39 +180,39 @@ class DashboardCookieTests(_Base):
             seen.append(real(client, srv_addr, tables))
             return seen[-1]
         with mock.patch.object(api_token, "peer_uid", spy):
-            _, headers, _ = self.srv.request("GET", PAGE)
+            _, headers, _ = self.srv.request("GET", PAGE, headers=NAV)
         if os.path.exists("/proc/net/tcp"):
             self.assertEqual(seen, [os.geteuid()])
         self.assertIn("Set-Cookie", headers)
 
     def test_another_local_account_gets_the_page_but_not_the_token(self):
         with mock.patch.object(api_token, "peer_uid", return_value=os.geteuid() + 4242):
-            status, headers, body = self.srv.request("GET", PAGE)
+            status, headers, body = self.srv.request("GET", PAGE, headers=NAV)
         self.assertEqual(status, 200)
         self.assertNotIn("Set-Cookie", headers)
         self.assertNotIn(self.token.encode(), body)
 
     def test_root_keeps_the_cookie_and_an_unattributable_peer_does_not(self):
         with mock.patch.object(api_token, "peer_uid", return_value=0):
-            _, headers, _ = self.srv.request("GET", PAGE)
+            _, headers, _ = self.srv.request("GET", PAGE, headers=NAV)
             self.assertIn("Set-Cookie", headers)
         # Fail closed: a peer whose owner cannot be determined (a Windows
         # program across WSL networking) pairs explicitly instead.
         with mock.patch.object(api_token, "peer_uid", return_value=None):
-            status, headers, body = self.srv.request("GET", PAGE)
+            status, headers, body = self.srv.request("GET", PAGE, headers=NAV)
             self.assertEqual(status, 200)
             self.assertNotIn("Set-Cookie", headers)
             self.assertNotIn(self.token.encode(), body)
 
     def test_the_redirect_to_the_page_guards_the_cookie_the_same_way(self):
-        status, headers, _ = self.srv.request("GET", "/")
+        status, headers, _ = self.srv.request("GET", "/", headers=NAV)
         self.assertIn(status, (200, 302))
         if status == 302:
             self.assertTrue(headers.get("Location", "").startswith("/ui/"))
         self.assertIn("Set-Cookie", headers)
         for uid in (os.geteuid() + 4242, None):
             with self.subTest(uid=uid), mock.patch.object(api_token, "peer_uid", return_value=uid):
-                _, headers, body = self.srv.request("GET", "/")
+                _, headers, body = self.srv.request("GET", "/", headers=NAV)
                 self.assertNotIn("Set-Cookie", headers)
                 self.assertNotIn(self.token.encode(), body)
 
@@ -220,6 +222,72 @@ class DashboardCookieTests(_Base):
             with self.subTest(path=path):
                 _, _, body = self.srv.request(method, path)
                 self.assertNotIn(self.token.encode(), body)
+
+
+    # QC-ARGUS-1-2026-10-27 blocker 4: the hand-over needs a browser navigation.
+    def test_a_request_without_browser_navigation_metadata_gets_no_cookie(self):
+        for extra in ({}, {"Sec-Fetch-Site": "none"}, {"Sec-Fetch-Mode": "navigate"},
+                      {**NAV, "Sec-Fetch-Mode": "cors"}, {**NAV, "Sec-Fetch-Mode": "no-cors"},
+                      {**NAV, "Sec-Fetch-Site": "cross-site"}, {**NAV, "Sec-Fetch-Site": "same-site"}):
+            for path in (PAGE, "/"):
+                with self.subTest(extra=extra, path=path):
+                    status, headers, body = self.srv.request("GET", path, headers=extra)
+                    self.assertIn(status, (200, 302, 403))
+                    self.assertNotIn("Set-Cookie", headers)
+                    self.assertNotIn(self.token.encode(), body)
+
+    def test_a_navigation_followed_from_our_own_page_gets_the_cookie(self):
+        _, headers, _ = self.srv.request("GET", PAGE, headers={**NAV, "Sec-Fetch-Site": "same-origin"})
+        self.assertIn(f"{api_token.COOKIE}={self.token}", headers.get("Set-Cookie", ""))
+
+    def test_a_service_account_owner_no_longer_receives_the_cookie(self):
+        # Formerly JARVIS_OWNER_UID: the owner cannot read the service account's
+        # token file, so handing it the cookie was a grant; it pairs instead.
+        with mock.patch.dict(os.environ, {"JARVIS_OWNER_UID": str(os.geteuid() + 4242)}), \
+                mock.patch.object(api_token, "peer_uid", return_value=os.geteuid() + 4242):
+            _, headers, body = self.srv.request("GET", PAGE, headers=NAV)
+        self.assertNotIn("Set-Cookie", headers)
+        self.assertNotIn(self.token.encode(), body)
+
+
+class CookieCredentialTests(_Base):
+    """A state-changing request whose only credential is a cookie must carry
+    same-origin browser evidence; header tokens need none (CLI, app, supervisors)."""
+
+    def jar(self):
+        return {"Cookie": f"{api_token.COOKIE}={self.token}"}
+
+    def test_a_cookie_replayed_without_browser_evidence_is_refused(self):
+        for extra in ({}, {"Origin": "http://evil.example"}, {"Sec-Fetch-Site": "none"},
+                      {"Origin": "null"}):
+            with self.subTest(extra=extra):
+                status, _, body = self.srv.request("POST", "/api/answer", {"id": "x"},
+                                                   {**self.jar(), **extra})
+                self.assertEqual(status, 403)
+                self.assertRegex(json.loads(body)["error"], "token|cross-site")
+
+    def test_the_dashboards_own_cookie_requests_reach_the_handler(self):
+        port = self.srv.port
+        for extra in ({"Sec-Fetch-Site": "same-origin"}, {"Origin": f"http://localhost:{port}"},
+                      {"Origin": f"http://127.0.0.1:{port}"}):
+            with self.subTest(extra=extra):
+                status, _, body = self.srv.request("POST", "/api/answer", {"id": "unknown", "choice": "yes"},
+                                                   {**self.jar(), **extra})
+                self.assertEqual(status, 400)        # reached questions.answer
+                self.assertIn("message", json.loads(body))
+
+    def test_a_header_token_needs_no_origin(self):
+        for hdr in ({api_token.HEADER: self.token}, {"Authorization": f"Bearer {self.token}"},
+                    {api_token.HEADER: self.token, **self.jar()}):
+            with self.subTest(hdr=list(hdr)):
+                status, _, _ = self.srv.request("POST", "/api/answer", {"id": "unknown", "choice": "yes"}, hdr)
+                self.assertEqual(status, 400)
+
+    def test_a_wrong_cookie_with_browser_evidence_is_still_refused(self):
+        status, _, _ = self.srv.request("POST", "/api/answer", {"id": "x"},
+                                        {"Cookie": f"{api_token.COOKIE}={'0' * 64}",
+                                         "Sec-Fetch-Site": "same-origin"})
+        self.assertEqual(status, 403)
 
 
 class PeerAttributionTests(unittest.TestCase):
@@ -271,8 +339,8 @@ class PeerAttributionTests(unittest.TestCase):
 
     def test_policy(self):
         self.assertFalse(api_token.may_receive(None))
-        self.assertTrue(api_token.may_receive(1234, {"JARVIS_OWNER_UID": "1234"}))
-        self.assertFalse(api_token.may_receive(1235, {"JARVIS_OWNER_UID": "1234,x"}))
+        with mock.patch.dict(os.environ, {"JARVIS_OWNER_UID": "1234"}):
+            self.assertFalse(api_token.may_receive(1234))     # the owner pairs (blocker 4)
         self.assertTrue(api_token.may_receive(0))
         self.assertTrue(api_token.may_receive(os.geteuid()))
         self.assertFalse(api_token.may_receive(os.geteuid() + 1))
