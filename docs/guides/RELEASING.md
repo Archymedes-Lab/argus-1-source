@@ -51,17 +51,34 @@ Before tagging, on that host: commit, `python3 release/host_attest.py make`, sig
 `release/host-attestation.json` with your releaser key, commit both files. `release.yml` refuses a
 tag whose attestation is missing, unsigned by a pinned releaser, incomplete, or older than a code change.
 
-### Desktop app checks CI does not run
+### Desktop app execution checks
 
-CI runs the desktop app's Rust tests on Linux only and never opens the interface in a browser.
-Before tagging a release that changes `desktop/`, on a machine with the toolchain:
+Ordinary CI runs the desktop app's Rust tests on Linux. Every Windows release
+build also runs them natively on its disposable Windows builder, from the exported
+release source with the production feature and release flags, before copying the
+executable or recording build digests. A failing or blocked test harness fails
+the build; it does not change Defender policy. The added compile/test time counts
+against the existing Windows desktop job timeout.
+
+For a native Windows proof without rebuilding the engine and server, push a
+reviewed commit to a `test/windows-native/*` branch on `org`. CI's opt-in
+`desktop-rust-windows` job runs the same gated builder on Windows, within a
+45-minute limit, with no publication or signing step. Ordinary pushes do not
+start this job. Check its native harness output and job result; compilation or
+a skipped harness is not a pass. This validates Windows behavior on the CI
+runner, not the developer machine's local Defender policy.
+
+CI never opens the interface in a browser.
+Before tagging a release that changes `desktop/`, require a successful native
+Windows test harness result from the release job or the opt-in proof job, and
+run the browser check on a machine with the toolchain:
 
 - `uv run --with playwright==1.55.0 python3 scripts/dev/desktop_ui_check.py` (after
   `cd desktop/ui && bun run build`): every view, Simple and Expert, light and dark; the
   Windows-edition status banner; daemon answers that are empty or wrong-typed; Open in your
   browser; four languages including Arabic. Exit 0 only when every check passes.
-- `desktop/scripts/build-windows.sh --test` (WSL with the cross toolchain): compiles the app's
-  unit tests for Windows and runs them on Windows, the only place the `cfg(windows)` paths run.
+- Local alternative: `desktop/scripts/build-windows.sh --test` (WSL with the cross toolchain) compiles the app's
+  unit tests for Windows and runs them on Windows, including the `cfg(windows)` paths.
   It found a Windows-only connection reset on 2026-11-09. On the owner's machine Defender's
   prevalence rule (ASR 01443614) can block a fresh test binary; the script then says so and
   exits 126. That is not a pass: run it where the rule allows it, or record that it did not run.

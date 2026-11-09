@@ -49,6 +49,17 @@ def _timeout(section):
 
 
 class CiSpend(unittest.TestCase):
+    def test_native_windows_proof_is_opt_in_and_uses_the_gated_builder(self):
+        job = _jobs((WORKFLOWS / "ci.yml").read_text())["desktop-rust-windows"]
+        condition = re.search(r"^    if: (.+)$", job, re.M)
+        self.assertIsNotNone(condition, "an unconditional Windows job spends on every push")
+        self.assertEqual(condition.group(1),
+                         "startsWith(github.ref, 'refs/heads/test/windows-native/')")
+        self.assertIn("runs-on: windows-2025", job)
+        self.assertIn("python release/build_desktop.py --platform windows", job)
+        self.assertNotIn("continue-on-error", job, "native test failures must fail the check")
+        self.assertIn("steps.windows-cargo-cache.outputs.cache-hit != 'true'", job)
+
     def test_ci_runs_once_per_commit(self):
         text = (WORKFLOWS / "ci.yml").read_text()
         triggers = _triggers(text)
