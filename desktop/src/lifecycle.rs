@@ -55,29 +55,107 @@ pub struct Status {
     pub phase: Phase,
     /// One plain sentence for the person.
     pub message: String,
-    /// What to do or what was found, when there is more to say.
+    /// What to do or what was found, when there is more to say. For blind
+    /// collectors this is a short count by cause; `blind` names every one.
     pub detail: String,
+    /// Every collector the daemon reported blind, each with its cause, so the
+    /// interface can group them instead of printing one long sentence. Never
+    /// filtered: a limitation is grouped, not hidden.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub blind: Vec<Blind>,
 }
+
+/// Why a collector cannot fully see, sorted into the few causes a person can act on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlindKind {
+    /// This edition runs without the elevated sensor (platform/admin_sensor.py).
+    AdminSensor,
+    /// It ran and failed.
+    Failed,
+    /// It has not reported within its window.
+    Stale,
+    /// The daemon gave another reason, or none.
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Blind {
+    pub job: String,
+    pub label: String,
+    pub reason: String,
+    pub kind: BlindKind,
+}
+
+/// The daemon's words for "this edition has no administrator sensor"
+/// (jarvis/core/mechanisms.py NEEDS_ADMIN_SENSOR).
+const NEEDS_ADMIN_SENSOR: &str = "Needs administrator sensor";
 
 impl Status {
     fn new(phase: Phase, message: &str, detail: impl Into<String>) -> Self {
-        Status { phase, message: message.into(), detail: detail.into() }
+        Status { phase, message: message.into(), detail: detail.into(), blind: Vec::new() }
     }
 }
 
 /// Why a collector is blind, from what the daemon reports about it. An explicit
 /// `reason` wins; otherwise the failure flags are put in plain words.
-fn blind_reason(b: &Value) -> String {
+fn blind_reason(b: &Value) -> (String, BlindKind) {
     if let Some(r) = b.get("reason").and_then(Value::as_str).filter(|r| !r.is_empty()) {
-        return r.to_string();
+        let kind = if r == NEEDS_ADMIN_SENSOR { BlindKind::AdminSensor } else { BlindKind::Other };
+        return (r.to_string(), kind);
     }
     if b.get("error").and_then(Value::as_bool) == Some(true) {
-        return "it failed the last time it ran".into();
+        return ("it failed the last time it ran".into(), BlindKind::Failed);
     }
     match b.get("freshness").and_then(Value::as_str) {
-        Some("STALE") => "it has not reported recently".into(),
-        _ => "no reason given".into(),
+        Some("STALE") => ("it has not reported recently".into(), BlindKind::Stale),
+        _ => ("no reason given".into(), BlindKind::Other),
     }
+}
+
+/// The blind list from a pulse, in the daemon's order, bounded so a runaway
+/// peer cannot grow the status without limit (the registry has ~100 collectors).
+pub fn blind_items(p: &Value) -> Vec<Blind> {
+    const MAX_BLIND: usize = 256;
+    p.get("blind")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .take(MAX_BLIND)
+                .map(|b| {
+                    let job = b.get("job").and_then(Value::as_str).unwrap_or("").chars().take(64).collect::<String>();
+                    let label = b
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .filter(|l| !l.is_empty())
+                        .map(str::to_string)
+                        .unwrap_or_else(|| if job.is_empty() { "a check".into() } else { job.clone() });
+                    let (reason, kind) = blind_reason(b);
+                    Blind { job, label: label.chars().take(120).collect(), reason: reason.chars().take(300).collect(), kind }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// "9 need the administrator sensor · 7 have not reported recently · …":
+/// one short line by cause, largest first, for the CLI and tooltips.
+pub fn blind_summary(items: &[Blind]) -> String {
+    let count = |k: BlindKind| items.iter().filter(|b| b.kind == k).count();
+    let mut parts: Vec<(usize, String)> = Vec::new();
+    for (kind, one, many) in [
+        (BlindKind::AdminSensor, "needs the administrator sensor", "need the administrator sensor"),
+        (BlindKind::Stale, "has not reported recently", "have not reported recently"),
+        (BlindKind::Failed, "failed the last time it ran", "failed the last time they ran"),
+        (BlindKind::Other, "has another problem", "have other problems"),
+    ] {
+        let n = count(kind);
+        if n > 0 {
+            parts.push((n, format!("{n} {}", if n == 1 { one } else { many })));
+        }
+    }
+    parts.sort_by(|a, b| b.0.cmp(&a.0));
+    parts.into_iter().map(|(_, s)| s).collect::<Vec<_>>().join(" · ")
 }
 
 /// What a pulse from the daemon means for the person. `blind` lists collectors
@@ -86,29 +164,26 @@ pub fn classify_pulse(p: &Value) -> Status {
     if p.get("ok").and_then(Value::as_bool) != Some(true) {
         return Status::new(Phase::Degraded, "ARGUS-INSTINCT is running, but its latest report did not come through", "It tries again by itself in a moment.");
     }
-    let blind: Vec<String> = p
-        .get("blind")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .map(|b| {
-                    let name = b.get("label").or_else(|| b.get("job")).and_then(Value::as_str).unwrap_or("a check");
-                    format!("{name}: {}", blind_reason(b))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let blind = blind_items(p);
+    let n = blind.len();
+    let summary = blind_summary(&blind);
+    let with = |message: &str| Status { phase: Phase::Degraded, message: message.into(), detail: summary.clone(), blind: blind.clone() };
     if p.get("healthy").and_then(Value::as_bool) != Some(true) {
-        return Status::new(Phase::Degraded, "ARGUS-INSTINCT is running, but says part of it is not working", blind.join("; "));
+        if n == 0 {
+            return Status::new(Phase::Degraded, "ARGUS-INSTINCT is running, but says part of it is not working", "");
+        }
+        return with(&if n == 1 {
+            "ARGUS-INSTINCT is running, but 1 of its checks is not working".to_string()
+        } else {
+            format!("ARGUS-INSTINCT is running, but {n} of its checks are not working")
+        });
     }
-    if !blind.is_empty() {
-        let n = blind.len();
-        let msg = if n == 1 {
+    if n > 0 {
+        return with(&if n == 1 {
             "ARGUS-INSTINCT can't fully check 1 part of your computer right now".to_string()
         } else {
             format!("ARGUS-INSTINCT can't fully check {n} parts of your computer right now")
-        };
-        return Status::new(Phase::Degraded, &msg, blind.join("; "));
+        });
     }
     Status::new(Phase::Live, "ARGUS-INSTINCT is watching your computer", "")
 }
@@ -458,7 +533,9 @@ mod tests {
         let s = classify_pulse(&p);
         assert_eq!(s.phase, Phase::Degraded);
         assert!(s.message.contains("can't fully check 1 part of"), "{}", s.message);
-        assert!(s.detail.contains("Windows event log") && s.detail.contains("needs administrator rights"));
+        assert_eq!(s.blind.len(), 1);
+        assert_eq!((s.blind[0].label.as_str(), s.blind[0].reason.as_str()), ("Windows event log", "needs administrator rights"));
+        assert_eq!(s.blind[0].kind, BlindKind::Other);
     }
 
     #[test]
@@ -469,9 +546,53 @@ mod tests {
             {"job": "x"}]});
         let s = classify_pulse(&p);
         assert!(s.message.contains("3 parts"));
-        assert!(s.detail.contains("Processes: it has not reported recently"));
-        assert!(s.detail.contains("Network: it failed the last time it ran"));
-        assert!(s.detail.contains("x: no reason given"));
+        let got: Vec<(&str, &str, BlindKind)> = s.blind.iter().map(|b| (b.label.as_str(), b.reason.as_str(), b.kind)).collect();
+        assert_eq!(got, vec![
+            ("Processes", "it has not reported recently", BlindKind::Stale),
+            ("Network", "it failed the last time it ran", BlindKind::Failed),
+            ("x", "no reason given", BlindKind::Other),
+        ]);
+    }
+
+    #[test]
+    fn many_blind_collectors_are_grouped_by_cause_and_none_is_dropped() {
+        // The shape of a Windows install without the elevated sensor (2026-11-09 report).
+        let mut blind = Vec::new();
+        for i in 0..9 {
+            blind.push(json!({"job": format!("a{i}"), "label": format!("A{i}"), "reason": "Needs administrator sensor", "freshness": "UNAVAILABLE"}));
+        }
+        for i in 0..7 {
+            blind.push(json!({"job": format!("s{i}"), "label": format!("S{i}"), "freshness": "STALE"}));
+        }
+        for i in 0..6 {
+            blind.push(json!({"job": format!("f{i}"), "label": format!("F{i}"), "error": true}));
+        }
+        let s = classify_pulse(&json!({"ok": true, "healthy": false, "blind": blind}));
+        assert_eq!(s.phase, Phase::Degraded);
+        assert_eq!(s.message, "ARGUS-INSTINCT is running, but 22 of its checks are not working");
+        assert_eq!(s.blind.len(), 22, "grouped, never hidden");
+        assert_eq!(s.blind.iter().filter(|b| b.kind == BlindKind::AdminSensor).count(), 9);
+        assert_eq!(s.detail, "9 need the administrator sensor · 7 have not reported recently · 6 failed the last time they ran");
+        assert!(s.detail.len() < 120, "the short line stays short: {}", s.detail);
+    }
+
+    #[test]
+    fn the_status_json_carries_the_grouping_keys_the_interface_reads() {
+        let s = classify_pulse(&json!({"ok": true, "healthy": true, "blind": [
+            {"job": "sysmon", "label": "Sysmon", "reason": "Needs administrator sensor"}]}));
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["blind"][0]["kind"], "admin_sensor");
+        assert_eq!(v["blind"][0]["job"], "sysmon");
+        let live = serde_json::to_value(classify_pulse(&json!({"ok": true, "healthy": true, "blind": []}))).unwrap();
+        assert!(live.get("blind").is_none(), "an empty list is left out");
+    }
+
+    #[test]
+    fn a_hostile_blind_list_is_bounded() {
+        let huge: Vec<Value> = (0..5000).map(|i| json!({"job": "j".repeat(500), "label": format!("{i}{}", "L".repeat(5000))})).collect();
+        let s = classify_pulse(&json!({"ok": true, "healthy": true, "blind": huge}));
+        assert_eq!(s.blind.len(), 256);
+        assert!(s.blind.iter().all(|b| b.job.chars().count() <= 64 && b.label.chars().count() <= 120));
     }
 
     #[test]

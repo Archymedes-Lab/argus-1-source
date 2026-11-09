@@ -142,10 +142,16 @@ fn request_to(
         head.push_str(&format!("Content-Type: application/json\r\nContent-Length: {}\r\n", b.len()));
     }
     head.push_str("\r\n");
-    (&sock).write_all(head.as_bytes())?;
+    // Headers and body in one write, so they arrive together: a server that
+    // answers after one read and closes (an older daemon on a route that ignores
+    // the body) then leaves nothing unread. Unread bytes make the OS reset the
+    // connection, and Windows drops the unread reply with it (WSAECONNRESET 10054,
+    // measured 2026-11-09 by running these tests on Windows).
+    let mut out = head.into_bytes();
     if let Some(b) = body {
-        (&sock).write_all(b)?;
+        out.extend_from_slice(b);
     }
+    (&sock).write_all(&out)?;
     parse_response(&mut BufReader::new(sock))
 }
 
@@ -475,6 +481,7 @@ pub async fn procs_baseline() -> Result<Value, String> {
 /// list: nothing the interface passes in is ever turned into an address.
 pub fn page_path(page: &str) -> Option<&'static str> {
     match page {
+        "dashboard" => Some("/ui/"),
         "coverage" => Some("/coverage"),
         "world" => Some("/world"),
         "procs" => Some("/procs"),
@@ -490,23 +497,36 @@ pub fn valid_link_code(c: &str) -> bool {
     (32..=64).contains(&c.len()) && c.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+/// The address to open for `path`. With a link code the browser lands on /pair,
+/// which pairs it once and goes on to `path`; the code rides in the fragment,
+/// which a browser never sends to a server or puts in a Referer, and the page
+/// removes it from the address bar. Without one (an older daemon, or minting
+/// failed) the page itself opens and asks the browser to pair if it must.
+pub fn browser_url(base: &str, path: &str, code: Option<&str>) -> String {
+    let base = base.trim_end_matches('/');
+    match code.filter(|c| valid_link_code(c)) {
+        Some(c) => format!("{base}/pair?next={path}#code={c}"),
+        None => format!("{base}{path}"),
+    }
+}
+
+/// Ask the daemon for a one-time browser pairing code; None when it cannot
+/// give one. Opening the page must still work, so a failure only costs the
+/// shortcut, never the page.
+fn mint_link_code() -> Option<String> {
+    let v = post_json("/api/session/link", &json!({}), ACTION_TIMEOUT).ok()?;
+    v.get("code").and_then(Value::as_str).filter(|c| valid_link_code(c)).map(str::to_string)
+}
+
 #[tauri::command]
 pub async fn open_page(page: String) -> Result<Value, String> {
     let path = page_path(&page).ok_or("unknown page")?;
-    let base = pulse::dashboard_url().trim_end_matches('/').to_string();
+    let base = pulse::dashboard_url();
     blocking(move || {
-        // A one-time code, minted with the app's own credential, signs the browser in
-        // so a person never has to pair it by hand. If the daemon cannot mint one
-        // (an older build), the plain address still opens and shows how to connect.
-        let url = match post_json("/api/session/link", &json!({}), ACTION_TIMEOUT) {
-            Ok(v) => match v.get("code").and_then(Value::as_str) {
-                Some(code) if valid_link_code(code) => format!("{base}/pair?next={path}#code={code}"),
-                _ => format!("{base}{path}"),
-            },
-            Err(_) => format!("{base}{path}"),
-        };
+        let code = mint_link_code();
+        let url = browser_url(&base, path, code.as_deref());
         open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
-        Ok(json!({ "ok": true }))
+        Ok(json!({ "ok": true, "paired_link": code.is_some() }))
     })
     .await
 }
@@ -759,6 +779,7 @@ mod tests {
         assert!(sent.contains(&format!("Host: 127.0.0.1:{port}\r\n")));
         assert!(sent.contains("X-JARVIS-Token: "));
         assert!(sent.contains("Content-Length: 2\r\n"));
+        assert!(sent.ends_with("\r\n\r\n{}"), "the body arrives with the headers, in the server's first read");
         assert!(!sent.contains("Origin:"), "no Origin: the daemon treats the app as a local client");
 
         let (port, h) = fake_daemon(b"HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{}".to_vec(), Duration::ZERO);
@@ -820,6 +841,7 @@ b"));
         for bad in ["", "short", "has space and is long enough to pass the length check", &"A".repeat(65), "x#y&z/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] {
             assert!(!valid_link_code(bad), "{bad}");
         }
+        assert_eq!(page_path("dashboard"), Some("/ui/"));
         assert_eq!(page_path("coverage"), Some("/coverage"));
         assert_eq!(page_path("classic"), Some("/classic"));
         for bad in ["", "/coverage", "coverage/../x", "https://evil.example", "geo?x=1", "COVERAGE"] {
@@ -873,4 +895,24 @@ b"));
         assert!(valid_fix_decision("approve") && valid_fix_decision("retry") && valid_fix_decision("reject"));
         assert!(!valid_fix_decision("authorize"), "authorising a patch is not offered by the app");
     }
+
+    #[test]
+    fn a_browser_link_carries_the_code_only_in_the_fragment() {
+        let code = "A".repeat(43);
+        let url = browser_url("http://127.0.0.1:8765/", "/coverage", Some(&code));
+        assert_eq!(url, format!("http://127.0.0.1:8765/pair?next=/coverage#code={code}"));
+        let (before, after) = url.split_once('#').unwrap();
+        assert!(!before.contains(&code), "the part a browser sends to the server has no code");
+        assert_eq!(after, format!("code={code}"));
+    }
+
+    #[test]
+    fn without_a_valid_code_the_page_opens_directly() {
+        assert_eq!(browser_url("http://127.0.0.1:8765", "/ui/", None), "http://127.0.0.1:8765/ui/");
+        for bad in ["", "short", &"A".repeat(31), &"A".repeat(65), &format!("{}#", "A".repeat(42)), &format!("{}&", "A".repeat(42)), &"é".repeat(22)] {
+            assert!(!valid_link_code(bad), "{bad}");
+            assert_eq!(browser_url("http://127.0.0.1:8765", "/procs", Some(bad)), "http://127.0.0.1:8765/procs", "{bad}");
+        }
+    }
+
 }

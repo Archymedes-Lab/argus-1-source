@@ -105,8 +105,12 @@ _links_lock = threading.Lock()
 
 
 def issue_link(now=None):
-    """A fresh one-time code. At most LINK_MAX are outstanding; the oldest is dropped."""
-    now = time.time() if now is None else now
+    """A fresh one-time code. At most LINK_MAX are outstanding; the oldest is dropped.
+
+    `now` is monotonic seconds: a code's two minutes do not stretch or shrink
+    when the wall clock steps (measured on WSL: about -2.5 s every 30 s).
+    """
+    now = time.monotonic() if now is None else now
     code = secrets.token_urlsafe(32)
     with _links_lock:
         for key in [k for k, exp in _links.items() if exp <= now]:
@@ -117,17 +121,21 @@ def issue_link(now=None):
     return code
 
 
-def redeem_link(store, code, now=None):
+def redeem_link(store, code, now=None, mono=None):
     """Spend a one-time code and mint a browser client. Returns (id, token) or None.
 
     The code is consumed whether or not minting then succeeds, so it cannot be retried.
+    Raises ValueError when every client slot is held by something this path did
+    not create (nothing of anyone else's is retired to make room).
+    `mono` is monotonic seconds for the code's expiry; `now` is the wall clock
+    recorded on the client record.
     """
-    now = time.time() if now is None else now
+    mono = time.monotonic() if mono is None else mono
     if not isinstance(code, str) or not _LINK_RE.match(code):
         return None
     with _links_lock:
         expiry = _links.pop(_digest(code), None)
-    if expiry is None or expiry <= now:
+    if expiry is None or expiry <= mono:
         return None
     records = _load(store)
     active = [r for r in records if not r.get("revoked_at")]
@@ -135,7 +143,8 @@ def redeem_link(store, code, now=None):
         # Make room by retiring the oldest browser this path created; never anyone else's.
         mine = [r for r in active if r.get("name") == LINK_CLIENT_NAME]
         if not mine:
-            return None
+            raise ValueError(f"{MAX_ACTIVE} clients are already paired; revoke one first "
+                             "(jarvis desktop clients, jarvis desktop revoke ID)")
         revoke(store, min(mine, key=lambda r: r.get("created_at") or 0)["id"], now)
     return pair(store, LINK_CLIENT_NAME, now)
 
@@ -159,3 +168,15 @@ def verify(store, token):
                 return r["id"]
             return None
     return None
+
+
+def pending_links(mono=None):
+    """How many one-time codes are live (for tests and diagnostics; never the codes)."""
+    mono = time.monotonic() if mono is None else mono
+    with _links_lock:
+        return sum(1 for exp in _links.values() if exp > mono)
+
+
+def _reset_links():
+    with _links_lock:
+        _links.clear()

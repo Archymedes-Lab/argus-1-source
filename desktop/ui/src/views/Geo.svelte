@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import MapPin from "@lucide/svelte/icons/map-pin";
   import { api, type Geo } from "../lib/api";
-  import { app, toast } from "../lib/store.svelte";
+  import { app, toast, openInBrowser } from "../lib/store.svelte";
   import { agoT, tr } from "../lib/i18n";
 
   let data = $state<Geo | null>(null);
@@ -41,7 +41,7 @@
   const pct = $derived(Math.round((data?.confidence?.score ?? 0) * 100));
   const trustLabel = (t: string) => ({ trusted: tr("Trusted"), degraded: tr("Needs a look"), untrusted: tr("Not trusted") } as Record<string, string>)[t] ?? t;
   const zoneName = (z?: string) => (!z || z === "outside" ? tr("Outside your trusted zones") : z);
-  async function full() { try { await api.openPage("geo"); } catch (e) { toast(String((e as Error).message ?? e), "bad"); } }
+  const full = () => openInBrowser("geo");
 </script>
 
 <div class="mx-auto flex max-w-[820px] flex-col gap-6">

@@ -22,6 +22,10 @@ use std::time::{Duration, Instant};
 pub const GATE: i64 = 90;
 pub const OUTAGE_AFTER: Duration = Duration::from_secs(60);
 pub const MAX_TOASTS: usize = 3;
+/// A "stopped working" pop-up names at most this many checks, then "and N more".
+pub const MAX_NAMED: usize = 3;
+/// The daemon's reason for a check this edition cannot run without the elevated sensor.
+const NEEDS_ADMIN_SENSOR: &str = "Needs administrator sensor";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
@@ -202,20 +206,41 @@ impl Watch {
         // Newly blind collectors.
         let now_blind: HashSet<String> = blind.iter().map(|b| s(b, "job").to_string()).collect();
         if self.seeded {
-            let mut gone: Vec<&Value> = blind.iter().copied().filter(|b| !self.blind.contains(s(b, "job"))).collect();
+            // A check that needs the administrator sensor is not "stopped working":
+            // it sees less because the sensor is absent (platform/admin_sensor.py).
+            // An edition without the sensor reports these from the first pulse, which
+            // is never announced. If they appear later, the sensor went away: that is
+            // announced once, as what it is. Either way they count above.
+            let newly: Vec<&Value> = blind.iter().copied().filter(|b| !self.blind.contains(s(b, "job"))).collect();
+            let (sensor, mut gone): (Vec<&Value>, Vec<&Value>) =
+                newly.into_iter().partition(|b| s(b, "reason") == NEEDS_ADMIN_SENSOR);
+            if !sensor.is_empty() {
+                toasts.push(Toast {
+                    kind: Kind::Collector,
+                    title: "ARGUS-INSTINCT lost its administrator sensor".into(),
+                    body: format!(
+                        "{} now {} less because the administrator sensor is not running. Open ARGUS-INSTINCT to see which, or reinstall the sensor.",
+                        plural(sensor.len(), "check", "checks"),
+                        if sensor.len() == 1 { "sees" } else { "see" },
+                    ),
+                });
+            }
             gone.sort_by_key(|b| s(b, "job").to_string());
             if !gone.is_empty() {
-                let names: Vec<&str> = gone.iter().map(|b| s(b, "label")).collect();
+                let mut names: Vec<String> = gone.iter().take(MAX_NAMED).map(|b| s(b, "label").to_string()).collect();
+                if gone.len() > MAX_NAMED {
+                    names.push(format!("and {} more", gone.len() - MAX_NAMED));
+                }
                 toasts.push(Toast {
                     kind: Kind::Collector,
                     title: "ARGUS-INSTINCT can't check everything right now".into(),
                     body: format!(
                         "{} stopped working: {}. Until {} again, ARGUS-INSTINCT can't tell whether {} of your computer {} okay. Nothing for you to do now; if this keeps happening, open ARGUS-INSTINCT to see why.",
-                        if names.len() == 1 { "This check" } else { "These checks" },
+                        if gone.len() == 1 { "This check" } else { "These checks" },
                         names.join(", "),
-                        if names.len() == 1 { "it works" } else { "they work" },
-                        if names.len() == 1 { "that part" } else { "those parts" },
-                        if names.len() == 1 { "is" } else { "are" },
+                        if gone.len() == 1 { "it works" } else { "they work" },
+                        if gone.len() == 1 { "that part" } else { "those parts" },
+                        if gone.len() == 1 { "is" } else { "are" },
                     ),
                 });
             }
@@ -349,6 +374,45 @@ mod tests {
         assert_eq!(v.toasts.len(), 1);
         assert!(v.toasts[0].body.contains("Sysmon"));
         assert!(w.pulse(&pulse(91, json!([]), blind)).toasts.is_empty());
+    }
+
+    #[test]
+    fn many_newly_blind_checks_are_named_briefly() {
+        let mut w = Watch::default();
+        w.pulse(&pulse(91, json!([]), json!([])));
+        let blind: Vec<Value> = (0..7).map(|i| json!({"job": format!("j{i}"), "label": format!("Check {i}")})).collect();
+        let v = w.pulse(&pulse(91, json!([]), Value::Array(blind)));
+        assert_eq!(v.toasts.len(), 1);
+        let body = &v.toasts[0].body;
+        assert!(body.contains("Check 0, Check 1, Check 2, and 4 more"), "{body}");
+        assert!(!body.contains("Check 6"));
+        assert!(body.starts_with("These checks"));
+    }
+
+    #[test]
+    fn an_edition_without_the_administrator_sensor_is_quiet_from_the_start() {
+        let mut w = Watch::default();
+        let blind = json!([{"job": "sysmon", "label": "Sysmon", "reason": "Needs administrator sensor"}]);
+        let v = w.pulse(&pulse(91, json!([]), blind.clone()));
+        assert!(v.toasts.is_empty(), "known from the first pulse: a limit of the edition");
+        assert_eq!(v.level, Level::Attention, "but the tray stays cautious");
+        assert!(w.pulse(&pulse(91, json!([]), blind)).toasts.is_empty());
+    }
+
+    #[test]
+    fn losing_the_administrator_sensor_later_is_announced_once_as_what_it_is() {
+        let mut w = Watch::default();
+        w.pulse(&pulse(91, json!([]), json!([])));
+        let blind = json!([
+            {"job": "sysmon", "label": "Sysmon", "reason": "Needs administrator sensor"},
+            {"job": "memscan", "label": "Memory", "reason": "Needs administrator sensor"},
+            {"job": "net", "label": "Network", "freshness": "STALE"}]);
+        let v = w.pulse(&pulse(91, json!([]), blind.clone()));
+        assert_eq!(v.toasts.len(), 2);
+        assert!(v.toasts[0].title.contains("lost its administrator sensor"));
+        assert!(v.toasts[0].body.starts_with("2 checks now see less"), "{}", v.toasts[0].body);
+        assert!(v.toasts[1].body.contains("Network") && !v.toasts[1].body.contains("Sysmon"));
+        assert!(w.pulse(&pulse(91, json!([]), blind)).toasts.is_empty(), "once per change");
     }
 
     #[test]

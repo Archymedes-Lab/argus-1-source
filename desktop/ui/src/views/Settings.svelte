@@ -5,7 +5,7 @@
   import { api, inApp, type AppSettings, type Autopilot, type LicenceState } from "../lib/api";
   import { t } from "../lib/words";
   import { LANGS, tr } from "../lib/i18n";
-  import { app, checkUpdate, go, setLang, setMode, setTheme, toast, type Mode, type Theme } from "../lib/store.svelte";
+  import { app, checkUpdate, go, openInBrowser, setLang, setMode, setTheme, toast, type Mode, type Theme } from "../lib/store.svelte";
   const themes: [Theme, string][] = [["auto", "Automatic"], ["light", "Light"], ["dark", "Dark"]];
 
   let ap = $state<Autopilot | null>(null);
@@ -66,6 +66,19 @@
         </div>
       </div>
       <p class="mt-2 px-1 text-copy-13 text-gray-900">{tr("Checks one public file. Sends nothing, installs nothing.")}</p>
+    </section>
+  {/if}
+
+  {#if inApp}
+    <section>
+      <h2 class="mb-2 px-1 text-label-13 text-gray-900">{tr("Browser")}</h2>
+      <div class="card row justify-between gap-4">
+        <div>
+          <p class="text-label-13">{tr("Open in your browser")}</p>
+          <p class="mt-0.5 text-copy-13 text-gray-900">{tr("See everything in your browser too. It pairs by itself; there is no token to copy.")}</p>
+        </div>
+        <button class="btn btn-sm btn-accent shrink-0" onclick={() => openInBrowser("dashboard")}>{tr("Open")}</button>
+      </div>
     </section>
   {/if}
 

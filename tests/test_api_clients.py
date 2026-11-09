@@ -66,7 +66,7 @@ POST_ONLY = {*LICENCE_POSTS, "/api/answer", "/api/ask", "/api/assistant/action",
              "/api/session", "/api/veil/events",
              "/api/autopilot/authorize", "/api/autopilot/decide", "/api/autopilot/policy",
              "/api/pause", "/api/resume",
-             "/api/protection/scan"}
+             "/api/protection/scan", "/api/session/link"}
 
 
 def served_routes():
@@ -109,16 +109,16 @@ class ClientRegistryTests(unittest.TestCase):
         self.assertEqual(clients.listing(self.store)[0]["id"], cid)  # kept as audit
 
     def test_only_a_digest_is_stored(self):
-        _, token = clients.pair(self.store, "cli")
-        raw = self.store.get_meta(clients.META_KEY)
-        self.assertNotIn(token, raw)
-        # The whole 43-character secret, never a fragment: the secret is URL-safe
-        # base64 and may itself contain "_", so splitting on "_" could yield one
-        # letter that any JSON contains (failed main CI 42643800439, ~0.7% of runs).
-        secret = clients._TOKEN_RE.match(token).group(2)
-        self.assertEqual(len(secret), 43)
-        self.assertNotIn(secret, raw)
-        self.assertNotIn("sha256", json.dumps(clients.listing(self.store)))
+        # URL-safe secrets may contain underscores, including near the end.
+        # Check the entire secret, rather than a possibly one-character suffix.
+        for secret in ("A" * 43, "A" * 41 + "_s", "_" * 43):
+            with self.subTest(secret=secret), \
+                    mock.patch.object(clients.secrets, "token_urlsafe", return_value=secret):
+                _, token = clients.pair(self.store, "cli")
+                raw = self.store.get_meta(clients.META_KEY)
+                self.assertNotIn(token, raw)
+                self.assertNotIn(token.split("_", 2)[2], raw)
+                self.assertNotIn("sha256", json.dumps(clients.listing(self.store)))
 
     def test_forged_malformed_and_unknown_tokens_are_refused(self):
         cid, token = clients.pair(self.store, "desktop")
@@ -242,7 +242,8 @@ class PairedClientTests(_ServerBase):
     def test_one_time_codes_expire_and_forged_or_cross_site_codes_fail(self):
         same = {"Sec-Fetch-Site": "same-origin"}
         code = self._link()
-        with mock.patch.object(clients.time, "time", return_value=time.time() + clients.LINK_TTL_S + 1):
+        # Expiry runs on the monotonic clock, so a wall-clock step cannot stretch a code.
+        with mock.patch.object(clients.time, "monotonic", return_value=time.monotonic() + clients.LINK_TTL_S + 1):
             self.assertEqual(self.srv.request("POST", "/api/session", {"code": code}, same)[0], 403)
         for bad in ("A" * 43, "short", "x" * 100):
             self.assertEqual(self.srv.request("POST", "/api/session", {"code": bad}, same)[0], 403)

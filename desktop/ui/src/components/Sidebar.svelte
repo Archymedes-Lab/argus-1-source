@@ -92,7 +92,9 @@
     </nav>
     <div class="flex items-center gap-2 border-t border-gray-300 px-5 py-3 text-label-12 text-gray-900">
       <span class="dot {live ? (paused ? 'dot-warn' : 'dot-ok') : app.status.phase === 'degraded' ? 'dot-warn' : app.status.phase === 'starting' ? 'dot-run' : 'dot-bad'}"></span>
-      <span class="truncate" title={app.status.detail}>{live ? (paused ? tr("On a break") : tr("Watching")) : tr(app.status.message)}</span>
+      <span class="truncate" title={app.status.detail || tr(app.status.message)}>{live ? (paused ? tr("On a break") : tr("Watching"))
+        : app.status.blind?.length ? (app.status.blind.length === 1 ? tr("Watching · 1 check limited") : tr("Watching · {n} checks limited", { n: app.status.blind.length }))
+        : tr(app.status.message)}</span>
     </div>
   </div>
 </aside>

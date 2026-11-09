@@ -540,10 +540,11 @@ def main(argv=None):
         if refused is not None:
             return refused
     if (args.cmd == 'mesh' or getattr(args, 'no_store', False)
-            or (args.cmd == 'desktop' and args.action == 'save')):
+            or (args.cmd == 'desktop' and args.action in ('save', 'browser'))):
         # Mesh owns its isolated store, and the server network sensors run as
         # their own account without access to it: never open the protected
-        # collector DB for them. `desktop save` only writes the caller's token.
+        # collector DB for them. `desktop save` only writes the caller's token;
+        # `desktop browser` only asks the running daemon for a link.
         return args.fn(args, None)
     refusal = statedir.cli_refusal(args.db, DEFAULT_DB, argv if argv is not None else sys.argv[1:])
     if refusal:
