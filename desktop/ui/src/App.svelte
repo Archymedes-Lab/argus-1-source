@@ -16,6 +16,7 @@
   import Phone from "./views/Phone.svelte";
   import Licence from "./views/Licence.svelte";
   import CommandPalette from "./components/CommandPalette.svelte";
+  import StatusBanner from "./components/StatusBanner.svelte";
   import { Tooltip } from "bits-ui";
   import { app } from "./lib/store.svelte";
   import { tr } from "./lib/i18n";
@@ -37,14 +38,7 @@
           </div>
         </div>
       {/if}
-      {#if app.status.phase !== "live" && app.status.phase !== "starting"}
-        <div class="mx-auto mt-6 max-w-[1200px] px-8" role="status">
-          <div class="flex flex-col gap-1 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900">
-            <span class="flex items-center gap-3"><span class="dot dot-warn"></span>{tr(app.status.message)}{#if app.daemon === "down" && app.data}. {tr("Showing the last state it reported.")}{/if}</span>
-            {#if app.status.detail}<span class="pl-5">{app.status.detail}</span>{/if}
-          </div>
-        </div>
-      {/if}
+      {#if app.status.phase !== "live" && app.status.phase !== "starting"}<StatusBanner />{/if}
       <div class="mx-auto max-w-[1200px] px-8 py-8">
         {#key app.view}<div class="anim-rise"><Current /></div>{/key}
       </div>

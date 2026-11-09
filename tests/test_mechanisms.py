@@ -348,6 +348,8 @@ ALLOWED_NAME_LISTS = {
                                      "deriving it from the registry would make it check itself",
     "jarvis/core/assurance.py": "OBSERVATION_REQUIREMENTS maps capabilities to evidence sources; "
                                 "test_assurance_evidence_names_real_sources checks every name",
+    "jarvis/cli/commands/desktop.py": "BROWSER_PAGES are dashboard page names (/coverage, /world, "
+                                      "/geo) that share words with jobs, not a list of collectors",
     "jarvis/cli/output.py": "SECTION headings are finding categories that share some words with "
                             "job names, not a list of collectors",
     "jarvis/service/autopilot.py": "MONITORING_CATEGORIES are finding categories (intel, auditd, "

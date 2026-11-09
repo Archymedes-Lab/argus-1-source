@@ -7,6 +7,7 @@
 // cookie the daemon issued with the page. Either way the screens are identical.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { shapeCoverage, shapeGeo, shapePhoneDevices, shapeProcs, shapeState, shapeWorld } from "./shape";
 import { brandDeep } from "./brand";
 import { validLicencePage } from "./licence";
 
@@ -51,7 +52,7 @@ export const ROUTES: Record<string, (a: Args) => Route> = {
 };
 
 /** The daemon pages that open as their own full views. A fixed list. */
-export const PAGES: Record<string, string> = { coverage: "/coverage", world: "/world", procs: "/procs", geo: "/geo", classic: "/classic" };
+export const PAGES: Record<string, string> = { dashboard: "/ui/", coverage: "/coverage", world: "/world", procs: "/procs", geo: "/geo", classic: "/classic" };
 
 async function http<T>(cmd: string, args: Args = {}): Promise<T> {
   if (cmd === "open_page") { window.open(PAGES[args.page] ?? "/", "_blank", "noopener"); return { ok: true } as T; }
@@ -121,13 +122,19 @@ async function procsSnapshotHttp(): Promise<ProcsSnapshot> {
 }
 
 /** What the app knows about the daemon (desktop/src/lifecycle.rs): never "healthy" unless it is. */
+export type BlindKind = "admin_sensor" | "failed" | "stale" | "other";
+/** A collector the daemon reported blind, with its cause (desktop/src/lifecycle.rs Blind). */
+export type BlindItem = { job: string; label: string; reason: string; kind: BlindKind };
+
 export type AppStatus = {
   phase: "starting" | "live" | "degraded" | "not_installed" | "not_authorised" | "stopped";
   message: string;
   detail: string;
+  /** Every blind collector, grouped by the interface; absent when none. */
+  blind?: BlindItem[];
 };
 
-export type Reply = { ok?: boolean; message?: string; answer?: string; source?: string; queued?: boolean };
+export type Reply = { ok?: boolean; message?: string; answer?: string; source?: string; queued?: boolean; paired_link?: boolean };
 
 export type Protection = { available: boolean; level: "on" | "off" | "stale" | "unknown"; summary: string; signature_age_days?: number | null; last_quick_scan?: string };
 export type AppSettings = { notify_findings: boolean; notify_health: boolean; notify_outage: boolean };
@@ -171,7 +178,7 @@ export type ProcsSnapshot = { snaps: Record<string, any[][]>; status: any };
 export type UpdateInfo = { current: string; latest: string | null; newer: boolean; enabled: boolean; checked: number; error: string };
 
 export const api = {
-  state: () => call<any>("daemon_state"),
+  state: () => call<unknown>("daemon_state").then(shapeState),
   status: () => call<AppStatus>("app_status"),
   runCollector: (job: string) => call<Reply>("run_collector", { job }),
   answer: (id: string, choice: "yes" | "no") => call<Reply>("answer_question", { id, choice }),
@@ -189,14 +196,14 @@ export const api = {
   setAutoHandle: (on: boolean) => call<Reply>("autopilot_policy", { autoHandle: on }),
   decideFix: (id: string, decision: "approve" | "retry" | "reject", reason?: string) =>
     call<Reply>("decide_fix", { id, decision, reason }),
-  geo: () => call<Geo>("geo_state"),
-  coverage: () => call<Coverage>("coverage_state"),
-  world: () => call<World>("world_state"),
+  geo: () => call<unknown>("geo_state").then(shapeGeo),
+  coverage: () => call<unknown>("coverage_state").then(shapeCoverage),
+  world: () => call<unknown>("world_state").then(shapeWorld),
   procsBaseline: () => call<any>("procs_baseline"),
-  procsSnapshot: () => call<ProcsSnapshot>("procs_snapshot"),
+  procsSnapshot: () => call<unknown>("procs_snapshot").then(shapeProcs),
   openPage: (page: keyof typeof PAGES) => call<Reply>("open_page", { page }),
   phoneStatus: () => call<PhoneStatus>("phone_status"),
-  phoneDevices: () => call<{ devices: PhoneDevice[] }>("phone_devices"),
+  phoneDevices: () => call<unknown>("phone_devices").then(shapePhoneDevices),
   pairCurrent: () => call<{ pairing: Pairing | null }>("phone_pair_current"),
   pairStart: () => call<Pairing>("phone_pair_start"),
   pairPoll: (session: string) => call<Pairing>("phone_pair_poll", { session }),

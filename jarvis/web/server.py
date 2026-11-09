@@ -664,19 +664,51 @@ class Handler(BaseHTTPRequestHandler):
         port = self.server.server_address[1]
         return not (origin and any(origin == f"http://{h}:{port}" for h in ("localhost", "127.0.0.1")))
 
+    def _declared_length(self):
+        try:
+            return max(0, int(self.headers.get("Content-Length") or "0"))
+        except ValueError:
+            return 0
+
     def _json_body(self, limit):
         """The request's JSON object, or None when it is missing, oversized or malformed."""
-        try:
-            length = int(self.headers.get("Content-Length") or "0")
-        except ValueError:
-            return None
+        length = self._declared_length()
         if length <= 0 or length > limit:
             return None
+        self._body_left = 0
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8", "replace"))
         except ValueError:
             return None
         return payload if isinstance(payload, dict) else None
+
+    # A request body the route never read is read and dropped before the reply.
+    # Closing a socket with unread bytes makes the OS reset the connection, and
+    # Windows then discards the reply the client had not read yet ("An existing
+    # connection was forcibly closed", WSAECONNRESET 10054): measured 2026-11-09
+    # with the desktop app's own client on Windows. Bounded: a body larger than
+    # DRAIN_MAX is not read, the connection is closed as before.
+    DRAIN_MAX = 64 * 1024
+    DRAIN_TIMEOUT_S = 2
+
+    def _drain_body(self):
+        left = getattr(self, "_body_left", 0)
+        self._body_left = 0
+        if left <= 0:
+            return
+        if left > self.DRAIN_MAX:
+            self.close_connection = True
+            return
+        try:
+            self.connection.settimeout(self.DRAIN_TIMEOUT_S)
+            self.rfile.read(left)
+        except OSError:
+            self.close_connection = True
+        finally:
+            try:
+                self.connection.settimeout(self.timeout)
+            except OSError:
+                pass
 
     # The dashboard is self-contained and forbids anything external, except that
     # it may frame its own GeoSecurity page.
@@ -731,6 +763,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, body, ctype, csp=self.CSP_COVERAGE, cookie=cookie)
 
     def _send(self, code, body, ctype="application/json", csp=None, cookie=None):
+        self._drain_body()
         if isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
@@ -836,6 +869,7 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
 
     def do_POST(self):
+        self._body_left = self._declared_length()
         if not self._host_ok():
             return self._send(403, json.dumps({"error": "bad host"}))
         url = urlparse(self.path)
@@ -873,6 +907,9 @@ class Handler(BaseHTTPRequestHandler):
             # The /pair page: a browser that could not be given the dashboard
             # cookie (its owner is not identifiable) presents a paired client
             # token once and keeps it as an HttpOnly, SameSite=Strict cookie.
+            # Or it presents a one-time link code from the desktop app
+            # (clients.issue_link): spent once, and this browser becomes its
+            # own paired, revocable client.
             payload = self._json_body(1024)
             value = str((payload or {}).get("token") or "").strip()
             code = str((payload or {}).get("code") or "").strip()
@@ -881,10 +918,14 @@ class Handler(BaseHTTPRequestHandler):
                 if code and not value:
                     # A one-time link minted by the desktop app: trade it for a
                     # browser client, so nobody has to run a command.
-                    minted = clients.redeem_link(store, code)
+                    try:
+                        minted = clients.redeem_link(store, code)
+                    except ValueError as exc:
+                        return self._send(409, json.dumps({"error": str(exc), "reason": "too_many_clients"}))
                     if not minted:
-                        return self._send(403, json.dumps({"error": "this link has expired; "
-                                                                    "open it again from the app"}))
+                        return self._send(403, json.dumps({"error": "this link was already used or has expired; "
+                                                                    "open it again from the app",
+                                                           "reason": "link_expired"}))
                     cid, value = minted
                 else:
                     cid = clients.verify(store, value)
@@ -907,6 +948,10 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/session/link":
             # For the desktop app (it holds a paired client token): a two-minute,
             # single-use code that opens a browser without typing a command.
+            # Only a token sent as a header may ask: a browser's cookie may not,
+            # so a page cannot multiply its own credential.
+            if not api_token.header_credentials(self.headers):
+                return self._send(403, json.dumps({"error": "send the client token as a header"}))
             return self._send(200, json.dumps({"code": clients.issue_link(),
                                                "expires_in": clients.LINK_TTL_S}))
         if url.path in phone.ROUTES_POST:

@@ -66,7 +66,7 @@ POST_ONLY = {*LICENCE_POSTS, "/api/answer", "/api/ask", "/api/assistant/action",
              "/api/session", "/api/veil/events",
              "/api/autopilot/authorize", "/api/autopilot/decide", "/api/autopilot/policy",
              "/api/pause", "/api/resume",
-             "/api/protection/scan"}
+             "/api/protection/scan", "/api/session/link"}
 
 
 def served_routes():
@@ -237,7 +237,8 @@ class PairedClientTests(_ServerBase):
     def test_one_time_codes_expire_and_forged_or_cross_site_codes_fail(self):
         same = {"Sec-Fetch-Site": "same-origin"}
         code = self._link()
-        with mock.patch.object(clients.time, "time", return_value=time.time() + clients.LINK_TTL_S + 1):
+        # Expiry runs on the monotonic clock, so a wall-clock step cannot stretch a code.
+        with mock.patch.object(clients.time, "monotonic", return_value=time.monotonic() + clients.LINK_TTL_S + 1):
             self.assertEqual(self.srv.request("POST", "/api/session", {"code": code}, same)[0], 403)
         for bad in ("A" * 43, "short", "x" * 100):
             self.assertEqual(self.srv.request("POST", "/api/session", {"code": bad}, same)[0], 403)

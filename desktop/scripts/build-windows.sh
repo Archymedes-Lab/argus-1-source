@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Cross-compile the JARVIS desktop Windows binary from WSL.
 #
-#   desktop/scripts/build-windows.sh [--check-only] [--force]
+#   desktop/scripts/build-windows.sh [--check-only] [--force] [--test]
+#
+# --test compiles the app's unit tests for Windows instead of the app and runs
+# them natively on Windows (from %LOCALAPPDATA%\JarvisDesktopBuild\tests): CI
+# runs these tests on Linux only, so this is where the cfg(windows) paths run.
 #
 # Why not build on Windows: Defender's ASR rule 01443614 ("block executables unless
 # they meet a prevalence, age or trusted-list criterion") is in block mode here and
@@ -35,10 +39,11 @@ KITS="/mnt/c/Program Files (x86)/Windows Kits/10"
 LLVM=/usr/lib/llvm-18/bin
 RUST_LLD=$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld
 
-check_only=0 force=0
+check_only=0 force=0 test_mode=0
 for a in "$@"; do
   case $a in
     --check-only) check_only=1 ;;
+    --test) test_mode=1 ;;
     --force) force=1 ;;
     *) echo "unknown argument: $a" >&2; exit 64 ;;
   esac
@@ -113,6 +118,38 @@ mkdir -p "$logdir"
 log=$logdir/build-$(date -u +%Y%m%dT%H%M%SZ).log
 start=$(date +%s)
 cd "$DESKTOP"
+if (( test_mode )); then
+  # Debug test binary for Windows, then run it there. Same idle checks, niceness
+  # and memory floor as the app build, without the watchdog loop: tests compile once.
+  nice -n 19 ionice -c3 cargo test --no-run --locked -j "$JOBS" --target $TARGET --message-format=json >"$log" 2>"$log.err" \
+    || { tail -30 "$log.err"; die "test build failed. Log: $log.err"; }
+  texe=$(python3 -c 'import json,sys
+for l in open(sys.argv[1]):
+    try: m = json.loads(l)
+    except ValueError: continue
+    if m.get("reason") == "compiler-artifact" and m.get("profile", {}).get("test") and m.get("executable"):
+        print(m["executable"])' "$log" | tail -1)
+  [[ -f $texe ]] || die "no test executable in $log"
+  winlocal=$(wslpath "$(powershell.exe -NoProfile -Command '[Environment]::GetFolderPath("LocalApplicationData")' | tr -d '\r')")
+  tdir=$winlocal/JarvisDesktopBuild/tests
+  mkdir -p "$tdir"
+  cp -f "$texe" "$tdir/jarvis-desktop-tests.exe"
+  echo "Running the unit tests on Windows: $(wslpath -w "$tdir/jarvis-desktop-tests.exe")"
+  # Run from the Windows folder so the process starts with a Windows working directory.
+  (cd "$tdir" && ./jarvis-desktop-tests.exe --test-threads=2 2>&1) | tee "$logdir/windows-tests-$(date -u +%Y%m%dT%H%M%SZ).log"
+  rc=${PIPESTATUS[0]}
+  # 126/"Invalid argument": Windows refused to start it. On the owner's machine that is
+  # Defender ASR rule 01443614 (prevalence) blocking a fresh build (event 1121); this
+  # script does not work around Windows policy, it says so.
+  if (( rc == 126 || rc == 1 )) && powershell.exe -NoProfile -Command \
+      "Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -MaxEvents 20 | Where-Object { \$_.Id -eq 1121 -and \$_.TimeCreated -gt (Get-Date).AddMinutes(-5) -and \$_.Message -like '*jarvis-desktop-tests.exe*' } | Select-Object -First 1" \
+      2>/dev/null | grep -q 1121; then
+    echo "Windows did not run the tests: Defender attack surface reduction rule 01443614 blocked the new test binary (event 1121). Not a test failure; nothing was bypassed." >&2
+    exit 126
+  fi
+  exit "$rc"
+fi
+
 nice -n 19 ionice -c3 cargo build --release --locked -j "$JOBS" --target $TARGET \
   --features custom-protocol >"$log" 2>&1 &
 pid=$!

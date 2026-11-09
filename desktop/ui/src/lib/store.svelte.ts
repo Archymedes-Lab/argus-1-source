@@ -1,6 +1,6 @@
 // Application state. The daemon owns the truth; this holds the last copy the
 // shell fetched and refreshes it when the pulse stream says something changed.
-import { api, inApp, onDaemon, type Coverage, type UpdateInfo, type AppStatus } from "./api";
+import { api, inApp, onDaemon, type Coverage, type UpdateInfo, type AppStatus, type PAGES } from "./api";
 import { tr } from "./i18n";
 
 export type View = "overview" | "findings" | "collectors" | "review" | "assistant" | "geo" | "coverage" | "world" | "procs" | "phone" | "pricing" | "licence" | "settings";
@@ -194,4 +194,15 @@ export function go(view: View, filters: Partial<{ severity: string | null; query
   if ("host" in filters) app.host = filters.host ?? "";
   if ("job" in filters) app.job = filters.job ?? "";
   app.selected = null;
+}
+
+/** Open a daemon page in the default browser. From the app the browser gets a
+ *  one-time pairing link (desktop/src/api.rs open_page), so it never asks for a token. */
+export async function openInBrowser(page: keyof typeof PAGES = "dashboard") {
+  try {
+    const r = await api.openPage(page);
+    if (inApp) toast(r?.paired_link ? tr("Opening in your browser. It pairs by itself the first time.") : tr("Opening in your browser."), "ok");
+  } catch (e) {
+    toast(String((e as Error)?.message ?? e), "bad");
+  }
 }

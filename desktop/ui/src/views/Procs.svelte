@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import Search from "@lucide/svelte/icons/search";
   import { api, type ProcsSnapshot } from "../lib/api";
-  import { app, toast } from "../lib/store.svelte";
+  import { app, toast, openInBrowser } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
   import { filterProcs, megabytes, procCounts, rowsFrom, type Baseline } from "../lib/procs";
 
@@ -42,7 +42,7 @@
   const pill = { new: "pill-high", recent: "pill-info", unknown: "pill-low", known: "", approved: "pill-ok" } as Record<string, string>;
   const label = $derived({ new: tr("New name"), recent: tr("Seen today"), unknown: tr("Not judged"), known: tr("Known"), approved: tr("Approved") } as Record<string, string>);
   const started = (ms: number) => (ms ? new Date(ms).toLocaleString(app.lang, { dateStyle: "short", timeStyle: "short" }) : "—");
-  async function full() { try { await api.openPage("procs"); } catch (e) { toast(String((e as Error).message ?? e), "bad"); } }
+  const full = () => openInBrowser("procs");
 </script>
 
 <div class="flex flex-col gap-6">

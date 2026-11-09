@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import Search from "@lucide/svelte/icons/search";
   import { api, type Coverage } from "../lib/api";
-  import { app, toast } from "../lib/store.svelte";
+  import { app, toast, openInBrowser } from "../lib/store.svelte";
   import { tr } from "../lib/i18n";
   import Pill from "../components/Pill.svelte";
 
@@ -44,7 +44,7 @@
   let gapLimit = $state(12);
   const share = (n: number) => (data && data.totals.total ? (n / data.totals.total) * 100 : 0);
   const watched = $derived(Math.round((data?.uptime?.pct24 ?? 0) * 100));
-  async function full() { try { await api.openPage("coverage"); } catch (e) { toast(String((e as Error).message ?? e), "bad"); } }
+  const full = () => openInBrowser("coverage");
 </script>
 
 <div class="flex flex-col gap-6">

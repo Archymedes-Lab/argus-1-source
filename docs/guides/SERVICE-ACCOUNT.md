@@ -82,8 +82,13 @@ That check is in `jarvis/core/statedir.py`, and it runs from `serve()`.
    - **`supervisor`:** save it as `%LOCALAPPDATA%\Jarvis\client.token`, readable
      by your Windows account only. The reviver and health monitor then get
      source details and can queue re-runs. Without it they see liveness only.
-   - **Browsers:** open `http://localhost:8787/`. You are sent to `/pair`; paste
-     a token from `sudo jarvis-svc desktop pair --name browser`.
+   - **Browsers:** from the desktop app, press Ctrl K and choose **Open in your
+     browser** (or Settings → Browser → Open). The browser opens a one-time
+     link (single use, two minutes, code in the URL fragment), pairs itself as
+     a new client named `browser opened from the app`, and goes on to the page. Without the
+     app, `jarvis desktop browser` prints and opens the same kind of link. The
+     manual path still works: open `http://localhost:8787/`, and on `/pair`
+     paste a token from `sudo jarvis-svc desktop pair --name browser`.
    - **Prometheus:** see docs/architecture/ARGUS-SERVER.md (W7).
 
    To list or revoke paired clients:

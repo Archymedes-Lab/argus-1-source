@@ -5,7 +5,7 @@
   import TrendingDown from "@lucide/svelte/icons/trending-down";
   import Minus from "@lucide/svelte/icons/minus";
   import { api, type World, type WorldZone } from "../lib/api";
-  import { app, toast } from "../lib/store.svelte";
+  import { app, toast, openInBrowser } from "../lib/store.svelte";
   import { agoT, tr } from "../lib/i18n";
 
   let data = $state<World | null>(null);
@@ -21,7 +21,7 @@
   async function load() {
     if (loading || !alive) return;
     loading = true;
-    try { data = await api.world(); err = ""; }
+    try { data = await api.world(); err = ""; }   // shaped in lib/shape.ts: never missing a list
     catch (e) { err = String((e as Error).message ?? e); }
     finally { loading = false; }
   }
@@ -54,7 +54,7 @@
   });
   const zones = $derived([...(data?.zones ?? [])].sort((a, b) => b.reports - a.reports));
   const okSources = $derived((data?.sources ?? []).filter((s) => !s.error && s.ok).length);
-  async function full() { try { await api.openPage("world"); } catch (e) { toast(String((e as Error).message ?? e), "bad"); } }
+  const full = () => openInBrowser("world");
 </script>
 
 <div class="flex flex-col gap-6">

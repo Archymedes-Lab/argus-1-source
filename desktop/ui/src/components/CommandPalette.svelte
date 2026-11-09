@@ -3,8 +3,10 @@
   import Search from "@lucide/svelte/icons/search";
   import CornerDownLeft from "@lucide/svelte/icons/corner-down-left";
   import Play from "@lucide/svelte/icons/play";
+  import Globe from "@lucide/svelte/icons/globe";
   import { api } from "../lib/api";
-  import { app, go, toast, type View } from "../lib/store.svelte";
+  import { app, go, openInBrowser, toast, type View } from "../lib/store.svelte";
+  import { inApp } from "../lib/api";
   import { distinct, filterFindings, sentence, type Finding, type Job } from "../lib/model";
   import { NAV } from "../lib/nav";
   import Pill from "./Pill.svelte";
@@ -24,6 +26,10 @@
     if ((f.count ?? 1) > 1) { go("findings", { query: f.title, severity: null }); close(); return; }
     go("findings", { query: "", severity: null }); app.selected = f; close();
   }
+  const browserLabel = $derived(tr("Open in your browser"));
+  const showBrowser = $derived(inApp && (!search.trim() || browserLabel.toLowerCase().includes(search.trim().toLowerCase())
+    || "browser".includes(search.trim().toLowerCase())));
+  function browser() { close(); void openInBrowser("dashboard"); }
   function searchAll() { go("findings", { query: search.trim(), severity: null }); close(); }
   async function run(j: Job) {
     close();
@@ -94,6 +100,16 @@
                 {/each}
               </Command.GroupItems>
             </Command.Group>
+            {#if showBrowser}
+              <Command.Group>
+                <Command.GroupHeading class="px-2 pt-3 pb-1.5 text-label-12 text-gray-700">{tr("Actions")}</Command.GroupHeading>
+                <Command.GroupItems>
+                  <Command.Item value="open-browser" onSelect={browser} class="menu-item h-10">
+                    <Globe size={15} class="text-gray-700" /><span class="flex-1">{browserLabel}</span>
+                  </Command.Item>
+                </Command.GroupItems>
+              </Command.Group>
+            {/if}
           </Command.Viewport>
         </Command.List>
       </Command.Root>

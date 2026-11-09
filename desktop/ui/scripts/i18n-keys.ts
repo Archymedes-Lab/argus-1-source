@@ -12,6 +12,19 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/** Every status sentence the desktop shell can send (desktop/src/lifecycle.rs): the
+ *  interface shows them through tr(), so each needs a translation like any other string.
+ *  Literal messages are read from Status::new(Phase::X, "…") and the messages built for
+ *  blind collectors; counted ones ({n}) are matched by lib/blind.ts statusKey. */
+export function shellStatusKeys(root = "src"): string[] {
+  const rs = readFileSync(join(root, "..", "..", "src", "lifecycle.rs"), "utf8");
+  const code = rs.slice(0, rs.indexOf("#[cfg(test)]"));
+  const out = new Set<string>();
+  for (const m of code.matchAll(/Status::new\(\s*Phase::\w+,\s*"((?:\\.|[^"\\])*)"/g)) out.add(JSON.parse(`"${m[1]}"`));
+  for (const m of code.matchAll(/(?:format!\(|^\s*)"(ARGUS-INSTINCT (?:is running, but|can't fully check)[^"]*)"/gm)) out.add(m[1]);
+  return [...out];
+}
+
 export function collectKeys(root = "src"): string[] {
   const keys = new Set<string>();
   const re = /\btr\(\s*"((?:\\.|[^"\\])*)"/g;
@@ -49,8 +62,14 @@ export function collectKeys(root = "src"): string[] {
     // Pricing plan features reach tr() through a list.
     "Continuous monitoring of this computer", "Plain-language assistant", "Investigate any finding with one click",
     "Approvals, reports and daily briefing",
+    // lib/blind.ts GROUPS reach tr() through the status banner.
+    "Failed last run", "Run one again, or open Collectors to see the error.",
+    "Not reporting", "These usually catch up by themselves after the computer wakes up or ARGUS-INSTINCT restarts.",
+    "Administrator sensor", "This edition runs without administrator rights, so these checks see less. It is a limit of this edition, not a fault.",
+    "Other",
   ];
   for (const k of extra) keys.add(k);
+  for (const k of shellStatusKeys(root)) keys.add(k);
   return [...keys].sort();
 }
 

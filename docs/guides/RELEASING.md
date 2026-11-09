@@ -51,10 +51,27 @@ Before tagging, on that host: commit, `python3 release/host_attest.py make`, sig
 `release/host-attestation.json` with your releaser key, commit both files. `release.yml` refuses a
 tag whose attestation is missing, unsigned by a pinned releaser, incomplete, or older than a code change.
 
+### Desktop app checks CI does not run
+
+CI runs the desktop app's Rust tests on Linux only and never opens the interface in a browser.
+Before tagging a release that changes `desktop/`, on a machine with the toolchain:
+
+- `uv run --with playwright==1.55.0 python3 scripts/dev/desktop_ui_check.py` (after
+  `cd desktop/ui && bun run build`): every view, Simple and Expert, light and dark; the
+  Windows-edition status banner; daemon answers that are empty or wrong-typed; Open in your
+  browser; four languages including Arabic. Exit 0 only when every check passes.
+- `desktop/scripts/build-windows.sh --test` (WSL with the cross toolchain): compiles the app's
+  unit tests for Windows and runs them on Windows, the only place the `cfg(windows)` paths run.
+  It found a Windows-only connection reset on 2026-11-09. On the owner's machine Defender's
+  prevalence rule (ASR 01443614) can block a fresh test binary; the script then says so and
+  exits 126. That is not a pass: run it where the rule allows it, or record that it did not run.
+
 ## Releaser keys
 
 Adding a second releaser, a lost or compromised key, revocation and rotation:
 `docs/guides/RELEASER-KEYS.md`.
+
+Sonia's verified access and machine setup: [SONIA-RELEASE-HANDOFF.md](SONIA-RELEASE-HANDOFF.md).
 
 ## Publishing a dry run (the current method)
 
