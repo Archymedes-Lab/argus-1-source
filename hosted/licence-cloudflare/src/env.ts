@@ -14,6 +14,7 @@ export interface Env {
   SUPPORT_EMAIL?: string;
   LICENCE_SIGNING_KEY?: string;   // secret: "<kid>.<base64url PKCS#8 Ed25519>" (scripts/licence-keygen.ts)
   KEY_PEPPER?: string;            // secret: 32+ random characters; HMAC for key, email and seal keys
+  ADMIN_GRANT_SECRET?: string;    // secret, optional: 32+ characters, one complimentary grant (src/admin.ts)
   RL_BUY?: RateLimit;
   RL_LICENCE?: RateLimit;
   RL_EMAIL?: RateLimit;

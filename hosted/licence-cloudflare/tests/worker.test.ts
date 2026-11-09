@@ -6,7 +6,7 @@ import { hmacHex, STRIPE_VERSION, verifyStripeSignature } from "../src/stripe";
 import { SUBSCRIPTION_GRACE } from "../src/env";
 import { b64url, decodeJws, signedMessage, unb64url } from "../src/cert";
 import { ALPHABET, checkChar, deriveKey, formatKey, parseKey } from "../src/keys";
-import { asSql, grant, MAX_DAYS } from "../scripts/grant";
+import { asSql, grant, MAX_DAYS } from "../src/grant";
 
 // Synthetic values only: no live key, no live endpoint is ever contacted.
 const WHSEC = "whsec_test_synthetic";
@@ -31,7 +31,13 @@ function fakeD1() {
     };
     return stmt;
   };
-  return { db, d1: { prepare } as unknown as D1Database };
+  // D1 batch = one transaction: all statements or none.
+  const batch = async (stmts: any[]) => {
+    db.exec("BEGIN");
+    try { const out = []; for (const st of stmts) out.push(await st.run()); db.exec("COMMIT"); return out; }
+    catch (e) { db.exec("ROLLBACK"); throw e; }
+  };
+  return { db, d1: { prepare, batch } as unknown as D1Database };
 }
 
 type Call = { url: string; method: string; headers: Record<string, string>; body: string };
@@ -976,5 +982,82 @@ describe("complimentary grants (scripts/grant.ts)", () => {
       await expect(grant(PEPPER, opts(bad), NOW)).rejects.toThrow();
     await expect(grant("short", opts(), NOW)).rejects.toThrow();
     expect(store.db.query("SELECT COUNT(*) AS n FROM licences_v2").get()).toEqual({ n: 0 });
+  });
+});
+
+describe("POST /admin/grant (signed, one grant per secret)", () => {
+  const ADMIN = "admin-secret-synthetic-0123456789abcdef";
+  const body = (over: any = {}) => JSON.stringify({ offer: "argus-desktop", email: "cofounder@example.com", seats: 3, days: 365,
+                                                    note: "cofounder", ...over });
+  const adminPost = async (raw: string, secret = ADMIN, t = NOW) =>
+    call("/admin/grant", { method: "POST", body: raw,
+                           headers: { "Content-Type": "application/json", "X-Admin-Signature": `t=${t},v1=${await hmacHex(secret, `${t}.${raw}`)}` } });
+  const count = () => (store.db.query("SELECT COUNT(*) AS n FROM licences_v2").get() as any).n;
+
+  test("off unless the secret is set: a plain 404", async () => {
+    expect((await adminPost(body())).status).toBe(404);
+    env.ADMIN_GRANT_SECRET = "short";
+    expect((await adminPost(body(), "short")).status).toBe(404);
+    expect(count()).toBe(0);
+  });
+
+  test("a signed request grants a working licence, once; the same secret is then spent", async () => {
+    env.ADMIN_GRANT_SECRET = ADMIN;
+    const raw = body();
+    const res = await adminPost(raw);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    const out = await res.json() as any;
+    expect(out.key.startsWith("ARGUS-DSK-")).toBe(true);
+    expect(out.ends).toBe(new Date((NOW + 365 * 86400) * 1000).toISOString().slice(0, 10));
+    expect((await (await device("laptop")).activate(out.key)).status).toBe(200);
+    // replay of the identical request inside the 5 minutes, and a fresh one with the same secret
+    expect((await adminPost(raw)).status).toBe(409);
+    expect((await (await adminPost(body({ email: "other@example.com" }))).json() as any).code).toBe("secret_used");
+    expect(count()).toBe(1);
+    expect(store.db.query("SELECT actor, action FROM audit WHERE licence_id = ?").get(out.licence_id))
+      .toEqual({ actor: "support", action: "granted (cofounder, 3 seat(s), 365 days)" });
+    // a new secret makes one more grant
+    env.ADMIN_GRANT_SECRET = ADMIN + "-rotated";
+    expect((await adminPost(body(), ADMIN + "-rotated")).status).toBe(200);
+    expect(count()).toBe(2);
+  });
+
+  test("wrong secret, stale or future time, edited body and missing header are refused and burn nothing", async () => {
+    env.ADMIN_GRANT_SECRET = ADMIN;
+    expect((await adminPost(body(), "not-the-admin-secret-0123456789abcdef")).status).toBe(401);
+    expect((await adminPost(body(), ADMIN, NOW - 301)).status).toBe(401);
+    expect((await adminPost(body(), ADMIN, NOW + 301)).status).toBe(401);
+    const t = NOW, raw = body();
+    const sig = `t=${t},v1=${await hmacHex(ADMIN, `${t}.${raw}`)}`;
+    expect((await call("/admin/grant", { method: "POST", body: body({ seats: 100 }), headers: { "X-Admin-Signature": sig } })).status).toBe(401);
+    expect((await call("/admin/grant", { method: "POST", body: raw })).status).toBe(401);
+    expect(count()).toBe(0);
+    expect((await adminPost(body())).status).toBe(200);          // the secret was never burnt
+  });
+
+  test("invalid grants are refused before the secret is burnt; nothing half-written", async () => {
+    env.ADMIN_GRANT_SECRET = ADMIN;
+    for (const bad of [{ days: 400 }, { seats: 0 }, { offer: "argus-gold" }, { note: "Real Name" }, { email: "x" }])
+      expect((await adminPost(body(bad))).status).toBe(400);
+    expect((await adminPost("{not json")).status).toBe(400);
+    expect((await adminPost("x".repeat(3000))).status).toBe(413);
+    expect(count()).toBe(0);
+    expect((await adminPost(body())).status).toBe(200);
+  });
+
+  test("no KEY_PEPPER on the Worker: refused, secret not burnt", async () => {
+    env.ADMIN_GRANT_SECRET = ADMIN;
+    env.KEY_PEPPER = undefined;
+    expect((await adminPost(body())).status).toBe(400);
+    env.KEY_PEPPER = PEPPER;
+    expect((await adminPost(body())).status).toBe(200);
+  });
+
+  test("a failed write rolls back the licence and its audit row together", async () => {
+    env.ADMIN_GRANT_SECRET = ADMIN;
+    store.db.exec("CREATE TRIGGER no_audit BEFORE INSERT ON audit BEGIN SELECT RAISE(ABORT, 'audit down'); END");
+    expect((await adminPost(body())).status).toBe(500);
+    expect(count()).toBe(0);
   });
 });

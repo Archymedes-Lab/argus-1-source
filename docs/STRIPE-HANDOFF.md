@@ -256,6 +256,17 @@ nothing). Run its SQL with `npx wrangler d1 execute argus-licence --remote --com
   `grant_…`). `/manage` and `/recover` work with the email given. Extend with the UPDATE it prints; to re-key a
   leaked grant, revoke it and grant again (`reissue` is for Checkout sessions). Tests: `tests/worker.test.ts`,
   "complimentary grants".
+- **Complimentary licence without `KEY_PEPPER`** (the pepper is write-only in Cloudflare): the Worker makes it.
+  One admin secret makes one grant; it signs the request and is never sent.
+  ```
+  cd hosted/licence-cloudflare
+  AGS=$(openssl rand -base64 48 | tr -d '\n')
+  printf %s "$AGS" | node node_modules/wrangler/bin/wrangler.js secret put ADMIN_GRANT_SECRET
+  ADMIN_GRANT_SECRET="$AGS" bun scripts/admin-grant.ts argus-desktop <email> 3 365 cofounder; unset AGS
+  node node_modules/wrangler/bin/wrangler.js secret delete ADMIN_GRANT_SECRET   # optional: route back to 404
+  ```
+  The secret is spent after one grant (a replay or second request gets 409); set a new one for the next grant.
+  A refused request (bad input, bad signature) burns nothing. Design and tests: `src/admin.ts`, `tests/worker.test.ts`.
 - Receipts and invoices come from Link (Stripe); buyers manage subscriptions at https://link.com or through
   "Billing and invoices" on `/manage`.
 - Logs never contain keys, emails or IPs (at most the last 4 characters of a key).

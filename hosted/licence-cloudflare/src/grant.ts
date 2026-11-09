@@ -1,5 +1,5 @@
 // Complimentary licences (cofounders, staff, reviewers): a licence with no Stripe payment behind it.
-// Used by scripts/support.ts `grant`; tested in tests/grant.test.ts.
+// Used by scripts/support.ts `grant` and the signed POST /admin/grant (src/admin.ts); tests/worker.test.ts.
 //
 // Invariants:
 // - Same storage rules as a bought licence: only HMAC hashes of the key and email are stored; the key is
@@ -10,8 +10,8 @@
 // - It always ends (lic_exp is set, at most MAX_DAYS away), so the retention purge and renewal rules
 //   apply exactly as for a bought licence. Extending it is an explicit, audited UPDATE.
 // - Every grant writes an audit row (actor `support`) naming who it is for, by role only.
-import { OFFERS } from "../src/env";
-import { deriveKey, emailHash, keyHash, randomId } from "../src/keys";
+import { OFFERS } from "./env";
+import { deriveKey, emailHash, keyHash, randomId } from "./keys";
 
 export const MAX_DAYS = 366;
 export const GRANT_ID = /^grant_[0-9A-Z]{20}$/;
