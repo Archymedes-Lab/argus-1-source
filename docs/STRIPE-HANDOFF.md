@@ -248,6 +248,14 @@ nothing). Run its SQL with `npx wrangler d1 execute argus-licence --remote --com
   revoked_at = unixepoch(), updated_at = unixepoch() WHERE id = 'lic_…'`. Renewals and content stop at once;
   the machine is no longer licensed when its lease ends (at most 30 days) or at its next renewal. Refunds and
   cancellations in Stripe do this automatically (`customer.subscription.deleted`).
+- **Complimentary licences** (cofounders, staff, reviewers; no Stripe):
+  `KEY_PEPPER=… bun scripts/support.ts grant argus-desktop <their email> <seats> <days ≤ 366> <role>`, e.g.
+  `… grant argus-desktop sonia@… 3 365 cofounder`. It prints the key once (hand it over in person or by a private
+  channel; it is not stored) and the SQL to run. The grant always has an end date and an audit row (actor
+  `support`, the role, never a name); no Stripe event, refund or thank-you page can reach it (its session id is
+  `grant_…`). `/manage` and `/recover` work with the email given. Extend with the UPDATE it prints; to re-key a
+  leaked grant, revoke it and grant again (`reissue` is for Checkout sessions). Tests: `tests/worker.test.ts`,
+  "complimentary grants".
 - Receipts and invoices come from Link (Stripe); buyers manage subscriptions at https://link.com or through
   "Billing and invoices" on `/manage`.
 - Logs never contain keys, emails or IPs (at most the last 4 characters of a key).

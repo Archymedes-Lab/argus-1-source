@@ -25,6 +25,66 @@ cd ~/jarvis
 jarvis investigate       # or a one-off report in the terminal
 ```
 
+## Cofounders: start here
+
+For a cofounder or contributor on their own computer (Windows 11 with WSL2, or Linux).
+The product is **ARGUS-INSTINCT**: its code lives here in
+[Archymedes-Lab/argus-1](https://github.com/Archymedes-Lab/argus-1) and its site in
+[Archymedes-Lab/argusinstinct](https://github.com/Archymedes-Lab/argusinstinct) (argusinstinct.xyz); the other
+repositories are listed in [CONTRIBUTING.md](CONTRIBUTING.md#where-we-work).
+How we work together (branches, reviews, agents, CI budget) is in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**1. Get the code and check your setup** (inside WSL on Windows):
+
+```bash
+git clone https://github.com/Archymedes-Lab/argus-1.git ~/jarvis && cd ~/jarvis
+git remote rename origin org
+scripts/dev/bootstrap.sh        # tools, GitHub access, releaser key, git hooks, then the fast tests
+```
+
+**2. Use it to protect your own computer.** Pick one:
+
+| You want | Do this |
+|---|---|
+| The product as customers get it | Install **Argus Desktop** from the site (Windows) and paste your licence key in **Licence**. Nothing from the checkout runs. |
+| JARVIS from the checkout, running 24/7 | `./quickstart.sh` (systemd service, dashboard at http://127.0.0.1:8787, one UAC prompt for Windows hardening; `--no-windows` to skip it). See [QUICKSTART.md](QUICKSTART.md). |
+| A one-off look, nothing installed | `python3 -m jarvis investigate` |
+
+**3. Activate your licence.** Your key (`ARGUS-DSK-…`) is a complimentary grant handed to you directly, never by email
+from the shop. In the desktop app: **Licence → paste → Activate**. From the checkout: `python3 -m jarvis licence activate ARGUS-DSK-…`,
+then `python3 -m jarvis licence status`. To move it to another computer: `licence deactivate` on the old one first.
+Detection never depends on the licence; it unlocks only the premium review report ([Licences and payments](#licences-and-payments-argus)).
+
+**4. Everyday commands**, once it is running:
+
+```bash
+jarvis coverage        # is JARVIS itself running, current and not blind? (check this first)
+jarvis investigate     # everything in one report
+jarvis spy             # mic/camera use, keyloggers, screen capture
+jarvis outstanding     # what was flagged and never resolved
+jarvis defend          # proposed containment actions: approve or undo
+jarvis ask "why is my CPU busy?"   # answers from current JARVIS data (local Ollama for open questions)
+```
+
+The full list is under [The commands](#the-commands). Phone alerts and approvals: choose **Pair a phone** in the dashboard
+or the desktop app ([ARGUS-NOTIFY.md](docs/architecture/ARGUS-NOTIFY.md)).
+
+**5. Develop.** Branch from `org/main` in its own worktree, one per agent or task:
+
+```bash
+git fetch org && git worktree add ~/.cache/wt/feat-x -b feat/x org/main && cd ~/.cache/wt/feat-x
+python3 scripts/dev/fasttest.py           # changed tests only, scratch HOME, seconds
+scripts/dev/static_gate.sh                # ruff, mypy, property and model checks
+git push -u org feat/x && gh pr create    # pre-push hook runs the quick gate first; CI runs everything
+```
+
+Ordinary code merges on green CI; workflows, `release/`, licensing and security docs need the other cofounder
+([CODEOWNERS](.github/CODEOWNERS)). Agents read [AGENTS.md](AGENTS.md): on your machine they must not run the
+owner-machine deploy steps it describes.
+
+**6. Release.** Any one listed releaser signs: push to `release-test/<name>`, wait for the green **Release build**, then
+`bash release/publish_dry_run.sh <run id>` on the machine holding your signing key ([Releasing](#releasing)).
+
 ## Releasing
 
 Releases are built by CI only, never on a laptop. The current method: push
