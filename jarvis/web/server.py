@@ -875,9 +875,19 @@ class Handler(BaseHTTPRequestHandler):
             # token once and keeps it as an HttpOnly, SameSite=Strict cookie.
             payload = self._json_body(1024)
             value = str((payload or {}).get("token") or "").strip()
+            code = str((payload or {}).get("code") or "").strip()
             store = Store(self.db_path)
             try:
-                cid = clients.verify(store, value)
+                if code and not value:
+                    # A one-time link minted by the desktop app: trade it for a
+                    # browser client, so nobody has to run a command.
+                    minted = clients.redeem_link(store, code)
+                    if not minted:
+                        return self._send(403, json.dumps({"error": "this link has expired; "
+                                                                    "open it again from the app"}))
+                    cid, value = minted
+                else:
+                    cid = clients.verify(store, value)
             finally:
                 store.close()
             if not cid:
@@ -894,6 +904,11 @@ class Handler(BaseHTTPRequestHandler):
                                                         "dashboard's own pages; send the token as a header"}))
         if not self._authorized():
             return self._send(403, json.dumps({"error": "missing or wrong API token"}))
+        if url.path == "/api/session/link":
+            # For the desktop app (it holds a paired client token): a two-minute,
+            # single-use code that opens a browser without typing a command.
+            return self._send(200, json.dumps({"code": clients.issue_link(),
+                                               "expires_in": clients.LINK_TTL_S}))
         if url.path in phone.ROUTES_POST:
             payload = self._json_body(4096) or {}
             store = Store(self.db_path)

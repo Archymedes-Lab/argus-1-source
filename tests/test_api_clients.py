@@ -42,7 +42,7 @@ ROUTES = {
     "/ui/": "page", "/ui/index.html": "page", "/classic": "page",
     "/geo": "page", "/pair": "page",
     "/api/health": "live", "/api/live": "live",
-    "/api/session": "session", "/api/veil/events": "veil",
+    "/api/session": "session", "/api/session/link": "token", "/api/veil/events": "veil",
     "/metrics": "token",
     **{p: "token" for p in LICENCE_POSTS},
     **{p: "token" for p in (
@@ -208,6 +208,42 @@ class PairedClientTests(_ServerBase):
         self.assertEqual(self.srv.request("POST", "/api/answer", {"id": "x", "choice": "yes"},
                                           {**jar, "Sec-Fetch-Site": "same-origin"})[0], 400)
         self.assertEqual(self.srv.request("POST", "/api/answer", {"id": "x", "choice": "yes"}, jar)[0], 403)
+
+    def _link(self):
+        status, _, body = self.srv.request(
+            "POST", "/api/session/link", {}, {api_token.HEADER: self.client})
+        self.assertEqual(status, 200)
+        return json.loads(body)["code"]
+
+    def test_the_app_opens_a_browser_with_a_one_time_code_and_no_typing(self):
+        # No credential, no code.
+        self.assertEqual(self.srv.request("POST", "/api/session/link", {})[0], 403)
+        code = self._link()
+        same = {"Sec-Fetch-Site": "same-origin"}
+        status, headers, body = self.srv.request("POST", "/api/session", {"code": code}, same)
+        self.assertEqual(status, 200)
+        cookie = headers["Set-Cookie"]
+        for flag in ("HttpOnly", "SameSite=Strict", "Max-Age="):
+            self.assertIn(flag, cookie)
+        minted = cookie.split(";")[0].split("=", 1)[1]
+        self.assertNotIn(minted.encode(), body)
+        jar = {"Cookie": f"{api_token.CLIENT_COOKIE}={minted}"}
+        self.assertEqual(self.srv.request("GET", "/api/defender", headers=jar)[0], 200)
+        # Single use: the same code is spent.
+        status, headers, _ = self.srv.request("POST", "/api/session", {"code": code}, same)
+        self.assertEqual(status, 403)
+        self.assertNotIn("Set-Cookie", headers)
+
+    def test_one_time_codes_expire_and_forged_or_cross_site_codes_fail(self):
+        same = {"Sec-Fetch-Site": "same-origin"}
+        code = self._link()
+        with mock.patch.object(clients.time, "time", return_value=time.time() + clients.LINK_TTL_S + 1):
+            self.assertEqual(self.srv.request("POST", "/api/session", {"code": code}, same)[0], 403)
+        for bad in ("A" * 43, "short", "x" * 100):
+            self.assertEqual(self.srv.request("POST", "/api/session", {"code": bad}, same)[0], 403)
+        fresh = self._link()
+        self.assertEqual(self.srv.request(
+            "POST", "/api/session", {"code": fresh}, {"Sec-Fetch-Site": "cross-site"})[0], 403)
 
     def test_the_session_route_refuses_bad_tokens_and_cross_site_calls(self):
         for body, extra in (({"token": "jc1_" + "0" * 12 + "_" + "A" * 43}, {}),

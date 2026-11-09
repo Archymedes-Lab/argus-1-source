@@ -484,11 +484,27 @@ pub fn page_path(page: &str) -> Option<&'static str> {
     }
 }
 
+/// The daemon's one-time link code: URL-safe base64, as `secrets.token_urlsafe(32)` makes.
+/// Checked before it is placed in an address.
+pub fn valid_link_code(c: &str) -> bool {
+    (32..=64).contains(&c.len()) && c.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 #[tauri::command]
 pub async fn open_page(page: String) -> Result<Value, String> {
     let path = page_path(&page).ok_or("unknown page")?;
-    let url = pulse::dashboard_url().trim_end_matches('/').to_string() + path;
+    let base = pulse::dashboard_url().trim_end_matches('/').to_string();
     blocking(move || {
+        // A one-time code, minted with the app's own credential, signs the browser in
+        // so a person never has to pair it by hand. If the daemon cannot mint one
+        // (an older build), the plain address still opens and shows how to connect.
+        let url = match post_json("/api/session/link", &json!({}), ACTION_TIMEOUT) {
+            Ok(v) => match v.get("code").and_then(Value::as_str) {
+                Some(code) if valid_link_code(code) => format!("{base}/pair?next={path}#code={code}"),
+                _ => format!("{base}{path}"),
+            },
+            Err(_) => format!("{base}{path}"),
+        };
         open_in_browser(&url).map_err(|e| format!("could not open the browser: {e}"))?;
         Ok(json!({ "ok": true }))
     })
@@ -800,6 +816,10 @@ b"));
 
     #[test]
     fn only_listed_daemon_pages_can_be_opened() {
+        assert!(valid_link_code(&"A".repeat(43)));
+        for bad in ["", "short", "has space and is long enough to pass the length check", &"A".repeat(65), "x#y&z/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] {
+            assert!(!valid_link_code(bad), "{bad}");
+        }
         assert_eq!(page_path("coverage"), Some("/coverage"));
         assert_eq!(page_path("classic"), Some("/classic"));
         for bad in ["", "/coverage", "coverage/../x", "https://evil.example", "geo?x=1", "COVERAGE"] {

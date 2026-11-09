@@ -17,6 +17,7 @@ import hashlib
 import json
 import re
 import secrets
+import threading
 import time
 
 META_KEY = "api_clients"
@@ -84,6 +85,59 @@ def revoke(store, cid, now=None):
             _save(store, records)
             return True
     return False
+
+
+# ---- one-time browser links ---------------------------------------------------
+#
+# The desktop app already holds a paired client token. To open Geo, World or
+# Processes in a browser without asking a person to run a command, the app asks
+# for a one-time link code (this needs its credential), puts it in the page
+# address after the "#" (never sent to any server or in a Referer), and the pair
+# page trades it for a browser client cookie. A code lives two minutes, works
+# once, and only SHA-256 digests are held, in memory (a restart voids them).
+
+LINK_TTL_S = 120
+LINK_MAX = 8
+LINK_CLIENT_NAME = "browser opened from the app"
+_LINK_RE = re.compile(r"^[A-Za-z0-9_-]{32,64}$")
+_links = {}                      # sha256(code) -> expiry
+_links_lock = threading.Lock()
+
+
+def issue_link(now=None):
+    """A fresh one-time code. At most LINK_MAX are outstanding; the oldest is dropped."""
+    now = time.time() if now is None else now
+    code = secrets.token_urlsafe(32)
+    with _links_lock:
+        for key in [k for k, exp in _links.items() if exp <= now]:
+            del _links[key]
+        while len(_links) >= LINK_MAX:
+            del _links[min(_links, key=_links.get)]
+        _links[_digest(code)] = now + LINK_TTL_S
+    return code
+
+
+def redeem_link(store, code, now=None):
+    """Spend a one-time code and mint a browser client. Returns (id, token) or None.
+
+    The code is consumed whether or not minting then succeeds, so it cannot be retried.
+    """
+    now = time.time() if now is None else now
+    if not isinstance(code, str) or not _LINK_RE.match(code):
+        return None
+    with _links_lock:
+        expiry = _links.pop(_digest(code), None)
+    if expiry is None or expiry <= now:
+        return None
+    records = _load(store)
+    active = [r for r in records if not r.get("revoked_at")]
+    if len(active) >= MAX_ACTIVE:
+        # Make room by retiring the oldest browser this path created; never anyone else's.
+        mine = [r for r in active if r.get("name") == LINK_CLIENT_NAME]
+        if not mine:
+            return None
+        revoke(store, min(mine, key=lambda r: r.get("created_at") or 0)["id"], now)
+    return pair(store, LINK_CLIENT_NAME, now)
 
 
 def verify(store, token):
