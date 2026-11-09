@@ -19,7 +19,7 @@ export interface Env {
   RL_EMAIL?: RateLimit;
 }
 
-export interface Deps { fetch: Fetch; now: () => number /* ms */ }
+export interface Deps { fetch: Fetch; now: () => number /* ms */; promoLookupMs?: number }
 
 export type Mode = "payment" | "subscription";
 export type Plan = "server" | "desktop";

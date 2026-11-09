@@ -541,5 +541,8 @@
  "Detection gaps": "Пробелы в обнаружении",
  "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "Техники из актуальной разведки угроз, которые ARGUS-INSTINCT пока не проверяет. Это о самом инструменте, а не об этом компьютере.",
  "Came back": "Вернулось",
- "Open for {age}": "Открыто {age}"
+ "Open for {age}": "Открыто {age}",
+ "Promo code (optional)": "Промокод (необязательно)",
+ "A promo code is up to 40 letters, digits, - or _.": "Промокод — до 40 латинских букв, цифр, - или _.",
+ "Prices shown are before any promo code. The code is checked at checkout, where you can also enter one.": "Цены указаны без учёта промокода. Код проверяется при оплате, где его также можно ввести."
 }

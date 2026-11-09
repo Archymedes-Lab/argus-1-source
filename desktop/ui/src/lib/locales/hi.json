@@ -541,5 +541,8 @@
  "Detection gaps": "पहचान में कमियाँ",
  "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "वर्तमान ख़तरा-सूचना में बताई गई तकनीकें जिन्हें ARGUS-INSTINCT अभी जाँचता नहीं है। ये टूल के बारे में हैं, इस कंप्यूटर के बारे में नहीं।",
  "Came back": "फिर से आया",
- "Open for {age}": "{age} से खुला"
+ "Open for {age}": "{age} से खुला",
+ "Promo code (optional)": "प्रोमो कोड (वैकल्पिक)",
+ "A promo code is up to 40 letters, digits, - or _.": "प्रोमो कोड में अधिकतम 40 अक्षर, अंक, - या _ होते हैं।",
+ "Prices shown are before any promo code. The code is checked at checkout, where you can also enter one.": "दिखाई गई कीमतें किसी भी प्रोमो कोड से पहले की हैं। कोड की जाँच चेकआउट पर होती है, जहाँ आप कोड दर्ज भी कर सकते हैं।"
 }

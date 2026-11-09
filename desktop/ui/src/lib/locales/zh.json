@@ -541,5 +541,8 @@
  "Detection gaps": "检测缺口",
  "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "当前威胁情报描述、但 ARGUS-INSTINCT 尚未检查的技术。这些关乎工具本身，而不是这台电脑。",
  "Came back": "再次出现",
- "Open for {age}": "已持续 {age}"
+ "Open for {age}": "已持续 {age}",
+ "Promo code (optional)": "优惠码（可选）",
+ "A promo code is up to 40 letters, digits, - or _.": "优惠码最多 40 个字符，可包含字母、数字、- 或 _。",
+ "Prices shown are before any promo code. The code is checked at checkout, where you can also enter one.": "显示的价格未计入任何优惠码。优惠码会在结账时验证，您也可以在结账页输入。"
 }

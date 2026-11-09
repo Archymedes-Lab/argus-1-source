@@ -3,7 +3,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { ROUTES } from "./api";
-import { PAY_ORIGIN, validLicencePage } from "./licence";
+import { buyPage, checkPromo, PAY_ORIGIN, PROMO, validLicencePage } from "./licence";
 
 const src = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const CLAIM = "clm_0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -50,4 +50,43 @@ test("the Pricing view buys through the claim flow at the price-book prices", ()
   expect(view).toContain('from "../lib/prices"');
   expect(view).not.toMatch(/\$\d/);            // no amount written outside prices.ts
   expect(view).not.toMatch(/billing(Status|Checkout|Confirm)/);
+});
+
+test("a promo code rides along to the daemon only when there is one", () => {
+  expect(ROUTES.licence_action({ action: "upgrade", plan: "desktop", promo: "LAUNCH20" }).body)
+    .toEqual({ key: "", plan: "desktop", promo: "LAUNCH20" });
+  expect("promo" in (ROUTES.licence_action({ action: "upgrade", plan: "desktop" }).body as object)).toBe(false);
+  expect("promo" in (ROUTES.licence_action({ action: "upgrade", plan: "desktop", promo: "" }).body as object)).toBe(false);
+});
+
+test("promo codes: shape check, and the checkout pages that may carry one", () => {
+  expect(checkPromo("")).toEqual({ state: "empty" });
+  expect(checkPromo("   ")).toEqual({ state: "empty" });
+  expect(checkPromo(" Launch_20-x ")).toEqual({ state: "ok", code: "Launch_20-x" });
+  expect(checkPromo("A".repeat(40)).state).toBe("ok");
+  for (const bad of ["A".repeat(41), "SAVE 20", "a&b", "a.b", "été", "<b>", "%41", "a?b", "a#b"]) expect(checkPromo(bad)).toEqual({ state: "bad" });
+  expect(PROMO.source).toBe("^[A-Za-z0-9_-]{1,40}$");
+  expect(buyPage("argus-server", checkPromo("FLEET10"))).toBe("buy/argus-server?promo=FLEET10");
+  expect(buyPage("argus-desktop", checkPromo(""))).toBe("buy/argus-desktop");
+  expect(buyPage("argus-desktop-monthly", checkPromo("bad code"))).toBe("buy/argus-desktop-monthly");
+  for (const ok of [`buy/argus-desktop?claim=${CLAIM}&promo=LAUNCH_20-x`, "buy/argus-server?promo=FLEET10",
+                    `buy/argus-desktop-monthly?claim=${CLAIM}&promo=${"A".repeat(40)}`]) {
+    expect(validLicencePage(`${PAY_ORIGIN}/${ok}`)).toBe(true);
+  }
+  for (const bad of [`buy/argus-desktop?claim=${CLAIM}&promo=`, `buy/argus-desktop?claim=${CLAIM}&promo=${"A".repeat(41)}`,
+                     `buy/argus-desktop?claim=${CLAIM}&promo=A&x=1`, `buy/argus-desktop?claim=${CLAIM}&promo=A%20B`,
+                     "buy/argus-desktop?promo=", "buy/argus-desktop?promo=A&claim=x", "manage?promo=A", "buy/argus-watch?promo=A",
+                     `buy/argus-desktop?promo=A&claim=${CLAIM}`, "buy/argus-desktop?promo=a&allow_promotion_codes=false"]) {
+    expect(validLicencePage(`${PAY_ORIGIN}/${bad}`)).toBe(false);
+  }
+});
+
+test("the Pricing view passes the promo code through the claim, and shows list prices only", () => {
+  const view = src("../views/Pricing.svelte");
+  expect(view).toContain("checkPromo(promoText)");
+  expect(view).toMatch(/api\.licenceAction\("upgrade", undefined, [^)]*promo\.state === "ok" \? promo\.code : undefined\)/s);
+  expect(view).toContain('tr("Promo code (optional)")');
+  // a malformed code stops before the daemon is asked
+  expect(view.indexOf('if (promo.state === "bad")')).toBeLessThan(view.indexOf('api.licenceAction("upgrade"'));
+  expect(view).not.toMatch(/discount|percent_off|amount_off/i);
 });

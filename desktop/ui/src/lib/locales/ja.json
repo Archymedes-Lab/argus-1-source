@@ -541,5 +541,8 @@
  "Detection gaps": "検知のすき間",
  "Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.": "現在の脅威インテリジェンスが記述しているが、ARGUS-INSTINCT がまだ確認していない手法です。これはツールについてであり、このコンピューターについてではありません。",
  "Came back": "再発",
- "Open for {age}": "{age} 未解決"
+ "Open for {age}": "{age} 未解決",
+ "Promo code (optional)": "プロモーションコード（任意）",
+ "A promo code is up to 40 letters, digits, - or _.": "プロモーションコードは英字・数字・- または _ で最大 40 文字です。",
+ "Prices shown are before any promo code. The code is checked at checkout, where you can also enter one.": "表示価格はプロモーションコード適用前の価格です。コードは決済時に確認され、決済ページで入力することもできます。"
 }

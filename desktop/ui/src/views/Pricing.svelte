@@ -9,6 +9,7 @@
   import { tr } from "../lib/i18n";
   import Segmented from "../components/Segmented.svelte";
   import { DESKTOP, FLEET_MAX, fleetCents, SERVER_TIERS, usd, yearlySavingCents } from "../lib/prices";
+  import { buyPage, checkPromo } from "../lib/licence";
 
   const PAY = "https://pay.archymedes.xyz";
   let st = $state<LicenceState | null>(null);
@@ -17,6 +18,10 @@
   let busy = $state(false);
   let waiting = $state(false);
   let problem = $state("");
+  // Optional promo code. Prices on this page stay the list prices; the licence service checks the
+  // code at Stripe when checkout opens and says there if it was not applied.
+  let promoText = $state("");
+  const promo = $derived(checkPromo(promoText));
   let timer: ReturnType<typeof setInterval> | null = null;
 
   onMount(async () => { try { st = await api.licence(); if (st.purchase_waiting) poll(); } catch { st = null; } });
@@ -29,9 +34,11 @@
   const until = $derived(st?.expires_at ? new Date(st.expires_at * 1000).toLocaleDateString(app.lang) : "");
 
   async function buyHere() {
+    if (promo.state === "bad") { problem = tr("A promo code is up to 40 letters, digits, - or _."); return; }
     busy = true; problem = "";
     try {
-      const r = await api.licenceAction("upgrade", undefined, yearly ? "desktop" : "desktop-monthly");
+      const r = await api.licenceAction("upgrade", undefined, yearly ? "desktop" : "desktop-monthly",
+                                        promo.state === "ok" ? promo.code : undefined);
       if (!r.ok || !r.open) { problem = r.error ?? tr("Checkout could not be opened."); return; }
       await api.openLicencePage(r.open);
       poll();
@@ -49,6 +56,7 @@
     }, 5000);
   }
   async function website(path: string) {
+    if (promo.state === "bad") { toast(tr("A promo code is up to 40 letters, digits, - or _."), "bad"); return; }
     try { await api.openLicencePage(`${PAY}/${path}`); } catch (e) { toast(String((e as Error).message ?? e), "bad"); }
   }
 </script>
@@ -88,7 +96,7 @@
       </div>
       <p class="mt-4 text-copy-13 text-gray-900">
         {tr("For a team of up to {n} computers, buy on the website.", { n: DESKTOP.teamMax })}
-        <button class="link" onclick={() => website(yearly ? "buy/argus-desktop" : "buy/argus-desktop-monthly")}>{tr("Buy on the website")}</button>
+        <button class="link" onclick={() => website(buyPage(yearly ? "argus-desktop" : "argus-desktop-monthly", promo))}>{tr("Buy on the website")}</button>
       </p>
     </section>
 
@@ -110,11 +118,24 @@
         <span class="ml-auto text-label-14 tabular">{fleet === null ? "—" : tr("{total} a year", { total: fmt(fleet) })}</span>
       </label>
       <div class="mt-5">
-        <button class="btn h-10 px-5" onclick={() => website("buy/argus-server")}>{tr("Buy on the website")}</button>
+        <button class="btn h-10 px-5" onclick={() => website(buyPage("argus-server", promo))}>{tr("Buy on the website")}</button>
         <p class="mt-2 text-copy-13 text-gray-900">{tr("The key arrives by email.")}</p>
       </div>
     </section>
   </div>
 
-  <p class="border-t border-gray-300 pt-4 text-copy-13 text-gray-900">{tr("Payment by Stripe. Card details never reach ARGUS-INSTINCT.")}</p>
+  <div class="flex flex-col gap-1 border-t border-gray-300 pt-4">
+    <label class="flex flex-wrap items-center gap-3 text-copy-13">
+      <span class="text-gray-900">{tr("Promo code (optional)")}</span>
+      <input class="input w-56" type="text" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false"
+             bind:value={promoText} aria-invalid={promo.state === "bad"} />
+    </label>
+    {#if promo.state === "bad"}
+      <p class="text-copy-13 text-red-900" role="alert">{tr("A promo code is up to 40 letters, digits, - or _.")}</p>
+    {:else}
+      <p class="text-copy-13 text-gray-900">{tr("Prices shown are before any promo code. The code is checked at checkout, where you can also enter one.")}</p>
+    {/if}
+  </div>
+
+  <p class="text-copy-13 text-gray-900">{tr("Payment by Stripe. Card details never reach ARGUS-INSTINCT.")}</p>
 </div>

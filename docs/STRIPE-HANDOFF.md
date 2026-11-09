@@ -16,8 +16,11 @@ version: **`2026-10-28.endive`** (`src/stripe.ts`); Managed Payments needs
 3. Configure the customer billing portal (Settings → Billing → Customer portal) so
    `POST /licence/portal` can open it.
 4. Create a **restricted key** (`rk_live_…`) with: `checkout_session_write`,
-   `checkout_session_read`, `plan_read` (prices), `subscription_read`, `customer_portal_write`.
+   `checkout_session_read`, `plan_read` (prices), `subscription_read`, `customer_portal_write`,
+   `promotion_code_read` (Dashboard: **Promotion codes: Read**; for `?promo=` links, section 7).
    That is every Stripe call the Worker makes (archymedes-gtm `docs/stripe-restricted-keys.md`).
+   Without `promotion_code_read` a prefilled code is never applied (the buyer can still type it on
+   the Stripe page); nothing else breaks.
 
 ## 1. D1 database (and migration)
 
@@ -148,6 +151,77 @@ of the Worker's secrets alone. Each licence row records the paying Checkout Sess
 5. Confirm the revocation: the same D1 query shows `status = revoked`; on the computer, `argus licence refresh`
    reports the subscription ended; protection keeps running exactly as before
    (`tests/test_licence_never_gates_core.py`). Stripe's fee on the refunded charge is not returned.
+
+## 7. Promotion codes (discounts)
+
+Discounts are made in the Stripe Dashboard only. The Worker holds no amounts, percentages or rules:
+it shows Stripe's "Add promotion code" box on every Checkout Session (`allow_promotion_codes`), and
+it can prefill one code from a link. The prices shown in the app, the dashboard and on the website
+stay the list prices; Stripe shows the discounted total on its payment page.
+
+**Where a code can come from**
+
+- The buyer types it on the Stripe payment page (always possible).
+- A marketing link: `https://pay.archymedes.xyz/buy/argus-desktop?promo=LAUNCH20` (also
+  `argus-desktop-monthly`, `argus-server`; combine with `&computers=N` / `&servers=N`, `&ref=`,
+  `&utm_…` as before).
+- The **Promo code (optional)** field on Pricing in the desktop app and the classic dashboard. It rides
+  on the in-app claim link (`/buy/<offer>?claim=clm_…&promo=CODE`) and on the "Buy on the website"
+  buttons. The daemon refuses a malformed code (`bad_promo`) before opening a claim.
+
+A prefilled code must be 1-40 characters of `A-Z a-z 0-9 - _` (Stripe itself allows more; codes
+outside this set still work when typed on the Stripe page). The Worker looks it up with
+`GET /v1/promotion_codes?code=…&active=true&limit=1`. If it is active, not expired and not used up,
+the session gets `discounts[0][promotion_code]` instead of the box (Stripe refuses both together). In
+every other case (malformed, unknown, inactive, expired, used up, lookup failed, or Stripe refuses it
+for this price or customer when the session is created, after which the Worker retries once without
+it) the buyer sees a short page "Your promo code was not applied" with **Continue to payment** to an
+ordinary session where a code can be typed. A code never fails a purchase, and the code itself is
+never logged, stored, put into Stripe metadata or echoed back on a page.
+
+**Create one (live mode)**
+
+1. Stripe Dashboard, **live** mode (the "Test mode" toggle off) → Product catalog → **Coupons** →
+   **+ Create coupon**.
+2. Type: **Percentage discount** or **Fixed amount discount** (fixed amounts: currency USD).
+3. Duration, for these subscriptions: **Once** = the first invoice only (the first month of
+   `argus-desktop-monthly`, the first year of `argus-desktop` and `argus-server`); **Multiple
+   months** = every invoice in that many months; **Forever** = every renewal (rarely what you want).
+4. **Apply to specific products**: pick Argus Desktop and/or Argus Server, so a desktop code cannot
+   discount a server fleet. Without it the coupon applies to every product on the account,
+   **including Orion's** (same Stripe account).
+5. Coupon limits (optional): **Limit the date range when customers can redeem this coupon**, and
+   **Limit the total number of times this coupon can be redeemed**.
+6. Under **Codes**, tick **Use customer-facing coupon codes**, enter the code (e.g. `LAUNCH20`;
+   stick to `A-Z 0-9 - _` and at most 40 characters so links work) and choose its restrictions:
+   - **Eligible for first-time order only**: only a customer with no previous payment.
+   - **Limit to a specific customer**: a one-off code for one buyer (needs the customer to exist).
+   - **Limit number of times this code can be redeemed** (max redemptions).
+   - **Add an expiration date**.
+   - **Require minimum order value** (careful with fleet quantities; a refused code just falls back).
+7. Save. Codes are case-insensitive for buyers. To stop a code: Coupons → the coupon → the code →
+   **Archive** / deactivate. Subscriptions that already used it keep the discount for the coupon's
+   duration; deleting the coupon does not change past invoices.
+
+**Test it** (test mode first, as in section 5; nothing here was run against Stripe):
+
+1. Create a test-mode coupon (e.g. 20% off, Once, Argus Desktop only) with code `TEST20`, and a second
+   code `OLD20` that you then deactivate.
+2. `…/buy/argus-desktop-monthly?promo=TEST20` → Stripe shows the 20% discount and no code box.
+3. `…/buy/argus-desktop-monthly?promo=OLD20`, `?promo=NOPE` and `?promo=bad%20code` → the "not applied"
+   page → Continue → the ordinary page with "Add promotion code"; typing `TEST20` there works.
+4. `…/buy/argus-server?promo=TEST20` (a desktop-only coupon) → Stripe refuses the discount for that
+   price, the Worker retries without it → the "not applied" page, then the ordinary checkout.
+5. Desktop app → Pricing → Promo code `TEST20` → **Buy for this computer** → the discount on the Stripe
+   page; pay with `4242 4242 4242 4242`; the computer activates as usual.
+6. **Managed Payments**: confirm that a prefilled discount is accepted with `managed_payments[enabled]`.
+   If Stripe refuses it, buyers still get the ordinary checkout (step 4's fallback), but say so here.
+7. After a paid discounted purchase, the audit trail has Stripe's promotion code id and the amount off
+   (minor units), never the code: `npx wrangler d1 execute argus-licence --remote --command "SELECT
+   datetime(at,'unixepoch'), licence_id, action FROM audit WHERE action LIKE 'discount %' ORDER BY at DESC
+   LIMIT 10"` → e.g. `discount promo_1Qx… 300 usd`. It is an audit row, not a licence column: a column needs an
+   `ALTER TABLE` on the live D1 that would have to land before the Worker, or issuing licences fails.
+   Stripe's own records (the session's `discounts`, the invoice) remain the authority.
 
 ## Support runbooks
 

@@ -2619,7 +2619,16 @@ function licencePageOk(url) {
   if (typeof url !== "string" || !url.startsWith(PAY_ORIGIN + "/")) return false;
   const rest = url.slice(PAY_ORIGIN.length + 1);
   return ["manage", "recover", "buy/argus-server", "buy/argus-desktop", "buy/argus-desktop-monthly"].includes(rest)
-    || /^buy\/argus-(server|desktop|desktop-monthly)\?claim=clm_[0-9A-Z]{32}$/.test(rest);
+    || /^buy\/argus-(server|desktop|desktop-monthly)\?claim=clm_[0-9A-Z]{32}(&promo=[A-Za-z0-9_-]{1,40})?$/.test(rest)
+    || /^buy\/argus-(server|desktop|desktop-monthly)\?promo=[A-Za-z0-9_-]{1,40}$/.test(rest);
+}
+// Optional promo code (the same pattern as jarvis/web/licenceapi.py PROMO). Discounts live in Stripe;
+// the licence service checks the code when checkout opens and says there if it was not applied.
+const PROMO = /^[A-Za-z0-9_-]{1,40}$/;
+const BAD_PROMO = "A promo code is up to 40 letters, digits, - or _.";
+function promoCode() {
+  const el = $("lic-promo"), code = el ? el.value.trim() : "";
+  return code === "" ? "" : PROMO.test(code) ? code : null;    // null: malformed
 }
 async function loadLicence() {
   try {
@@ -2653,9 +2662,11 @@ function waitForPayment() {
   }, 5000);
 }
 async function subscribe(plan) {
-  const msg = $("lic-msg"); msg.textContent = "Opening secure checkout…";
+  const msg = $("lic-msg"), promo = promoCode();
+  if (promo === null) { msg.textContent = BAD_PROMO; return; }
+  msg.textContent = "Opening secure checkout…";
   try {
-    const r = await postJSON("/api/licence/upgrade", { plan: plan === "month" ? "desktop-monthly" : "desktop" });
+    const r = await postJSON("/api/licence/upgrade", { plan: plan === "month" ? "desktop-monthly" : "desktop", ...(promo ? { promo } : {}) });
     const link = r.ok && r.data && r.data.ok ? r.data.open : "";
     if (!licencePageOk(link)) { msg.textContent = (r.data && r.data.error) || "Could not start checkout."; return; }
     window.open(link, "_blank", "noopener");
@@ -2755,7 +2766,12 @@ const UI_CALLS = {
   protocol: el => answerProtocol(el),
   go: el => go(el.dataset.arg),
   subscribe: el => subscribe(el.dataset.arg),
-  licpage: el => { const u = PAY_ORIGIN + "/" + el.dataset.arg; if (licencePageOk(u)) window.open(u, "_blank", "noopener"); },
+  licpage: el => {
+    const promo = el.dataset.arg.startsWith("buy/") ? promoCode() : "";
+    if (promo === null) { toast(BAD_PROMO, "warn"); return; }
+    const u = PAY_ORIGIN + "/" + el.dataset.arg + (promo ? "?promo=" + promo : "");
+    if (licencePageOk(u)) window.open(u, "_blank", "noopener");
+  },
 };
 function uiDispatch(attr, ev) {
   // Every matching ancestor, innermost first: the order inline handlers ran in.

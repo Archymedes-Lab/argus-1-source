@@ -47,13 +47,31 @@ export const PRODUCT = { server: "Argus Server", desktop: "Argus Desktop" } as c
 /** The licence service: the only place a purchase is made (hosted/licence-cloudflare). */
 export const PAY_ORIGIN = "https://pay.archymedes.xyz";
 const PAGES = new Set(["manage", "recover", "buy/argus-server", "buy/argus-desktop", "buy/argus-desktop-monthly"]);
-const CLAIM = /^buy\/argus-(server|desktop|desktop-monthly)\?claim=clm_[0-9A-Z]{32}$/;
+const CLAIM = /^buy\/argus-(server|desktop|desktop-monthly)\?claim=clm_[0-9A-Z]{32}(&promo=[A-Za-z0-9_-]{1,40})?$/;
+const BUY_PROMO = /^buy\/argus-(server|desktop|desktop-monthly)\?promo=[A-Za-z0-9_-]{1,40}$/;
 
 /** The pages the interface may open, in the app and in a browser alike. The same list as
  *  `valid_licence_page` in desktop/src/api.rs: the licence pages, or a checkout carrying the
- *  claim id this computer opened. No other address, and never a seller's own checkout. */
+ *  claim id this computer opened, either one with an optional promo code. No other address,
+ *  and never a seller's own checkout. */
 export function validLicencePage(url: string): boolean {
   if (typeof url !== "string" || !url.startsWith(PAY_ORIGIN + "/")) return false;
   const rest = url.slice(PAY_ORIGIN.length + 1);
-  return PAGES.has(rest) || CLAIM.test(rest);
+  return PAGES.has(rest) || CLAIM.test(rest) || BUY_PROMO.test(rest);
+}
+
+/** An optional promo code: the same pattern as the daemon (jarvis/web/licenceapi.py PROMO) and the
+ *  licence service (hosted/licence-cloudflare PROMO). Codes and discounts live in Stripe; the code is
+ *  only checked here for shape, and the licence service checks it at Stripe when checkout opens. */
+export const PROMO = /^[A-Za-z0-9_-]{1,40}$/;
+export type PromoCheck = { state: "empty" } | { state: "ok"; code: string } | { state: "bad" };
+export function checkPromo(input: string): PromoCheck {
+  const code = (input ?? "").trim();
+  if (!code) return { state: "empty" };
+  return PROMO.test(code) ? { state: "ok", code } : { state: "bad" };
+}
+
+/** A website checkout page, with the promo code when there is a valid one. */
+export function buyPage(offer: "argus-server" | "argus-desktop" | "argus-desktop-monthly", promo: PromoCheck): string {
+  return promo.state === "ok" ? `buy/${offer}?promo=${promo.code}` : `buy/${offer}`;
 }

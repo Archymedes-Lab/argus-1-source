@@ -481,6 +481,42 @@ class DaemonApi(Base):
     def test_unknown_action_is_404(self):
         self.assertEqual(self.api.action(self.db, '../x', {})[0], 404)
 
+    def test_a_promo_code_is_passed_to_the_checkout_link_and_nowhere_else(self):
+        for plan, offer in (('desktop', 'argus-desktop'), ('desktop-monthly', 'argus-desktop-monthly')):
+            with self.subTest(plan=plan):
+                code, body = self.api.action(self.db, 'upgrade', {'plan': plan, 'promo': '  Launch_20-x  '})
+                self.assertEqual(code, 200)
+                self.assertTrue(body['ok'], body)
+                self.assertRegex(body['open'], rf'^https://pay\.archymedes\.xyz/buy/{offer}\?claim=clm_[0-9A-Z]{{32}}'
+                                               r'&promo=Launch_20-x$')
+                self.assertTrue(body['promo_sent'])
+        # never sent to the licence service with the claim, never written to the licence file
+        self.assertTrue(any(u.endswith('/licence/claim') for u, _m, _h, _b in self.svc.requests))
+        self.assertNotIn('Launch_20', json.dumps([(u, b) for u, _m, _h, b in self.svc.requests]))
+        with open(self.path) as fh:
+            self.assertNotIn('Launch_20', fh.read())
+
+    def test_no_or_empty_promo_keeps_the_plain_claim_link(self):
+        for payload in ({'plan': 'desktop'}, {'plan': 'desktop', 'promo': ''}, {'plan': 'desktop', 'promo': '   '},
+                        {'plan': 'desktop', 'promo': None}):
+            with self.subTest(payload=payload):
+                body = self.api.action(self.db, 'upgrade', payload)[1]
+                self.assertRegex(body['open'], r'^https://pay\.archymedes\.xyz/buy/argus-desktop\?claim=clm_[0-9A-Z]{32}$')
+                self.assertFalse(body['promo_sent'])
+
+    def test_a_malformed_promo_is_refused_before_any_network_call(self):
+        bad = ['A' * 41, 'SAVE 20', 'x&allow_promotion_codes=false', 'a/b', '<b>', 'ÉTÉ20', 'a.b', '%41', 20, ['X'], {'c': 'X'}]
+        for promo in bad:
+            with self.subTest(promo=promo):
+                before = len(self.svc.requests)
+                code, body = self.api.action(self.db, 'upgrade', {'plan': 'desktop', 'promo': promo})
+                self.assertEqual((code, body['ok'], body['code']), (200, False, 'bad_promo'))
+                self.assertNotIn('open', body)
+                self.assertEqual(len(self.svc.requests), before)          # no claim opened
+                if isinstance(promo, str):
+                    self.assertNotIn(promo, body['error'])
+        self.assertFalse(os.path.exists(self.path))                         # nothing pending
+
 
 class ReviewPreview(Base):
     def setUp(self):
