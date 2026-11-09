@@ -9,6 +9,7 @@
 // - Customer machines call /licence/* with the key or a device signature: no secret leaves this worker.
 // - Keys, emails, machine ids and IPs are never stored or logged (D1 holds HMACs; see schema.sql).
 // - Certificates are Ed25519 JWS (src/cert.ts); the app verifies them offline with embedded public keys.
+import { adminGrant } from "./admin";
 import { purgeEnded } from "./retention";
 import { contentRoute, issue, keyEmail, keyOf, bindClaim, CLAIM_ID, licenceRoute, type Claim } from "./licence";
 import { manage, manageHome, recover, link, thanks } from "./manage";
@@ -109,10 +110,10 @@ export function checkoutForm(env: Env, offerId: string, offer: Offer, price: str
 // price, or a failed lookup all give the ordinary session where the buyer can type a code, plus a notice that
 // it was not applied. The raw code is sent to Stripe's lookup only, and never logged, stored or put in a page.
 // ---------------------------------------------------------------------------------------------
-export const PROMO = /^[A-Za-z0-9_-]{1,40}$/;
+const PROMO = /^[A-Za-z0-9_-]{1,40}$/;
 const PROMO_ID = /^promo_[A-Za-z0-9]{1,255}$/;
 /** A slow lookup must not hold up checkout: past this, the code counts as not applied. */
-export const PROMO_LOOKUP_MS = 4000;
+const PROMO_LOOKUP_MS = 4000;
 
 /** asked: the link carried a promo; id: the active Stripe promotion code it names, or null. At most one Stripe call. */
 export async function promotion(env: Env, deps: Deps, url: URL): Promise<{ asked: boolean; id: string | null }> {
@@ -359,6 +360,7 @@ export async function handle(req: Request, env: Env, deps: Deps): Promise<Respon
       if (req.method === "GET") return await sessionStatus(env, deps, decodeURIComponent(m[1]));
     }
     if (p === "/stripe/webhook" && req.method === "POST") return await webhook(req, env, deps);
+    if (p === "/admin/grant" && req.method === "POST") return await adminGrant(req, env, deps);
     // Machine-facing JSON API. No CORS headers: no browser page needs to call it.
     m = p.match(/^\/licence\/(activate|renew|release|claim|claim\/poll|portal)$/);
     if (m && req.method === "POST") return await licenceRoute(req, env, deps, m[1] === "claim/poll" ? "poll" : m[1]);
