@@ -64,6 +64,13 @@ def build(tree, platform, version):
     env = {**os.environ, "RUSTFLAGS": remap_flags(src), "ARGUS_RELEASE": version,
            "CARGO_PROFILE_RELEASE_DEBUG": "0", "CARGO_PROFILE_RELEASE_STRIP": "symbols"}
     run(["cargo", "build", "--release", "--locked", "--features", "custom-protocol"], src, env)
+    if platform == "windows":
+        # Run on the disposable Windows builder, using the exported source and
+        # the same release flags. A failed or blocked harness must stop before
+        # the executable is copied or its build receipt is written. No changes
+        # to the protected user's Defender policy are needed.
+        run(["cargo", "test", "--release", "--locked", "--features", "custom-protocol",
+             "--", "--test-threads=2"], src, env)
     # CARGO_TARGET_DIR (CI: a cached folder) keeps compiled dependencies between
     # dry runs; cargo rebuilds whatever its fingerprints say changed.
     target = Path(os.environ.get("CARGO_TARGET_DIR") or src / "target")

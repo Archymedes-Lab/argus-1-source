@@ -46,11 +46,13 @@ Watch its **Release build** run to completion. All builds, install tests,
 regression checks, assembly and content gates must pass. Review the manifest
 commit, change report and remaining validation gaps before signing.
 
-For a release touching `desktop/`, run the browser and native Windows app
-checks in [RELEASING.md](RELEASING.md). The owner's rebuilt native Windows
-test executable was blocked by Defender's prevalence rule in the prior
-session. That is an unrun check, not a pass. Run it on an allowed test machine;
-do not disable the rule to obtain a pass.
+For a release touching `desktop/`, run the browser check in
+[RELEASING.md](RELEASING.md) and require a passed native Windows harness in
+the release builder or its opt-in `test/windows-native/*` CI job. The owner's
+local test executable was blocked by Defender's prevalence rule in the prior
+session; that local attempt remains unrun. The disposable CI runner provides
+the native execution evidence without changing the owner's policy. Check the
+harness output, test count and final job result, not only compilation.
 
 The current preparation stops before signing. Once the release is ready and
 you are ready to publish, the final interactive step is your own key passphrase:
