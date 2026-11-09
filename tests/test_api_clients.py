@@ -109,11 +109,16 @@ class ClientRegistryTests(unittest.TestCase):
         self.assertEqual(clients.listing(self.store)[0]["id"], cid)  # kept as audit
 
     def test_only_a_digest_is_stored(self):
-        _, token = clients.pair(self.store, "cli")
-        raw = self.store.get_meta(clients.META_KEY)
-        self.assertNotIn(token, raw)
-        self.assertNotIn(token.split("_")[-1], raw)
-        self.assertNotIn("sha256", json.dumps(clients.listing(self.store)))
+        # URL-safe secrets may contain underscores, including near the end.
+        # Check the entire secret, rather than a possibly one-character suffix.
+        for secret in ("A" * 43, "A" * 41 + "_s", "_" * 43):
+            with self.subTest(secret=secret), \
+                    mock.patch.object(clients.secrets, "token_urlsafe", return_value=secret):
+                _, token = clients.pair(self.store, "cli")
+                raw = self.store.get_meta(clients.META_KEY)
+                self.assertNotIn(token, raw)
+                self.assertNotIn(token.split("_", 2)[2], raw)
+                self.assertNotIn("sha256", json.dumps(clients.listing(self.store)))
 
     def test_forged_malformed_and_unknown_tokens_are_refused(self):
         cid, token = clients.pair(self.store, "desktop")
