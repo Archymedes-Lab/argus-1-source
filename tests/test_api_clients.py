@@ -112,7 +112,12 @@ class ClientRegistryTests(unittest.TestCase):
         _, token = clients.pair(self.store, "cli")
         raw = self.store.get_meta(clients.META_KEY)
         self.assertNotIn(token, raw)
-        self.assertNotIn(token.split("_")[-1], raw)
+        # The whole 43-character secret, never a fragment: the secret is URL-safe
+        # base64 and may itself contain "_", so splitting on "_" could yield one
+        # letter that any JSON contains (failed main CI 42643800439, ~0.7% of runs).
+        secret = clients._TOKEN_RE.match(token).group(2)
+        self.assertEqual(len(secret), 43)
+        self.assertNotIn(secret, raw)
         self.assertNotIn("sha256", json.dumps(clients.listing(self.store)))
 
     def test_forged_malformed_and_unknown_tokens_are_refused(self):
