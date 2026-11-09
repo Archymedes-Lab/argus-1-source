@@ -27,21 +27,26 @@
 </head>
 <body>
 <main>
-  <h1>Pair this browser with ARGUS-INSTINCT</h1>
-  <p>ARGUS-INSTINCT could not confirm which account this browser runs under, so it will not
-    show your security data until you pair it. On the machine running ARGUS-INSTINCT, run
-    <code>jarvis desktop pair --name browser</code> (if ARGUS-INSTINCT runs under its own account:
-    <code>sudo jarvis-svc desktop pair --name browser</code>) and paste the token it prints.</p>
-  <p>The token is kept by this browser as a cookie that page scripts cannot read. You
-    can list and revoke paired clients with <code>jarvis desktop clients</code> and
-    <code>jarvis desktop revoke ID</code>.</p>
-  <form id="pair" autocomplete="off">
-    <label for="token">Client token</label>
-    <input id="token" name="token" type="password" spellcheck="false" required
-           pattern="jc1_[0-9a-f]{12}_[A-Za-z0-9_\-]{43}" placeholder="jc1_…">
-    <button type="submit">Pair</button>
-  </form>
+  <h1>Open this from the ARGUS-INSTINCT app</h1>
+  <p>Your licence is fine. To keep other programs on this computer from reading your security
+    data, this page opens only from the ARGUS-INSTINCT app. Go back to the app and click
+    <strong>Geo</strong>, <strong>World</strong>, <strong>Processes</strong> or
+    <strong>Coverage</strong> again. It connects this browser by itself, with nothing to type.</p>
   <div id="result" role="status" aria-live="polite"></div>
+  <details id="manual">
+    <summary>Advanced: connect with a code instead</summary>
+    <p>On the computer running ARGUS-INSTINCT run <code>jarvis desktop pair --name browser</code>
+      (if it runs under its own account: <code>sudo jarvis-svc desktop pair --name browser</code>)
+      and paste the code it prints. The code is kept by this browser as a cookie that page scripts
+      cannot read. List or revoke connected browsers with <code>jarvis desktop clients</code> and
+      <code>jarvis desktop revoke ID</code>.</p>
+    <form id="pair" autocomplete="off">
+      <label for="token">Client token</label>
+      <input id="token" name="token" type="password" spellcheck="false" required
+             pattern="jc1_[0-9a-f]{12}_[A-Za-z0-9_\-]{43}" placeholder="jc1_…">
+      <button type="submit">Pair</button>
+    </form>
+  </details>
 </main>
 <script src="/static/pair.js"></script>
 </body>
