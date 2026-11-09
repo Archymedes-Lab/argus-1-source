@@ -41,6 +41,16 @@ Ask narrow typed questions about the actual tradeoffs and validation gaps; treat
 uncertainty explicitly. Jev cannot select an unsafe design, replace invariant
 tests or runtime measurement, authorize a protected action, or overrule the human.
 
+## Which machine
+
+JARVIS has two cofounders, each with their own computer (CONTRIBUTING.md). The live
+deployment, sealed releases under `/opt/jarvis`, Windows tasks and owner decisions
+below describe the owner's machine (chrisnkuno). On any other machine, an agent works
+in a checkout or worktree, runs tests with a scratch HOME (`scripts/dev/fasttest.py`),
+and does not deploy, install the broker, register Windows tasks, run `wsl --shutdown`
+or apply Windows hardening unless that machine's own user asks for it in this session.
+A rule that names a person's decision binds that person's machine only.
+
 ## Live verification outside the sandbox
 
 Use the permitted host execution path for JARVIS checks that require the real

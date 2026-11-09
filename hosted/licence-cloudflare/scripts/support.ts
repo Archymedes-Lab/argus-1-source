@@ -6,6 +6,8 @@
 //   KEY_PEPPER=… bun scripts/support.ts email someone@x.com     find licences for a purchase email
 //   KEY_PEPPER=… bun scripts/support.ts reissue <cs_…> <current key_gen> <server|desktop>
 //                                                              a new key for a leaked one (the old key stops working)
+//   KEY_PEPPER=… bun scripts/support.ts grant argus-desktop someone@x.com [seats] [days] [role]
+//                                                              a complimentary licence, no Stripe (scripts/grant.ts)
 import { deriveKey, emailHash, keyHash, parseKey } from "../src/keys";
 
 const pepper = process.env.KEY_PEPPER || "";
@@ -29,6 +31,16 @@ if (cmd === "key") {
   console.log(`UPDATE licences_v2 SET key_gen = ${gen}, key_hash = ${q(await keyHash(pepper, key))}, key_last4 = ${q(key.slice(-4))}, ` +
               `emailed_at = NULL WHERE session_id = ${q(a)} AND key_gen = ${gen - 1};`);
   console.log("Machines already activated keep working (they renew with their device key, not the key). If the key leaked, release the strangers' machines too: UPDATE activations_v2 SET released_at = unixepoch(), released_by = 'support' WHERE licence_id = 'lic_…' AND id <> 'act_… (the owner's)';");
+} else if (cmd === "grant") {
+  // grant <offer> <email> [seats] [days] [note]   e.g. grant argus-desktop someone@x.com 3 365 cofounder
+  const { grant, asSql } = await import("./grant");
+  const g = await grant(pepper, { offer: a, email: b || "", seats: Number(c ?? 1), days: Number(process.argv[6] ?? 365),
+                                  note: process.argv[7] ?? "complimentary", livemode: true }, Math.floor(Date.now() / 1000));
+  console.log(`key (hand it over in person or by a private channel; it is not stored): ${g.key}`);
+  console.log(`licence ${g.licenceId}, ends ${new Date(g.licExp * 1000).toISOString().slice(0, 10)}`);
+  console.log(asSql(g.statements));
+  console.log(`Extend later: UPDATE licences_v2 SET lic_exp = <unix time>, updated_at = unixepoch() WHERE id = '${g.licenceId}'; ` +
+              `INSERT INTO audit (at, licence_id, action, actor) VALUES (unixepoch(), '${g.licenceId}', 'grant extended', 'support');`);
 } else {
-  console.error("commands: key <key> | email <address> | reissue <session> <gen> <server|desktop>"); process.exit(2);
+  console.error("commands: key <key> | email <address> | reissue <session> <gen> <server|desktop> | grant <offer> <email> [seats] [days] [note]"); process.exit(2);
 }

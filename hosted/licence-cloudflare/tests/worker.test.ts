@@ -6,6 +6,7 @@ import { hmacHex, STRIPE_VERSION, verifyStripeSignature } from "../src/stripe";
 import { SUBSCRIPTION_GRACE } from "../src/env";
 import { b64url, decodeJws, signedMessage, unb64url } from "../src/cert";
 import { ALPHABET, checkChar, deriveKey, formatKey, parseKey } from "../src/keys";
+import { asSql, grant, MAX_DAYS } from "../scripts/grant";
 
 // Synthetic values only: no live key, no live endpoint is ever contacted.
 const WHSEC = "whsec_test_synthetic";
@@ -909,5 +910,71 @@ describe("grace period matches the EULA", () => {
     expect(SUBSCRIPTION_GRACE).toBe(14 * 86400);
     const eula = readFileSync(new URL("../../../LICENSE.txt", import.meta.url), "utf8");
     expect(eula).toMatch(/grace period of fourteen \(14\) days/);
+  });
+});
+
+describe("complimentary grants (scripts/grant.ts)", () => {
+  const opts = (over: any = {}) => ({ offer: "argus-desktop", email: "cofounder@example.com", seats: 2, days: 365,
+                                      note: "cofounder", livemode: false, ...over });
+  async function granted(over: any = {}) {
+    const g = await grant(PEPPER, opts(over), NOW);
+    for (const [sql, args] of g.statements) store.db.query(sql).run(...(args as any[]));
+    return g;
+  }
+
+  test("a granted key activates like a bought one, with the grant's plan, seats and end", async () => {
+    const g = await granted();
+    expect(g.key.startsWith("ARGUS-DSK-")).toBe(true);
+    const res = await (await device("laptop")).activate(g.key);
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(await verifyCert(body.certificate)).toBe(true);
+    const { claims } = decodeJws(body.certificate)!;
+    expect(claims).toMatchObject({ plan: "desktop", sub: g.licenceId, lic_exp: NOW + 365 * 86400 });
+    expect((await (await device("desktop")).activate(g.key)).status).toBe(200);
+    expect((await (await device("third")).activate(g.key)).status).toBe(409);       // seats hold
+  });
+
+  test("only hashes are stored, never the key or the email; the grant is audited by role", async () => {
+    const g = await granted();
+    const dump = JSON.stringify(store.db.query("SELECT * FROM licences_v2").all()) + JSON.stringify(store.db.query("SELECT * FROM audit").all());
+    expect(dump).not.toContain(g.key);
+    expect(dump).not.toContain("cofounder@example.com");
+    expect(store.db.query("SELECT actor, action FROM audit WHERE licence_id = ?").get(g.licenceId))
+      .toEqual({ actor: "support", action: "granted (cofounder, 2 seat(s), 365 days)" });
+  });
+
+  test("no Stripe path reaches a grant: thank-you page, subscription end and refunds leave it alone", async () => {
+    const g = await granted();
+    expect((await call(`/thanks?session_id=${g.sessionId}`)).status).not.toBe(200);
+    await signed(event("evt_d", "customer.subscription.deleted", { id: null, metadata: { app: "argus" } }));
+    await signed(event("evt_r", "charge.refunded", { payment_intent: null, refunded: true, metadata: { app: "argus" } }));
+    expect((store.db.query("SELECT status FROM licences_v2 WHERE id = ?").get(g.licenceId) as any).status).toBe("active");
+  });
+
+  test("it ends: after lic_exp it cannot be activated or renewed", async () => {
+    const g = await granted({ days: 30 });
+    const d = await device("laptop");
+    const { activation_id } = await (await d.activate(g.key)).json() as any;
+    deps.now = () => NOW_MS + 31 * 86400_000;
+    expect((await (await device("late")).activate(g.key)).status).toBe(403);
+    expect((await d.renew(activation_id)).status).not.toBe(200);
+  });
+
+  test("the SQL text the operator runs stores exactly the same row", async () => {
+    const g = await grant(PEPPER, opts(), NOW);
+    store.db.exec(asSql(g.statements));
+    const row = store.db.query("SELECT key_hash, seats, lic_exp, session_id, subscription FROM licences_v2").get() as any;
+    expect(row).toMatchObject({ seats: 2, lic_exp: g.licExp, session_id: g.sessionId, subscription: null });
+    expect((await (await device("x")).activate(g.key)).status).toBe(200);
+    expect(asSql([["SELECT ?", ["it's"]]])).toBe("SELECT 'it''s';");
+  });
+
+  test("bad requests are refused before anything is written", async () => {
+    for (const bad of [{ days: 0 }, { days: MAX_DAYS + 1 }, { seats: 0 }, { seats: 101 }, { offer: "argus-gold" },
+                       { email: "nope" }, { note: "Sonia Ineza" }, { days: 1.5 }])
+      await expect(grant(PEPPER, opts(bad), NOW)).rejects.toThrow();
+    await expect(grant("short", opts(), NOW)).rejects.toThrow();
+    expect(store.db.query("SELECT COUNT(*) AS n FROM licences_v2").get()).toEqual({ n: 0 });
   });
 });
