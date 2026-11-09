@@ -38,7 +38,7 @@ To also *run* JARVIS on your own machine, see "Using it" in the
 |---|---|
 | **`main` only moves by pull request.** Branch from `org/main`: `feat/…`, `fix/…`, `docs/…`; `release-test/…` for a release build; `integrate/…` to combine branches. | One history both of us and every agent can trust. |
 | **Green CI merges itself; no review needed** for ordinary code. The author merges when CI is green. | Waiting on the other person for every change would halve our speed. |
-| **Trust anchors need the other cofounder** ([CODEOWNERS](.github/CODEOWNERS)): workflows, `release/`, the licence and notify Workers, licensing, `docs/security/`, `AGENTS.md`, licences. | These decide what ships, who can sign and who gets paid: a mistake or a stolen account there is the expensive one. |
+| **Either cofounder may merge when required CI is green**, including trust-anchor changes. [CODEOWNERS](.github/CODEOWNERS) routes review requests; approval from the other cofounder is optional (owner decision 2026-11-09). | Both cofounders can ship; PR history, required checks and ASES DEV-12's independent review requirements remain in force. |
 | **One agent, one worktree, one branch.** `git worktree add ~/.cache/wt/<branch> -b <branch> org/main`. Never two agents in one checkout. | 2026-09-24: two agents in one checkout half-applied each other's edits. |
 | **Small PRs, merged the same day.** Stack them if needed; rebase or merge `org/main` before asking for review. | Long-lived branches are where our merges went wrong (the 68-vs-3 commit fork of 2026-11-02). |
 | **Say what is not done.** The PR template's last section is mandatory. | A claim without measured evidence is the one thing AGENTS.md forbids. |
