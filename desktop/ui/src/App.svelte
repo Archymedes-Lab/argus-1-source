@@ -16,6 +16,7 @@
   import Phone from "./views/Phone.svelte";
   import Licence from "./views/Licence.svelte";
   import CommandPalette from "./components/CommandPalette.svelte";
+  import Toasts from "./components/Toasts.svelte";
   import StatusBanner from "./components/StatusBanner.svelte";
   import { Tooltip } from "bits-ui";
   import { app } from "./lib/store.svelte";
@@ -32,14 +33,15 @@
     <Toolbar />
     <main class="flex-1 overflow-y-auto">
       {#if (app.data?.paused_until ?? 0) * 1000 > Date.now()}
-        <div class="mx-auto mt-6 max-w-[1200px] px-8">
+        <div class="mx-auto {app.mode === 'simple' ? 'max-w-[920px] px-8 pt-1 pb-3' : 'mt-6 max-w-[1360px] px-6'}">
           <div class="flex items-center gap-3 rounded-lg bg-amber-100 px-4 py-2.5 text-copy-13 text-amber-900">
             <span class="dot dot-warn"></span>{tr("ARGUS-INSTINCT is taking a break and is not checking your computer. It starts again by itself at {time}.", { time: new Date(app.data.paused_until * 1000).toLocaleTimeString(app.lang, { hour: "2-digit", minute: "2-digit" }) })}
           </div>
         </div>
       {/if}
       {#if app.status.phase !== "live" && app.status.phase !== "starting"}<StatusBanner />{/if}
-      <div class="mx-auto max-w-[1200px] px-8 py-8">
+      <!-- Simple reads as one calm column; Expert uses the whole window. -->
+      <div class="mx-auto {app.mode === 'simple' ? 'max-w-[920px] px-8 pt-4 pb-10' : 'max-w-[1360px] px-6 py-6'}">
         {#key app.view}<div class="anim-rise"><Current /></div>{/key}
       </div>
     </main>
@@ -48,10 +50,4 @@
 <CommandPalette />
 </Tooltip.Provider>
 
-<div class="pointer-events-none fixed right-4 bottom-4 z-40 flex w-[360px] flex-col gap-2">
-  {#each app.toasts as t (t.id)}
-    <div class="pointer-events-auto flex items-start gap-2.5 rounded-lg bg-bg-100 px-4 py-3 text-copy-13 shadow-pop anim-rise" role="status">
-      <span class="dot mt-1.5 {t.tone === 'ok' ? 'dot-ok' : t.tone === 'bad' ? 'dot-bad' : 'dot-run'}"></span><span>{t.text}</span>
-    </div>
-  {/each}
-</div>
+<Toasts />

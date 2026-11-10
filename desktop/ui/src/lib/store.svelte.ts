@@ -42,7 +42,7 @@ export const app = $state({
   theme: readTheme(),
   mode: readMode(),
   lang: readLang(),
-  toasts: [] as { id: number; text: string; tone: "ok" | "bad" | "info" }[],
+  toasts: [] as Toast[],
 });
 
 function readTheme(): Theme {
@@ -180,11 +180,25 @@ export async function start() {
   setInterval(() => { if (Date.now() - last > FALLBACK_MS) refresh(); }, 10000);
 }
 
+export type Toast = {
+  id: number; text: string; tone: "ok" | "bad" | "info";
+  /** Optional second line, quieter than the headline. */
+  detail?: string;
+  /** Optional single action, shown as a text button on the right. */
+  action?: { label: string; run: () => void };
+};
+type ToastOpts = { detail?: string; action?: Toast["action"] };
+
 let toastId = 0;
-export function toast(text: string, tone: "ok" | "bad" | "info" = "info") {
+/** Show a small banner. The headline is one plain sentence; auto-dismiss is handled by the banner itself. */
+export function toast(text: string, tone: Toast["tone"] = "info", opts: ToastOpts = {}) {
   const id = ++toastId;
-  app.toasts = [...app.toasts.slice(-2), { id, text, tone }];
-  setTimeout(() => { app.toasts = app.toasts.filter((t) => t.id !== id); }, 6000);
+  // Same message already showing: don't stack a duplicate.
+  if (app.toasts.some((t) => t.text === text && t.tone === tone)) return;
+  app.toasts = [...app.toasts.slice(-2), { id, text, tone, ...opts }];
+}
+export function dismissToast(id: number) {
+  app.toasts = app.toasts.filter((t) => t.id !== id);
 }
 
 export function go(view: View, filters: Partial<{ severity: string | null; query: string; host: string; job: string }> = {}) {

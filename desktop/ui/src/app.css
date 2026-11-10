@@ -11,6 +11,12 @@
    headings; tight negative tracking that grows with size.
    Chrome (Apple): content first; the sidebar and toolbar are a quieter
    layer around it, translucent only where they float over content.
+
+   2026-11 redesign: the page is a soft canvas (bg-200) and content sits on it
+   as raised cards (bg-100); neutrals carry a faint ink-blue cast and the accent
+   is one indigo. Simple and Expert are two different rooms: Simple is roomy,
+   round and one column wide; Expert is tight, square-ish and dense. The split
+   is made here with html[data-mode], so every view follows it.
    ========================================================================== */
 @import "tailwindcss";
 
@@ -51,58 +57,64 @@
 @layer base {
   :root {
     --bg-100: oklch(100% 0 0);
-    --bg-200: oklch(98.4% 0.0015 286);
-    --gray-100: oklch(97% 0.002 286);   --gray-200: oklch(94.7% 0.003 286); --gray-300: oklch(92.2% 0.004 286);
-    --gray-400: oklch(88.6% 0.005 286); --gray-500: oklch(82.5% 0.006 286); --gray-600: oklch(72% 0.008 286);
-    --gray-700: oklch(58% 0.01 286);    --gray-800: oklch(50.5% 0.011 286); --gray-900: oklch(44.5% 0.012 286);
-    --gray-1000: oklch(20.5% 0.01 286);
-    --blue-100: oklch(96.4% 0.022 255); --blue-400: oklch(86% 0.07 255);   --blue-700: oklch(56.5% 0.2 258);  --blue-900: oklch(50% 0.19 258);
+    --bg-200: oklch(97.4% 0.004 270);
+    --gray-100: oklch(96.6% 0.004 270); --gray-200: oklch(94.2% 0.005 270); --gray-300: oklch(91.6% 0.006 270);
+    --gray-400: oklch(88% 0.007 270);   --gray-500: oklch(82% 0.009 270);   --gray-600: oklch(71.5% 0.012 270);
+    --gray-700: oklch(57.5% 0.014 270); --gray-800: oklch(50% 0.016 270);   --gray-900: oklch(43.5% 0.018 270);
+    --gray-1000: oklch(19% 0.02 270);
+    --blue-100: oklch(96.2% 0.024 270); --blue-400: oklch(85.5% 0.075 270); --blue-700: oklch(54% 0.215 270);  --blue-900: oklch(47% 0.2 270);
     --red-100: oklch(96.5% 0.018 45);   --red-400: oklch(86% 0.05 45);     --red-700: oklch(62% 0.11 40);     --red-900: oklch(50% 0.10 40);
     --amber-100: oklch(97.2% 0.035 85); --amber-400: oklch(88% 0.11 82);   --amber-700: oklch(77% 0.165 70);  --amber-900: oklch(51% 0.12 55);
     --green-100: oklch(96.6% 0.035 152);--green-400: oklch(86% 0.1 152);   --green-700: oklch(62% 0.165 150); --green-900: oklch(46% 0.12 152);
-    --shadow-card: 0 0 0 1px oklch(20% 0.01 286 / 0.06), 0 1px 2px oklch(20% 0.01 286 / 0.04);
-    --shadow-pop: 0 0 0 1px oklch(20% 0.01 286 / 0.08), 0 8px 30px oklch(20% 0.01 286 / 0.12);
-    --material: oklch(98.4% 0.0015 286 / 0.78);
+    --shadow-card: 0 0 0 1px oklch(19% 0.02 270 / 0.055), 0 1px 1px oklch(19% 0.02 270 / 0.04), 0 6px 16px -8px oklch(19% 0.02 270 / 0.08);
+    --shadow-raise: 0 0 0 1px oklch(19% 0.02 270 / 0.06), 0 2px 4px oklch(19% 0.02 270 / 0.04), 0 18px 40px -18px oklch(19% 0.02 270 / 0.18);
+    --shadow-pop: 0 0 0 1px oklch(19% 0.02 270 / 0.08), 0 12px 36px oklch(19% 0.02 270 / 0.14);
+    --material: oklch(97.4% 0.004 270 / 0.78);
+    --brand-a: oklch(58% 0.21 268); --brand-b: oklch(52% 0.23 292);
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg-100: oklch(16.5% 0.004 286);
-      --bg-200: oklch(13.2% 0.004 286);
-      --gray-100: oklch(20.5% 0.005 286); --gray-200: oklch(23.2% 0.006 286); --gray-300: oklch(26% 0.007 286);
-      --gray-400: oklch(30.5% 0.008 286); --gray-500: oklch(35.5% 0.009 286); --gray-600: oklch(43.5% 0.01 286);
-      --gray-700: oklch(55% 0.011 286);   --gray-800: oklch(62% 0.011 286);   --gray-900: oklch(71.5% 0.01 286);
-      --gray-1000: oklch(95.5% 0.004 286);
-      --blue-100: oklch(26% 0.06 258);    --blue-400: oklch(42% 0.13 258);   --blue-700: oklch(62% 0.19 258);   --blue-900: oklch(74% 0.14 255);
+      --bg-100: oklch(19.5% 0.012 270);
+      --bg-200: oklch(14.8% 0.012 270);
+      --gray-100: oklch(22.5% 0.012 270); --gray-200: oklch(25% 0.013 270);   --gray-300: oklch(27.8% 0.014 270);
+      --gray-400: oklch(32% 0.015 270);   --gray-500: oklch(37% 0.016 270);   --gray-600: oklch(45% 0.016 270);
+      --gray-700: oklch(57% 0.016 270);   --gray-800: oklch(64% 0.015 270);   --gray-900: oklch(73% 0.013 270);
+      --gray-1000: oklch(96% 0.005 270);
+      --blue-100: oklch(27% 0.07 270);    --blue-400: oklch(43% 0.14 270);   --blue-700: oklch(63% 0.19 270);   --blue-900: oklch(77% 0.13 270);
       --red-100: oklch(26% 0.04 45);      --red-400: oklch(42% 0.08 45);     --red-700: oklch(66% 0.11 40);     --red-900: oklch(76% 0.10 40);
       --amber-100: oklch(27% 0.05 75);    --amber-400: oklch(45% 0.1 72);    --amber-700: oklch(80% 0.16 78);   --amber-900: oklch(83% 0.13 82);
       --green-100: oklch(25.5% 0.05 152); --green-400: oklch(42% 0.11 152);  --green-700: oklch(66% 0.17 150);  --green-900: oklch(78% 0.14 152);
-      --shadow-card: 0 0 0 1px oklch(100% 0 0 / 0.06);
-      --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 0.08), 0 12px 40px oklch(0% 0 0 / 0.5);
-      --material: oklch(13.2% 0.004 286 / 0.78);
+      --shadow-card: 0 0 0 1px oklch(100% 0 0 / 0.07), 0 8px 24px -14px oklch(0% 0 0 / 0.7);
+      --shadow-raise: 0 0 0 1px oklch(100% 0 0 / 0.08), 0 24px 48px -20px oklch(0% 0 0 / 0.8);
+      --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 0.09), 0 16px 48px oklch(0% 0 0 / 0.6);
+      --material: oklch(14.8% 0.012 270 / 0.78);
+      --brand-a: oklch(66% 0.19 268); --brand-b: oklch(60% 0.21 292);
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg-100: oklch(16.5% 0.004 286);
-    --bg-200: oklch(13.2% 0.004 286);
-    --gray-100: oklch(20.5% 0.005 286); --gray-200: oklch(23.2% 0.006 286); --gray-300: oklch(26% 0.007 286);
-    --gray-400: oklch(30.5% 0.008 286); --gray-500: oklch(35.5% 0.009 286); --gray-600: oklch(43.5% 0.01 286);
-    --gray-700: oklch(55% 0.011 286);   --gray-800: oklch(62% 0.011 286);   --gray-900: oklch(71.5% 0.01 286);
-    --gray-1000: oklch(95.5% 0.004 286);
-    --blue-100: oklch(26% 0.06 258);    --blue-400: oklch(42% 0.13 258);   --blue-700: oklch(62% 0.19 258);   --blue-900: oklch(74% 0.14 255);
+    --bg-100: oklch(19.5% 0.012 270);
+    --bg-200: oklch(14.8% 0.012 270);
+    --gray-100: oklch(22.5% 0.012 270); --gray-200: oklch(25% 0.013 270);   --gray-300: oklch(27.8% 0.014 270);
+    --gray-400: oklch(32% 0.015 270);   --gray-500: oklch(37% 0.016 270);   --gray-600: oklch(45% 0.016 270);
+    --gray-700: oklch(57% 0.016 270);   --gray-800: oklch(64% 0.015 270);   --gray-900: oklch(73% 0.013 270);
+    --gray-1000: oklch(96% 0.005 270);
+    --blue-100: oklch(27% 0.07 270);    --blue-400: oklch(43% 0.14 270);   --blue-700: oklch(63% 0.19 270);   --blue-900: oklch(77% 0.13 270);
     --red-100: oklch(26% 0.04 45);      --red-400: oklch(42% 0.08 45);     --red-700: oklch(66% 0.11 40);     --red-900: oklch(76% 0.10 40);
     --amber-100: oklch(27% 0.05 75);    --amber-400: oklch(45% 0.1 72);    --amber-700: oklch(80% 0.16 78);   --amber-900: oklch(83% 0.13 82);
     --green-100: oklch(25.5% 0.05 152); --green-400: oklch(42% 0.11 152);  --green-700: oklch(66% 0.17 150);  --green-900: oklch(78% 0.14 152);
-    --shadow-card: 0 0 0 1px oklch(100% 0 0 / 0.06);
-    --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 0.08), 0 12px 40px oklch(0% 0 0 / 0.5);
-    --material: oklch(13.2% 0.004 286 / 0.78);
+    --shadow-card: 0 0 0 1px oklch(100% 0 0 / 0.07), 0 8px 24px -14px oklch(0% 0 0 / 0.7);
+    --shadow-raise: 0 0 0 1px oklch(100% 0 0 / 0.08), 0 24px 48px -20px oklch(0% 0 0 / 0.8);
+    --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 0.09), 0 16px 48px oklch(0% 0 0 / 0.6);
+    --material: oklch(14.8% 0.012 270 / 0.78);
+    --brand-a: oklch(66% 0.19 268); --brand-b: oklch(60% 0.21 292);
     color-scheme: dark;
   }
 
   html, body, #app { height: 100%; }
   body {
-    @apply bg-bg-100 font-sans text-gray-1000 antialiased;
+    @apply bg-bg-200 font-sans text-gray-1000 antialiased;
     font-size: 14px; line-height: 20px; letter-spacing: -0.006em;
     font-optical-sizing: auto; font-feature-settings: "cv11", "ss03", "calt";
     overflow: hidden; user-select: none; -webkit-user-select: none;
@@ -146,10 +158,10 @@ html[data-mode="simple"] { font-size: 17px; }
   .btn {
     @apply inline-flex h-8 cursor-default items-center gap-1.5 rounded-md px-3 text-label-13 whitespace-nowrap transition-colors duration-100;
     @apply bg-bg-100 text-gray-1000 hover:bg-gray-100 active:bg-gray-200 disabled:opacity-50;
-    box-shadow: inset 0 0 0 1px var(--gray-400);
+    box-shadow: inset 0 0 0 1px var(--gray-400), 0 1px 1px oklch(19% 0.02 270 / 0.04);
   }
   .btn-primary { @apply bg-gray-1000 text-bg-100 hover:bg-gray-800 active:bg-gray-900; box-shadow: none; }
-  .btn-accent { @apply bg-blue-700 text-white hover:bg-blue-900; box-shadow: none; }
+  .btn-accent { @apply bg-blue-700 text-white hover:bg-blue-900; box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.18); }
   .btn-ghost { @apply bg-transparent text-gray-900 hover:bg-gray-200 hover:text-gray-1000; box-shadow: none; }
   .btn-sm { @apply h-7 px-2.5 text-label-12; }
   .link { @apply cursor-default text-label-13 text-blue-900 hover:underline; }
@@ -165,19 +177,27 @@ html[data-mode="simple"] { font-size: 17px; }
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 10px center; }
 
-  .segmented { @apply inline-flex rounded-md bg-gray-200 p-0.5; }
-  .seg-item { @apply inline-flex h-7 cursor-default items-center gap-1.5 rounded-[5px] px-2.5 text-label-12 text-gray-900 transition-colors hover:text-gray-1000; }
+  .segmented { @apply inline-flex rounded-lg bg-gray-200 p-0.5; box-shadow: inset 0 0 0 1px var(--gray-300); }
+  .seg-item { @apply inline-flex h-7 cursor-default items-center gap-1.5 rounded-[6px] px-2.5 text-label-12 text-gray-900 transition-colors hover:text-gray-1000; }
   .seg-item[data-state="on"] { @apply bg-bg-100 text-gray-1000; box-shadow: 0 1px 2px oklch(0% 0 0 / 0.12), 0 0 0 0.5px oklch(0% 0 0 / 0.06); }
 
-  /* Sidebar, Swiss: one column on a 4 px grid, flush left; hierarchy from type and
-     hairline rules, not boxes. The current page is a 2 px rule and full-strength text. */
-  .nav-item { @apply relative flex h-8 cursor-default items-center gap-3 pr-4 pl-5 text-label-13 text-gray-900 transition-colors hover:text-gray-1000; }
-  .nav-item::before { content: ""; @apply absolute top-1.5 bottom-1.5 left-0 w-0.5 bg-transparent transition-colors; }
-  .nav-item[aria-current="page"] { @apply font-semibold text-gray-1000; }
-  .nav-item[aria-current="page"]::before { @apply bg-gray-1000; }
+  /* Sidebar (Linear, macOS): a quiet column that shares the canvas. Each row is an
+     icon and a word; the current page is a raised pill, not a coloured bar. */
+  .nav-item { @apply relative mx-2 flex h-8 cursor-default items-center gap-2.5 rounded-lg px-2.5 text-label-13 text-gray-900 transition-colors duration-100 hover:bg-gray-200 hover:text-gray-1000; }
+  .nav-item > svg { @apply shrink-0 text-gray-700 transition-colors; }
+  .nav-item:hover > svg { @apply text-gray-900; }
+  .nav-item[aria-current="page"] { @apply bg-bg-100 font-semibold text-gray-1000; box-shadow: var(--shadow-card); }
+  .nav-item[aria-current="page"] > svg { @apply text-blue-700; }
   .nav-item:focus-visible { @apply outline-none; box-shadow: inset 0 0 0 2px var(--blue-700); }
-  .side-section { @apply border-t border-gray-300 pt-3 pb-2; }
-  .side-label { @apply px-5 pb-1.5 text-eyebrow text-gray-700; }
+  .nav-count { @apply ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-gray-200 px-1.5 text-[11px] font-semibold tabular; }
+  .nav-item[aria-current="page"] .nav-count { @apply bg-gray-100; }
+  .side-section { @apply pt-3 pb-1; }
+  .side-label { @apply px-[18px] pb-1.5 text-eyebrow text-gray-700; }
+  .side-panel { @apply mx-2 rounded-xl p-3 text-left transition-colors hover:bg-gray-200; box-shadow: inset 0 0 0 1px var(--gray-300); }
+  .side-panel[aria-current="page"] { @apply bg-bg-100; box-shadow: var(--shadow-card); }
+  .brand-mark { @apply grid size-7 shrink-0 place-items-center rounded-[9px] text-white;
+    background: linear-gradient(140deg, var(--brand-a), var(--brand-b));
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.25), 0 4px 10px -4px var(--brand-a); }
 
   /* Floating surfaces: menus, palette, sheets, tooltips. */
   .popover { @apply rounded-xl bg-bg-100; box-shadow: var(--shadow-pop); }
@@ -205,12 +225,54 @@ html[data-mode="simple"] { font-size: 17px; }
   .empty { @apply px-5 py-10 text-center text-copy-13 text-gray-900; }
   .meter { @apply h-1.5 overflow-hidden rounded-full bg-gray-200; }
   .meter > i { @apply block h-full rounded-full; transition: width .5s cubic-bezier(.2, .8, .2, 1); }
+
+  /* Simple home: one calm answer, one big thing to press. */
+  .hero { @apply relative overflow-hidden rounded-[28px] bg-bg-100; box-shadow: var(--shadow-raise); }
+  .hero-aura { @apply pointer-events-none absolute rounded-full blur-3xl; }
+  .btn-hero {
+    @apply inline-flex h-12 cursor-default items-center gap-2.5 rounded-2xl px-6 text-[15px] font-semibold whitespace-nowrap text-white transition-[filter,transform] duration-100 disabled:opacity-60;
+    background: linear-gradient(180deg, var(--brand-a), var(--blue-700));
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.22), 0 10px 24px -10px var(--brand-a);
+  }
+  .btn-hero:hover { filter: brightness(1.06); }
+  .btn-hero:active { transform: translateY(1px); filter: brightness(.97); }
+  /* Grouped rows (macOS System Settings): an icon tile, a sentence, a chevron. */
+  .rows { @apply overflow-hidden rounded-[20px] bg-bg-100; box-shadow: var(--shadow-card); }
+  .rows > * + * { box-shadow: inset 0 1px 0 var(--gray-300); }
+  .rows-item { @apply flex w-full cursor-default items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-gray-100; }
+  .tile { @apply grid size-10 shrink-0 place-items-center rounded-xl; }
+  .tile-ok { @apply bg-green-100 text-green-900; } .tile-warn { @apply bg-amber-100 text-amber-900; }
+  .tile-info { @apply bg-blue-100 text-blue-900; } .tile-mute { @apply bg-gray-200 text-gray-900; }
+  .rows-title { @apply px-2 pb-2 text-label-13 text-gray-900; }
 }
+
+/* ---------- two rooms ---------- */
+/* Simple: roomy and round. Bigger targets, softer corners. */
+html[data-mode="simple"] .card { border-radius: 20px; }
+html[data-mode="simple"] .btn { height: 36px; border-radius: 10px; font-size: 14px; }
+html[data-mode="simple"] .btn:not(.px-0) { padding-inline: 14px; }
+html[data-mode="simple"] .btn.w-8 { width: 36px; }
+html[data-mode="simple"] .btn-sm { height: 32px; font-size: 13px; }
+html[data-mode="simple"] .btn-sm:not(.px-0) { padding-inline: 12px; }
+html[data-mode="simple"] .nav-item { height: 40px; gap: 12px; margin-inline: 10px; padding-inline: 12px; border-radius: 12px; font-size: 14.5px; }
+html[data-mode="simple"] .input { height: 36px; border-radius: 10px; }
+html[data-mode="simple"] .seg-item { height: 30px; }
+html[data-mode="simple"] .row { padding-block: 14px; }
+/* Expert: tight and precise. Smaller radii, denser rows, figures in tabular digits. */
+html[data-mode="expert"] .card { border-radius: 10px; }
+html[data-mode="expert"] .popover { border-radius: 10px; }
+html[data-mode="expert"] .row { padding-block: 9px; }
+html[data-mode="expert"] .card-head { padding-top: 14px; padding-bottom: 10px; font-size: 14px; }
+html[data-mode="expert"] .pill { border-radius: 5px; }
+html[data-mode="expert"] .nav-item { height: 30px; border-radius: 7px; }
+html[data-mode="expert"] .side-panel { border-radius: 8px; }
+html[data-mode="expert"] .text-display { font-size: 36px; line-height: 38px; }
 
 @keyframes pulse { 50% { opacity: .35 } }
 @utility anim-rise { animation: rise .18s ease; }
 @utility anim-slide { animation: slide .18s ease; }
 @utility shadow-pop { box-shadow: var(--shadow-pop); }
+@utility shadow-raise { box-shadow: var(--shadow-raise); }
 @utility ring-fill { transition: stroke-dashoffset .8s cubic-bezier(.2, .8, .2, 1); }
 @keyframes fade { from { opacity: 0 } }
 @keyframes rise { from { opacity: 0; transform: translateY(6px) } }

@@ -29,7 +29,18 @@ def win_finding(category, severity, title, detail, where="", host="win"):
 # Findings raised by rule content (a signed rule pack, community rules) are evidence,
 # never authority. The `origin` key says so, but a finding that was stored and read back
 # keeps only its text, so the title carries a mark too and this function reads either.
-CONTENT_TITLE_MARKS = ((" (community rule)", "sigma"), (" [rule pack ", "rulepack"))
+CONTENT_TITLE_MARKS = ((" (community rule)", "sigma"), (" [rule pack ", "rulepack"),
+                       (" (file evidence)", "file"))
+
+
+def file_finding(category, severity, title, detail, where="", host=None):
+    """File evidence: marked so that it never drives an automatic action, also after it
+    was stored and read back. The mark does not change severity: lowering what a
+    detection costs is an owner decision under the score-integrity rule
+    (ALERT-QUALITY-2026-11-08), not a side effect of how the evidence was gathered."""
+    result = finding(category, severity, title + " (file evidence)", detail, where, host)
+    result["origin"] = "file"
+    return result
 
 
 def content_origin(finding):
@@ -39,6 +50,13 @@ def content_origin(finding):
     if origin:
         return origin
     title = str(f.get("title") or "")
+    # Legacy stored webshell findings predate the durable title marker.
+    if f.get("category") == "webshell":
+        return "file"
+    if f.get("category") == "persistence" and title.startswith((
+            "shell profile runs a payload:", "cron entry runs a payload:",
+            "systemd user unit for ", "autostart entry no package owns:", "cron file no package owns:")):
+        return "file"
     for mark, name in CONTENT_TITLE_MARKS:
         if mark in title:
             return name

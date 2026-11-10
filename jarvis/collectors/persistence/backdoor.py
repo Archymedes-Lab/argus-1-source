@@ -25,6 +25,8 @@ try:
     import pwd
 except ImportError:      # native Windows: no passwd database, and no caller there
     pwd = None
+from jarvis.collectors.persistence import startup_state
+from jarvis.core.finding import file_finding
 from jarvis.core.finding import finding as _finding
 from jarvis.core.paths import load_win_script
 from jarvis.core.util import dpkg_owns
@@ -366,10 +368,10 @@ def check_persistence():
             continue
         for i, line in enumerate(body.splitlines(), 1):
             if PAYLOAD_RE.search(line):
-                out.append(_finding(
+                out.append(file_finding(
                     "persistence", "critical",
                     f"shell profile runs a payload: {os.path.basename(f)}:{i}",
-                    f"{line.strip()[:150]} — this executes on every login",
+                    "A fetch/execute or reverse-shell indicator appears in startup code; source and arguments are withheld.",
                     f))
 
     # systemd user services need no root and are easy to miss
@@ -393,11 +395,10 @@ def check_persistence():
             # is exactly how a real unit slips through.
             if _is_self(fn, execs):
                 continue
-            out.append(_finding(
+            out.append(file_finding(
                 "persistence", "high",
                 f"systemd user unit for {user}: {fn}",
-                (execs[0][:130] if execs else "no Exec line")
-                + " — user units start at login and need no root", full))
+                "User units start at login and need no root; source and arguments are withheld.", full))
 
     # XDG autostart
     xdg = ["/etc/xdg/autostart"]
@@ -412,12 +413,10 @@ def check_persistence():
             full = os.path.join(d, fn)
             if _dpkg_owns(full):
                 continue
-            body = _read(full)
-            m = re.search(r"^\s*Exec\s*=\s*(.+)$", body, re.M)
-            out.append(_finding(
+            out.append(file_finding(
                 "persistence", "medium",
                 f"autostart entry no package owns: {fn}",
-                (m.group(1)[:130] if m else "no Exec line"), full))
+                "An unowned desktop startup entry is present; source and arguments are withheld.", full))
 
     # cron
     cron_files = sorted(glob.glob("/etc/cron.d/*")) + ["/etc/crontab"]
@@ -432,15 +431,19 @@ def check_persistence():
             if not line or line.startswith("#"):
                 continue
             if PAYLOAD_RE.search(line):
-                out.append(_finding(
+                out.append(file_finding(
                     "persistence", "critical",
                     f"cron entry runs a payload: {os.path.basename(f)}:{i}",
-                    line[:150], f))
+                    "A fetch/execute or reverse-shell indicator appears in cron code; source and arguments are withheld.", f))
             elif not owned and f.startswith("/etc/cron.d/"):
-                out.append(_finding(
+                out.append(file_finding(
                     "persistence", "medium",
                     f"cron file no package owns: {os.path.basename(f)}",
-                    line[:150], f))
+                    "An unowned system cron entry is present; source and arguments are withheld.", f))
+    # Fresh metadata-only state supplements the legacy keyword signatures.
+    already_reported = {f.get("where") for f in out}
+    out.extend(f for f in startup_state.audit(_home_dirs())
+               if f.get("where") not in already_reported)
     return out
 
 

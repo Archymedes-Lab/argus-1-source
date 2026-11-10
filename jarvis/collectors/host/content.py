@@ -32,7 +32,8 @@ import stat
 import time
 
 from jarvis.collectors import webroots
-from jarvis.core import collection, patterns
+from jarvis.core import collection, patterns, safe_files, script_patterns
+from jarvis.core.finding import file_finding
 from jarvis.core.finding import finding as _finding
 
 META = "content_scan_v1"
@@ -67,28 +68,10 @@ def roots(hosts=("wsl", "win")):
     return found
 
 
-def identity(st):
-    return [st.st_dev, st.st_ino, st.st_ctime_ns, st.st_mtime_ns, st.st_size]
-
-
-def open_safe(path, directory=False):
-    """Anchor every component to an opened, non-link directory descriptor."""
-    parts = os.path.abspath(path).split(os.sep)
-    fd = os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        for index, part in enumerate(parts):
-            if not part:
-                continue
-            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-            if index < len(parts) - 1 or directory:
-                flags |= os.O_DIRECTORY
-            child = os.open(part, flags, dir_fd=fd)
-            os.close(fd)
-            fd = child
-        return fd
-    except BaseException:
-        os.close(fd)
-        raise
+# Kept as aliases for callers and existing safety regressions.
+identity = safe_files.identity
+open_safe = safe_files.open_safe
+read_start = safe_files.read_start
 
 
 def candidates(root_dirs, limit=MAX_ENTRIES, clock=time.monotonic, started=None):
@@ -136,31 +119,6 @@ def candidates(root_dirs, limit=MAX_ENTRIES, clock=time.monotonic, started=None)
     return sorted(out, reverse=True), False, unread
 
 
-def read_start(path, limit=MAX_FILE_BYTES, expected=None):
-    """Read a stable regular file without traversing links; races return unknown."""
-    try:
-        fd = open_safe(path)
-    except OSError:
-        return None
-    try:
-        before = os.fstat(fd)
-        if not stat.S_ISREG(before.st_mode) or (expected is not None and identity(before) != expected):
-            return None
-        chunks, left = [], limit
-        while left > 0:
-            chunk = os.read(fd, min(left, 1 << 20))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            left -= len(chunk)
-        if identity(os.fstat(fd)) != identity(before):
-            return None
-        return b"".join(chunks)
-    except OSError:
-        return None
-    finally:
-        os.close(fd)
-
 
 def _load(store):
     try:
@@ -174,6 +132,12 @@ def _describe(path, entry, by_id):
     """A finding for one file from its remembered matches, or None if no rule is left."""
     hits = [by_id[r] for r in entry.get("rules", ()) if r in by_id]
     if not hits:
+        if entry.get("builtin") == script_patterns.PHP_PROBE_VERSION:
+            return file_finding(
+                "file content", "high", "PHP request data passed directly to a command executor",
+                f"SHA-256 {entry.get('sha', '?')}; {entry.get('size', '?')} bytes. "
+                "Static PHP code contains a direct request-to-execution expression. It may be dormant "
+                "or intentionally implemented; confirm its purpose. File content and arguments are withheld.", path)
         return None
     worst = "high" if any(r.severity == "high" for r in hits) else "medium"
     first = max(hits, key=lambda r: r.score)
@@ -199,9 +163,9 @@ def audit(store, hosts=("wsl", "win"), root_dirs=None, clock=time.monotonic):
         collection.failed("content", "file-content rule set is missing or empty")
         return [_finding("visibility", "medium", "File-content rules are missing",
                          "No file content was checked. Restore the shipped rule data.", WHERE)]
-    generation = hashlib.sha256(json.dumps([
+    generation = hashlib.sha256((script_patterns.PHP_PROBE_VERSION + json.dumps([
         (r.id, r.title, r.author, r.score, r.strings, r.condition)
-        for r in rules], sort_keys=True, default=repr).encode()).hexdigest()
+        for r in rules], sort_keys=True, default=repr)).encode()).hexdigest()
     by_id = {r.id: r for r in rules}
     seen = _load(store)
     started = clock()
@@ -235,18 +199,21 @@ def audit(store, hosts=("wsl", "win"), root_dirs=None, clock=time.monotonic):
         read_bytes += len(data)
         hits = patterns.match(rules, data, size)
         entry = {"m": mtime_ns, "size": size, "identity": ident, "generation": generation}
+        if os.path.splitext(path)[1].lower() in script_patterns.PHP_EXTENSIONS and script_patterns.php_request_exec(data):
+            entry["builtin"] = script_patterns.PHP_PROBE_VERSION
         if hits:
             entry["rules"] = [r.id for r in hits][:8]
+        if hits or entry.get("builtin"):
             entry["sha"] = hashlib.sha256(data).hexdigest()
         fresh[path] = entry
     # Retain prior matches when discovery or refresh could not reach them.
     discovered = {row[2] for row in files}
     for path, entry in seen.items():
-        if (path not in fresh and isinstance(entry, dict) and entry.get("rules")
+        if (path not in fresh and isinstance(entry, dict) and (entry.get("rules") or entry.get("builtin"))
                 and (discovery_cut or path in discovered)):
             fresh[path] = dict(entry, stale=True)
     for path, entry in fresh.items():
-        if entry.get("rules"):
+        if entry.get("rules") or entry.get("builtin"):
             f = _describe(path, entry, by_id)
             if f:
                 if entry.get("stale"):
@@ -261,7 +228,7 @@ def audit(store, hosts=("wsl", "win"), root_dirs=None, clock=time.monotonic):
             "Only complete stable files up to the per-file limit are evaluated. "
             "Coverage outside the discovered subset remains unknown.", WHERE))
     if len(fresh) > MAX_REMEMBERED:
-        keep = sorted(fresh.items(), key=lambda kv: (bool(kv[1].get("rules")), kv[1].get("m", 0)), reverse=True)
+        keep = sorted(fresh.items(), key=lambda kv: (bool(kv[1].get("rules") or kv[1].get("builtin")), kv[1].get("m", 0)), reverse=True)
         fresh = dict(keep[:MAX_REMEMBERED])
     store.set_meta(META, json.dumps(fresh, sort_keys=True))
     if left or discovery_cut or oversized or unread:

@@ -85,11 +85,11 @@ class AssuranceTests(unittest.TestCase):
         # 2026-11-10: +1 unverified registry_family_watch (sysmon job).
         # 2026-11-10: +1 unverified powershell_script_blocks (psscript job).
         # 2026-11-10: +1 unverified file_content_rules (content job).
-        self.assertEqual(gaps['implementation_unverified'], 43)
+        self.assertEqual(gaps['implementation_unverified'], 44)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 26)   # +1 phone_approvals (2026-11-04)
-        self.assertEqual(gaps['containment_not_validated'], 68)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
-        self.assertEqual(gaps['validation_date_missing'], 68)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
+        self.assertEqual(gaps['containment_not_validated'], 69)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
+        self.assertEqual(gaps['validation_date_missing'], 69)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
         self.assertFalse(result['complete'])
 
     def test_bruteforce_deterrence_claims_no_live_ban(self):

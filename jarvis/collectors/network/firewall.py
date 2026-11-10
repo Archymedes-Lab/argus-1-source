@@ -255,6 +255,7 @@ def audit_windows(data=None):
             continue
 
         risky = []
+
         if app and app != "Any" and r.get("exists") is False:
             risky.append("program no longer installed — orphaned rule")
         if app in ("", "Any", None) and not group:

@@ -69,6 +69,41 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class StaleRuleTests(unittest.TestCase):
+    """A folder name is not evidence of administrator-only write permissions."""
+
+    def sev(self, app, **extra):
+        from unittest import mock
+
+        from jarvis.collectors.network import firewall
+        rules = {"rules": [{"name": "Old rule", "app": app, "remote": "Any",
+                            "exists": False, **extra}]}
+        with mock.patch.object(firewall, "ps_json", return_value=rules),              mock.patch.object(firewall.firewall_state, "rule_inactive", return_value=False):
+            return [f["severity"] for f in firewall.audit_windows()
+                    if f["title"] == "permissive inbound rule"]
+
+    def test_removed_program_without_acl_evidence_stays_high_and_listed(self):
+        for app in (r"C:\Program Files (x86)\Vendor\a.exe", r"C:\Program Files\V\a.exe",
+                    r"%SystemRoot%\system32\svchost.exe"):
+            self.assertEqual(self.sev(app), ["high"], app)
+
+    def test_path_prefix_traversal_and_windows_temp_cannot_reduce_severity(self):
+        for app in (r"C:\Windows\Temp\payload.exe",
+                    r"C:\Program Files\Vendor\..\..\Users\Public\payload.exe",
+                    r"%SystemRoot%\Temp\payload.exe"):
+            self.assertEqual(self.sev(app), ["high"], app)
+
+    def test_removed_program_in_a_user_folder_stays_high(self):
+        self.assertEqual(self.sev(r"C:\Users\u\AppData\Local\x\a.exe"), ["high"])
+
+    def test_removed_program_elsewhere_stays_high(self):
+        self.assertEqual(self.sev(r"D:\tools\a.exe"), ["high"])
+
+    def test_remote_access_group_still_stacks_to_high(self):
+        self.assertEqual(self.sev(r"C:\Windows\system32\svchost.exe",
+                                  group="Remote Assistance"), ["high"])
+
+
 class PermissiveRuleTests(unittest.TestCase):
     RULES = {"rules": [
         {"name": "Node.js", "app": "C:\\Program Files\\nodejs\\node.exe", "remote": "Any",

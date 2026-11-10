@@ -21,6 +21,7 @@ import re
 import subprocess
 
 from jarvis.collectors import webroots
+from jarvis.core.finding import file_finding
 from jarvis.core.finding import finding as _finding
 from jarvis.core.paths import load_win_script
 from jarvis.platform import windows as collect_windows
@@ -158,7 +159,7 @@ def _linux():
     for root in roots[:6]:
         for path, mtime, score, why in _scan_root(root):
             sev = "critical" if score >= 4 else "high" if score >= 2 else "low"
-            out.append(_finding(
+            out.append(file_finding(
                 "webshell", sev, "server-side script reads as a command dispatcher",
                 f"{path} (modified {time.strftime('%Y-%m-%d', time.localtime(mtime))})"
                 f" — {', '.join(why)}", path))
@@ -192,7 +193,7 @@ def _windows():
     for h in hits:
         p = (h or {}).get("path", "?")
         w = ((h or {}).get("written") or "").replace("T", " ")[:19]
-        out.append(_finding(
+        out.append(file_finding(
             "webshell", "high",
             "IIS script reads as a command dispatcher",
             f"{p} (modified {w}) — contains eval / Request.* / a shell object",

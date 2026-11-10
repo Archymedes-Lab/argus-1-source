@@ -42,9 +42,18 @@ $o.threats = @(Get-MpThreatDetection | Sort-Object InitialDetectionTime -Descend
 # a Get-MpThreat entry is a live problem or a historical record. Defender keeps
 # naming a threat long after the file behind it is gone, so without these every
 # past detection reads as an ongoing compromise forever.
+# Get-MpThreat often names no resource at all; the detection records do. Join them by threat id so a
+# file Defender flagged and that is still on disk is reported as such, not as "names no file".
+$detRes = @{}
+foreach ($d in @(Get-MpThreatDetection)) {
+  $k = [string]$d.ThreatID
+  if (-not $detRes.ContainsKey($k)) { $detRes[$k] = New-Object System.Collections.ArrayList }
+  foreach ($r in @($d.Resources)) { if ($r -and -not $detRes[$k].Contains($r)) { [void]$detRes[$k].Add($r) } }
+}
 $o.threatNames = @(Get-MpThreat | Select-Object -First 40 |
   ForEach-Object {
-    $res = @($_.Resources)
+    $res = @($_.Resources | Where-Object { $_ })
+    if (-not $res.Count -and $detRes.ContainsKey([string]$_.ThreatID)) { $res = @($detRes[[string]$_.ThreatID]) }
     $files = @($res | Where-Object { $_ -like 'file:_*' } |
                       ForEach-Object { $_.Substring(6) })
     [pscustomobject]@{
@@ -107,10 +116,13 @@ $o.extensions = @($ext)
 
 # --- 5. Recently written executables in staging directories ---------------
 $cut = (Get-Date).AddDays(-14)
-$o.recentExe = @(Get-ChildItem -File -ErrorAction SilentlyContinue -Path @(
-    "$env:TEMP", "$env:USERPROFILE\Downloads", "$env:APPDATA",
-    "$env:LOCALAPPDATA\Temp", "$env:PUBLIC") -Recurse -Depth 2 -Include `
-    *.exe,*.dll,*.scr,*.ps1,*.bat,*.cmd,*.vbs,*.hta,*.js,*.jar |
+# Deduplicate identical roots, but keep package trees visible: native add-ons and
+# poisoned package scripts must not disappear behind a performance optimization.
+$stageRoots = @($env:TEMP, "$env:USERPROFILE\Downloads", $env:APPDATA,
+                "$env:LOCALAPPDATA\Temp", $env:PUBLIC) |
+  Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') } | Select-Object -Unique
+$o.recentExe = @(Get-ChildItem -File -ErrorAction SilentlyContinue -Path $stageRoots `
+    -Recurse -Depth 2 -Include *.exe,*.dll,*.node,*.scr,*.ps1,*.bat,*.cmd,*.vbs,*.hta,*.js,*.mjs,*.cjs,*.jar |
   Where-Object { $_.LastWriteTime -gt $cut -and
                  $_.FullName -notmatch '\\(Mozilla|Firefox|Google\\Chrome|Microsoft\\Edge)\\' -and
                  $_.Name -notmatch '^(prefs|user|handlers|search|extension-preferences)\.js$' } |

@@ -30,6 +30,17 @@
   const tone: Record<string, string> = { validated: "var(--green-700)", claimed: "var(--blue-700)", blind: "var(--amber-700)", regressed: "var(--red-700)" };
   const pill: Record<string, string> = { validated: "pill-ok", claimed: "pill-info", blind: "pill-high", regressed: "pill-critical" };
   const pretty = (id: string) => id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+  // Simple: what the attacker is trying to do at each step, in everyday words. Expert keeps the ATT&CK names.
+  const plainStage = $derived<Record<string, string>>({
+    "reconnaissance": tr("Looking for a target"), "resource-development": tr("Getting tools ready"),
+    "initial-access": tr("Getting in"), "execution": tr("Running their program"),
+    "persistence": tr("Staying after a restart"), "privilege-escalation": tr("Getting more power"),
+    "defense-evasion": tr("Hiding from protection"), "credential-access": tr("Stealing passwords"),
+    "discovery": tr("Looking around"), "lateral-movement": tr("Moving to other computers"),
+    "collection": tr("Gathering your files"), "command-and-control": tr("Taking orders from far away"),
+    "exfiltration": tr("Sending your files out"), "impact": tr("Breaking or locking things"),
+  });
+  const stageName = (id: string) => (app.mode === "simple" && plainStage[id]) || pretty(id);
 
   // What needs a look comes first: got worse, then blind spots, then expected, then proven.
   const RANK: Record<string, number> = { regressed: 0, blind: 1, claimed: 2, validated: 3 };
@@ -85,8 +96,8 @@
           {@const total = Math.max(1, c.total ?? 0)}
           <button class="-mx-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-gray-100 {stage === id ? 'bg-gray-100 ring-2 ring-blue-700' : ''}"
                   onclick={() => (stage = stage === id ? "" : id)} aria-pressed={stage === id}>
-            <div class="mb-1 flex justify-between text-copy-13"><span>{pretty(id)}</span><span class="tabular text-gray-900">{c.total}</span></div>
-            <div class="flex h-1 overflow-hidden bg-gray-200" role="img" aria-label="{pretty(id)}: {LEVELS.map((l) => `${label[l]} ${c[l] ?? 0}`).join(', ')}">
+            <div class="mb-1 flex justify-between text-copy-13"><span>{stageName(id)}</span><span class="tabular text-gray-900">{c.total}</span></div>
+            <div class="flex h-1 overflow-hidden bg-gray-200" role="img" aria-label="{stageName(id)}: {LEVELS.map((l) => `${label[l]} ${c[l] ?? 0}`).join(', ')}">
               {#each LEVELS as l}<i style:width="{((c[l] ?? 0) / total) * 100}%" style:background={tone[l]}></i>{/each}
             </div>
           </button>
@@ -96,12 +107,12 @@
 
     {#if gaps.length}
       <section class="card">
-        <div class="card-head">{tr("Detection gaps")} <span class="tabular text-gray-900">{gaps.length}</span></div>
-        <p class="px-5 text-copy-13 text-gray-900">{tr("Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.")}</p>
+        <div class="card-head">{app.mode === "simple" ? tr("Tricks ARGUS-INSTINCT cannot spot yet") : tr("Detection gaps")} <span class="tabular text-gray-900">{gaps.length}</span></div>
+        <p class="px-5 text-copy-13 text-gray-900">{app.mode === "simple" ? tr("Attackers have newer tricks that ARGUS-INSTINCT does not check for yet. This is about ARGUS-INSTINCT, not about your computer.") : tr("Techniques current threat intelligence describes that ARGUS-INSTINCT does not check yet. These are about the tool, not about this computer.")}</p>
         <div class="divide mt-2">
           {#each gaps.slice(0, gapLimit) as g (g.tid)}
             <div class="row items-start">
-              <span class="w-[76px] shrink-0 pt-px"><Pill severity={g.priority} /></span>
+              <span class="{app.mode === 'simple' ? 'w-[112px]' : 'w-[76px]'} shrink-0 pt-px"><Pill severity={g.priority} /></span>
               <span class="min-w-0 flex-1"><span class="block truncate text-label-13">{g.name || g.tid}</span>
                 <span class="block truncate text-copy-13 text-gray-900">{g.detail}</span></span>
               {#if app.mode === "expert"}<span class="tag shrink-0">{g.tid}</span>{/if}
@@ -130,10 +141,10 @@
           <div class="divide">
             {#each rows.slice(0, limit) as t (t.tid)}
               <div class="row items-start">
-                <span class="w-[92px] shrink-0 pt-px"><span class="pill {pill[t.level] ?? 'pill-low'}">{label[t.level] ?? t.level}</span></span>
+                <span class="{app.mode === 'simple' ? 'w-[128px]' : 'w-[92px]'} shrink-0 pt-px"><span class="pill {pill[t.level] ?? 'pill-low'}">{label[t.level] ?? t.level}</span></span>
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-label-13">{t.name}</span>
-                  <span class="block truncate text-copy-13 text-gray-900">{(t.tactics ?? []).map(pretty).join(", ")}</span>
+                  <span class="block truncate text-copy-13 text-gray-900">{(t.tactics ?? []).map(stageName).join(", ")}</span>
                 </span>
                 {#if app.mode === "expert"}<span class="tag shrink-0">{t.tid}</span>{/if}
               </div>

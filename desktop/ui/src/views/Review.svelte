@@ -77,7 +77,7 @@
       {/if}
     </div>
     <p class="mb-4 text-copy-13 text-gray-900">{t("review.cases.sub")}
-      {#if ap.policy?.auto_handle}{tr("Auto-handle is on: after {n} unchanged days, items that only need your OK are accepted and logged. Never critical.", { n: ap.policy.min_age_days })}{/if}</p>
+      {#if ap.policy?.auto_handle}{app.mode === "simple" ? tr("If nothing changes for {n} days, small items that only need your OK are accepted for you and written down. Urgent items always wait for you.", { n: ap.policy.min_age_days }) : tr("Auto-handle is on: after {n} unchanged days, items that only need your OK are accepted and logged. Never critical.", { n: ap.policy.min_age_days })}{/if}</p>
     {#if !cases.length}
       <div class="card empty">{tr("No cases need a decision.")}</div>
     {:else}
@@ -87,7 +87,7 @@
       <div class="flex flex-col gap-3">
         {#each cases as c (c.key)}
           <div class="card p-5">
-            <div class="flex items-center gap-2"><Pill severity={c.severity} /><span class="text-copy-13 text-gray-900">{c.count === 1 ? tr("1 observation") : tr("{n} observations", { n: c.count })}</span></div>
+            <div class="flex items-center gap-2"><Pill severity={c.severity} /><span class="text-copy-13 text-gray-900">{app.mode === "simple" ? (c.count === 1 ? tr("Seen 1 time") : tr("Seen {n} times", { n: c.count })) : c.count === 1 ? tr("1 observation") : tr("{n} observations", { n: c.count })}</span></div>
             <p class="selectable mt-2.5 text-label-14">{c.title}</p>
             {#if app.mode === "expert"}<p class="selectable mt-1 text-copy-13 text-gray-900">{c.what_happened}</p>{/if}
             {#if c.recommended}<p class="selectable mt-1 text-copy-13">{c.recommended}</p>{/if}
