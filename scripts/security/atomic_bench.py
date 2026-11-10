@@ -28,6 +28,7 @@ import yaml
 from jarvis.collectors.telemetry import sysmon
 from jarvis.collectors.telemetry import techniques as t
 from jarvis.collectors.telemetry.sysmon_linux import rules as linux_rules
+from jarvis.core import sigma
 
 PLAT = {"windows": t.WIN, "linux": t.LINUX}
 SHELL = {"command_prompt": ("C:\\Windows\\System32\\cmd.exe", "cmd.exe /c {}"),
@@ -161,6 +162,14 @@ def full_detectors(evs, regs, platform, n):
             if f.get("severity") in ("critical", "high", "medium", "low")]
 
 
+def script_block(command):
+    """What the script-block collector's rules say about a PowerShell test's text
+    (the test run in a PowerShell session with script-block logging on)."""
+    idx, _error = sigma.index(sigma.WIN_PS)
+    return [(r.severity, r.title + " (community rule)", r.tids)
+            for r in idx.match(sigma.prepare(sigma.WIN_PS, {"text": command, "path": ""}))]
+
+
 BENIGN = {t.WIN: ("command_prompt", ["dir C:\\Users", "notepad.exe notes.txt", "git status", "ping 127.0.0.1",
                                      "python.exe build.py", "code .", "ipconfig", "copy a.txt b.txt",
                                      "npm install", "tar -xf archive.tar", "where python", "type readme.md"]),
@@ -213,6 +222,8 @@ def main():
                     reg = [r for key, details in regs for r in t.registry(key, details)]
                     try:
                         found = full_detectors(events(ex["name"], command, platform), regs, platform, len(rows))
+                        if COMMUNITY and ex["name"] == "powershell":
+                            found += script_block(command)
                     except Exception as exc:  # a detector crash on odd input is itself a result
                         found = []
                         crashes[type(exc).__name__ + ": " + str(exc)[:80]] += 1

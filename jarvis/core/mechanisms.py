@@ -364,6 +364,14 @@ COLLECTORS = (
        admin_sensor="unavailable",
        command="sysmon", health="required", health_limit_s=1500,
        domain="windows", depends_on=("windows-bridge", "native-sensor"), cost_s=1.5),
+    # What PowerShell actually ran (event 4104), for commands that start no
+    # process. Reads only what Windows already logs; never turns logging on.
+    # The log is a small ring, so the cadence is short.
+    _c("psscript", 120, "PowerShell script blocks", None, 0, 2, "medium", 60,
+       command="sysmon", domain="windows", depends_on=("windows-bridge",), cost_s=3.0,
+       lane="frequent",
+       unscored="script-block findings are reported, not yet scored (unsoaked; reads only "
+                "when Windows script-block logging is already on)"),
     # ATT&CK coverage, validated by probing the real detectors.
     _c("attackmap", 21600, "ATT&CK coverage map", None, 0, 4, "low", 300,
        command="attack",
