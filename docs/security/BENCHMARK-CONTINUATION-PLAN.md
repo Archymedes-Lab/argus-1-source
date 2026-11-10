@@ -95,3 +95,90 @@ incomplete rather than claiming all files were enumerated or guaranteeing eventu
 - Workflow environment review: sudo filters the runner identity variables, so the
   live step now forwards just GITHUB_ACTIONS and RUNNER_ENVIRONMENT explicitly to
   the isolation gate. A regression check prevents an always-refused live workflow.
+
+## Follow-up: ProgramData registry provenance
+
+Measured read-only ACL metadata on 2026-11-10 disproved the blanket exclusion:
+standard user groups have Write rights on the ProgramData root, but only read
+rights on the checked Defender vendor folder. No ACL or policy was changed.
+
+Invariants before editing: a pathname cannot establish trusted writer identity;
+report security-family changes without reading registry values; retain existing
+family deduplication, medium severity ceiling, and bounded tables. Never grant an
+exception based on an executable or vendor name an attacker can copy.
+
+Compare a conservative unknown-provenance finding, a bounded independent signature
+plus ACL resolver, and blanket suppression. Choose the conservative finding as the
+smallest safe immediate fix. It may report legitimate vendor engines; any later
+suppression needs measured independent identity and ACL evidence and explicit
+failure behavior. The earlier zero-noise claim is superseded, not preserved by
+hiding a writable path. Validate arbitrary ProgramData writers, Defender lookalikes,
+case/path variants, missing identity, value privacy, and the pinned attack replay.
+
+## First disposable workflow result: refused, not measured
+
+Run 42884753488 was green but uploaded only an empty live.txt and no JSON. Logs
+show the isolation gate refused before any action: /sys/class/net belongs to the
+host's existing sysfs mount, even after unshare --net. The implicit workflow shell
+also masked the benchmark's nonzero exit through tee.
+
+Invariants before fixing: query the calling process's network namespace, fail
+closed on query errors, preserve every gate, propagate refused/failed benchmark
+status, and never accept an empty/missing measurement artifact. Use the standard
+socket interface enumeration (current namespace), explicit bash pipefail and a
+nonempty JSON artifact check. Add failure-path tests without executing attacks.
+- Jev comparison (jev-1.14.0, fixed metadata only) favored immediately reporting
+  unknown provenance: probability 0.97, concentration/confidence 0.96; verified
+  exclusion 0.03, blanket suppression 0.00. It grants no trust or response authority.
+- Disposable scenario audit also fixed an empty-crontab failure under set -e;
+  the fixture test runs the action against a fake crontab executable and scratch
+  state, so it verifies the shell path without touching the host's crontab.
+
+## First executed measurement and empty-socket baseline fix
+
+Run 42885855204 applied all 16 actions, named 8 through new findings, and reported
+no cleanup failures. It correctly failed because hidden's baseline mistook valid
+empty socket tables for unreadable tables. Result is provisional/incomplete, not a
+production detection score. Misses: loader preload, profile script, listener, PHP
+web shell, root crontab, hidden executable, shell-history redirection and rc.local.
+
+Invariants before editing: retain fresh socket reads and inode identity, distinguish
+complete empty observations from denied/malformed/truncated observations, preserve
+first-sighting evidence on failed recheck, allow absent IPv6 tables only, and cap
+strict reads. Choose an opt-in strict reader for attribution checks rather than
+changing the legacy best-effort mapping API for every consumer. A complete empty
+read is valid; read errors remain unknown and must never become clean attribution.
+- The provisional run omitted the existing Linux preload detector (`implant`) and
+  process/network scanner. Reviewed both service paths: they observe local Linux
+  state, use no model/network enrichment by default and persist only to the scratch
+  store. Added them to the explicit allowlist. Report collector names and a separate
+  high/critical count, because generic new-process inventory alone is not attack proof.
+- Strict socket reader: 22 attribution and 14 observation tests passed in private
+  scratch homes; real host read-only smoke parsed 18 rows. Jev Choice preferred the
+  strict evidence-status design (probability/concentration 1.00), advisory only;
+  deterministic malformed, denied, over-budget, empty and failed-recheck tests gate it.
+- Full local follow-up run completed 316/317 modules green. One existing campaign
+  cleanup test hit ESRCH while reading a process that had just been reaped; it
+  already accepts ENOENT and zombie state as successful termination. Treat ESRCH
+  identically, preserving the timeout and descendant-liveness assertions. This is
+  a test race correction, not a production behavior or containment promotion.
+
+## Completed disposable measurement
+
+Run 42887094655 (source a260548) applied 16/16 scenarios: 11 marker-linked findings,
+10 high/critical, 10 reviewed observers, 41.8 s. Baseline errors, after errors,
+cleanup-command failures and execution errors all empty. Preserve report at
+`docs/security/evidence/live-detection-2026-11-10.json`. This is controlled Linux
+state observation, not a score over the public 1,745 tests; marker linkage does not
+prove the intended mechanism was identified, and successful cleanup commands are
+not independent containment/recovery validation. No production deployment.
+
+Five recorded misses remain: profile script, PHP web shell, root crontab,
+shell-history redirection and rc.local. Do not remove or rewrite these cases to
+raise the count. They are next coverage work, with success and benign controls
+needed before broadening detection. The content-rule subset missed the PHP fixture.
+- Final CI ran 4,928 tests and caught the new strict text-open at the repository's
+  decoding gate. Preserve that gate: read bounded binary bytes, then explicitly
+  decode the kernel's ASCII protocol. Invalid bytes remain unavailable evidence,
+  while the collector's outer handler reports the gap. Add a non-ASCII failure
+  fixture; do not weaken the source guard or replace invalid bytes into valid rows.

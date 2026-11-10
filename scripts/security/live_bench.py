@@ -33,6 +33,7 @@ import hashlib
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -45,7 +46,7 @@ sys.path.insert(0, ROOT)
 from jarvis.lab import isolation  # noqa: E402
 
 # Explicit reviewed observation-only jobs; new scheduler jobs are excluded by default.
-READ_ONLY = frozenset({"backdoor", "posture", "asep", "hidden", "intrusion", "evasion",
+READ_ONLY = frozenset({"scan", "implant", "backdoor", "posture", "asep", "hidden", "intrusion", "evasion",
                        "webshell", "content", "sysmon_linux", "auditd", "logins", "sshwatch"})
 CHILD = ("import sys, json; sys.path.insert(0, %r)\n"
          "from jarvis.service.jobs import run_job\n"
@@ -81,7 +82,7 @@ SCENARIOS = (
     ("04", "T1543.002", "enabled systemd service running a program from /tmp",
      f"cp /bin/sleep /tmp/{T}-04; printf '[Unit]\\nDescription={T}-04\\n[Service]\\nExecStart=/tmp/{T}-04 3600\\n"
      f"[Install]\\nWantedBy=multi-user.target\\n' > /etc/systemd/system/{T}-04.service; "
-     f"systemctl daemon-reload; systemctl enable --now {T}-04.service",
+     f"systemctl daemon-reload; systemctl enable --now {T}-04.service; systemctl is-active --quiet {T}-04.service",
      f"systemctl disable --now {T}-04.service; rm -f /etc/systemd/system/{T}-04.service /tmp/{T}-04; "
      "systemctl daemon-reload", ()),
     ("05", "T1548.001", "setuid-root copy of a shell in /tmp",
@@ -121,7 +122,8 @@ SCENARIOS = (
      f"'ST[\"c\"]); }} ?>' > /var/www/html/{T}-12.php",
      f"rm -f /var/www/html/{T}-12.php", ()),
     ("13", "T1053.003", "root crontab entry at reboot",
-     f"(crontab -l 2>/dev/null; printf '@reboot /dev/shm/.{T}-13\\n') | crontab -",
+     f"(crontab -l 2>/dev/null || true; printf '@reboot /dev/shm/.{T}-13\\n') | crontab -; "
+     f"crontab -l | grep -Fq '{T}-13'",
      f"crontab -l 2>/dev/null | grep -v '{T}-13' | crontab - || true", ()),
     ("14", "T1564.001", "hidden executable in /tmp, running",
      f"mkdir -p /tmp/.{T}-14; cp /bin/sleep /tmp/.{T}-14/kworker; "
@@ -138,6 +140,14 @@ SCENARIOS = (
      f"if [ -e /etc/rc.local.{T} ]; then mv -f /etc/rc.local.{T} /etc/rc.local; else rm -f /etc/rc.local; fi",
      ("rc.local",)),
 )
+
+
+def network_isolated():
+    """Enumerate interfaces in this process's network namespace, not the sysfs mount."""
+    try:
+        return {name for _index, name in socket.if_nameindex()} <= {"lo"}
+    except OSError:
+        return False
 
 
 def refusal(env=None, uid=None, home=None, disposable_vm=False, isolated_network=None):
@@ -162,7 +172,7 @@ def refusal(env=None, uid=None, home=None, disposable_vm=False, isolated_network
     if uid != 0:
         return "run as root: the actions and their undo need it"
     if isolated_network is None:
-        isolated_network = set(os.listdir("/sys/class/net")) <= {"lo"}
+        isolated_network = network_isolated()
     if not isolated_network:
         return "network is not isolated: run inside a network namespace with only loopback"
     return ""
@@ -295,11 +305,13 @@ def main(argv=None):
     for sid, tid, what, _do, _undo, _extra in SCENARIOS:
         state = "not applied" if sid in not_applied else ("caught" if caught.get(sid) else "missed")
         rows.append({"id": sid, "technique": tid, "what": what, "state": state,
-                     "why": not_applied.get(sid, ""), "findings": caught.get(sid, [])})
+                     "why": not_applied.get(sid, ""), "findings": caught.get(sid, []),
+                     "high_or_critical": any(sev in ("high", "critical") for _job, sev, _title in caught.get(sid, []))})
     n_applied = len(applied)
     n_caught = sum(1 for r in rows if r["state"] == "caught")
-    report = {"applied": n_applied, "caught": n_caught, "scenarios": rows,
-              "jobs_run": len(names), "jobs_failed_before": failed_before, "jobs_failed_after": failed_after,
+    report = {"applied": n_applied, "caught": n_caught,
+              "high_or_critical": sum(row["high_or_critical"] for row in rows), "scenarios": rows,
+              "jobs_run": len(names), "jobs": [name for name, _timeout in names], "jobs_failed_before": failed_before, "jobs_failed_after": failed_after,
               "cleanup_failed": cleanup_failed, "execution_error": execution_error, "new_findings": len(new), "seconds": round(time.time() - started, 1)}
     print(f"live detection: {n_caught} of {n_applied} applied actions were named by a new finding "
           f"({len(SCENARIOS) - n_applied} could not be applied here); {len(names)} collectors, "

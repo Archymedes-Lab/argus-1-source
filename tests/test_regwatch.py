@@ -59,7 +59,7 @@ class Judge(unittest.TestCase):
         self.assertIsNone(regwatch.judge("C:\\Users\\u\\AppData\\Local\\Discord\\Update.exe", RUN))
         # Defender's own engine lives under ProgramData and writes its own settings.
         engine = "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18\\MsMpEng.exe"
-        self.assertIsNone(regwatch.judge(engine, "HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Features\\X"))
+        self.assertEqual(regwatch.judge(engine, "HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Features\\X")[3], "shared-data")
 
     def test_scripting_tools_are_reported_wherever_they_live(self):
         for tool in ("powershell.exe", "PWSH.EXE", "cmd.exe", "wscript.exe", "regedit.exe", "python.exe"):
@@ -105,3 +105,28 @@ class Detector(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedDataProvenance(unittest.TestCase):
+    def test_shared_data_location_never_proves_a_trusted_writer(self):
+        for image in (r"C:\ProgramData\UserCreated\agent.exe",
+                      r"C:\ProgramData\Microsoft\Windows Defender\Platform\fake\MsMpEng.exe",
+                      "d:/PROGRAMDATA/user-created/tool.exe"):
+            result = regwatch.judge(image, POLICY)
+            self.assertIsNotNone(result, image)
+            self.assertEqual(result[3], "shared-data")
+
+    def test_unknown_provenance_is_explicit_and_value_is_withheld(self):
+        findings = audit([(r"C:\ProgramData\UserCreated\agent.exe", POLICY, "secret-registry-value")])
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]['severity'], 'medium')
+        self.assertIn('location alone does not establish', findings[0]['detail'])
+        self.assertIn('legitimate vendor security engines', findings[0]['detail'])
+        self.assertNotIn('secret-registry-value', str(findings))
+
+    def test_similar_directory_names_are_not_treated_as_programdata(self):
+        self.assertIsNone(regwatch.judge(r"C:\ProgramDatabase\agent.exe", POLICY))
+        self.assertIsNone(regwatch.judge(None, POLICY))
+
+    def test_scripting_tool_identity_remains_the_more_specific_reason(self):
+        self.assertEqual(regwatch.judge(r"C:\ProgramData\tools\powershell.exe", POLICY)[3], 'tool')

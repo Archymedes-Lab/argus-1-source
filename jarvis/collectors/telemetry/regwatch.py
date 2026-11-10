@@ -71,9 +71,10 @@ TOOLS = frozenset({
 # Folders a standard user can write. A program there is not a Windows component or a
 # machine-wide installation. Autostart entries are left to the autostart inventory
 # (collectors/persistence/asep.py): per-user applications register themselves there all day.
-# Not ProgramData: its vendor folders are administrator-only, and Microsoft Defender's own
-# engine runs from there and writes its settings (measured 2026-11-10: the only two reports
-# in 8,619 recorded registry writes were exactly that).
+# ProgramData is a shared-data tree: its root permits user-created folders, while
+# individual vendor folders may be protected. Neither fact establishes the writer's
+# provenance from a path. Report such writes conservatively; no vendor-name exemption.
+SHARED_DATA = re.compile(r"^[a-z]:\\programdata\\", re.I)
 USER_WRITABLE = re.compile(r"^[a-z]:\\(users|temp|windows\\temp|perflogs)\\", re.I)
 USER_PATH_SKIP = frozenset({"autorun", "openwith", "proxy"})
 SEVERITY = "medium"
@@ -95,11 +96,13 @@ def family(key):
 
 
 def writer_kind(image, fid):
-    """"tool", "user-path" or "" (a writer this rule has nothing to say about)."""
+    """Writer evidence: tool, user-path, shared-data (unknown provenance), or none."""
     if _base(image) in TOOLS:
         return "tool"
     if fid not in USER_PATH_SKIP and USER_WRITABLE.search((image or "").replace("/", "\\")):
         return "user-path"
+    if fid not in USER_PATH_SKIP and SHARED_DATA.search((image or "").replace("/", "\\")):
+        return "shared-data"
     return ""
 
 
@@ -115,6 +118,15 @@ def judge(image, key):
 def describe(image, what, kind, key, count, when):
     """(title, detail) for one folded finding."""
     who = _base(image) or "an unknown program"
+    if kind == "shared-data":
+        return (f"{who} changed {what.split(' (')[0]}",
+                f"{who} wrote to {key[:MAX_KEY]}" + (f" at {when}" if when else "")
+                + (f", {count} writes in this family" if count > 1 else "")
+                + f". This part of the registry holds {what}. The writer runs under ProgramData, "
+                  "whose subfolders have different permissions. Its location alone does not establish "
+                  "trusted provenance; legitimate vendor security engines may also run there. "
+                  "Confirm the executable signature and directory permissions before judging this change. "
+                  "The value written is not shown.")
     reason = ("a command-line or scripting tool" if kind == "tool"
               else "a program running from a folder any account can write")
     title = f"{who} changed {what.split(' (')[0]}"
