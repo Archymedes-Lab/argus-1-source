@@ -79,16 +79,20 @@ def run_nested(name):
     """Oracle: a denied member must be refused wherever it sits. Here it is inside
     a zip that is itself a member of an allowed zip artifact (a .whl, .jar, .nupkg,
     a bundled .zip): the gate must still see the denied name."""
-    name = name.strip().strip("/") or "x"
-    if not gate.denied_path(name, POLICY) or ".." in name.split("/") or name.startswith("/"):
+    # zipfile truncates member names at NUL bytes and keeps backslashes literal;
+    # the gate normalizes backslashes to slashes when it renders the member name.
+    rendered = name.split("\x00", 1)[0].replace("\\", "/").strip().strip("/") or "x"
+    if not gate.denied_path(rendered, POLICY) or ".." in rendered.split("/") \
+            or rendered.startswith("/"):
         return
-    inner = zip_bytes({name: b"print('hi')\n"})
+    inner = zip_bytes({rendered: b"print('hi')\n"})
     rule = {"name": "fuzz.zip", "kind": "zip", "allow": ["app/**/*"], "executables": []}
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp) / "fuzz.zip"
         p.write_bytes(zip_bytes({"app/lib/bundle.zip": inner}))
         problems, _n = gate.check_artifact(p, rule, POLICY)
-    assert any(name in p for p in problems), f"nested archive hides a denied member: {name!r} inside app/lib/bundle.zip passes the gate"
+    assert any(rendered.lower() in p.lower() for p in problems), \
+        f"nested archive hides a denied member: {rendered!r} inside app/lib/bundle.zip passes the gate"
 
 
 ASCII_TAG = re.compile(r"v?20[0-9]{2}\.[0-9]{2}\.[0-9]{2}(?:-(?:0|[1-9][0-9]*))?", re.ASCII)
@@ -106,8 +110,9 @@ def run_version(text):
 
 def _windows_canonical(path):
     """How Windows (case-insensitive, Win32 path rules) names the extracted file:
-    case folded, trailing dots and spaces dropped from every segment."""
-    return "/".join(seg.rstrip(". ") for seg in path.lower().split("/"))
+    backslashes become slashes, case folded, trailing dots and spaces dropped
+    from every segment."""
+    return "/".join(seg.rstrip(". ") for seg in path.replace("\\", "/").lower().split("/"))
 
 
 def run_denied_case(path):

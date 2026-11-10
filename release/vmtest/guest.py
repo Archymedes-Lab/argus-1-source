@@ -441,6 +441,8 @@ def phase1():
                   "systemd": sh("systemctl --version | head -n 1", 10)[1].strip(),
                   "mem_available_before_mb": meminfo("MemAvailable")}
     R["files_sha256"] = {f"{LAB}/guest.py": sha256(f"{LAB}/guest.py")}
+    if CONF.get('security_probes'):
+        R['files_sha256'][f'{LAB}/security_guest.py'] = sha256(f'{LAB}/security_guest.py')
     # S1 (guest half): the bytes delivered are the bytes the host verified against SHA256SUMS.
     R["S1"] = {w: {"expected": f["sha256"], "got": sha256(f["guest_path"])} for w, f in CONF["files"].items()}
     if any(v["expected"] != v["got"] for v in R["S1"].values()):
@@ -473,6 +475,9 @@ def phase1():
     AUTH["token"] = tok
     R["token_found"] = bool(tok)
     R["state_status"] = http("/api/state")[0]
+    if CONF.get('security_probes'):
+        from security_guest import probes
+        R['security_probes'] = probes(PORT, tok)
     R["forced"] = {j: http(f"/api/run?job={j}", "POST", tok)[0]
                    for j in ("patches", "heartbeat", "distrovuln", "firewall", "backdoor", "logins")}
     if CONF.get("scenario", True):

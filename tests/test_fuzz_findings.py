@@ -92,20 +92,17 @@ class ReleaseGateFindings(unittest.TestCase):
         names = sorted(m.path for m in gate._deb_members(deb))
         self.assertIn("usr/share/argus-server/bin/argus-server", names)
 
-    @unittest.expectedFailure  # FZ-11 open: the gate does not look inside nested archives
     def test_fz11_denied_member_inside_a_nested_zip_is_refused(self):
         inner = rg.zip_bytes({"src/secret.py": b"print('x')  # /home/builder/project\n"})
         rule = {"name": "f.zip", "kind": "zip", "allow": ["app/**/*"], "executables": []}
         problems, _n = _check("f.zip", rg.zip_bytes({"app/lib/bundle.zip": inner}), rule)
         self.assertTrue(any("src/secret.py" in p for p in problems), problems)
 
-    @unittest.expectedFailure  # FZ-12 open: a "binary" artifact that is a zip is not opened
     def test_fz12_binary_artifact_that_is_a_zip_is_refused(self):
         data = rg.zip_bytes({"src/secret.py": b"x"})
         problems, _n = _check("argus-desktop-windows-x64.exe", data, {"name": "x", "kind": "binary"})
         self.assertTrue(problems)
 
-    @unittest.expectedFailure  # FZ-13 open: denied names compared case-sensitively
     def test_fz13_denied_names_follow_windows_name_equivalence(self):
         for path in ("app/Docs/readme.txt", "app/SRC/x.dll", "app/x.PY.", "app/Tests/a.dll"):
             self.assertTrue(gate.denied_path(path, POLICY), path)
