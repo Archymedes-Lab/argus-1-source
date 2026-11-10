@@ -76,10 +76,16 @@ GitHub Team (protected branches, required reviews).
 ## Windows code signing (Authenticode) is separate
 
 Releaser keys sign `SHA256SUMS` so the site and the audit know who approved a release. They do
-not make Windows trust a program. SmartScreen needs an Authenticode certificate. Still missing,
-and needed from the owner: (1) a code-signing certificate from a public CA (an EV certificate
-clears SmartScreen reputation fastest; a standard OV certificate builds it over time), its
-private key on a hardware token or a cloud HSM service, never a file in CI; (2) a signing step in
+not make Windows trust a program. Authenticode identifies the Windows publisher; new signed files can still warn
+until reputation develops. EV certificates no longer bypass SmartScreen. See
+[Microsoft guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+Still missing, and needed from the owner: (1) a publicly trusted code-signing certificate, or
+a validated Microsoft Artifact Signing public-trust profile, with its
+private key held by a hardware token or cloud signing service, never an exported key file in CI; (2) a signing step in
 `release/build_desktop.py` for `argus-desktop-windows-x64.exe` and the installer that signs with
 `signtool /fd SHA256 /tr <RFC 3161 timestamp URL> /td SHA256`, so the signature stays valid after the
 certificate expires; (3) gate policy to reject an unsigned `.exe`. None of this has been done or tested.
+
+
+For the concrete signing order, prerequisites and acceptance checks, see
+[the Windows publisher-trust plan](WINDOWS-PUBLISHER-TRUST-2026-11-10.md).

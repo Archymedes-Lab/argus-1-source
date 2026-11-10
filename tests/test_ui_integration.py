@@ -1,8 +1,8 @@
 """Integration invariants independent of redesign layout and detector wording."""
 import sqlite3
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
-import unittest
 
 from jarvis.web.server import _indicator_kinds
 

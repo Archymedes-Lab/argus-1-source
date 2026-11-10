@@ -169,7 +169,7 @@ async def every_view(pg, errors, tag, shots, min_text=40):
             await pg.screenshot(path=str(Path(shots) / f"{tag.replace('/', '-')}-{i:02d}.png"))
     # The coverage panel in the sidebar opens the Coverage view.
     before = len(errors)
-    await pg.locator("aside button.side-section").first.click()
+    await pg.locator("aside button[data-view=coverage]").first.click()
     await pg.wait_for_timeout(700)
     check(f"[{tag}] Coverage: no script error", len(errors) == before, "; ".join(errors[before:])[:200])
 
@@ -250,7 +250,7 @@ async def run(shots):
         check("Settings: Open in your browser", len(await calls(pg, "open_page")) == 2)
         for view, page in (("Coverage", "coverage"), ("GeoSecurity", "geo"), ("World", "world"), ("Processes", "procs")):
             if view == "Coverage":
-                await pg.locator("aside button.side-section").first.click()
+                await pg.locator("aside button[data-view=coverage]").first.click()
             else:
                 await pg.locator("aside nav button", has_text=view).first.click()
             await pg.wait_for_timeout(600)

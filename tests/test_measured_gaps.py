@@ -160,7 +160,7 @@ class StartupEvidence(Scratch):
         saved = store.get_snapshots()['backdoor']['findings'][0]
         saved.pop('origin', None)
         self.assertTrue(content_origin(saved))
-        self.assertEqual(saved['severity'], 'high')
+        self.assertEqual(saved['severity'], 'critical')     # marked advisory, never made cheaper
         self.assertTrue(content_origin({'category': 'webshell', 'title': 'old stored finding'}))
 
 

@@ -115,3 +115,18 @@ narrow sealed-base release before requesting the final local authenticated activ
 Initial Windows report investigation: the job list omitted `control`, the actual
 Run/task/service collector. Add it and rerun identical fixtures; preserve the
 initial 1/5 report as harness evidence. No detector rule/severity is changed.
+
+## Integration correction, 2026-11-11: file evidence keeps its severity
+
+The file-evidence change above also lowered existing detections from critical to
+high: a fetch-and-run or reverse-shell line in a login profile or cron file, and a
+web-shell score of four or more. That is not a proven detector bug, and making a
+detection cheaper is an owner decision under the score-integrity rule
+(ALERT-QUALITY-2026-11-08). It was reverted before merge: `file_finding` marks the
+evidence (durable title mark, no automatic response, source and arguments withheld)
+and leaves severity as the detector gave it. The privacy fix and the authority fix
+stand. Titles of these findings gained the ` (file evidence)` mark, so
+acknowledgements made against the old titles no longer apply and the findings show
+again at full severity until confirmed: the score can only fall from this.
+
+Still for the owner: whether these should cost less than critical.

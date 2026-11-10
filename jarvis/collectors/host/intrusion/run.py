@@ -1,7 +1,7 @@
 """The intrusion audit: one PowerShell sample, turned into findings."""
 
-import re
 import ntpath
+import re
 import time
 
 from jarvis.core.paths import load_win_script

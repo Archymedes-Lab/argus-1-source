@@ -369,7 +369,7 @@ def check_persistence():
         for i, line in enumerate(body.splitlines(), 1):
             if PAYLOAD_RE.search(line):
                 out.append(file_finding(
-                    "persistence", "high",
+                    "persistence", "critical",
                     f"shell profile runs a payload: {os.path.basename(f)}:{i}",
                     "A fetch/execute or reverse-shell indicator appears in startup code; source and arguments are withheld.",
                     f))
@@ -432,7 +432,7 @@ def check_persistence():
                 continue
             if PAYLOAD_RE.search(line):
                 out.append(file_finding(
-                    "persistence", "high",
+                    "persistence", "critical",
                     f"cron entry runs a payload: {os.path.basename(f)}:{i}",
                     "A fetch/execute or reverse-shell indicator appears in cron code; source and arguments are withheld.", f))
             elif not owned and f.startswith("/etc/cron.d/"):

@@ -90,3 +90,12 @@ Noul for changing/suppressing findings from the current evidence: 0.07; for clai
 five Windows detections from initial delivery evidence: 0.07. Advice supports the
 conservative repairs; deterministic tests and measured execution remain authoritative.
 UI build passed, svelte-check had zero errors/warnings, 72 Bun tests passed.
+
+Native signing follow-up: owner identifies the warning as SmartScreen unknown
+publisher. Added a public-trust signing plan and corrected the outdated EV claim.
+No policy bypass or security exclusion was applied. Read-only Windows diagnostic
+was unavailable from this shell, so local event counts remain unverified.
+
+The combined tree now includes the measured-gap branch for final regression.
+Browser navigation checks target stable Coverage view identity with the same
+navigation assertions. Full unittest discovery uses a private scratch HOME.

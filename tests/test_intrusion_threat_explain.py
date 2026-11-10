@@ -2,7 +2,6 @@ import time
 import unittest
 from unittest import mock
 
-from jarvis.collectors.host import intrusion
 from jarvis.collectors.host.intrusion import run
 from jarvis.collectors.host.intrusion.explain import explain_threat
 

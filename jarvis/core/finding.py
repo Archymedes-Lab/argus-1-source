@@ -34,9 +34,10 @@ CONTENT_TITLE_MARKS = ((" (community rule)", "sigma"), (" [rule pack ", "rulepac
 
 
 def file_finding(category, severity, title, detail, where="", host=None):
-    """External file evidence stays advisory, including after persistence."""
-    if severity == "critical":
-        severity = "high"
+    """File evidence: marked so that it never drives an automatic action, also after it
+    was stored and read back. The mark does not change severity: lowering what a
+    detection costs is an owner decision under the score-integrity rule
+    (ALERT-QUALITY-2026-11-08), not a side effect of how the evidence was gathered."""
     result = finding(category, severity, title + " (file evidence)", detail, where, host)
     result["origin"] = "file"
     return result
