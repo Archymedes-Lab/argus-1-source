@@ -58,4 +58,3 @@ def read_start(path, limit=DEFAULT_LIMIT, expected=None):
         return None
     finally:
         os.close(fd)
-
