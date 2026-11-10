@@ -65,7 +65,7 @@ class BuildTests(unittest.TestCase):
 
         store = Store(self.db)
         try:
-            acknowledge.acknowledge(store, crit, "hunt", "owner test")
+            acknowledge.acknowledge(store, crit, "hunt", "owner test", confirmed_by=acknowledge.TERMINAL)
         finally:
             store.close()
         pulse = stream.build(self.db, None)

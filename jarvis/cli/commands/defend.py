@@ -14,10 +14,10 @@ so nothing starts acting on its own without an explicit edit.
 
 
 from jarvis.core.util import iso
-from jarvis.response import alert, defense, questions
+from jarvis.response import acknowledge, alert, defense, questions
 from jarvis.response.actions import base
 
-from ..output import color, is_tty
+from ..output import color, is_tty, typed_confirmation
 
 
 def cmd_defend(store, args):
@@ -97,7 +97,18 @@ def cmd_answer(store, args):
             print(f"        no  → {q['no']}")
             print(f"        {q['answer_cmd']}\n")
         return 0
-    ok, message = questions.answer(store, args.qid, args.choice)
+    confirmed_by = None
+    hit = acknowledge.resolve(store.get_snapshots(), args.qid)
+    yes = (args.choice or "").strip().lower() in ("y", "yes", "mine", "me")
+    if hit and yes and acknowledge.needs_confirmation(hit[0]):
+        what = (f"CRITICAL: {hit[0].get('title', '')} ({hit[1]})\n"
+                "Answering yes marks it as expected and stops alerts about it.")
+        if not typed_confirmation(args.qid, what):
+            print("not confirmed: a critical finding can only be confirmed by typing its id "
+                  "at an interactive terminal")
+            return 2
+        confirmed_by = acknowledge.TERMINAL
+    ok, message = questions.answer(store, args.qid, args.choice, confirmed_by=confirmed_by)
     print(message)
     return 0 if ok else 1
 

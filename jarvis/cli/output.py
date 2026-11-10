@@ -23,6 +23,29 @@ def is_tty():
     return sys.stdout.isatty()
 
 
+def typed_confirmation(word, what, stdin=None, stdout=None):
+    """True only when a person at an interactive terminal types `word`.
+
+    Refuses outright when either stream is not a terminal: a pipe, a script or
+    a service cannot confirm. Nothing is read in that case.
+    """
+    stdin = sys.stdin if stdin is None else stdin
+    stdout = sys.stdout if stdout is None else stdout
+    try:
+        interactive = stdin.isatty() and stdout.isatty()
+    except (AttributeError, ValueError):
+        interactive = False
+    if not interactive:
+        return False
+    try:
+        stdout.write(f"{what}\nType {word} to confirm, anything else to cancel: ")
+        stdout.flush()
+        typed = stdin.readline()
+    except (OSError, ValueError, KeyboardInterrupt):
+        return False
+    return typed.strip() == word
+
+
 def selected_hosts(args):
     """The domains to observe: all that exist here, or the one asked for."""
     if args.host == "all":
