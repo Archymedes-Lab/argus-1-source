@@ -1,0 +1,264 @@
+{
+  "applied": 16,
+  "caught": 11,
+  "high_or_critical": 10,
+  "scenarios": [
+    {
+      "id": "01",
+      "technique": "T1053.003",
+      "what": "system cron job running a script from /tmp",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "medium",
+          "cron file no package owns: argus-live-d741d0eb4f-01"
+        ]
+      ],
+      "high_or_critical": false
+    },
+    {
+      "id": "02",
+      "technique": "T1136.001",
+      "what": "second account with user id 0",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "critical",
+          "second account with uid 0: argus-live-d741d0eb4f-02"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "03",
+      "technique": "T1098.004",
+      "what": "SSH key added to root's authorized_keys",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "high",
+          "SSH key authorised for root: argus-live-d741d0eb4f-03"
+        ],
+        [
+          "sshwatch",
+          "high",
+          "new SSH key for root"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "04",
+      "technique": "T1543.002",
+      "what": "enabled systemd service running a program from /tmp",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "argus-live-d741 [pid 2563] \u2014 NEW"
+        ],
+        [
+          "backdoor",
+          "high",
+          "privileged service runs user-editable code: argus-live-d741d0eb4f-04.service"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "05",
+      "technique": "T1548.001",
+      "what": "setuid-root copy of a shell in /tmp",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "critical",
+          "setuid binary no package owns: argus-live-d741d0eb4f-05"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "06",
+      "technique": "T1574.006",
+      "what": "library added to /etc/ld.so.preload",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "implant",
+          "critical",
+          "a global library preload is configured"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "07",
+      "technique": "T1546.004",
+      "what": "script dropped in /etc/profile.d",
+      "state": "missed",
+      "why": "",
+      "findings": [],
+      "high_or_critical": false
+    },
+    {
+      "id": "08",
+      "technique": "T1571",
+      "what": "listener on all interfaces on an unusual port",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "argus-live-d741 [pid 2579] \u2014 NEW"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "09",
+      "technique": "T1070.004",
+      "what": "process still running after its program file was deleted",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "argus-live-d741 [pid 2584] \u2014 NEW"
+        ],
+        [
+          "hidden",
+          "critical",
+          "executable mapping was deleted from disk"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "10",
+      "technique": "T1098",
+      "what": "sshd drop-in allowing root password logins",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "critical",
+          "sshd_config: PermitEmptyPasswords yes"
+        ],
+        [
+          "backdoor",
+          "high",
+          "sshd_config: PermitRootLogin yes"
+        ],
+        [
+          "sshwatch",
+          "medium",
+          "SSH accepts passwords"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "11",
+      "technique": "T1548.003",
+      "what": "sudoers drop-in granting passwordless root",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "high",
+          "passwordless sudo: nobody ALL=(ALL) NOPASSWD: ALL"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "12",
+      "technique": "T1505.003",
+      "what": "PHP web shell in the web root",
+      "state": "missed",
+      "why": "",
+      "findings": [],
+      "high_or_critical": false
+    },
+    {
+      "id": "13",
+      "technique": "T1053.003",
+      "what": "root crontab entry at reboot",
+      "state": "missed",
+      "why": "",
+      "findings": [],
+      "high_or_critical": false
+    },
+    {
+      "id": "14",
+      "technique": "T1564.001",
+      "what": "hidden executable in /tmp, running",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "kworker [pid 2605] \u2014 NEW"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "15",
+      "technique": "T1070.003",
+      "what": "root shell history redirected to /dev/null",
+      "state": "missed",
+      "why": "",
+      "findings": [],
+      "high_or_critical": false
+    },
+    {
+      "id": "16",
+      "technique": "T1037.004",
+      "what": "rc.local created and made executable",
+      "state": "missed",
+      "why": "",
+      "findings": [],
+      "high_or_critical": false
+    }
+  ],
+  "jobs_run": 10,
+  "jobs": [
+    "scan",
+    "hidden",
+    "implant",
+    "backdoor",
+    "webshell",
+    "content",
+    "auditd",
+    "sysmon_linux",
+    "logins",
+    "sshwatch"
+  ],
+  "jobs_failed_before": {},
+  "jobs_failed_after": {},
+  "cleanup_failed": {},
+  "execution_error": "",
+  "new_findings": 32,
+  "seconds": 41.8,
+  "source_run": "https://github.com/Archymedes-Lab/argus-1/actions/runs/42887094655",
+  "source_commit": "a260548",
+  "scope": "16 reviewed controlled Linux state scenarios; marker-linked findings, not necessarily mechanism-specific attribution; no protected-user data or production deployment"
+}

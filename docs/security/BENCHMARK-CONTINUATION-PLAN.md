@@ -157,3 +157,23 @@ read is valid; read errors remain unknown and must never become clean attributio
   scratch homes; real host read-only smoke parsed 18 rows. Jev Choice preferred the
   strict evidence-status design (probability/concentration 1.00), advisory only;
   deterministic malformed, denied, over-budget, empty and failed-recheck tests gate it.
+- Full local follow-up run completed 316/317 modules green. One existing campaign
+  cleanup test hit ESRCH while reading a process that had just been reaped; it
+  already accepts ENOENT and zombie state as successful termination. Treat ESRCH
+  identically, preserving the timeout and descendant-liveness assertions. This is
+  a test race correction, not a production behavior or containment promotion.
+
+## Completed disposable measurement
+
+Run 42887094655 (source a260548) applied 16/16 scenarios: 11 marker-linked findings,
+10 high/critical, 10 reviewed observers, 41.8 s. Baseline errors, after errors,
+cleanup-command failures and execution errors all empty. Preserve report at
+`docs/security/evidence/live-detection-2026-11-10.json`. This is controlled Linux
+state observation, not a score over the public 1,745 tests; marker linkage does not
+prove the intended mechanism was identified, and successful cleanup commands are
+not independent containment/recovery validation. No production deployment.
+
+Five recorded misses remain: profile script, PHP web shell, root crontab,
+shell-history redirection and rc.local. Do not remove or rewrite these cases to
+raise the count. They are next coverage work, with success and benign controls
+needed before broadening detection. The content-rule subset missed the PHP fixture.

@@ -35,7 +35,7 @@ PowerShell test text. It does not measure telemetry delivery, actual block assem
 detection latency, end-to-end attacks or the benign population false-positive rate.
 The following earlier sections are historical snapshots, including superseded counts.
 
-Content scanning now ships a strict **215-rule** literal-only signature-base subset
+The source now includes a strict **215-rule** literal-only signature-base subset
 (commit de3c7252c22b3376352b5a68defa46459a12a693), without executing rule code.
 The interrupted 326-rule build used a licence substring check; explicit approved
 DRL-1.1 labels reduce that set to 215. The scanner rejects ancestor symlinks and
@@ -61,7 +61,7 @@ Real-execution work is a manually dispatched disposable-runner workflow with an
 explicit observation-only collector allowlist, an isolated network namespace,
 per-action cleanup, failure reporting and retained artifacts. It is not a replay
 replacement: 16 local Linux scenarios do not represent the 1,745-test corpus.
-No live-execution result is claimed until a workflow run produces evidence.
+The completed workflow measurement is recorded below; it promotes no production capability.
 
 Plan and invariants: [BENCHMARK-CONTINUATION-PLAN.md](BENCHMARK-CONTINUATION-PLAN.md).
 Jev advisory (jev-1.14.0, fixed metadata only): Choice favored skipping oversized
@@ -70,10 +70,29 @@ files (probability 0.89; concentration/confidence 0.83), prioritized real execut
 production detection was 0.03. Advice supports the conservative design and next
 validation priority; it changes no gate, severity or authorization.
 
+**Measured disposable Linux execution:** [run 42887094655](https://github.com/Archymedes-Lab/argus-1/actions/runs/42887094655)
+against source a260548 applied 16/16 controlled state scenarios; 11 generated a new
+marker-linked finding, 10 at high/critical severity. Ten reviewed observers ran in
+41.8 seconds: scan, hidden, implant, backdoor, webshell, content, auditd, sysmon_linux,
+logins and sshwatch. No baseline/after collector error or cleanup-command failure.
+A finding naming a process marker need not identify the intended attack mechanism;
+these counts are not proof of compromise or a general detection rate. This does not
+measure Windows execution, the 1,745-test corpus, kernel telemetry delivery, production
+latency, containment or independent verification of complete recovery.
+
+Misses are retained: profile script, PHP web shell, root crontab, shell-history
+redirection and rc.local. In particular, the literal community content subset did
+not report this simple PHP fixture. [The report](evidence/live-detection-2026-11-10.json)
+is preserved in the repository as well as the workflow artifact; all scenario data
+came from the disposable runner, with no protected-user data. The first green run
+42884753488 refused before execution and produced no JSON; it is not a measurement.
+The intermediate 8/16 run 42885855204 had an invalid empty-socket baseline and remains
+incomplete. See the continuation plan for the fixes and why the final run is different.
+
 Still open: exact own-launch suppression for process-start community rules,
 broader false-positive measurement, reliable script-log retention, memory-content
 scanning, a maintained full rule engine if justified, signed rule-pack distribution,
-and measured live execution on both Windows and Linux.
+and measured Windows execution plus broader Linux coverage.
 
 ---
 
