@@ -209,3 +209,49 @@ class Interruption(ExecutionFailures):
         code, sh, _ = self.run_main([InterruptedError('signal'), ok])
         self.assertEqual(code, 1)
         self.assertEqual(sh.call_count, 2)
+
+class NamespaceEvidence(unittest.TestCase):
+    def test_interface_query_uses_current_process_namespace_and_fails_closed(self):
+        for interfaces, expected in (([(1, 'lo')], True), ([(1, 'lo'), (2, 'eth0')], False)):
+            with mock.patch.object(live.socket, 'if_nameindex', return_value=interfaces) as query:
+                self.assertEqual(live.network_isolated(), expected)
+                query.assert_called_once_with()
+        with mock.patch.object(live.socket, 'if_nameindex', side_effect=OSError('no namespace view')):
+            self.assertFalse(live.network_isolated())
+
+    def test_workflow_propagates_refusal_and_requires_report_artifact(self):
+        import subprocess
+        self.assertIn('shell: bash', Workflow.TEXT)
+        self.assertIn('set -euo pipefail', Workflow.TEXT)
+        self.assertIn('test -s "$RUNNER_TEMP/live.json"', Workflow.TEXT)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(['bash', '-euo', 'pipefail', '-c',
+                                     'exit 2 | tee "$1"', 'test', os.path.join(tmp, 'empty.txt')],
+                                    capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 2)
+
+class EmptyCrontab(unittest.TestCase):
+    def test_no_existing_crontab_still_installs_fixture_entry(self):
+        # Execute against a fake crontab command and a scratch file, never the host crontab.
+        import shutil
+        import subprocess
+        import sys
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake = root / 'crontab'
+            fake.write_text(f'#!{sys.executable}\n'
+                            'import os,sys\nfrom pathlib import Path\n'
+                            'p=Path(os.environ["FIXTURE_CRONTAB"])\n'
+                            'if sys.argv[1] == "-l":\n'
+                            ' if not p.exists(): sys.exit(1)\n'
+                            ' print(p.read_text(), end="")\n'
+                            'else: p.write_text(sys.stdin.read())\n')
+            fake.chmod(0o755)
+            os.symlink(shutil.which('grep'), root / 'grep')
+            state = root / 'state'
+            result = subprocess.run(['/bin/sh', '-ec', live.SCENARIOS[12][3]],
+                                    env={'PATH': str(root), 'FIXTURE_CRONTAB': str(state)},
+                                    capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f'{live.T}-13', state.read_text())

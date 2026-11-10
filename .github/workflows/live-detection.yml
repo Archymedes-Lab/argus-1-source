@@ -2,7 +2,7 @@ name: Live detection run
 
 # Started by a person, never by a push. On a GitHub-hosted runner (a virtual machine
 # that is destroyed afterwards) a fixed list of local, reversible attacker actions is
-# carried out for real, and reviewed Linux observation collectors is asked what it saw
+# carried out for real, and reviewed Linux observation collectors report what they saw
 # (scripts/security/live_bench.py). Nothing is downloaded by the actions and nothing
 # leaves the runner. A measurement: it does not gate a release. CI minutes are a
 # budget, so this is not scheduled.
@@ -26,9 +26,12 @@ jobs:
       - name: Runtime dependencies (pinned by hash)
         run: python -m pip install --disable-pip-version-check --require-hashes -r release/requirements-runtime.txt
       - name: Real actions, then reviewed collectors
+        shell: bash
         run: |
+          set -euo pipefail
           # No external network in the attack/collector phase. Dependencies were installed above.
-          sudo unshare --net -- env JARVIS_ARENA_SANDBOX=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" "$(command -v python)" scripts/security/live_bench.py --json "$RUNNER_TEMP/live.json" | tee "$RUNNER_TEMP/live.txt"
+          sudo unshare --net -- env JARVIS_ARENA_SANDBOX=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" "$(command -v python)" scripts/security/live_bench.py --json "$RUNNER_TEMP/live.json" 2>&1 | tee "$RUNNER_TEMP/live.txt"
+          test -s "$RUNNER_TEMP/live.json"
           { echo '```'; cat "$RUNNER_TEMP/live.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve measurement, including failed runs
         if: always()

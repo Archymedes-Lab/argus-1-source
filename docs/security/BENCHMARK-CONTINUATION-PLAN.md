@@ -95,3 +95,41 @@ incomplete rather than claiming all files were enumerated or guaranteeing eventu
 - Workflow environment review: sudo filters the runner identity variables, so the
   live step now forwards just GITHUB_ACTIONS and RUNNER_ENVIRONMENT explicitly to
   the isolation gate. A regression check prevents an always-refused live workflow.
+
+## Follow-up: ProgramData registry provenance
+
+Measured read-only ACL metadata on 2026-11-10 disproved the blanket exclusion:
+standard user groups have Write rights on the ProgramData root, but only read
+rights on the checked Defender vendor folder. No ACL or policy was changed.
+
+Invariants before editing: a pathname cannot establish trusted writer identity;
+report security-family changes without reading registry values; retain existing
+family deduplication, medium severity ceiling, and bounded tables. Never grant an
+exception based on an executable or vendor name an attacker can copy.
+
+Compare a conservative unknown-provenance finding, a bounded independent signature
+plus ACL resolver, and blanket suppression. Choose the conservative finding as the
+smallest safe immediate fix. It may report legitimate vendor engines; any later
+suppression needs measured independent identity and ACL evidence and explicit
+failure behavior. The earlier zero-noise claim is superseded, not preserved by
+hiding a writable path. Validate arbitrary ProgramData writers, Defender lookalikes,
+case/path variants, missing identity, value privacy, and the pinned attack replay.
+
+## First disposable workflow result: refused, not measured
+
+Run 42884753488 was green but uploaded only an empty live.txt and no JSON. Logs
+show the isolation gate refused before any action: /sys/class/net belongs to the
+host's existing sysfs mount, even after unshare --net. The implicit workflow shell
+also masked the benchmark's nonzero exit through tee.
+
+Invariants before fixing: query the calling process's network namespace, fail
+closed on query errors, preserve every gate, propagate refused/failed benchmark
+status, and never accept an empty/missing measurement artifact. Use the standard
+socket interface enumeration (current namespace), explicit bash pipefail and a
+nonempty JSON artifact check. Add failure-path tests without executing attacks.
+- Jev comparison (jev-1.14.0, fixed metadata only) favored immediately reporting
+  unknown provenance: probability 0.97, concentration/confidence 0.96; verified
+  exclusion 0.03, blanket suppression 0.00. It grants no trust or response authority.
+- Disposable scenario audit also fixed an empty-crontab failure under set -e;
+  the fixture test runs the action against a fake crontab executable and scratch
+  state, so it verifies the shell path without touching the host's crontab.

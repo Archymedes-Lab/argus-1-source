@@ -20,6 +20,16 @@ outside the Sysmon policy remain unseen. Script blocks are read only if Windows
 already records them. Logging is never enabled automatically because it records
 private script contents. Neither collector is deployed by this work.
 
+**Registry audit correction:** the earlier zero-noise result suppressed every
+writer under ProgramData on the assumption that its vendor folders were all
+administrator-only. Read-only ACL measurement on this Windows host disproved the
+blanket assumption: standard-user groups have Write rights on the root, while the
+checked Defender folder grants only read access. Security-family writes from
+ProgramData now remain visible with provenance explicitly unknown. This can report
+legitimate vendor engines; neither an executable name nor a vendor-looking path
+gets an exception. The historical two Defender reports are no longer hidden by
+that blanket rule, and zero-noise is not a claim for this revised policy.
+
 This remains command-text replay, with script-block rule matching added to the
 PowerShell test text. It does not measure telemetry delivery, actual block assembly,
 detection latency, end-to-end attacks or the benign population false-positive rate.
