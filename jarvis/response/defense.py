@@ -26,6 +26,7 @@ import hashlib
 import json
 import time
 
+from jarvis.core.finding import content_origin
 from jarvis.response import acknowledge, alert, tools
 from jarvis.response.actions import base
 from jarvis.response.evidence.case import Case
@@ -94,7 +95,8 @@ def decide(finding, job, conf, acks):
             continue
         # A finding raised by signed detection content (core/rulepack.py) is
         # evidence, never authority: it may be proposed, never acted on unasked.
-        strong = f.get("severity") in AUTO_MIN_SEVERITY and f.get("origin") != "rulepack"
+        # Read from the title as well: a stored finding comes back without its `origin` key.
+        strong = f.get("severity") in AUTO_MIN_SEVERITY and not content_origin(f)
         if _enabled(conf, action) and strong and action.auto_eligible(f, job, target):
             return AUTO, action, target
         return PROPOSE, action, target

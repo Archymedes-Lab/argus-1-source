@@ -3320,6 +3320,15 @@
    "version": "4.2.0"
   }
  ],
+ "content": [
+  {
+   "copyright": "the author named in each rule; Sigma project contributors",
+   "license": "DRL-1.1",
+   "name": "Sigma detection rules (compiled subset; each alert names the rule and its author)",
+   "source": "https://github.com/SigmaHQ/sigma",
+   "version": "commit d7c9da10c170"
+  }
+ ],
  "native": [
   {
    "copyright": "Copyright (c) 2001 Python Software Foundation; includes components under their own permissive licences, listed in Python's LICENSE",

@@ -7,7 +7,10 @@ a command typed inside an already running PowerShell session produces no process
 start at all, and other collectors (registry, memory, persistence, network) are not
 exercised here.
 
-    python3 -m scripts.security.atomic_bench INDEX.yaml [--json OUT]
+    python3 -m scripts.security.atomic_bench INDEX.yaml [--json OUT] [--floor scripts/security/atomic_floor.json]
+
+With --floor the run is a gate: it exits 1 when fewer tests are caught than the recorded
+floor, when a benign control command raises a finding, or when a detector crashes.
 
 INDEX.yaml is atomics/Indexes/index.yaml from redcanaryco/atomic-red-team (MIT), fetched
 by the person running this into its own directory; it is data, parsed with yaml.safe_load,
@@ -15,6 +18,7 @@ and is not vendored here. PyYAML is a development-only dependency of this tool.
 Results of 2026-11-10: docs/security/DETECTION-BENCHMARK-2026-11-10.md.
 """
 import collections
+import hashlib
 import json
 import re
 import sys
@@ -29,6 +33,11 @@ PLAT = {"windows": t.WIN, "linux": t.LINUX}
 SHELL = {"command_prompt": ("C:\\Windows\\System32\\cmd.exe", "cmd.exe /c {}"),
          "powershell": ("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "powershell.exe -Command {}"),
          "sh": ("/bin/sh", "sh -c {}"), "bash": ("/bin/bash", "bash -c {}")}
+# --builtin-only measures the built-in rules alone (the baseline before community rules).
+COMMUNITY = "--builtin-only" not in sys.argv
+PROGRAM = re.compile(r"[A-Za-z0-9_.:\\\\/~+-]+")
+BUILTINS = {"echo", "set", "cd", "if", "for", "rem", "exit", "export", "then", "fi", "do", "done", "else",
+            "function", "return", "foreach", "try", "catch", "while", "param", "write-host", "start-sleep"}
 SPLIT = re.compile(r"\s*(?:&&|\|\||[;&|])\s*")
 
 
@@ -53,6 +62,12 @@ def events(executor, command, platform):
             if not seg:
                 continue
             first = seg.split()[0].strip('"\'')
+            # Only something that could be a program is a process start: not a
+            # PowerShell cmdlet, an assignment, a redirect target or a shell builtin.
+            if not PROGRAM.fullmatch(first) or first.lower() in BUILTINS:
+                continue
+            if executor == "powershell" and "-" in first and not first.lower().endswith(".exe"):
+                continue
             if platform == t.WIN and "." not in first.rsplit("\\", 1)[-1]:
                 first += ".exe"
             out.append((first, seg, shell_image))
@@ -108,7 +123,9 @@ def registry_writes(command):
 
 
 def _win_path(image):
-    return image if "\\" in image else "C:\\Tools\\" + image
+    """A bare program name is where Windows would find it: its system folder. A
+    tool the test brings along keeps the path the test gives it."""
+    return image if "\\" in image else "C:\\Windows\\System32\\" + image
 
 
 def full_detectors(evs, regs, platform, n):
@@ -130,7 +147,8 @@ def full_detectors(evs, regs, platform, n):
                           "process": {"image": "C:\\Windows\\System32\\reg.exe",
                                       "guid": "{%08d-0000-0000-0000-%012d}" % (n, 900 + j), "pid": 5000 + j},
                           "target": {"key": key, "details": details}})
-        found = sysmon.audit(events=sysmon.rows_from_events(canon), volumes={"C": ("Fixed", "")})
+        found = sysmon.audit(events=sysmon.rows_from_events(canon), volumes={"C": ("Fixed", "")},
+                             community_rules=COMMUNITY)
     else:
         events = [{"id": 1, "Image": image if image.startswith("/") else "/usr/bin/" + image,
                    "CommandLine": cmdline, "ParentImage": parent or "/usr/bin/bash", "User": "victim",
@@ -138,7 +156,7 @@ def full_detectors(evs, regs, platform, n):
                    "ParentProcessGuid": "{%08d-0000-0000-0000-999999999999}" % n,
                    "UtcTime": "2026-11-10 12:00:%02d.000" % (i % 60)}
                   for i, (image, cmdline, parent) in enumerate(evs)]
-        found = linux_rules._rules(events)
+        found = linux_rules._rules(events, community_rules=COMMUNITY)
     return [(f.get("severity"), f.get("title", ""), tuple(f.get("techniques") or ())) for f in found
             if f.get("severity") in ("critical", "high", "medium", "low")]
 
@@ -151,9 +169,30 @@ BENIGN = {t.WIN: ("command_prompt", ["dir C:\\Users", "notepad.exe notes.txt", "
                              "docker ps", "ssh-add -l", "tar czf backup.tgz docs"])}
 
 
+def check_floor(summary, floor, index_sha256):
+    """Why this run fails the gate; [] when it passes.
+
+    The floor is what a reviewed run measured on one exact index. Detection may
+    rise (then the floor is raised in the same change); it may not fall, benign
+    commands may not raise findings, and no detector may crash on an input."""
+    problems = []
+    if floor.get("index_sha256") != index_sha256:
+        return [f"the index is not the one the floor was measured on ({index_sha256[:12]}...)"]
+    if summary["tests"] != floor["tests"]:
+        problems.append(f"{summary['tests']} tests were modelled, the floor was measured on {floor['tests']}")
+    for key in ("any_finding", "win", "linux"):
+        if summary[key] < floor[key]:
+            problems.append(f"{key}: {summary[key]} caught, below the floor of {floor[key]}")
+    if summary["benign_findings"] > floor.get("benign_findings", 0):
+        problems.append(f"{summary['benign_findings']} benign control commands raised a finding")
+    if summary["crashes"]:
+        problems.append(f"{summary['crashes']} inputs crashed a detector")
+    return problems
+
+
 def main():
     index = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
-    seen, rows, crashes = set(), [], collections.Counter()
+    seen, rows, crashes, benign_hits = set(), [], collections.Counter(), 0
     for tactic, techniques in index.items():
         for tid, entry in (techniques or {}).items():
             for test in (entry or {}).get("atomic_tests") or []:
@@ -210,6 +249,7 @@ def main():
     print("detector crashes:", dict(crashes))
     for platform, (executor, commands) in BENIGN.items():
         hit = [(c, full_detectors(events(executor, c, platform), [], platform, 0)) for c in commands]
+        benign_hits += sum(bool(f) for _, f in hit)
         print(f"benign control {platform}: {sum(bool(f) for _, f in hit)} of {len(hit)} raised a finding", [(c, f) for c, f in hit if f][:4])
     print("RULE MATCHER ONLY (techniques.match + registry rules)")
     print("ALL      ", rate(rows))
@@ -229,6 +269,19 @@ def main():
     print("severity of the best rule hit:", dict(sev))
     missed = collections.Counter(x["tid"] for x in rows if not x["rule"])
     print("most-missed techniques:", missed.most_common(25))
+    summary = {"tests": len(rows), "any_finding": sum(x["full"] for x in rows),
+               "win": sum(x["full"] for x in rows if x["platform"] == t.WIN),
+               "linux": sum(x["full"] for x in rows if x["platform"] == t.LINUX),
+               "benign_findings": benign_hits, "crashes": sum(crashes.values())}
+    print("summary:", json.dumps(summary, sort_keys=True))
+    if "--floor" in sys.argv:
+        problems = check_floor(summary, json.load(open(sys.argv[sys.argv.index("--floor") + 1], encoding="utf-8")),
+                               hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+        for line in problems:
+            print("DETECTION GATE:", line)
+        if problems:
+            sys.exit(1)
+        print("DETECTION GATE: passed")
     if "--json" in sys.argv:
         json.dump(rows, open(sys.argv[sys.argv.index("--json") + 1], "w"), indent=0)
 

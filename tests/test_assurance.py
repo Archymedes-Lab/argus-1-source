@@ -81,11 +81,12 @@ class AssuranceTests(unittest.TestCase):
         # 2026-11-06: +1 unverified daemon_stop_attribution (restarts job, merged from 810217b).
         # 2026-11-06: +1 unverified osquery_cross_view (osquery job, merged from 88f1fac).
         # 2026-11-10: +2 unverified critical_ack_confirmation, upgrade_failsafe (no job).
-        self.assertEqual(gaps['implementation_unverified'], 39)
+        # 2026-11-10: +1 unverified community_rules (sysmon, sysmon_linux jobs).
+        self.assertEqual(gaps['implementation_unverified'], 40)
         self.assertEqual(gaps['implementation_partial'], 25)
         self.assertEqual(gaps['observation_mapping_missing'], 26)   # +1 phone_approvals (2026-11-04)
-        self.assertEqual(gaps['containment_not_validated'], 64)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
-        self.assertEqual(gaps['validation_date_missing'], 64)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
+        self.assertEqual(gaps['containment_not_validated'], 65)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
+        self.assertEqual(gaps['validation_date_missing'], 65)   # +1 osquery_cross_view (2026-11-06), +1 phone_approvals (2026-11-04), +1 daemon_stop_attribution (2026-11-06)
         self.assertFalse(result['complete'])
 
     def test_bruteforce_deterrence_claims_no_live_ban(self):
