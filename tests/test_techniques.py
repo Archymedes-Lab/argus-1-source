@@ -189,7 +189,11 @@ class RegistryRuleTests(unittest.TestCase):
             out = self.write(*rule.sample)
             self.assertTrue(any(set(rule.tids) <= set(f["techniques"]) for f in out), rule.title)
             for sample in rule.benign:
-                self.assertEqual(self.write(*sample), [], f"{rule.title}: {sample[2]}")
+                # Not reported as this rule's technique. The registry family watch
+                # (regwatch, 2026-11-10) may report the same write for another reason:
+                # a command-line tool changed the family, whatever the value.
+                claimed = [f for f in self.write(*sample) if set(rule.tids) & set(f["techniques"])]
+                self.assertEqual(claimed, [], f"{rule.title}: {sample[2]}")
 
     def test_the_write_is_reported_whatever_program_made_it(self):
         key = (r"HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy"

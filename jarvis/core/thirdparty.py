@@ -65,6 +65,12 @@ INTEGRATED = (
            "author is refused); the shipped file keeps each rule's author and id, the source "
            "repository and commit, and the DRL; the licence text ships in THIRD-PARTY-NOTICES",
            fit="community detections over Sysmon process and registry events, credited per finding"),
+    Source("signature-base", "rules", "DRL-1.1",
+           "compiled literal-only subset shipped as intel/data/content_rules.json", "cleared",
+           "author, source repository, pinned commit and licence retained; findings credit the "
+           "matching author; unsupported and differently licensed rules excluded; DRL text in "
+           "THIRD-PARTY-NOTICES",
+           fit="read-only bounded local file-content matching, advisory only"),
     Source("osv.dev", "data", "Apache-2.0 (service); per-advisory data licences, e.g. CC-BY-4.0",
            "downloaded advisory dumps matched offline (osv job)", "cleared",
            "credit the advisory source (GitHub Advisory Database is CC-BY-4.0) in reports"),
@@ -72,8 +78,6 @@ INTEGRATED = (
 
 # Evaluated 2026-11-02 for the next integrations; nothing here runs yet.
 CANDIDATES = (
-    Source("signature-base", "rules", "DRL-1.1", "not integrated", "cleared",
-           "same attribution as Sigma (YARA and IOC rules by Florian Roth et al.)"),
     Source("yara-forge", "rules", "GPL-3.0", "not integrated", "restricted",
            "never compiled into Argus; only as an operator-supplied rules path"),
     Source("lynis", "engine", "GPL-3.0", "not integrated", "cleared", "operator-installed program only",

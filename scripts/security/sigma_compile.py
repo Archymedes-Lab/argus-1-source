@@ -7,7 +7,8 @@ Detection Rule License 1.1). It is data: parsed with yaml.safe_load, never run.
 PyYAML is a development-only dependency of this tool; nothing here ships.
 
 A rule is compiled only when every part of it can be evaluated exactly:
-  * log source: Windows process creation, Windows registry value set, Linux process creation;
+  * log source: Windows process creation, Windows registry value set, Linux process creation,
+    PowerShell script blocks;
   * fields this program records (jarvis.core.sigma.FIELDS);
   * modifiers contains, startswith, endswith, all, windash, and the `*` wildcard;
   * conditions built from and / or / not, parentheses, and `1 of` / `all of`.
@@ -35,11 +36,13 @@ FOLDERS = {
     "rules/windows/registry/registry_set": sigma.WIN_REG,
     "rules/windows/registry/registry_event": sigma.WIN_REG,
     "rules/linux/process_creation": sigma.LINUX_PROC,
+    "rules/windows/powershell/powershell_script": sigma.WIN_PS,
 }
 LOGSOURCE = {
     sigma.WIN_PROC: {("process_creation", "windows")},
     sigma.WIN_REG: {("registry_set", "windows"), ("registry_event", "windows")},
     sigma.LINUX_PROC: {("process_creation", "linux")},
+    sigma.WIN_PS: {("ps_script", "windows")},
 }
 STATUSES = ("stable", "test")
 DASHES = ("-", "/", "–", "—", "―")

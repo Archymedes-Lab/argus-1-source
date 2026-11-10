@@ -48,6 +48,8 @@ ADDED_AFTER_GOLDEN = {
     "appcode": "codebases, dependency CVEs, code rules, secrets and web-root leaks (ARGUS-SERVER.md W12, 2026-10-28)",
     "osv": "daily public OSV dumps for the ecosystems found (ARGUS-SERVER.md W12, 2026-10-28)",
     "selfguard": "tamper evidence that survives source disclosure (DETECTION-CONTENT.md, 2026-10-30)",
+    "content": "file bytes in drop folders and web roots against compiled community content rules (2026-11-10)",
+    "psscript": "PowerShell script blocks (event 4104) checked against community rules; own scripts left out by hash (2026-11-10)",
     "sensorprobe": "positive control of the Linux process sensor, trusted journal origin (2026-11-01)",
     "osquery": "operator-installed osquery as an independent second view (2026-11-02)",
 }

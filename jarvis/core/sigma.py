@@ -30,7 +30,7 @@ DATA = PACKAGE_DIR / "intel" / "data" / "sigma_rules.json"
 LICENSE = "Detection Rule License 1.1"
 LICENSE_URL = "https://github.com/SigmaHQ/Detection-Rule-License"
 
-WIN_PROC, WIN_REG, LINUX_PROC = "win_proc", "win_reg", "linux_proc"
+WIN_PROC, WIN_REG, LINUX_PROC, WIN_PS = "win_proc", "win_reg", "linux_proc", "win_ps"
 # Sigma field -> the key of the event row this program records, per category.
 # A rule naming any other field is not compiled.
 FIELDS = {
@@ -41,6 +41,8 @@ FIELDS = {
     LINUX_PROC: {"Image": "Image", "CommandLine": "CommandLine", "ParentImage": "ParentImage",
                  "ParentCommandLine": "ParentCommandLine", "User": "User",
                  "CurrentDirectory": "CurrentDirectory"},
+    # PowerShell script blocks (event 4104), read by collectors/telemetry/psscript.py.
+    WIN_PS: {"ScriptBlockText": "text", "Path": "path"},
 }
 OPS = ("eq", "contains", "startswith", "endswith", "null")
 # Sigma level -> finding severity. Never critical: one community rule is one
@@ -60,6 +62,7 @@ MAX_SEGMENTS = 12
 MAX_SEGMENT = 600
 MAX_DEPTH = 12
 MAX_TEXT = 4096              # = techniques.MAX_CMDLINE: read what the built-in rules read
+MAX_TEXT_BY_CATEGORY = {WIN_PS: 65536}        # a script block is a whole script, not a command line
 
 
 class SigmaError(ValueError):
@@ -258,7 +261,8 @@ def _holds(node, rule, event, memo):
 def prepare(category, row):
     """The lower-cased, length-capped fields of one event row that rules of
     `category` may test. Anything else in the row is not visible to a rule."""
-    return {key: str(row.get(key) or "")[:MAX_TEXT].lower() for key in FIELDS[category].values()}
+    cap = MAX_TEXT_BY_CATEGORY.get(category, MAX_TEXT)
+    return {key: str(row.get(key) or "")[:cap].lower() for key in FIELDS[category].values()}
 
 
 def match(rules, event):
