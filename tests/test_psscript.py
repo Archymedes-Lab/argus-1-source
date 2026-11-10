@@ -233,3 +233,14 @@ class Payload(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PartialEvidence(Base):
+    def test_partial_or_truncated_scripts_cannot_trigger_absence_conditions(self):
+        self.store.set_meta(community.META, json.dumps({'since': 0, 'shapes': {}}))
+        for flags in ({'complete': False}, {'truncated': True}):
+            out = self.run_pass(answer(blocks=[block(11, text=SECRET, **flags)]))
+            self.assertFalse(any('(community rule)' in f['title'] for f in out))
+            self.assertTrue(any('partly checked' in f['title'] for f in out))
+
+    def test_reader_does_not_trust_process_id_for_following_blocks(self):
+        self.assertNotIn('$ownPid', load_win_script('psscript.ps1'))

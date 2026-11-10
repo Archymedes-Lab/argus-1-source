@@ -27,6 +27,7 @@ from .commands import (
     cmd_boot,
     cmd_bruteforce,
     cmd_containers,
+    cmd_content,
     cmd_control,
     cmd_coverage,
     cmd_dotnet,
@@ -460,6 +461,7 @@ def build_parser():
     bf.set_defaults(fn=cmd_bruteforce)
 
     for _name, _fn, _help in (
+        ("content", cmd_content, "bounded read-only community file-content scan"),
         ("sniffing", cmd_sniffing, "packet capture: promiscuous NICs, raw "
          "sockets, capture drivers and tools"),
         ("webshell", cmd_webshell, "server-side scripts that read as command "

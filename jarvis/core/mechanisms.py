@@ -344,6 +344,12 @@ COLLECTORS = (
        command="sniffing"),
     _c("webshell", 21600, "Web shells", AT, 8, 4, "low", 300, governed=True,
        command="webshell"),
+    # File bytes in the places dropped files land (temp folders, downloads, web
+    # roots, startup folders) against compiled community content rules. Reads
+    # only; bounded per pass; unchanged files are not read again.
+    _c("content", 3600, "File content rules", None, 0, 3, "low", 120,
+       command="content", domain="linux", lane="bulk", governed=True, isolated=True,
+       unscored="content-rule findings are reported, not yet scored (unsoaked)"),
     # Is the Linux syscall-interception layer present and recording?
     _c("auditd", 7200, "Syscall interception posture", OS, 3, 3, "medium", 300,
        command="auditd",

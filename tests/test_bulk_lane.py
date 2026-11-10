@@ -19,6 +19,7 @@ from jarvis.service.schedule import JOBS
 
 # Job -> module whose audit the job runner calls (see jarvis/service/jobs.py).
 RUNNER_MODULES = {
+    "content": "jarvis.collectors.host.content",
     "evidence": "jarvis.collectors.telemetry.evidence",
     "rust_mirror": "jarvis.collectors.telemetry.mirror",
     "world": "jarvis.intel.worldwatch",

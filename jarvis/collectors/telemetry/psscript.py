@@ -20,8 +20,7 @@ Invariants
      Logging switched off is reported, never read as "nothing happened".
   3. Privacy: script text is never stored, logged or put in a finding.
   4. The monitor's own scripts are left out exactly: by the SHA-256 of the text
-     it launched (platform.windows.own_scripts), and blocks compiled inside such
-     a script by its process. Never by name.
+     it launched (platform.windows.own_scripts). Never by name or process id.
   5. Bounded: records, blocks and characters per pass are capped; what a cap
      cut is reported.
   6. Content is not authority: matches go through collectors/telemetry/community
@@ -156,7 +155,7 @@ def audit(store, hosts=("wsl", "win"), reader=read):
             f"run in that gap were not checked. The log holds {answer['log_bytes'] // (1024 * 1024)} MB and "
             f"is a ring. A larger log closes the gap (administrator): {RAISE_LOG}", CHANNEL))
     blocks = answer["blocks"]
-    rows = [{"text": b["text"], "path": b["path"], "time": b["time"], "sha": b["sha"]} for b in blocks]
+    rows = [{"text": b["text"], "path": b["path"], "time": b["time"], "sha": b["sha"]} for b in blocks if b["complete"] and not b["truncated"]]
 
     def make(severity, title, detail, image):
         return _finding("technique", severity, title, detail, image or CHANNEL)
@@ -178,7 +177,7 @@ def audit(store, hosts=("wsl", "win"), reader=read):
         out.append(_finding(
             "visibility", "low", "Some PowerShell scripts were only partly checked",
             f"{cut} script block(s) were longer than {MAX_TEXT} characters or arrived incomplete; only the "
-            "part that was read was checked against the rules.", CHANNEL))
+            "partial content was not evaluated because absence conditions would be unreliable.", CHANNEL))
     if answer["more"]:
         out.append(_finding(
             "visibility", "low", "PowerShell script blocks: more than one pass could read",
@@ -187,5 +186,8 @@ def audit(store, hosts=("wsl", "win"), reader=read):
     new_cursor = max(cursor, answer["last"]) if answer["read"] else cursor
     store.set_meta(META, json.dumps({"cursor": new_cursor, "hits": (kept + new_hits)[-KEEP_HITS:]},
                                     sort_keys=True))
-    collection.succeeded("psscript")
+    if cut or lost or answer["more"]:
+        collection.failed("psscript", "script-block coverage incomplete; see visibility findings")
+    else:
+        collection.succeeded("psscript")
     return out

@@ -6,6 +6,7 @@ from jarvis.collectors.host import (
     audiowatch,
     bootintegrity,
     containers,
+    content,
     dotnet_posture,
     inputwatch,
     intrusion,
@@ -537,3 +538,13 @@ def cmd_preos(args, store):
     render_findings(findings, verbose=args.verbose, severity=args.severity,
                     show_ok=True, empty="no pre-OS boot evidence returned")
 
+
+
+def cmd_content(args, store):
+    """Bounded read-only community content scan, using the daemon collector."""
+    findings = content.audit(store, hosts=selected_hosts(args))
+    if args.json:
+        print(json.dumps(findings, indent=2))
+        return
+    render_findings(findings, verbose=args.verbose, severity=args.severity,
+                    empty="no community content rule matched the checked files")

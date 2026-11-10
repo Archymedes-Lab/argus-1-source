@@ -1,5 +1,70 @@
 # Does it catch attacks? First independent detection benchmark (2026-11-10)
 
+## Latest continuation measurement
+
+Reverified on the pinned corpus on 2026-11-10:
+
+| Same text-replay corpus | Any finding |
+|---|---:|
+| Built-in baseline | 392 / 1,745 (22.5%) |
+| Community process/registry rules | 620 / 1,745 (35.5%) |
+| Plus registry-family watch | 693 / 1,745 (39.7%) |
+| Plus PowerShell script-block matching | **707 / 1,745 (40.5%)** |
+| Windows, latest | 642 / 1,322 (48.6%) |
+| Linux, latest | 65 / 423 (15.4%) |
+| Benign commands flagged, latest | 0 / 24 |
+
+Latest run: no detector crashes; the pinned-index hash and detection floor pass.
+The registry layer observes writes rather than snapshotting registry state; writes
+outside the Sysmon policy remain unseen. Script blocks are read only if Windows
+already records them. Logging is never enabled automatically because it records
+private script contents. Neither collector is deployed by this work.
+
+This remains command-text replay, with script-block rule matching added to the
+PowerShell test text. It does not measure telemetry delivery, actual block assembly,
+detection latency, end-to-end attacks or the benign population false-positive rate.
+The following earlier sections are historical snapshots, including superseded counts.
+
+Content scanning now ships a strict **215-rule** literal-only signature-base subset
+(commit de3c7252c22b3376352b5a68defa46459a12a693), without executing rule code.
+The interrupted 326-rule build used a licence substring check; explicit approved
+DRL-1.1 labels reduce that set to 215. The scanner rejects ancestor symlinks and
+unstable reads, invalidates cached verdicts on identity or rule-generation change,
+bounds discovery and reads, and reports incomplete coverage. It skips oversized
+files entirely: absence predicates must not inspect a prefix as a complete file.
+Prior positive evidence that cannot be refreshed remains visibly stale. It runs
+in the governed isolated bulk lane, unscored; `jarvis content` audits the same path.
+Only Linux/WSL is supported, including accessible Windows mount roots from WSL.
+This is file scanning, not a memory scanner or full YARA engine. The scanner does
+not increase the command-text replay count. The earlier 6,001-file/222 MB noise
+measurement is historical, not independently revalidated for this final tree.
+
+The audit also removed the PowerShell reader's ten-minute process-id exemption:
+only complete exact own-script hashes are excluded. Incomplete/truncated blocks
+are reported as gaps and not evaluated. Nested blocks now receive ordinary rule
+judgment. The 120-second polling interval still loses evidence when the log wraps
+in about 30 seconds; this work does not enlarge logs or close that runtime gap.
+
+Real-execution work is a manually dispatched disposable-runner workflow with an
+explicit observation-only collector allowlist, an isolated network namespace,
+per-action cleanup, failure reporting and retained artifacts. It is not a replay
+replacement: 16 local Linux scenarios do not represent the 1,745-test corpus.
+No live-execution result is claimed until a workflow run produces evidence.
+
+Plan and invariants: [BENCHMARK-CONTINUATION-PLAN.md](BENCHMARK-CONTINUATION-PLAN.md).
+Jev advisory (jev-1.14.0, fixed metadata only): Choice favored skipping oversized
+files (probability 0.89; concentration/confidence 0.83), prioritized real execution
+(probability 0.74; concentration 0.61); Noul probability that replay establishes
+production detection was 0.03. Advice supports the conservative design and next
+validation priority; it changes no gate, severity or authorization.
+
+Still open: exact own-launch suppression for process-start community rules,
+broader false-positive measurement, reliable script-log retention, memory-content
+scanning, a maintained full rule engine if justified, signed rule-pack distribution,
+and measured live execution on both Windows and Linux.
+
+---
+
 Until today every technique rule was tested against a sample written with the rule. This
 is the first measurement against a library written by someone else: Atomic Red Team
 (redcanaryco, MIT), `atomics/Indexes/index.yaml` as of 2026-11-10
@@ -45,8 +110,8 @@ Re-run: `python3 -m scripts.security.atomic_bench INDEX.yaml` (PyYAML, developme
 
 ## What this does and does not show
 
-It is an **upper bound for the command-line and registry rule layer**, and a lower bound
-for the product:
+It is an **upper bound for the command-line and registry rule layer**, and does not establish a bound
+for the complete product:
 
 - Generous to Argus: 758 of the tests are PowerShell. They were modelled as
   `powershell.exe -Command <text>`. Typed into a running session they produce no process

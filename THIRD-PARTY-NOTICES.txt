@@ -549,11 +549,13 @@ express Statement of Purpose.
     this CC0 or use of the Work.
 
 ==============================================================================
-DRL-1.1 (1 components)
+DRL-1.1 (2 components)
 ==============================================================================
 
 Sigma detection rules (compiled subset; each alert names the rule and its author) commit d7c9da10c170 -- the author named in each rule; Sigma project contributors
     source: https://github.com/SigmaHQ/sigma
+signature-base detection rules (modified literal-only subset; attribution retained per rule) commit de3c7252c22b3376352b5a68defa46459a12a693 -- The authors named in each compiled rule; signature-base contributors
+    source: https://github.com/Neo23x0/signature-base
 
 --- DRL-1.1 licence text ---
 Detection Rule License (DRL) 1.1

@@ -61,7 +61,6 @@ try {
     $b.parts[[int]$pr[0].Value] = [string]$pr[2].Value
     if ([int]$e.Level -lt $b.level) { $b.level = [int]$e.Level }
   }
-  $ownPid = @{}
   $total = 0
   $out = New-Object System.Collections.ArrayList
   foreach ($id in $order) {
@@ -72,17 +71,13 @@ try {
     $text = $sb.ToString()
     $h = HashOf $text
     $isOwn = $false
-    if ($complete -and $ownSet.Contains($h)) { $isOwn = $true; $ownPid[$b.pid] = $b.time }
-    elseif ($ownPid.ContainsKey($b.pid)) {
-      # A block compiled inside a script the monitor launched (a loop body, a function):
-      # same PowerShell process, within ten minutes of that launch.
-      $d = ($b.time - $ownPid[$b.pid]).TotalSeconds
-      if ($d -ge -2 -and $d -le 600) { $isOwn = $true }
-    }
+    # A process id is not authority for later blocks (reuse and injected content).
+    if ($complete -and $ownSet.Contains($h)) { $isOwn = $true }
     if ($isOwn) { $o.own++; continue }
     if ($out.Count -ge $maxBlocks -or $total -ge $maxTotal) { $o.more = $true; $o.last = $b.rec - 1; break }
     $cut = $text
     if ($cut.Length -gt $maxText) { $cut = $cut.Substring(0, $maxText) }
+    if ($cut.Length -gt ($maxTotal - $total)) { $cut = $cut.Substring(0, $maxTotal - $total) }
     $total += $cut.Length
     [void]$out.Add(@{ rec=$b.rec; time=$b.time.ToString('o'); pid=$b.pid; level=$b.level; path=$b.path
                       sha=$h; len=$text.Length; complete=$complete; truncated=($cut.Length -lt $text.Length); text=$cut })
