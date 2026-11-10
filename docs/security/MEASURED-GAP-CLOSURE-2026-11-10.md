@@ -91,3 +91,27 @@ these Windows paths, not all Windows techniques or the native spool/broker servi
 References: Microsoft Sysmon documentation (v15.22, 2026-09-10),
 https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon ; runner image
 https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md .
+
+## Measured results, reviewed source 899f43b
+
+Workflow 42897555336 completed on disposable Linux and Windows runners. Reports
+are preserved under `docs/security/evidence/` with source/run/scope metadata.
+
+- Linux: 16/16 unchanged fixtures caught; 11 high/critical; no collector, execution
+  or cleanup errors. This closes the five measured gaps for these exact cases.
+- Windows: 5/5 inert state fixtures applied and removed; **1/5** marker-linked
+  detection (IFEO), zero collector/cleanup errors. Real Sysmon registry/process
+  events and the fixture's PowerShell 4104 block arrived. This proves delivery,
+  not five detections. Inert Run/task/service commands and process-id discovery
+  are not inherently malicious; do not add noisy detectors to inflate this count.
+- Full owner-host isolated unittest discovery: 5,007 tests passed, 17 skipped.
+  Static gate and ASES passed before the Windows-only additions; repeat final gates.
+
+Production remains the November 5 sealed source and is not deployed. Baseline live
+readiness is false (`memscan`: incomplete coverage); no health improvement claimed.
+No passwordless administrator deployment route was available. Stage and verify a
+narrow sealed-base release before requesting the final local authenticated activation.
+
+Initial Windows report investigation: the job list omitted `control`, the actual
+Run/task/service collector. Add it and rerun identical fixtures; preserve the
+initial 1/5 report as harness evidence. No detector rule/severity is changed.

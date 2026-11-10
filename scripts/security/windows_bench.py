@@ -20,7 +20,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 MARK = 'argus-win-' + uuid.uuid4().hex[:10]
-JOBS = ('sysmon', 'psscript', 'asep', 'backdoor')
+JOBS = ('sysmon', 'psscript', 'asep', 'backdoor', 'control')
 MAX_OUTPUT = 8 * 1024 * 1024
 CHILD = ("import sys,json; sys.path.insert(0,%r)\n"
          "from jarvis.service.jobs import run_job\n"

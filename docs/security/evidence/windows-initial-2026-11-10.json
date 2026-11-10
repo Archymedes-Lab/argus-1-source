@@ -1,0 +1,96 @@
+{
+  "platform": "windows",
+  "applied": 5,
+  "caught": 1,
+  "scenarios": [
+    {
+      "id": "01",
+      "technique": "T1547.001",
+      "what": "unique Run value with an inert command",
+      "state": "missed",
+      "why": "",
+      "findings": []
+    },
+    {
+      "id": "02",
+      "technique": "T1546.012",
+      "what": "IFEO debugger for a unique nonexistent program",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "asep",
+          "critical",
+          "Image File Execution Options debugger"
+        ]
+      ]
+    },
+    {
+      "id": "03",
+      "technique": "T1053.005",
+      "what": "inert logon scheduled task",
+      "state": "missed",
+      "why": "",
+      "findings": []
+    },
+    {
+      "id": "04",
+      "technique": "T1543.003",
+      "what": "inert auto-service registration, never started",
+      "state": "missed",
+      "why": "",
+      "findings": []
+    },
+    {
+      "id": "05",
+      "technique": "T1057",
+      "what": "LSASS process-id discovery from a script file, no memory access",
+      "state": "missed",
+      "why": "",
+      "findings": []
+    }
+  ],
+  "jobs": [
+    "sysmon",
+    "psscript",
+    "asep",
+    "backdoor"
+  ],
+  "jobs_failed_before": {},
+  "jobs_failed_after": {},
+  "cleanup_failed": {},
+  "execution_error": "",
+  "network": {
+    "inactive_profiles": 0,
+    "invalid": 0,
+    "rules": 3
+  },
+  "telemetry_delivered": true,
+  "telemetry_before": {
+    "sysmon_last": 18024,
+    "sysmon_registry": 0,
+    "fixture_script_blocks": 0,
+    "ps_last": 12611,
+    "sysmon_process": 11
+  },
+  "telemetry_after": {
+    "sysmon_last": 20621,
+    "sysmon_registry": 10,
+    "fixture_script_blocks": 1,
+    "ps_last": 12711,
+    "sysmon_process": 13
+  },
+  "seconds": 336.9,
+  "evidence_scope": {
+    "source_commit": "899f43b",
+    "workflow_run": 42897555336,
+    "host": "disposable GitHub-hosted runner",
+    "proves": "applied fixtures, marker-linked findings, collector errors and cleanup only",
+    "not_proven": [
+      "production deployment",
+      "real desktop UI",
+      "containment",
+      "universal coverage"
+    ]
+  }
+}

@@ -15,6 +15,21 @@ HOSTED = {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted',
 
 
 class Gates(unittest.TestCase):
+    def test_run_task_service_evidence_reaches_the_campaign(self):
+        # These persistence observations are produced by control, not ASEP or
+        # backdoor. A successful campaign must not silently omit that source.
+        def worker(argv, **kwargs):
+            row = {'severity': 'medium', 'title': 'autostart registry entry',
+                   'detail': 'fixture-run-value', 'where': 'Run'}
+            return __import__('types').SimpleNamespace(
+                returncode=0, stderr='', stdout=__import__('json').dumps(
+                    [row] if argv[-2] == 'control' else []))
+        with mock.patch.object(bench.subprocess, 'run', side_effect=worker):
+            findings, failures = bench.sweep(Path('scratch.db'), Path('scratch'))
+        self.assertEqual(failures, {})
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(next(iter(findings.values()))[0], 'control')
+
     def check(self, **over):
         params = dict(env=HOSTED, platform='win32', admin=True, home='scratch', exists=lambda path: False)
         params.update(over)

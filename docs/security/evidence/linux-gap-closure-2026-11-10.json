@@ -1,0 +1,303 @@
+{
+  "applied": 16,
+  "caught": 16,
+  "high_or_critical": 11,
+  "scenarios": [
+    {
+      "id": "01",
+      "technique": "T1053.003",
+      "what": "system cron job running a script from /tmp",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "medium",
+          "cron file no package owns: argus-live-937448268a-01 (file evidence)"
+        ]
+      ],
+      "high_or_critical": false
+    },
+    {
+      "id": "02",
+      "technique": "T1136.001",
+      "what": "second account with user id 0",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "critical",
+          "second account with uid 0: argus-live-937448268a-02"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "03",
+      "technique": "T1098.004",
+      "what": "SSH key added to root's authorized_keys",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "high",
+          "SSH key authorised for root: argus-live-937448268a-03"
+        ],
+        [
+          "sshwatch",
+          "high",
+          "new SSH key for root"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "04",
+      "technique": "T1543.002",
+      "what": "enabled systemd service running a program from /tmp",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "argus-live-9374 [pid 2468] \u2014 NEW"
+        ],
+        [
+          "backdoor",
+          "high",
+          "privileged service runs user-editable code: argus-live-937448268a-04.service"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "05",
+      "technique": "T1548.001",
+      "what": "setuid-root copy of a shell in /tmp",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "critical",
+          "setuid binary no package owns: argus-live-937448268a-05"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "06",
+      "technique": "T1574.006",
+      "what": "library added to /etc/ld.so.preload",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "implant",
+          "critical",
+          "a global library preload is configured"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "07",
+      "technique": "T1546.004",
+      "what": "script dropped in /etc/profile.d",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "medium",
+          "profile startup invokes a temporary-path program (file evidence)"
+        ]
+      ],
+      "high_or_critical": false
+    },
+    {
+      "id": "08",
+      "technique": "T1571",
+      "what": "listener on all interfaces on an unusual port",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "argus-live-9374 [pid 2484] \u2014 NEW"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "09",
+      "technique": "T1070.004",
+      "what": "process still running after its program file was deleted",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "argus-live-9374 [pid 2489] \u2014 NEW"
+        ],
+        [
+          "hidden",
+          "critical",
+          "executable mapping was deleted from disk"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "10",
+      "technique": "T1098",
+      "what": "sshd drop-in allowing root password logins",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "critical",
+          "sshd_config: PermitEmptyPasswords yes"
+        ],
+        [
+          "backdoor",
+          "high",
+          "sshd_config: PermitRootLogin yes"
+        ],
+        [
+          "sshwatch",
+          "medium",
+          "SSH accepts passwords"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "11",
+      "technique": "T1548.003",
+      "what": "sudoers drop-in granting passwordless root",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "high",
+          "passwordless sudo: nobody ALL=(ALL) NOPASSWD: ALL"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "12",
+      "technique": "T1505.003",
+      "what": "PHP web shell in the web root",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "content",
+          "high",
+          "PHP request data passed directly to a command executor (file evidence)"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "13",
+      "technique": "T1053.003",
+      "what": "root crontab entry at reboot",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "medium",
+          "cron startup invokes a temporary-path program (file evidence)"
+        ]
+      ],
+      "high_or_critical": false
+    },
+    {
+      "id": "14",
+      "technique": "T1564.001",
+      "what": "hidden executable in /tmp, running",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "scan",
+          "critical",
+          "kworker [pid 2508] \u2014 NEW"
+        ]
+      ],
+      "high_or_critical": true
+    },
+    {
+      "id": "15",
+      "technique": "T1070.003",
+      "what": "root shell history redirected to /dev/null",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "medium",
+          "Shell history is redirected to a non-persistent device (file evidence)"
+        ]
+      ],
+      "high_or_critical": false
+    },
+    {
+      "id": "16",
+      "technique": "T1037.004",
+      "what": "rc.local created and made executable",
+      "state": "caught",
+      "why": "",
+      "findings": [
+        [
+          "backdoor",
+          "medium",
+          "legacy boot startup invokes a temporary-path program (file evidence)"
+        ]
+      ],
+      "high_or_critical": false
+    }
+  ],
+  "jobs_run": 10,
+  "jobs": [
+    "scan",
+    "hidden",
+    "implant",
+    "backdoor",
+    "webshell",
+    "content",
+    "auditd",
+    "sysmon_linux",
+    "logins",
+    "sshwatch"
+  ],
+  "jobs_failed_before": {},
+  "jobs_failed_after": {},
+  "cleanup_failed": {},
+  "execution_error": "",
+  "new_findings": 37,
+  "seconds": 40.6,
+  "evidence_scope": {
+    "source_commit": "899f43b",
+    "workflow_run": 42897555336,
+    "host": "disposable GitHub-hosted runner",
+    "proves": "applied fixtures, marker-linked findings, collector errors and cleanup only",
+    "not_proven": [
+      "production deployment",
+      "real desktop UI",
+      "containment",
+      "universal coverage"
+    ]
+  }
+}
