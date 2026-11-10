@@ -9,6 +9,7 @@ from jarvis.platform.windows import aslist, ps_json
 from .bits import _bits_is_vendor
 from .common import _finding
 from .credentials import credential_findings
+from .explain import explain_threat
 from .history import _history_findings
 
 # Command shapes that show up in ClickFix lures and in pasted-payload attacks.
@@ -112,7 +113,7 @@ def audit():
         else:
             sev, note = "low", "not active, file no longer on disk — historical"
         out.append(_finding("av", sev, "Defender detected a threat",
-                            f"{t.get('name')} — {note}",
+                            f"{t.get('name')} — {note}. {explain_threat(t.get('name'))}".rstrip(),
                             (t.get("resources") or "")[:110] or "Get-MpThreat"))
     # Defender logs one detection per scan, so the same file appears repeatedly.
     # Collapse by resource and keep the worst outcome and latest time.
