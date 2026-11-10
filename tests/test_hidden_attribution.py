@@ -91,7 +91,7 @@ class OrphanListenerTests(unittest.TestCase):
              mock.patch.object(sockets.os, "listdir", side_effect=lambda path: ["42"] if path == sockets.PROC else ["3"]), \
              mock.patch.object(sockets.os, "readlink", return_value="socket:[12]"):
             valid, unclaimed, denied = sockets._unclaimed_socket_rows()
-        read.assert_called_once_with(fresh=True)
+        read.assert_called_once_with(fresh=True, strict=True)
         self.assertTrue(valid)
         self.assertEqual(unclaimed, {11: rows[11]})
         self.assertEqual(denied, 0)
@@ -219,3 +219,44 @@ class SchedulerViewTests(unittest.TestCase):
         with mock.patch.object(views, "pid_namespace_nested", return_value=False), \
              mock.patch.object(views, "_read", side_effect=lambda p, *a, **k: reads.get(p, "")):
             self.assertEqual(views.view_sched_debug(), {1, 812})
+
+
+class SocketReadEvidence(unittest.TestCase):
+    HEADER = 'sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n'
+
+    def test_valid_empty_tables_are_distinct_from_unreadable_tables(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            net = root / 'net'
+            net.mkdir()
+            for name in ('tcp', 'tcp6', 'udp', 'udp6'):
+                (net / name).write_text(self.HEADER)
+            with mock.patch.object(linux, 'PROC', str(root)), mock.patch.object(sockets, 'PROC', str(root)):
+                self.assertEqual(linux.socket_table(fresh=True, strict=True), {})
+                self.assertEqual(sockets.orphan_sockets(), ([], 0))
+                (net / 'tcp').unlink()
+                with self.assertRaisesRegex(RuntimeError, 'unreadable'):
+                    sockets.orphan_sockets()
+
+    def test_malformed_and_over_budget_reads_remain_unknown(self):
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'net').mkdir()
+            for name in ('tcp', 'udp'):
+                (root / 'net' / name).write_text(self.HEADER)
+            with mock.patch.object(linux, 'PROC', str(root)):
+                # IPv6 can be disabled; complete empty IPv4 observations stay valid.
+                self.assertEqual(linux.socket_table(strict=True), {})
+                (root / 'net/tcp').write_text(self.HEADER + 'incomplete row\n')
+                with self.assertRaises(ValueError):
+                    linux.socket_table(strict=True)
+                (root / 'net/tcp').write_text(self.HEADER)
+                with mock.patch.object(linux, 'MAX_SOCKET_TABLE_BYTES', 8):
+                    with self.assertRaises(ValueError):
+                        linux.socket_table(strict=True)
+
+    def test_permission_error_does_not_become_valid_empty_evidence(self):
+        with mock.patch.object(sockets, 'socket_table', side_effect=PermissionError('denied')):
+            self.assertEqual(sockets._unclaimed_socket_rows(), (False, {}, 0))

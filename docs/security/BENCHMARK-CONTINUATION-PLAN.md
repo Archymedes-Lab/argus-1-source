@@ -133,3 +133,27 @@ nonempty JSON artifact check. Add failure-path tests without executing attacks.
 - Disposable scenario audit also fixed an empty-crontab failure under set -e;
   the fixture test runs the action against a fake crontab executable and scratch
   state, so it verifies the shell path without touching the host's crontab.
+
+## First executed measurement and empty-socket baseline fix
+
+Run 42885855204 applied all 16 actions, named 8 through new findings, and reported
+no cleanup failures. It correctly failed because hidden's baseline mistook valid
+empty socket tables for unreadable tables. Result is provisional/incomplete, not a
+production detection score. Misses: loader preload, profile script, listener, PHP
+web shell, root crontab, hidden executable, shell-history redirection and rc.local.
+
+Invariants before editing: retain fresh socket reads and inode identity, distinguish
+complete empty observations from denied/malformed/truncated observations, preserve
+first-sighting evidence on failed recheck, allow absent IPv6 tables only, and cap
+strict reads. Choose an opt-in strict reader for attribution checks rather than
+changing the legacy best-effort mapping API for every consumer. A complete empty
+read is valid; read errors remain unknown and must never become clean attribution.
+- The provisional run omitted the existing Linux preload detector (`implant`) and
+  process/network scanner. Reviewed both service paths: they observe local Linux
+  state, use no model/network enrichment by default and persist only to the scratch
+  store. Added them to the explicit allowlist. Report collector names and a separate
+  high/critical count, because generic new-process inventory alone is not attack proof.
+- Strict socket reader: 22 attribution and 14 observation tests passed in private
+  scratch homes; real host read-only smoke parsed 18 rows. Jev Choice preferred the
+  strict evidence-status design (probability/concentration 1.00), advisory only;
+  deterministic malformed, denied, over-budget, empty and failed-recheck tests gate it.

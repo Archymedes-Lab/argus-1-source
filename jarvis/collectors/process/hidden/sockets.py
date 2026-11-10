@@ -15,7 +15,12 @@ def _unclaimed_socket_rows():
     """Take one uncached socket/fd view, retaining inode identity for recheck."""
     # The shared five-second socket cache can describe a connection that has
     # already closed before the fd sweep starts. Attribution needs fresh views.
-    table = socket_table(fresh=True)
+    try:
+        table = socket_table(fresh=True, strict=True)
+    except (OSError, ValueError, UnicodeError):
+        return False, {}, 0
+    if not table:
+        return True, {}, 0
     claimed = set()
     denied = 0
     for entry in os.listdir(PROC):
@@ -44,7 +49,7 @@ def _unclaimed_socket_rows():
         if conn["state"] in ("TIME_WAIT", "CLOSE"):
             continue  # kernel-owned leftovers, no process behind them
         orphans[inode] = conn
-    return bool(table), orphans, denied
+    return True, orphans, denied
 
 
 def orphan_sockets():

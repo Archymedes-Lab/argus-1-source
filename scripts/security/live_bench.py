@@ -46,7 +46,7 @@ sys.path.insert(0, ROOT)
 from jarvis.lab import isolation  # noqa: E402
 
 # Explicit reviewed observation-only jobs; new scheduler jobs are excluded by default.
-READ_ONLY = frozenset({"backdoor", "posture", "asep", "hidden", "intrusion", "evasion",
+READ_ONLY = frozenset({"scan", "implant", "backdoor", "posture", "asep", "hidden", "intrusion", "evasion",
                        "webshell", "content", "sysmon_linux", "auditd", "logins", "sshwatch"})
 CHILD = ("import sys, json; sys.path.insert(0, %r)\n"
          "from jarvis.service.jobs import run_job\n"
@@ -305,11 +305,13 @@ def main(argv=None):
     for sid, tid, what, _do, _undo, _extra in SCENARIOS:
         state = "not applied" if sid in not_applied else ("caught" if caught.get(sid) else "missed")
         rows.append({"id": sid, "technique": tid, "what": what, "state": state,
-                     "why": not_applied.get(sid, ""), "findings": caught.get(sid, [])})
+                     "why": not_applied.get(sid, ""), "findings": caught.get(sid, []),
+                     "high_or_critical": any(sev in ("high", "critical") for _job, sev, _title in caught.get(sid, []))})
     n_applied = len(applied)
     n_caught = sum(1 for r in rows if r["state"] == "caught")
-    report = {"applied": n_applied, "caught": n_caught, "scenarios": rows,
-              "jobs_run": len(names), "jobs_failed_before": failed_before, "jobs_failed_after": failed_after,
+    report = {"applied": n_applied, "caught": n_caught,
+              "high_or_critical": sum(row["high_or_critical"] for row in rows), "scenarios": rows,
+              "jobs_run": len(names), "jobs": [name for name, _timeout in names], "jobs_failed_before": failed_before, "jobs_failed_after": failed_after,
               "cleanup_failed": cleanup_failed, "execution_error": execution_error, "new_findings": len(new), "seconds": round(time.time() - started, 1)}
     print(f"live detection: {n_caught} of {n_applied} applied actions were named by a new finding "
           f"({len(SCENARIOS) - n_applied} could not be applied here); {len(names)} collectors, "
