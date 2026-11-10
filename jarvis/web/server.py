@@ -241,6 +241,29 @@ def _performance_state(jobs, scheduler):
             "running": running_jobs(scheduler)}
 
 
+_KINDS_CACHE = {"at": 0.0, "db": None, "kinds": {}}
+_KINDS_TTL = 30.0
+
+
+def _indicator_kinds(store):
+    """Active indicators per kind. Counting a 150k-row table on every state request took seconds
+    under write load and stalled the scheduler, so the count uses the covering (kind, status)
+    index and is reused for 30 s; it is a health figure, not a verdict."""
+    t = time.monotonic()
+    c = _KINDS_CACHE
+    if c["db"] is store and t - c["at"] < _KINDS_TTL:
+        return dict(c["kinds"])
+    sql = ("SELECT kind, COUNT(*) n FROM indicators{} WHERE status='active' "
+           "GROUP BY kind ORDER BY n DESC")
+    try:
+        rows = store.db.execute(sql.format(" INDEXED BY idx_ind_kind")).fetchall()
+    except Exception:   # an older database without that index: plain query
+        rows = store.db.execute(sql.format("")).fetchall()
+    kinds = {r["kind"]: r["n"] for r in rows}
+    c.update(at=t, db=store, kinds=kinds)
+    return dict(kinds)
+
+
 def _intel_state(store):
     """Knowledge-base health, so the page shows what the hunt is hunting with.
 
@@ -249,9 +272,7 @@ def _intel_state(store):
     refresh makes "no findings" mean something.
     """
     try:
-        kinds = {r["kind"]: r["n"] for r in store.db.execute(
-            "SELECT kind, COUNT(*) n FROM indicators WHERE status='active' "
-            "GROUP BY kind ORDER BY n DESC")}
+        kinds = _indicator_kinds(store)
         feeds_rows = [dict(r) for r in store.db.execute(
             "SELECT name,last_run,rows,kept,error FROM feed_runs ORDER BY name")]
         hits = [dict(r) for r in store.db.execute(

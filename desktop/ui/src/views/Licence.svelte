@@ -17,9 +17,17 @@
   const feedback = $derived(checkKey(key));
   const day = (ts?: number | null) => (ts ? new Date(ts * 1000).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "no end date");
 
+  // The daemon restarts now and then (the service replaces a stalled one, which takes seconds to
+  // minutes). Keep asking, keep the last good state, and only report an error if it never comes back.
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retries = $state(0);
+  const MAX_RETRIES = 40; // about 3 minutes at 5 s
   async function load() {
-    try { st = await api.licence(); loadError = ""; if (st.purchase_waiting) startPolling(); }
-    catch (e) { loadError = String((e as Error).message ?? e); }
+    try { st = await api.licence(); loadError = ""; retries = 0; if (st.purchase_waiting) startPolling(); }
+    catch (e) {
+      loadError = String((e as Error).message ?? e);
+      if (retries++ < MAX_RETRIES) retryTimer = setTimeout(load, 5000);
+    }
   }
   async function run(action: "activate" | "deactivate" | "refresh", k?: string) {
     busy = true; problem = "";
@@ -58,7 +66,7 @@
   function stopPolling() { waiting = false; if (timer) clearInterval(timer); timer = null; }
   const open = (url?: string) => url && api.openLicencePage(url).catch((e) => toast(String((e as Error).message ?? e), "bad"));
   onMount(load);
-  onDestroy(stopPolling);
+  onDestroy(() => { stopPolling(); if (retryTimer) clearTimeout(retryTimer); });
 </script>
 
 <div class="mx-auto flex max-w-[680px] flex-col gap-6">
@@ -67,7 +75,9 @@
     <p class="mt-1 text-copy-13 text-gray-900">A licence unlocks the full review report. Monitoring, alerts and evidence work with or without one.</p>
   </header>
 
-  {#if loadError}
+  {#if loadError && !st && retries <= MAX_RETRIES}
+    <div class="card empty">ARGUS-INSTINCT is starting. Checking the licence again…</div>
+  {:else if loadError && !st}
     <div class="card p-5 text-copy-13 text-red-900">Could not read the licence: {loadError}</div>
   {:else if !st}
     <div class="card empty">Reading the licence…</div>
