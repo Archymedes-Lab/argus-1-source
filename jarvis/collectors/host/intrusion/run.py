@@ -1,11 +1,12 @@
 """The intrusion audit: one PowerShell sample, turned into findings."""
 
+import json
 import ntpath
 import re
 import time
 
 from jarvis.core.paths import load_win_script
-from jarvis.platform.windows import aslist, ps_json
+from jarvis.platform.windows import aslist, ps_json, stdin_text
 
 from .bits import _bits_is_vendor
 from .common import _finding
@@ -63,8 +64,29 @@ STOCK_EXT = re.compile(r"^(Chrome Web Store Payments|Google Docs Offline|"
                        r"Chrome PDF Viewer|Firefox Screenshots)$", re.I)
 
 
-def audit():
-    data = ps_json(PS_INTRUSION, timeout=300)
+REFUSED_META = "intrusion_refused_v1"
+MAX_REFUSED = 200
+
+
+def _refused(store):
+    if store is None:
+        return []
+    try:
+        keys = json.loads(store.get_meta(REFUSED_META, "") or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [k for k in keys if isinstance(k, str)][:MAX_REFUSED] if isinstance(keys, list) else []
+
+
+def audit(store=None):
+    """`store` remembers files Windows refused to let the audit open, so they are not
+    opened (and logged by Windows as blocked) again on every pass."""
+    request = json.dumps({"refused": _refused(store)})
+    # The marker stays the first line of the command: Windows truncates long command lines
+    # in its records, and the credential check and the block explainer recognise this
+    # payload by it.
+    data = ps_json(PS_INTRUSION.split("\n", 2)[1] + "\n" + stdin_text("jarvisReq") + PS_INTRUSION,
+                   timeout=300, payload=request)
     if data is None:
         return [_finding("clickfix", "medium", "intrusion audit unavailable",
                          "powershell.exe returned no data", "interop")]
@@ -188,6 +210,15 @@ def audit():
         in_temp = re.search(r"\\temp\\|\\public\\", path, re.I)
         if sig == "Valid":
             continue
+        if sig == "BlockedByWindows":
+            # Windows Security refused to let the audit open it: its reputation rule blocks
+            # the file, so it cannot be read here and cannot run either. Listed, not judged
+            # by signature (unknown) and not opened again.
+            out.append(_finding(
+                "staging", "low", "recently written program Windows blocks",
+                f"{path.split(chr(92))[-1]} — Windows Security blocks this file, so its signature could not be "
+                f"checked and it cannot run here; written {(f.get('written') or '').replace('T', ' ')[:19]}", path))
+            continue
         if (f.get("sha256") or "").lower() == EMPTY_SHA256:
             # Zero bytes cannot execute, and an empty file has no signature to
             # check — Authenticode reports UnknownError for it. Temp is full of
@@ -210,6 +241,9 @@ def audit():
             f"{path.split(chr(92))[-1]} — {sig}, "
             f"{(f.get('written') or '').replace('T', ' ')[:19]}, "
             f"SHA-256 {(f.get('sha256') or 'unavailable')[:64]}", path))
+    if store is not None:
+        keys = [str(f.get("key")) for f in recent_code if f.get("sig") == "BlockedByWindows" and f.get("key")]
+        store.set_meta(REFUSED_META, json.dumps(keys[:MAX_REFUSED]))
     valid_code = sum(1 for f in recent_code if f.get("sig") == "Valid")
     out.append(_finding(
         "staging", "ok", "recent downloaded and staged software inventoried",

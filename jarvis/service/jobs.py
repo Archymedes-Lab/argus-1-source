@@ -40,6 +40,7 @@ from jarvis.collectors.host import (
     storage,
     toolchain,
     updates,
+    winblocks,
     wslguard,
     wslmanifest,
 )
@@ -465,6 +466,11 @@ def _sorted(module):
     return lambda hosts, db_path: module.sort_findings(module.audit())
 
 
+def _intrusion(db_path):
+    with _store(db_path) as store:
+        return intrusion_mod.sort_findings(intrusion_mod.audit(store))
+
+
 def _boot(hosts, db_path):
     findings = startup.sort_findings(startup.audit())
     # Reuse the control audit's full task verification, but only while its
@@ -523,6 +529,7 @@ RUNNERS = {
     "osquery": lambda hosts, db_path: osquery.audit(),
     "psscript": _with_store(psscript.audit),
     "content": _with_store(content.audit),
+    "winblocks": lambda hosts, db_path: winblocks.audit(hosts),
     "bootchain": _with_store(bootchain.audit),
     "selfguard": _selfguard,
     "keyreaders": _with_store(keyreaders.audit),
@@ -546,7 +553,7 @@ RUNNERS = {
     "spy": lambda hosts, db_path: spyware.sort_findings(spyware.audit(hosts=hosts)),
     "pixel": _hosts_only(pixel.audit),
     "identity": _with_store(impersonation.audit),
-    "intrusion": _sorted(intrusion_mod),
+    "intrusion": lambda hosts, db_path: _intrusion(db_path),
     "evasion": _sorted(evasion_mod),
     "coverage": _coverage,
     "boot": _boot,

@@ -24,14 +24,20 @@ ASR_KEY = {
         "block JS/VBS launching downloaded content",
     "9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2":
         "block credential theft from LSASS",
-    "01443614-cd74-433a-b99e-2ecdc07bfc25":
-        "block executables unless they meet prevalence/age criteria",
     "56a863a9-875e-4185-98a7-b882c64b5ce5":
         "block abuse of vulnerable signed drivers",
 }
 # Rules worth having on a workstation but whose absence is advice, not a
 # medium: several break specific workflows (USB tools, Adobe Reader plug-ins).
 ASR_MORE = {
+    # Not a key rule since 2026-11-11: it blocks every program Microsoft's cloud has not
+    # seen often or for long, which includes new installers, in-house tools and this
+    # product's own unsigned builds (measured on the owner's machine: 76 blocks of Argus
+    # and other first-party programs in nine days, every one shown to the person as
+    # "your administrator caused Windows Security to block this action"). Worth having
+    # on a machine that installs little; advice, not a deduction. See collectors/host/winblocks.py.
+    "01443614-cd74-433a-b99e-2ecdc07bfc25":
+        "block programs Microsoft has not seen often or for long (also blocks new installers and your own builds)",
     "92e97fa1-2edf-4476-bdd6-9dd0b4dddc7b": "block Win32 API calls from Office macros",
     "d1e49aac-8f56-4280-b9ba-993a6d77406c": "block process creation from PsExec and WMI",
     "e6db77e5-3df2-4cf1-b95a-636979351e5b": "block persistence through WMI subscriptions",
