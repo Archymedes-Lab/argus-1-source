@@ -93,3 +93,89 @@ is out of reach until the project can sign a Windows driver; it should not be pr
 A real-execution run in the VM lab (it measures all collectors); a Sigma-subset evaluator
 re-measured on this same index; or recorded-history replay showing that broader rules
 raise false findings on ordinary machines.
+
+---
+
+## Update, later on 2026-11-10: community rules built (item 1) and the gate (item 5, first half)
+
+**Harness correction.** The first run modelled every first word of a command as a program
+and placed bare program names under `C:\Tools`. Both inflated or distorted matches. A
+bare name is now placed where Windows finds it and only something that can be a program
+is a process start. Re-measured, the built-in rules catch 392 of 1,745 (22.5%).
+
+**Community rules.** 1,116 Sigma rules (SigmaHQ commit `d7c9da10`, Detection Rule License
+1.1) are compiled ahead of time into literal field tests (`scripts/security/sigma_compile.py`
+→ `jarvis/intel/data/sigma_rules.json`, evaluated by `jarvis/core/sigma.py`). 439 rules
+were left out because they cannot be evaluated exactly here (experimental status, fields
+Argus does not record, regular expressions); none is approximated.
+
+| Same 1,745 tests | Built-in rules | With community rules |
+|---|---|---|
+| Any finding | 392 (22.5%) | **997 (57.1%)** |
+| Windows (1,322) | 331 (25.0%) | 772 (58.4%) |
+| Linux (423) | 61 (14.4%) | 225 (53.2%) |
+| Techniques with at least one test caught (of 316) | 145 | 252 |
+| Benign control commands flagged (of 24) | 0 | 0 |
+
+**False alarms, measured on real history.** Read-only replay of 18 hours of the
+development host (27,252 process starts, 938 registry writes): 28 rules matched 11,578
+times, nearly all on the monitor's own scheduled PowerShell audits. Reporting raw matches
+would bury a person. Cost: 0.37 ms per distinct event with the candidate index (2.8 ms
+without), 24 s of rule time for the whole replay before the per-pass cache.
+
+**Designs compared for that noise** (`collectors/telemetry/community.py`):
+
+| Design | Verdict |
+|---|---|
+| Learn (rule, program, parent) shapes for the first 7 days, list them as a standing low finding until a person reviews them, alert only on new shapes afterwards (built) | Works on every install today; on the replay 38 shapes learned, no alert afterwards. An attacker with the same shape as a learned one is not reported by this layer |
+| Exclude exactly the monitor's own launches (a ledger of what it started) | The right fix for the monitor's own noise; needs a change to the command runner and measurement of how Sysmon records those command lines. **Next build** |
+| Exempt by the monitor's name | Rejected: an allowance an attacker can claim by naming a file |
+| Shadow mode only | No protection gain |
+| Report every match | 38 standing medium and high findings on this host from the monitor itself |
+
+Jev (jev-1.14.0, metadata only, `scripts/reviews/community_rules_advisory.py`), advisory:
+own-launch ledger first 0.59, learning 0.31; add the ledger later 0.76; a learning week on
+its own acceptable 0.22; top validation gap more hosts 0.43, imitation of a learned shape
+0.41. **Effect on the work:** learned shapes were made a standing finding that stays until
+reviewed (`jarvis rules`, `jarvis rules reviewed`, `jarvis rules forget KEY`) instead of
+being reported once, and the ledger is recorded as the next build. Jev did not favour the
+design that shipped; the deterministic evidence for shipping it is the replay above and
+the tests, and its limit is stated in the register.
+
+**Why not through the signed rule-pack channel yet.** No signer is pinned
+(`rulepack.PINNED_SIGNERS` is empty, so no pack can become active) and a pack is capped at
+256 KiB and 500 regular-expression rules; the compiled file is 741 KB of a different form.
+The rules ship as reviewed data inside the signed release. Extending the pack format to
+carry this form is a follow-up.
+
+**The gate.** `scripts/security/atomic_floor.json` records the measured counts for the
+pinned index. CI fetches that index by commit, checks its hash, and fails when fewer tests
+are caught, when a benign command raises a finding, or when a detector crashes.
+
+**Still open from the five-part list:** PowerShell script-block ingestion (2), registry
+family state watch (3), content scanner beyond the operator-installed YARA path (4), real
+execution in the VM lab (5, second half), and the own-launch ledger above.
+
+### Correction after the full test suite (same day)
+
+The existing rule-table tests caught three problems in the first cut, all fixed before merge:
+
+1. **Medium-level rules flag single ordinary commands** (one `whoami`), which this product
+   reports only as a burst. Only high and critical rules are used now: **582 rules**
+   (435 Windows process, 118 registry, 29 Linux). The benchmark with them is
+   **620 of 1,745 (35.5%)**: Windows 555 (42.0%), Linux 65 (15.4%); built-in alone 392
+   (22.5%). The 57.1% above needed the medium rules and is not what ships. On the real-history
+   replay the trimmed set fires 12 rules 2,436 times (the monitor's own PowerShell), 12
+   shapes are learned and no alert follows. The floor file records 620.
+2. **A community finding quoted the command line**, which can carry a password. Community
+   findings never quote it now.
+3. **Stored findings lose their `origin` key**, and the automatic-response gate read only
+   that key, so a stored rule-content finding of high severity could have been treated as
+   built-in. The title now carries the mark and the gate reads either
+   (`core.finding.content_origin`). This also closes the same latent gap for signed
+   rule-pack findings.
+
+A replay runs the built-in rules only unless it asks for community rules, so the coverage
+map's probes and benign look-alike controls keep measuring the built-in table. Community
+rules hit 7 of those 195 curated look-alikes (for example `powershell -ep bypass -file
+build.ps1`), which is the kind of activity the per-install learning exists for.

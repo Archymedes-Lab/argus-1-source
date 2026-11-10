@@ -42,7 +42,10 @@ PREFERENCE = ("MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC", "Zlib"
               "OFL-1.1", "MPL-2.0", "OpenSSL", "bzip2-1.0.6", "blessing", "X11",
               # AGPL-3.0 compiler whose runtime exception lets proprietary output use it
               # (verified 2026-11-02 in Nuitka's LICENSE-RUNTIME.txt).
-              "Nuitka-Runtime-Exception", "LicenseRef-Public-Domain")
+              "Nuitka-Runtime-Exception", "LicenseRef-Public-Domain",
+              # Detection Rule License 1.1: permissive for rule content; every alert built
+              # from a rule names its author (enforced in jarvis/core/sigma.py).
+              "DRL-1.1")
 ALLOWED = frozenset(PREFERENCE)
 # A licence whose terms extend to the whole program is never acceptable here.
 FORBIDDEN = re.compile(r"\b(A?GPL|LGPL|SSPL|BUSL|CC-BY-NC|Commons-Clause)\b", re.I)
@@ -66,7 +69,7 @@ def load():
 def entries(snapshot):
     """(section, name, version, chosen licence, copyright, source) for every component."""
     out = []
-    for section in ("native", "python", "web", "cargo"):
+    for section in ("native", "python", "web", "cargo", "content"):
         for c in snapshot.get(section, []):
             out.append((section, c["name"], c.get("version", ""), choose(c["license"]) or "",
                         c.get("copyright", ""), c.get("source", "")))

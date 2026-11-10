@@ -58,6 +58,13 @@ INTEGRATED = (
            "operator-installed sensor whose journal Argus reads", "cleared"),
     Source("auditd", "engine", "GPL-2.0-or-later",
            "distribution audit tools queried as programs (ausearch, auditctl)", "cleared"),
+    Source("sigma-rules", "rules", "DRL-1.1",
+           "a compiled subset shipped as data (intel/data/sigma_rules.json, built by "
+           "scripts/security/sigma_compile.py) and evaluated by core/sigma.py", "cleared",
+           "every finding from a rule names its author (core.sigma.attribution; a rule without an "
+           "author is refused); the shipped file keeps each rule's author and id, the source "
+           "repository and commit, and the DRL; the licence text ships in THIRD-PARTY-NOTICES",
+           fit="community detections over Sysmon process and registry events, credited per finding"),
     Source("osv.dev", "data", "Apache-2.0 (service); per-advisory data licences, e.g. CC-BY-4.0",
            "downloaded advisory dumps matched offline (osv job)", "cleared",
            "credit the advisory source (GitHub Advisory Database is CC-BY-4.0) in reports"),
@@ -65,9 +72,6 @@ INTEGRATED = (
 
 # Evaluated 2026-11-02 for the next integrations; nothing here runs yet.
 CANDIDATES = (
-    Source("sigma-rules", "rules", "DRL-1.1", "not integrated", "cleared",
-           "findings from a rule must name its author; shipped rules keep author, link and the DRL",
-           fit="next build (CDM 0.574): thousands of reviewed detections over Sysmon for Linux, credited per finding"),
     Source("signature-base", "rules", "DRL-1.1", "not integrated", "cleared",
            "same attribution as Sigma (YARA and IOC rules by Florian Roth et al.)"),
     Source("yara-forge", "rules", "GPL-3.0", "not integrated", "restricted",

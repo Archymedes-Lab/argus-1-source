@@ -40,8 +40,19 @@ jobs:
         run: python scripts/dev/standard_check.py
       - name: Release tooling (content gate, signatures, launcher)
         run: python -m unittest tests.test_release_gate tests.test_release_signing tests.test_release_keys tests.test_release_version tests.test_host_attest tests.test_release_digests tests.test_standard_check tests.test_server_launcher -v
+      - name: Development-only YAML parser (pinned by hash; the rule compiler tests and the benchmark use it)
+        run: python -m pip install --disable-pip-version-check --require-hashes -r scripts/security/requirements-bench.txt
       - name: Unit suite
         run: python scripts/dev/ci_suite.py
+      # Atomic Red Team's test index (MIT), fetched as data at a pinned commit and checked by
+      # hash. Its commands are replayed as text through the real detectors; nothing runs.
+      # The job fails if fewer tests are caught than scripts/security/atomic_floor.json records.
+      - name: Detection benchmark (must not fall below the floor)
+        run: |
+          curl -fsSL --max-time 120 -o "$RUNNER_TEMP/atomic-index.yaml" \
+            https://raw.githubusercontent.com/redcanaryco/atomic-red-team/a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6/atomics/Indexes/index.yaml
+          echo "afa92a2c9b95b77d6ff0a318ae8000d9df04fc63101f87a7ac9fc6feb1fdf6f6  $RUNNER_TEMP/atomic-index.yaml" | sha256sum -c -
+          python -m scripts.security.atomic_bench "$RUNNER_TEMP/atomic-index.yaml" --floor scripts/security/atomic_floor.json
 
   desktop-ui:
     runs-on: ubuntu-24.04

@@ -36,8 +36,8 @@ import os
 import re
 from datetime import datetime, timezone
 
-from jarvis.collectors.telemetry import techniques
-from jarvis.core import collection, warninglist
+from jarvis.collectors.telemetry import community, techniques
+from jarvis.core import collection, sigma, warninglist
 from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
@@ -626,11 +626,16 @@ def _query_blocked(st=None):
 
 
 def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None,
-          events=None, volumes=None):
+          events=None, volumes=None, community_rules=None):
     """`events` replays the given reduced rows (the shape rows_from_events
     returns) through every rule below instead of reading the machine. A replay
     never touches the store: it cannot record a hit or move a cursor. The
     coverage map's probes use it so they test this function, not a copy.
+
+    `community_rules`: whether community (Sigma) rules run after the built-in
+    ones. Default: on for the machine, off for a replay, so a replay exercises
+    the built-in rule table (the coverage map's probes and look-alike controls
+    depend on that) unless it asks for community rules too.
 
     `volumes` is a drive inventory {letter: (type, bus)} to judge drives
     against. A replay never asks Windows for one, so without it a replay leaves
@@ -1215,6 +1220,25 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             known = {}
         known.update(dict.fromkeys(registry_seen, now()))
         store.set_meta(REGISTRY_RECORDED_META, json.dumps(known))
+
+    # -- community rules (Sigma), judged per install --------------------------
+    # After the built-in rules and never instead of them. A replay (no store)
+    # learns nothing and returns every match.
+    def _community(severity, title, detail, image):
+        return _finding("technique", severity, title, detail, image or CHANNEL)
+
+    if community_rules is None:
+        community_rules = not probing
+    if community_rules:
+        out += community.findings(
+            sigma.WIN_PROC, [e for e in events if int(e.get("id") or 0) == 1],
+            lambda e: (e.get("image") or "", e.get("parent") or "", iso_of(e.get("time")),
+                       e.get("cmdline") or ""),
+            _community, store=store, now=now())
+        out += community.findings(
+            sigma.WIN_REG, [dict(e, event_type="SetValue") for e in events if int(e.get("id") or 0) == 13],
+            lambda e: (e.get("image") or "", "", iso_of(e.get("time")), e.get("reg_key") or ""),
+            _community, store=store, now=now())
 
     # Persist and re-surface. Reading incrementally means each run sees only
     # new events, so anything worth reporting has to outlive its own snapshot.
