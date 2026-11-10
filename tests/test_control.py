@@ -184,7 +184,7 @@ class MaskedUnitTests(unittest.TestCase):
                                    return_value=[("u", home, 1000)]):
                 titles = [f["title"] for f in backdoor.check_persistence()
                           if "systemd user unit" in f["title"]]
-        self.assertEqual(titles, ["systemd user unit for u: real.service"])
+        self.assertEqual(titles, ["systemd user unit for u: real.service (file evidence)"])
 
 
 class BootTaskVerificationTests(unittest.TestCase):

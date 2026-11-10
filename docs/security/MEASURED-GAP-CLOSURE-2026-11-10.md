@@ -1,0 +1,93 @@
+# Closing measured gaps (2026-11-10)
+
+Baseline: the unchanged disposable Linux campaign applied 16 state scenarios and
+reported 11 marker-linked findings, 10 high/critical. Cases 07 (profile), 12 (PHP),
+13 (root cron), 15 (history symlink), 16 (rc.local) remained unreported. The public
+text replay is separately 707/1745; neither number is a general protection claim.
+
+## Invariants before implementation
+
+- Read-only local observation; never execute files to classify them. No protected
+  host attack execution. Attack cases remain unchanged and run only on disposable VMs.
+- File bytes and command arguments remain in memory only. Emit metadata, locations,
+  hashes and fixed explanations; never source lines or history contents.
+- Anchor file reads to non-link directory descriptors, reject replacements and
+  incomplete reads. Time, entry, byte and per-file caps report unknown coverage.
+- Recognize literal startup invocations in staging directories, not a mention of
+  a path in an argument, comment or quoted example. Missing sources are not alerts;
+  failed reads remain explicit gaps. History checks inspect links, never history text.
+- Findings derived from external file content remain advisory after persistence.
+  A copied filename, rule text or model answer cannot authorize a response.
+- Preserve existing evidence and unrelated dirty work. A narrow release starts at
+  the running sealed manifest, overlays only reviewed files, validates dependencies,
+  records expected finding changes and retains an expect-base guard and rollback.
+- Windows validation requires an ephemeral hosted Windows machine, an empty scratch
+  profile/store, explicit protected-host refusal, local controlled actions, bounded
+  collection, fresh real records, verified cleanup and no publication of script text.
+
+## Designs and chosen scope
+
+Startup: extending malware keyword lists would leave simple literal persistence
+unseen; inventorying every unowned profile would flag ordinary user customization.
+Choose a bounded command-position parser for direct staging-path invocation plus
+metadata-only history-sink checks and executable rc.local inspection. Indirection,
+framework loaders and uncommon shell grammars remain stated limits.
+
+PHP: the current webshell audit requires a listening server, while the benchmark
+places a dormant artifact. Add a bounded built-in direct request-to-execution probe
+to the existing drop-folder content collector. Ignore comments and quoted examples;
+retain the community literal subset. A full language/dataflow engine is future work.
+
+Reuse one safe file reader for both new observations and content scanning. Keep the
+existing reader API so its ancestor-link, identity-race and budget regressions remain
+applicable. Do not change response authority or require model inference at runtime.
+
+## Work and acceptance
+
+1. Build the five-gap observations with benign controls and failure-path regressions.
+2. Run the unchanged Linux campaign and preserve its report, including any misses.
+3. Build and execute a bounded Windows campaign on a disposable hosted runner; separate
+   observed state, actual log delivery and unmeasured sources. No owner-host attacks.
+4. Run focused regressions, full isolated suite, static and ASES gates, pinned replay,
+   real service dispatch, resource measurements and a metadata-only Jev review.
+5. Merge only with CI green. Stage a narrow release from the live sealed source and
+   write a baseline, expected deltas and rollback. Activate only through the permitted
+   administrator path, then verify fresh affected snapshots and service health.
+
+## Initial live readback
+
+The live service is active with zero restarts on sealed release
+20261105T160315Z-e8c21be52587. No changes were made. Authenticated API readback and
+administrator availability are checked separately; a restart is not deployment.
+
+## File-evidence privacy and authority audit
+
+The existing persistence check could quote complete cron/profile/Exec lines,
+including credentials, before the new metadata-only finding was folded away.
+Remove those source/argument fields for these startup reports. Mark file evidence
+in a durable title and recognize legacy stored startup/webshell titles so a stored
+finding cannot acquire response authority. File-content evidence is capped below
+critical; no automatic response is granted. Record these expected title/severity
+changes in the deployment baseline rather than claiming a score gain as protection.
+
+## Windows test design
+
+Use only a GitHub-hosted Windows VM, refusing existing JARVIS data/installations.
+Install the Microsoft-signed Sysmon tool only in that disposable VM, from a pinned
+zip SHA-256 with Authenticode publisher validation; never replace an existing
+sensor. Enable 4104 logging only there, record previous settings, and restore them.
+Keep source text and event payloads out of artifacts. Network blocks for the test
+interpreter and command shells are read back from active policy before actions;
+agent/artifact transport stays outside these programs. No Defender exclusions,
+ASR bypass, memory dumping, credential reads or unknown-code execution.
+
+Controlled actions: unique Run value, unique IFEO debugger key, inert logon task,
+inert auto-service registration, and a script-file LSASS process-id query (metadata
+only). Verify the action's state, new real Sysmon records, a 4104 record associated
+with the fixture's file path, detections through real job dispatch, and per-object
+cleanup. OS prevention stays explicit rather than relaxing policy. This validates
+these Windows paths, not all Windows techniques or the native spool/broker service.
+
+References: Microsoft Sysmon documentation (v15.22, 2026-09-10),
+https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon ; runner image
+https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md .
