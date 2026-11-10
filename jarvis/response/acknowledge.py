@@ -17,6 +17,20 @@ What an acknowledgement is not:
 
 Monitoring outages cannot be acknowledged: JARVIS being blind is never
 "expected".
+
+A critical finding needs a confirmation the local API cannot give. The API is
+reachable by any program that can read the token, so a "yes" arriving there
+must not be able to silence the worst findings (PRODUCTION-READINESS-2026-11-02
+blocker 1). `acknowledge` refuses a critical finding unless the caller names
+how the person confirmed it (`confirmed_by`), and an acknowledgement of a
+critical finding that carries no such record does not apply. The only caller
+that supplies one today is the command line after an interactive, typed
+confirmation.
+
+Limit, stated: on an install where the daemon runs as the person's own
+account, a program running as that account can write the store directly and
+forge the record. The gate is a wall only where the store belongs to a
+separate service account.
 """
 
 import hashlib
@@ -30,6 +44,18 @@ DEFAULT_DAYS = 90
 # Findings about the guard itself, its evidence, or its own blindness can never
 # be waved away by the account an intruder would hold (PROTECTION-REVIEW C1).
 UNACKNOWLEDGEABLE = ("daemon", "collectors", "tamper", "tampering", "visibility")
+# Severities whose acknowledgement needs a confirmation made outside the local API.
+CONFIRM_SEVERITIES = ("critical",)
+TERMINAL = "terminal"
+CONFIRMERS = (TERMINAL,)
+
+
+class ConfirmationRequired(ValueError):
+    """A critical finding was offered for acknowledgement without a confirmation."""
+
+
+def needs_confirmation(finding):
+    return (finding or {}).get("severity") in CONFIRM_SEVERITIES
 
 
 def finding_id(finding, job):
@@ -71,12 +97,21 @@ def is_acknowledged(acks, finding, job, now=None):
     now = int(time.time() if now is None else now)
     if now >= int(entry.get("expires", 0)):
         return False
+    if needs_confirmation(finding) and entry.get("confirmed_by") not in CONFIRMERS:
+        return False
     worse = (alert.SEV_RANK.get(finding.get("severity"), 9)
              < alert.SEV_RANK.get(entry.get("severity"), 9))
     return not worse
 
 
-def acknowledge(store, finding, job, reason, days=DEFAULT_DAYS, now=None):
+def awaiting_confirmation(entry):
+    """True for a stored acknowledgement of a critical finding that no longer applies
+    because nobody confirmed it outside the API (for example one made before the gate)."""
+    e = entry or {}
+    return e.get("severity") in CONFIRM_SEVERITIES and e.get("confirmed_by") not in CONFIRMERS
+
+
+def acknowledge(store, finding, job, reason, days=DEFAULT_DAYS, now=None, confirmed_by=None):
     reason = (reason or "").strip()
     if not reason:
         raise ValueError("a reason is required")
@@ -84,12 +119,18 @@ def acknowledge(store, finding, job, reason, days=DEFAULT_DAYS, now=None):
         raise ValueError("monitoring outages and clean checks cannot be acknowledged")
     if not 1 <= int(days) <= 365:
         raise ValueError("days must be between 1 and 365")
+    if confirmed_by is not None and confirmed_by not in CONFIRMERS:
+        raise ValueError("unknown confirmation")
+    if needs_confirmation(finding) and confirmed_by is None:
+        raise ConfirmationRequired("a critical finding must be confirmed at this computer, in a terminal")
     now = int(time.time() if now is None else now)
     acks = load(store)
     fid = finding_id(finding, job)
     acks[fid] = {"job": job, "key": alert.finding_key(finding), "title": finding.get("title", ""),
                  "severity": finding.get("severity"), "reason": reason[:300],
                  "at": now, "expires": now + int(days) * 86400}
+    if confirmed_by is not None:
+        acks[fid]["confirmed_by"] = confirmed_by
     _save(store, acks)
     return fid, acks[fid]
 

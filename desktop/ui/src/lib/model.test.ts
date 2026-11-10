@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ago, collectorSummary, distinct, every, filterFindings, groupQuestions, isCoverageGap, isProblem, isReminder, problemCounts,
+  ago, collectorSummary, distinct, every, filterFindings, findingsView, groupQuestions, isCoverageGap, isProblem, isReminder, problemCounts,
   jobHealth, matches, scoreTone, sevRank, severityCounts, type Finding,
 } from "./model";
 
@@ -108,4 +108,42 @@ test("a JSON-wrapped model note shows its text, never braces", () => {
   expect(noteText("{not json")).toBe("{not json");
   expect(noteText('{"n": 3}')).toBe('{"n": 3}');
   expect(noteText(undefined)).toBe("");
+});
+
+describe("findingsView: one count for Home and the findings list", () => {
+  const f = (job: string, severity: string, title: string, extra: Partial<Finding> = {}): Finding =>
+    ({ job, severity, title, host: "wsl", ...extra }) as Finding;
+  const all = [
+    f("secrets", "critical", "key in plaintext"),
+    f("ledger", "critical", "unresolved for 16d: key in plaintext"),          // reminder (older daemon)
+    f("ledger", "high", "unresolved for 49d: no start event", { orphan: true }), // the only place it shows
+    f("gaps", "high", "T1001 Data Obfuscation"),                              // about the tool
+    f("netwatch", "high", "listening on a public profile"),
+    f("posture", "low", "screen lock off"),
+  ];
+
+  test("each severity's number equals the rows it lists, and equals Home's number", () => {
+    for (const severity of ["critical", "high", "medium", "low"] as const) {
+      const v = findingsView(all, { severity });
+      expect(v.rows.length).toBe(v.counts[severity]);
+      expect(v.counts[severity]).toBe(problemCounts(all)[severity]);
+      expect(v.rows.every(isProblem)).toBe(true);
+    }
+    expect(findingsView(all, {}).counts).toEqual({ critical: 1, high: 2, medium: 0, low: 1 });
+  });
+
+  test("nothing is dropped: with no severity chosen the whole list shows", () => {
+    const v = findingsView(all, {});
+    expect(v.rows.length).toBe(all.length);
+    expect(v.total).toBe(all.length);
+  });
+
+  test("an orphan note is a problem and is listed under its severity", () => {
+    expect(findingsView(all, { severity: "high" }).rows.map((x) => x.job).sort()).toEqual(["ledger", "netwatch"]);
+  });
+
+  test("a text search still reaches reminders and coverage notes", () => {
+    expect(findingsView(all, { query: "unresolved" }).rows.length).toBe(2);
+    expect(findingsView(all, { query: "T1001" }).rows.length).toBe(1);
+  });
 });

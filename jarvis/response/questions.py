@@ -115,14 +115,21 @@ def build(store, snapshots, conf, now=None):
             "severity": finding.get("severity"), "title": finding.get("title"),
             "contain": action.id if (rung in (defense.PROPOSE, defense.AUTO) and action) else "",
             "answer_cmd": f"jarvis answer {qid} yes|no",
+            # "yes" on this one is refused over the API; it needs the terminal.
+            "confirm": acknowledge.TERMINAL if acknowledge.needs_confirmation(finding) else "",
         })
     rank = alert.SEV_RANK
     open_q.sort(key=lambda q: rank.get(q["severity"], 9))
     return open_q
 
 
-def answer(store, qid, choice, now=None):
-    """Record an answer and act on it. Returns (ok, message)."""
+def answer(store, qid, choice, now=None, confirmed_by=None):
+    """Record an answer and act on it. Returns (ok, message).
+
+    `confirmed_by` names a confirmation made outside the local API (see
+    acknowledge.CONFIRMERS). Without it, a "yes" on a critical finding changes
+    nothing: the route this arrives on cannot be allowed to silence one.
+    """
     now = int(time.time() if now is None else now)
     choice = (choice or "").strip().lower()
     if choice in ("y", "yes", "mine", "me"):
@@ -136,6 +143,9 @@ def answer(store, qid, choice, now=None):
     if not hit:
         return False, f"no current finding has question id {qid}"
     finding, job = hit
+    if choice == YES and acknowledge.needs_confirmation(finding) and confirmed_by is None:
+        return False, ("this is a critical finding, so it stays open until you confirm it at this "
+                       f"computer: run  jarvis ack {qid} --reason \"why this is expected\"  in a terminal")
     answered = _load(store)
     answered[qid] = {"answer": choice, "at": now, "title": finding.get("title"),
                      "finding_key": alert.finding_key(finding)}
@@ -153,7 +163,8 @@ def answer(store, qid, choice, now=None):
     if choice == YES:
         try:
             acknowledge.acknowledge(store, finding, job,
-                                    "confirmed via jarvis answer: expected", now=now)
+                                    "confirmed via jarvis answer: expected", now=now,
+                                    confirmed_by=confirmed_by)
         except ValueError as exc:
             return True, f"noted, but not acknowledged ({exc})"
         return True, "confirmed as expected — it no longer counts against your score"
