@@ -28,7 +28,7 @@ temp dir, to confirm FZ-02.
 | FZ-11 | release/gate.py `scan_bytes` (nested archives) | blind spot | medium | **open** (expectedFailure) |
 | FZ-12 | release/gate.py `check_artifact` kind `binary` | blind spot | medium | **open** (expectedFailure) |
 | FZ-13 | release/gate.py `denied_path` | blind spot | low-medium | **open** (expectedFailure) |
-| FZ-14 | release/gate.py `_tar_members`/`_zip_members` | unbounded memory | low-medium | **open** (skip) |
+| FZ-14 | release/gate.py `_tar_members`/`_zip_members` | unbounded memory | low-medium | fixed 2026-11-10 |
 | FZ-15 | collectors/identity/logins.py `read_journal` | crash | low | fixed + test |
 
 ### FZ-01: negative ar member size loops for ever (gate)
@@ -146,11 +146,13 @@ temp dir, to confirm FZ-02.
   case-insensitive file system.
 - Not fixed: may newly refuse current members; check the live artifacts first.
 
-### FZ-14 (open): archive members are all held in memory
+### FZ-14: archive members are all held in memory, fixed 2026-11-10
 - Measured: a 65 KB `.tar.gz` of 8 zero-filled members made `_tar_members` hold 64 MiB (+48 MiB
   max RSS). There is a 512 MiB per-member cap but no aggregate one, so a small download on a
   compromised site can exhaust memory on the owner's machine during `audit.py`.
-- Fix direction: stream members (scan, then drop) and set a total-bytes budget that refuses.
+- Fix: a 256 MiB aggregate budget (`gate.MAX_TOTAL`); members past it are listed as
+  `over-budget` without being read and refused; nested zips check the budget before reading.
+  Regressions: `test_fz14_*` in tests/test_fuzz_findings.py (fail on the old gate).
 
 ### FZ-15: odd journal JSON lines lose the whole login read (logins)
 - Reproducers: a line `0` or `null`; `MESSAGE` byte array with 900 or a string element;

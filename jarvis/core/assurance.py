@@ -1,6 +1,19 @@
 """Conservative assurance claims. Configuration and passing health are not proof."""
 POLICY_VERSION = '2026-09-19'
 
+# Development evidence only; never contributes to runtime capability scores.
+SECURITY_TESTING = {
+    'status': 'partial',
+    'runner': 'scripts/security/campaign.py',
+    'scope': 'checkout scanners and synthetic boundary tests',
+    'limits': ('Hash-pinned scanner provisioning, source-bound SMT refinement of the '
+               'authority enable predicate, static ELF/PE header review and isolated native/VM '
+               'adapters are development checks only; proof assumptions and native '
+               'coverage are bounded; independent human review and successful VM '
+               'receipts remain required; no whole-program or deployment validation'),
+    'runtime_validated': False,
+}
+
 # This register deliberately grants no deployment/containment validation from
 # source inspection. A future evidence importer must validate signed receipts.
 CAPABILITIES = {
