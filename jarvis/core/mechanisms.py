@@ -378,6 +378,12 @@ COLLECTORS = (
        lane="frequent",
        unscored="script-block findings are reported, not yet scored (unsoaked; reads only "
                 "when Windows script-block logging is already on)"),
+    # What Windows Security blocked (attack surface reduction, controlled folder
+    # access), explained; says so when the blocked program is part of Argus.
+    # Reads the Defender log only; never unblocks or excludes anything.
+    _c("winblocks", 600, "Windows Security blocks", None, 0, 3, "medium", 60,
+       command="status", domain="windows", depends_on=("windows-bridge",), cost_s=3.0,
+       unscored="blocked-action findings are reported, not yet scored (unsoaked)"),
     # ATT&CK coverage, validated by probing the real detectors.
     _c("attackmap", 21600, "ATT&CK coverage map", None, 0, 4, "low", 300,
        command="attack",

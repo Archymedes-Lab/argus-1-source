@@ -2,6 +2,11 @@
 # jarvis-intrusion-payload (first line on purpose: see section 6)
 $ErrorActionPreference = 'SilentlyContinue'
 $o = [ordered]@{}
+# Files Windows Security refused to let this payload open on an earlier pass, as
+# "path|size|lastwrite ticks" (stdin, JSON list). They are listed, not opened again:
+# each refused open is logged by Windows as a blocked action.
+$refusedBefore = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+try { if ($jarvisReq) { foreach ($k in @(($jarvisReq | ConvertFrom-Json).refused)) { [void]$refusedBefore.Add([string]$k) } } } catch { }
 
 # --- 1. ClickFix: everything ever typed into the Win+R Run dialog ----------
 $mru = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU'
@@ -128,13 +133,24 @@ $o.recentExe = @(Get-ChildItem -File -ErrorAction SilentlyContinue -Path $stageR
                  $_.Name -notmatch '^(prefs|user|handlers|search|extension-preferences)\.js$' } |
   Sort-Object LastWriteTime -Descending | Select-Object -First 250 |
   ForEach-Object {
-    $s = Get-AuthenticodeSignature -LiteralPath $_.FullName
-    $h = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName -ErrorAction SilentlyContinue
+    $key = '{0}|{1}|{2}' -f $_.FullName, $_.Length, $_.LastWriteTimeUtc.Ticks
+    if ($refusedBefore.Contains($key)) {
+      [pscustomobject]@{ path=$_.FullName; size=$_.Length; written=$_.LastWriteTime.ToString('o')
+                         sig='BlockedByWindows'; signer=''; sha256=''; key=$key }
+      return
+    }
+    $s = $null; $h = $null; $denied = $false; $fs = $null
+    # Open once, explicitly: a refusal by Windows Security arrives as an access error
+    # (wrapped by PowerShell), and the hash is taken from the same open handle.
+    try { $fs = [IO.File]::Open($_.FullName, 'Open', 'Read', 'ReadWrite') }
+    catch { $ex = $_.Exception; while ($ex) { if ($ex -is [UnauthorizedAccessException]) { $denied = $true; break }; $ex = $ex.InnerException } }
+    if ($fs) { try { $h = Get-FileHash -Algorithm SHA256 -InputStream $fs } finally { $fs.Dispose() } }
+    if (-not $denied) { $s = Get-AuthenticodeSignature -LiteralPath $_.FullName }
     [pscustomobject]@{ path=$_.FullName; size=$_.Length
                        written=$_.LastWriteTime.ToString('o')
-                       sig=[string]$s.Status
-                       signer=if($s.SignerCertificate){[string]$s.SignerCertificate.Subject}else{''}
-                       sha256=[string]$h.Hash } })
+                       sig=if($denied){'BlockedByWindows'}else{[string]$s.Status}
+                       signer=if($s -and $s.SignerCertificate){[string]$s.SignerCertificate.Subject}else{''}
+                       sha256=[string]$h.Hash; key=$key } })
 
 # --- 6. Browser credential stores, and what else references them -------
 # Infostealers usually copy the store before decrypting it (the browser holds a

@@ -27,8 +27,6 @@ _ASR_KEY = {
         "block JS/VBS launching downloaded content",
     "9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2":
         "block credential theft from LSASS",
-    "01443614-cd74-433a-b99e-2ecdc07bfc25":
-        "block executables unless they meet prevalence/age criteria",
     "56a863a9-875e-4185-98a7-b882c64b5ce5":
         "block abuse of vulnerable signed drivers",
 }
