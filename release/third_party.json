@@ -3320,6 +3320,22 @@
    "version": "4.2.0"
   }
  ],
+ "content": [
+  {
+   "copyright": "the author named in each rule; Sigma project contributors",
+   "license": "DRL-1.1",
+   "name": "Sigma detection rules (compiled subset; each alert names the rule and its author)",
+   "source": "https://github.com/SigmaHQ/sigma",
+   "version": "commit d7c9da10c170"
+  },
+  {
+   "copyright": "The authors named in each compiled rule; signature-base contributors",
+   "license": "DRL-1.1",
+   "name": "signature-base detection rules (modified literal-only subset; attribution retained per rule)",
+   "source": "https://github.com/Neo23x0/signature-base",
+   "version": "commit de3c7252c22b3376352b5a68defa46459a12a693"
+  }
+ ],
  "native": [
   {
    "copyright": "Copyright (c) 2001 Python Software Foundation; includes components under their own permissive licences, listed in Python's LICENSE",

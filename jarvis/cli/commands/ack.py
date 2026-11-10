@@ -12,7 +12,7 @@ from jarvis.core.util import iso
 from jarvis.response import acknowledge
 from jarvis.response.reporting import triage
 
-from ..output import color, is_tty
+from ..output import color, is_tty, typed_confirmation
 
 
 def cmd_ack(args, store):
@@ -35,6 +35,9 @@ def cmd_ack(args, store):
             print(f"{fid}  {color(f' {sev.upper():8} ', sev, t)} "
                   f"{e.get('title', '')}  ({e.get('job')}, {state})")
             print(f"          reason: {e.get('reason', '')}")
+            if acknowledge.awaiting_confirmation(e) and e.get("expires", 0) > now:
+                print("          NOT APPLYING: a critical finding must be confirmed at a terminal; "
+                      f'run  jarvis ack {fid} --reason "..."  again')
         return 0
 
     snapshots = store.get_snapshots()
@@ -44,8 +47,19 @@ def cmd_ack(args, store):
             print(f"no current finding has id {args.target} (ids change if the finding changes)")
             return 1
         finding, job = hit
+        confirmed_by = None
+        if acknowledge.needs_confirmation(finding) and acknowledge.can_acknowledge(finding) \
+                and (args.reason or "").strip():
+            what = (f"CRITICAL: {finding.get('title', '')} ({job})\n"
+                    "Confirming it as expected stops alerts about it and lowers what it costs the score.")
+            if not typed_confirmation(args.target, what):
+                print("not confirmed: a critical finding can only be confirmed by typing its id "
+                      "at an interactive terminal")
+                return 2
+            confirmed_by = acknowledge.TERMINAL
         try:
-            fid, entry = acknowledge.acknowledge(store, finding, job, args.reason, args.days, now)
+            fid, entry = acknowledge.acknowledge(store, finding, job, args.reason, args.days, now,
+                                                 confirmed_by=confirmed_by)
         except ValueError as exc:
             print(f"not confirmed: {exc}")
             return 2

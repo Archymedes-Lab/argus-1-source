@@ -20,7 +20,7 @@ class PostureTests(unittest.TestCase):
 
     def test_acceptance_lowers_score_but_stays_debt_and_blocks_readiness(self):
         fid = acknowledge.finding_id(self.finding, "secrets")
-        acks = {fid: {"severity": "critical", "expires": 1100}}
+        acks = {fid: {"severity": "critical", "expires": 1100, "confirmed_by": acknowledge.TERMINAL}}
         before = posture.build(self.snaps, self.jobs, now=1001)
         accepted = posture.build(self.snaps, self.jobs, now=1001, acks=acks)
         self.assertGreater(accepted["score"], before["score"])

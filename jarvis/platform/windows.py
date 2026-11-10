@@ -8,13 +8,17 @@ so console codepage quirks can't corrupt it.
 """
 
 import base64
+import collections
 import errno
+import hashlib
 import json
 import os
 import re
 import shutil
 import stat
 import subprocess
+import threading
+import time
 
 from jarvis.core import collection
 from jarvis.core.paths import load_win_script
@@ -232,6 +236,7 @@ def interop_sockets():
 
 def _run_via(sock, script, timeout):
     env = {**os.environ, "WSL_INTEROP": sock} if sock else None
+    note_own_script(script)
     try:
         return spawn([_PS or find_powershell(), "-NoProfile", "-NonInteractive",
                       "-Command", script], gated=False,
@@ -326,6 +331,7 @@ def collect(timeout: int = 45):
     if reachable is False:
         collection.failed('windows-processes', UNREACHABLE)
         return []
+    note_own_script(PS_SCRIPT)
     try:
         res = spawn(
             [str(_PS), "-NoProfile", "-NonInteractive", "-Command", PS_SCRIPT],
@@ -421,6 +427,33 @@ def stdin_text(var):
             f"${var}=[Text.Encoding]::UTF8.GetString($jarvisIn.ToArray());")
 
 
+# Scripts this process launched itself, by SHA-256 of the exact text handed to
+# PowerShell. Windows records that same text when script-block logging is on
+# (measured 2026-11-10: identical hash), so the script-block reader can leave the
+# monitor's own scripts out exactly, not by name. In memory only and bounded; a
+# script launched by another process (a CLI command, a Windows task) is not here
+# and is judged like anyone else's.
+OWN_SCRIPTS_MAX = 4000
+_OWN_SCRIPTS = collections.OrderedDict()
+_OWN_LOCK = threading.Lock()
+
+
+def note_own_script(script):
+    digest = hashlib.sha256((script or "").encode("utf-8", "surrogatepass")).hexdigest()
+    with _OWN_LOCK:
+        _OWN_SCRIPTS.pop(digest, None)
+        _OWN_SCRIPTS[digest] = time.time()
+        while len(_OWN_SCRIPTS) > OWN_SCRIPTS_MAX:
+            _OWN_SCRIPTS.popitem(last=False)
+    return digest
+
+
+def own_scripts():
+    """{sha256 hex: last launch time} of scripts this process launched."""
+    with _OWN_LOCK:
+        return dict(_OWN_SCRIPTS)
+
+
 def ps_json(script, timeout=120, payload=None):
     """Run a PowerShell script and decode its base64 JSON payload.
 
@@ -442,6 +475,7 @@ def ps_json(script, timeout=120, payload=None):
     if isinstance(payload, str):
         payload = payload.encode("utf-8")
     stdin = {} if payload is None else {"input": payload}
+    note_own_script(script)
 
     for attempt in (1, 2):
         try:

@@ -87,14 +87,21 @@ TCP_STATES = {
 }
 
 
-def socket_table(fresh=False):
+MAX_SOCKET_TABLE_BYTES = 8 * 1024 * 1024
+
+
+def socket_table(fresh=False, strict=False):
     """inode -> connection detail, built from all four /proc/net socket tables.
 
     One authoritative read per interval: shared via jarvis.core.state so
     process, firewall and hidden-socket consumers do not each walk
     /proc/net. Attribution checks can request a fresh view to compare with
-    the current fd tables. Falls back to a direct read if the cache fails.
+    the current fd tables. Strict attribution reads bypass the cache and validate
+    required headers, complete rows and a per-table byte budget; errors propagate.
+    Best-effort callers retain the mapping-only API and cache fallback.
     """
+    if strict:
+        return _read_socket_table(strict=True)
     if fresh:
         return _read_socket_table()
     try:
@@ -104,20 +111,39 @@ def socket_table(fresh=False):
         return _read_socket_table()
 
 
-def _read_socket_table():
+def _read_socket_table(strict=False):
     """inode -> connection detail, built from all four /proc/net socket tables."""
     table = {}
     for fname, proto in (("tcp", "tcp"), ("tcp6", "tcp6"), ("udp", "udp"), ("udp6", "udp6")):
-        text = read_file(f"{PROC}/net/{fname}")
+        if strict:
+            try:
+                with open(f"{PROC}/net/{fname}", "rb") as handle:
+                    raw = handle.read(MAX_SOCKET_TABLE_BYTES + 1)
+            except FileNotFoundError:
+                if fname.endswith("6"):
+                    continue
+                raise
+            if len(raw) > MAX_SOCKET_TABLE_BYTES:
+                raise ValueError("socket table exceeded the read budget")
+            text = raw.decode("ascii")
+            header = text.splitlines()[0] if text else ""
+            if "local_address" not in header or "inode" not in header:
+                raise ValueError("socket table header is missing or malformed")
+        else:
+            text = read_file(f"{PROC}/net/{fname}")
         for line in text.splitlines()[1:]:
             f = line.split()
             if len(f) < 10:
+                if strict:
+                    raise ValueError("socket table row is incomplete")
                 continue
             try:
                 lip, lport = _parse_addr(f[1])
                 rip, rport = _parse_addr(f[2])
                 inode = int(f[9])
             except (ValueError, IndexError):
+                if strict:
+                    raise
                 continue
             table[inode] = {
                 "proto": proto,

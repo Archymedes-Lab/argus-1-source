@@ -9,10 +9,11 @@ try:
     import pwd
 except ImportError:      # native Windows: no passwd database, and no caller there
     pwd = None
-from jarvis.collectors.telemetry import techniques
+from jarvis.collectors.telemetry import community, techniques
 from jarvis.core import egress as egress_baseline
-from jarvis.core import vet, warninglist
+from jarvis.core import sigma, vet, warninglist
 from jarvis.core.finding import finding as _finding
+from jarvis.core.util import now
 
 from .harness import _payload
 from .journal import CHANNEL, _base, _clean, _event_utc
@@ -350,7 +351,7 @@ def _is_jarvis(e):
     return "jarvis" in blob or "-m jarvis" in blob
 
 
-def _rules(events, store=None):
+def _rules(events, store=None, community_rules=None):
     out = []
     recon, egress = {}, {}
     technique_hits, discovery_seen = {}, []
@@ -540,6 +541,20 @@ def _rules(events, store=None):
                 f"{', '.join(sorted(bins))} from one parent in a short window — "
                 f"enumeration a sampling monitor would never have caught",
                 CHANNEL))
+
+    # Community rules (Sigma), judged per install; after the built-in rules,
+    # never instead of them. On for the machine, off for a replay unless asked
+    # (a replay exercises the built-in table). A replay learns nothing.
+    if community_rules is None:
+        community_rules = store is not None
+    if community_rules:
+        out += community.findings(
+            sigma.LINUX_PROC, [e for e in events if e.get("id") == 1],
+            lambda e: (_clean(e.get("Image")), _clean(e.get("ParentImage")), _clean(e.get("UtcTime")),
+                       _clean(e.get("CommandLine"))),
+            lambda severity, title, detail, image: _finding("sysmon-linux", severity, title, detail,
+                                                            image or CHANNEL),
+            store=store, now=now())
 
     if store is not None and (dns_names or dests):
         out += _correlate(store, dns_names, dests)

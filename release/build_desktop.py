@@ -54,6 +54,33 @@ def remap_flags(src):
     return " ".join(f"--remap-path-prefix={p}=/{n.lstrip('/')}" for p, n in pairs)
 
 
+WINDOWS_CFG_FLAG = "-Ccontrol-flow-guard=checks"
+# Header facts the shipped Windows desktop must have (scripts/security/binary_review.py).
+# Authenticode is not required here: there is no code-signing certificate yet.
+WINDOWS_REQUIRED = ("aslr_effective", "high_entropy_aslr", "dep_nx_compatible",
+                    "no_writable_executable_section", "entry_in_executable_section",
+                    "control_flow_guard")
+
+
+def pe_hardening_problems(exe):
+    """Missing mitigations in the built .exe, read from its headers; [] when all hold.
+    An unreadable or malformed header is a problem, never a pass."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "argus_binary_review", HERE.parent / "scripts" / "security" / "binary_review.py")
+    review = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(review)
+    try:
+        with open(exe, "rb") as fh:
+            data = fh.read(review.MAX_BYTES + 1)
+        if len(data) > review.MAX_BYTES:
+            return ["executable exceeds the review bound"]
+        checks = review.pe(data)["checks"]
+    except (OSError, ValueError, review.struct.error) as exc:
+        return [f"headers unreadable ({type(exc).__name__})"]
+    return [name for name in WINDOWS_REQUIRED if checks.get(name) is not True]
+
+
 def build(tree, platform, version):
     src = tree / "desktop"
     ui = src / "ui"
@@ -61,10 +88,19 @@ def build(tree, platform, version):
     run(["bun", "run", "build"], ui)
     if not (ui / "dist" / "index.html").exists():
         sys.exit("the interface build produced no dist/index.html")
-    env = {**os.environ, "RUSTFLAGS": remap_flags(src), "ARGUS_RELEASE": version,
+    flags = remap_flags(src)
+    if platform == "windows":
+        # MSVC target: emit Control Flow Guard checks for our crates and link
+        # with /guard:cf. The prebuilt std is not instrumented (no build-std).
+        flags += " " + WINDOWS_CFG_FLAG
+    env = {**os.environ, "RUSTFLAGS": flags, "ARGUS_RELEASE": version,
            "CARGO_PROFILE_RELEASE_DEBUG": "0", "CARGO_PROFILE_RELEASE_STRIP": "symbols"}
     run(["cargo", "build", "--release", "--locked", "--features", "custom-protocol"], src, env)
+    target = Path(os.environ.get("CARGO_TARGET_DIR") or src / "target")
     if platform == "windows":
+        problems = pe_hardening_problems(target / "release" / "argus-desktop.exe")
+        if problems:
+            sys.exit("the Windows desktop build lacks exploit mitigations: " + ", ".join(problems))
         # Run on the disposable Windows builder, using the exported source and
         # the same release flags. A failed or blocked harness must stop before
         # the executable is copied or its build receipt is written. No changes
@@ -73,7 +109,6 @@ def build(tree, platform, version):
              "--", "--test-threads=2"], src, env)
     # CARGO_TARGET_DIR (CI: a cached folder) keeps compiled dependencies between
     # dry runs; cargo rebuilds whatever its fingerprints say changed.
-    target = Path(os.environ.get("CARGO_TARGET_DIR") or src / "target")
     exe = target / "release" / ("argus-desktop.exe" if platform == "windows" else "argus-desktop")
     if not exe.is_file():
         sys.exit(f"{exe} is missing")

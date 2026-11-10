@@ -5,7 +5,7 @@ Window: 2026-10-26 00:00 UTC to 2026-11-02 00:00 UTC (7 days)
 
 This is an observed review of what ARGUS-1 recorded on this server. It is not a security audit, a penetration test or a certification, and it does not say that this server is or is not compromised.
 
-None of the 62 capabilities in the coverage register has been live-tested yet.
+None of the 68 capabilities in the coverage register has been live-tested yet.
 
 Capability status: built and tested in source only; not yet verified on a real machine for every area below unless noted.
 Areas: 12 observed, 1 partial, 1 stale, 1 not observed.

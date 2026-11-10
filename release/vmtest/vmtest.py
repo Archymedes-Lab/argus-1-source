@@ -109,14 +109,18 @@ def _add(tar, name, data, mode=0o644):
     tar.addfile(info, fileobj=io.BytesIO(data))
 
 
-def build_payload(run_dir, kind, candidate, old=None, idle_s=3600, settle_s=600, scenario=True, seeds=()):
+def build_payload(run_dir, kind, candidate, old=None, idle_s=3600, settle_s=600, scenario=True, seeds=(), security=False):
     """payload.tar for the guest; returns {guest path: sha256} the guest must report."""
     files = {"candidate": candidate, **({"old": old} if old else {})}
     conf = {"package": kind, "idle_s": int(idle_s), "settle_s": int(settle_s), "scenario": bool(scenario),
             "files": {}}
     guest = (HERE / "guest.py").read_bytes()
+    security_guest = (HERE / 'security_guest.py').read_bytes() if security else None
     with tarfile.open(Path(run_dir) / "payload.tar", "w", format=tarfile.PAX_FORMAT) as tar:
         _add(tar, "guest.py", guest, 0o755)
+        if security_guest is not None:
+            _add(tar, 'security_guest.py', security_guest)
+            conf['security_probes'] = True
         for which, rel in files.items():
             ext = ".tar.gz" if kind == "tarball" else ".deb"
             name = f"{which}{ext}"
@@ -126,7 +130,10 @@ def build_payload(run_dir, kind, candidate, old=None, idle_s=3600, settle_s=600,
         for seed in seeds:
             _add(tar, f"seed/{Path(seed).name}", Path(seed).read_bytes())
         _add(tar, "config.json", json.dumps(conf).encode())
-    return {"/opt/lab/guest.py": hashlib.sha256(guest).hexdigest()}, conf
+    expected = {"/opt/lab/guest.py": hashlib.sha256(guest).hexdigest()}
+    if security_guest is not None:
+        expected['/opt/lab/security_guest.py'] = hashlib.sha256(security_guest).hexdigest()
+    return expected, conf
 
 
 def _num(x):
@@ -234,7 +241,7 @@ def sweep_stale(root, runner=subprocess.run, now=None, min_age_s=3600):
 
 def run_cell(cfg, kind, candidate, old=None, idle_s=3600, settle_s=600, seeds=(), *, runner=subprocess.run,
              popen=subprocess.Popen, sleep=time.sleep, clock=time.monotonic, load=None,
-             verify=vmlab.verify_base_image, echo=print):
+             verify=vmlab.verify_base_image, echo=print, security=False):
     """Boot one guest for one matrix cell. Returns (guest result or None, lab report, config)."""
     report = {"started": int(time.time()), "image": cfg.image, "package": kind, "candidate": candidate["name"],
               "old": old["name"] if old else None, "problems": [], "blocked": []}
@@ -259,7 +266,7 @@ def run_cell(cfg, kind, candidate, old=None, idle_s=3600, settle_s=600, seeds=()
     name = f"argus-vmtest-{run_id}"
     data, conf = None, None
     try:
-        expected, conf = build_payload(run_dir, kind, candidate, old, idle_s, settle_s, seeds=seeds)
+        expected, conf = build_payload(run_dir, kind, candidate, old, idle_s, settle_s, seeds=seeds, security=security)
         (run_dir / "user-data").write_text(USER_DATA)
         (run_dir / "meta-data").write_text(f"instance-id: argus-{run_id}\nlocal-hostname: argus-test\n")
         for argv in (("sh", "-c", "cd /work && xorriso -as mkisofs -quiet -o seed.iso -V cidata -J -r user-data meta-data"),

@@ -73,6 +73,17 @@ export function problemCounts(findings: Finding[]): Record<Severity, number> {
   return severityCounts(findings.filter(isProblem));
 }
 
+/** The findings list and the numbers beside its severity filter, by one rule
+ *  shared with Home: a severity counts distinct-from-reminder problems only
+ *  (`problemCounts`), and choosing a severity lists exactly those problems, so
+ *  the number on the control, the rows under it and Home's number agree.
+ *  With no severity chosen the whole list shows, reminders and coverage notes
+ *  included, and `total` is its length. */
+export function findingsView(all: Finding[], f: FindingFilter): { rows: Finding[]; counts: Record<Severity, number>; total: number } {
+  const scope = f.severity ? all.filter(isProblem) : all;
+  return { rows: filterFindings(scope, f), counts: problemCounts(all), total: all.length };
+}
+
 /** One row per distinct (job, title), with how many places it occurs. */
 export function distinct(findings: Finding[], limit: number): (Finding & { count: number })[] {
   const by = new Map<string, Finding & { count: number }>();

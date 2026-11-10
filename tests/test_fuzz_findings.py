@@ -92,28 +92,70 @@ class ReleaseGateFindings(unittest.TestCase):
         names = sorted(m.path for m in gate._deb_members(deb))
         self.assertIn("usr/share/argus-server/bin/argus-server", names)
 
-    @unittest.expectedFailure  # FZ-11 open: the gate does not look inside nested archives
     def test_fz11_denied_member_inside_a_nested_zip_is_refused(self):
         inner = rg.zip_bytes({"src/secret.py": b"print('x')  # /home/builder/project\n"})
         rule = {"name": "f.zip", "kind": "zip", "allow": ["app/**/*"], "executables": []}
         problems, _n = _check("f.zip", rg.zip_bytes({"app/lib/bundle.zip": inner}), rule)
         self.assertTrue(any("src/secret.py" in p for p in problems), problems)
 
-    @unittest.expectedFailure  # FZ-12 open: a "binary" artifact that is a zip is not opened
     def test_fz12_binary_artifact_that_is_a_zip_is_refused(self):
         data = rg.zip_bytes({"src/secret.py": b"x"})
         problems, _n = _check("argus-desktop-windows-x64.exe", data, {"name": "x", "kind": "binary"})
         self.assertTrue(problems)
 
-    @unittest.expectedFailure  # FZ-13 open: denied names compared case-sensitively
     def test_fz13_denied_names_follow_windows_name_equivalence(self):
         for path in ("app/Docs/readme.txt", "app/SRC/x.dll", "app/x.PY.", "app/Tests/a.dll"):
             self.assertTrue(gate.denied_path(path, POLICY), path)
 
-    @unittest.skip("FZ-14 open: no aggregate member budget; a 64 KB tar.gz held 64 MiB (measured), "
-                   "a reproducer at real scale would load this machine")
+    def _budget(self, limit):
+        old = gate.MAX_TOTAL
+        gate.MAX_TOTAL = limit
+        self.addCleanup(setattr, gate, "MAX_TOTAL", old)
+
     def test_fz14_archive_members_have_an_aggregate_memory_budget(self):
-        pass
+        # The measured reproducer shape (zero-filled members of a small .tar.gz),
+        # scaled so the budget is 3 MiB instead of 512 MiB.
+        self._budget(3 * 1024 * 1024)
+        member = bytes(1024 * 1024)
+        names = {f"app/m{i}.bin": member for i in range(8)}
+        tgz = io.BytesIO()
+        import gzip
+        with gzip.GzipFile(fileobj=tgz, mode="wb", mtime=0) as gz:
+            gz.write(rg.tar_bytes(names))
+        self.assertLess(len(tgz.getvalue()), 64 * 1024)
+        for members in (gate._tar_members(tgz.getvalue()), gate._zip_members(rg.zip_bytes(names))):
+            held = sum(len(m.data) for m in members)
+            self.assertLessEqual(held, gate.MAX_TOTAL)
+            self.assertEqual([m.kind for m in members].count("over-budget"), 5)
+            self.assertEqual(len(members), 8, "every member is still listed")
+        rule = {"name": "f.zip", "kind": "zip", "allow": ["app/**/*"], "executables": []}
+        problems, _n = _check("f.zip", rg.zip_bytes(names), rule)
+        self.assertTrue(any("over-budget" in p for p in problems), problems)
+
+    def test_fz14_archive_within_budget_is_unchanged(self):
+        self._budget(3 * 1024 * 1024)
+        names = {f"app/m{i}.bin": bytes(1024 * 1024) for i in range(3)}
+        members = gate._zip_members(rg.zip_bytes(names))
+        self.assertEqual([m.kind for m in members], ["file"] * 3)
+        self.assertEqual(sum(len(m.data) for m in members), 3 * 1024 * 1024)
+        rule = {"name": "f.zip", "kind": "zip", "allow": ["app/**/*"], "executables": []}
+        self.assertEqual(_check("f.zip", rg.zip_bytes(names), rule)[0], [])
+
+    def test_fz14_nested_zip_budget_is_checked_before_reading(self):
+        old = gate._NESTED_ZIP_BYTES
+        gate._NESTED_ZIP_BYTES = 1024 * 1024
+        self.addCleanup(setattr, gate, "_NESTED_ZIP_BYTES", old)
+        inner = rg.zip_bytes({"a.bin": bytes(2 * 1024 * 1024)})
+        read = []
+        real = gate.zipfile.ZipFile.read
+        def spy(zf, info, *a, **k):
+            read.append(getattr(info, "file_size", None))
+            return real(zf, info, *a, **k)
+        from unittest import mock
+        with mock.patch.object(gate.zipfile.ZipFile, "read", spy):
+            problems = gate._check_nested_zips(inner, "outer", POLICY)
+        self.assertIn("outer: nested archive exceeds read budget", problems)
+        self.assertEqual(read, [], "an over-budget member was decompressed")
 
 
 class VersioningFindings(unittest.TestCase):

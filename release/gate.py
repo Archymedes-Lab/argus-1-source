@@ -53,6 +53,10 @@ META = {"manifest.json", "SHA256SUMS", "SHA256SUMS.txt", "SHA256SUMS.sig", "allo
         "LICENSE.txt", "THIRD-PARTY-NOTICES.txt"}
 SIGS = re.compile(r"^SHA256SUMS\.[A-Za-z0-9_-]+\.sig$")  # one signature per releaser
 MAX_MEMBER = 512 * 1024 * 1024
+# Aggregate bytes held for one archive's members (FZ-14), ~2.9x the largest real
+# artifact (~89 MiB unpacked server tarball, 2026-11-10). Members past the
+# budget are listed as "over-budget" without being read, and refused.
+MAX_TOTAL = 256 * 1024 * 1024
 CHUNK = 8 * 1024 * 1024
 OVERLAP = 4096
 
@@ -164,7 +168,7 @@ def _norm(name):
 
 
 def _tar_members(data):
-    out = []
+    out, total = [], 0
     with tarfile.open(fileobj=io.BytesIO(data)) as tf:
         for ti in tf.getmembers():
             path = _norm(ti.name)
@@ -174,14 +178,18 @@ def _tar_members(data):
                 if ti.size > MAX_MEMBER:
                     out.append(Member(path, b"", ti.mode, "oversize"))
                     continue
-                out.append(Member(path, tf.extractfile(ti).read(), ti.mode, "file"))
+                total += ti.size
+                if total > MAX_TOTAL:
+                    out.append(Member(path, b"", ti.mode, "over-budget"))
+                    continue
+                out.append(Member(path, tf.extractfile(ti).read(MAX_MEMBER + 1), ti.mode, "file"))
             else:
                 out.append(Member(path, b"", ti.mode, "link" if (ti.issym() or ti.islnk()) else "special"))
     return out
 
 
 def _zip_members(data):
-    out = []
+    out, total = [], 0
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         for zi in zf.infolist():
             path = _norm(zi.filename)
@@ -192,7 +200,13 @@ def _zip_members(data):
                 out.append(Member(path, b"", mode, "link"))
             elif zi.file_size > MAX_MEMBER:
                 out.append(Member(path, b"", mode, "oversize"))
+            elif total + zi.file_size > MAX_TOTAL:
+                total += zi.file_size
+                out.append(Member(path, b"", mode, "over-budget"))
             else:
+                # zipfile stops at the declared size and checks the CRC, so the
+                # declared size bounds what is held.
+                total += zi.file_size
                 out.append(Member(path, zf.read(zi), mode or 0o644, "file"))
     return out
 
@@ -317,6 +331,10 @@ def scan_bytes(label, data, policy, member=None):
                     continue
                 problems.append(f"{label}: contains {mid} ({evidence(mid, m.group(0))})")
                 break
+    # A zip member that is itself an archive: denied members inside it must not
+    # hide behind the outer member's allow rule (FZ-11).
+    if data.startswith(b"PK\x03\x04"):
+        problems += _check_nested_zips(data, label, policy)
     # A zip appended to or embedded in a binary (PyInstaller, a self-extractor).
     if b"PK\x01\x02" in data and not data.startswith(b"PK\x03\x04"):
         problems += [f"{label}: embedded archive member {n}" for n in embedded_zip_names(data)
@@ -384,15 +402,63 @@ def embedded_zip_names(data):
 
 
 def denied_path(path, policy):
-    low = path.lower()
-    if any(low.endswith(s) for s in policy["deny_suffixes"]):
+    # Windows extracts files case-insensitively and drops trailing dots and
+    # spaces from every path segment, so a member spelled `APP/X.PY ` or
+    # `app/SRC./main.dll` lands on disk as `app/x.py` / `app/src/main.dll`.
+    # Check the canonical form so no spelling slips past the deny list.
+    norm = "/".join(seg.rstrip(". ") for seg in path.replace("\\", "/").lower().split("/"))
+    parts = norm.split("/")
+    if any(norm.endswith(s) for s in policy["deny_suffixes"]):
         return "denied file type"
-    parts = path.split("/")
     if any(p in policy["deny_path_parts"] for p in parts[:-1]):
         return "denied folder"
     if any(fnmatch.fnmatchcase(parts[-1], pat) for pat in policy.get("deny_copyleft_names", [])):
         return "copyleft library in a proprietary release"
     return None
+
+
+_NESTED_ZIP_DEPTH = 4
+_NESTED_ZIP_BYTES = 64 * 1024 * 1024
+
+
+def _check_nested_zips(data, label, policy, depth=0):
+    """Problems in zip archives nested inside an allowed member.
+
+    A denied member (source, key, source map, ...) must not hide inside a zip
+    that is itself a member of an allowed artifact. Recursion is bounded by
+    depth and decompressed bytes so a zip bomb cannot blow the read budget.
+    """
+    if depth >= _NESTED_ZIP_DEPTH:
+        return []
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            total = 0
+            out = []
+            for zi in zf.infolist():
+                npath = _norm(zi.filename)
+                if zi.is_dir() or npath.startswith("/") or ".." in npath.split("/"):
+                    continue
+                if zi.file_size > MAX_MEMBER:
+                    out.append(f"{label}:{npath}: oversize nested member")
+                    continue
+                # Budget on the declared size, before reading (FZ-14).
+                total += zi.file_size
+                if total > _NESTED_ZIP_BYTES:
+                    out.append(f"{label}: nested archive exceeds read budget")
+                    return out
+                ndata = zf.read(zi)
+                nlabel = f"{label}:{npath}"
+                why = denied_path(npath, policy)
+                if why:
+                    out.append(f"{nlabel}: {why}")
+                else:
+                    out += scan_bytes(nlabel, ndata, policy, member=npath)
+                if ndata.startswith(b"PK\x03\x04"):
+                    out += _check_nested_zips(ndata, nlabel, policy, depth + 1)
+            return out
+    except Exception:
+        # An unreadable nested archive is refused, not silently passed.
+        return [f"{label}: nested archive cannot be checked"]
 
 
 def check_artifact(path, rule, policy):

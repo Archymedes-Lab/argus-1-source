@@ -362,7 +362,9 @@ class LinuxServerScriptTests(unittest.TestCase):
         self.assertNotIn("/tmp/", text)
         # The verification run uses the root-owned installed copy, not the
         # extracted archive.
-        self.assertIn('"$PREFIX/bin/argus-server" -m argus.verify', text)
+        self.assertIn('"$PREFIX/bin.new/argus-server" -m argus.verify', text)
+        # ... and it runs before the running service is stopped.
+        self.assertLess(text.index("-m argus.verify"), text.index("systemctl stop argus.service"))
         for line in text.splitlines():
             if re.search(r"\brm\s+-rf", line):
                 self.assertRegex(line, r'rm -rf "\$PREFIX/[a-z.]+"( "\$PREFIX/[a-z.]+")*;?')

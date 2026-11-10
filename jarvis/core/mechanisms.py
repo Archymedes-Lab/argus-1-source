@@ -344,6 +344,12 @@ COLLECTORS = (
        command="sniffing"),
     _c("webshell", 21600, "Web shells", AT, 8, 4, "low", 300, governed=True,
        command="webshell"),
+    # File bytes in the places dropped files land (temp folders, downloads, web
+    # roots, startup folders) against compiled community content rules. Reads
+    # only; bounded per pass; unchanged files are not read again.
+    _c("content", 3600, "File content rules", None, 0, 3, "low", 120,
+       command="content", domain="linux", lane="bulk", governed=True, isolated=True,
+       unscored="content-rule findings are reported, not yet scored (unsoaked)"),
     # Is the Linux syscall-interception layer present and recording?
     _c("auditd", 7200, "Syscall interception posture", OS, 3, 3, "medium", 300,
        command="auditd",
@@ -364,6 +370,14 @@ COLLECTORS = (
        admin_sensor="unavailable",
        command="sysmon", health="required", health_limit_s=1500,
        domain="windows", depends_on=("windows-bridge", "native-sensor"), cost_s=1.5),
+    # What PowerShell actually ran (event 4104), for commands that start no
+    # process. Reads only what Windows already logs; never turns logging on.
+    # The log is a small ring, so the cadence is short.
+    _c("psscript", 120, "PowerShell script blocks", None, 0, 2, "medium", 60,
+       command="sysmon", domain="windows", depends_on=("windows-bridge",), cost_s=3.0,
+       lane="frequent",
+       unscored="script-block findings are reported, not yet scored (unsoaked; reads only "
+                "when Windows script-block logging is already on)"),
     # ATT&CK coverage, validated by probing the real detectors.
     _c("attackmap", 21600, "ATT&CK coverage map", None, 0, 4, "low", 300,
        command="attack",

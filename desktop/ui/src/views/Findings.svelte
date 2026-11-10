@@ -10,11 +10,13 @@
   import { tr, agoT } from "../lib/i18n";
   import { sevWord, t } from "../lib/words";
   import { groupLabel, hasGuide, plainFinding } from "../lib/plain";
-  import { filterFindings, sentence, severityCounts, SEVERITIES, type Finding } from "../lib/model";
+  import { findingsView, sentence, SEVERITIES, type Finding } from "../lib/model";
 
   const all = $derived((app.data?.findings ?? []) as Finding[]);
-  const counts = $derived(severityCounts(all));
-  const rows = $derived(filterFindings(all, { query: app.query, severity: app.severity, host: app.host, job: app.job }));
+  // One counting rule with Home (model.findingsView): the number on each severity is the rows it lists.
+  const view = $derived(findingsView(all, { query: app.query, severity: app.severity, host: app.host, job: app.job }));
+  const counts = $derived(view.counts);
+  const rows = $derived(view.rows);
   const jobs = $derived([...new Set(all.map((f) => f.job))].sort());
   let limit = $state(150);
   $effect(() => { app.query; app.severity; app.host; app.job; limit = 150; });

@@ -36,8 +36,8 @@ import os
 import re
 from datetime import datetime, timezone
 
-from jarvis.collectors.telemetry import techniques
-from jarvis.core import collection, warninglist
+from jarvis.collectors.telemetry import community, regwatch, techniques
+from jarvis.core import collection, sigma, warninglist
 from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core.finding import win_finding as _finding
 from jarvis.core.util import iso, now
@@ -626,11 +626,16 @@ def _query_blocked(st=None):
 
 
 def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None,
-          events=None, volumes=None):
+          events=None, volumes=None, community_rules=None):
     """`events` replays the given reduced rows (the shape rows_from_events
     returns) through every rule below instead of reading the machine. A replay
     never touches the store: it cannot record a hit or move a cursor. The
     coverage map's probes use it so they test this function, not a copy.
+
+    `community_rules`: whether community (Sigma) rules run after the built-in
+    ones. Default: on for the machine, off for a replay, so a replay exercises
+    the built-in rule table (the coverage map's probes and look-alike controls
+    depend on that) unless it asks for community rules too.
 
     `volumes` is a drive inventory {letter: (type, bus)} to judge drives
     against. A replay never asks Windows for one, so without it a replay leaves
@@ -768,6 +773,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 if now() - known_at < VOLUMES_FOR_S
                 and techniques.volume_kind(letter, known_volumes) == techniques.INTERNAL}
     smb_out, failed_lookups, registry_hits, registry_seen, odd_ports = {}, [], {}, set(), {}
+    family_hits = {}                # (key family, writer image) -> [count, key, time, tids, what, kind]
     dropped, drop_times = {}, []
     boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
 
@@ -857,8 +863,17 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                                        q, e.get("dns_status") or ""))
         elif eid == 13:
             registry_seen.update(techniques.registry_families(e.get("reg_key")))
-            for rule in techniques.registry(e.get("reg_key"), e.get("reg_details")):
+            specific = techniques.registry(e.get("reg_key"), e.get("reg_details"))
+            for rule in specific:
                 hit = registry_hits.setdefault((rule, image), [0, e.get("reg_key") or "", e.get("time")])
+                hit[0] += 1
+                hit[2] = e.get("time") or hit[2]
+            # A family write nobody's specific rule covers, judged by its writer.
+            watched = None if specific else regwatch.judge(image, e.get("reg_key"))
+            if watched:
+                fid, tids, what, kind = watched
+                hit = family_hits.setdefault((fid, image), [0, e.get("reg_key") or "", e.get("time"),
+                                                            tids, what, kind])
                 hit[0] += 1
                 hit[2] = e.get("time") or hit[2]
         elif eid == 3:
@@ -1215,6 +1230,32 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             known = {}
         known.update(dict.fromkeys(registry_seen, now()))
         store.set_meta(REGISTRY_RECORDED_META, json.dumps(known))
+
+    # -- security-relevant registry families written by an unexpected kind of program
+    for (_fid, image), (count, key, when, tids, what, kind) in family_hits.items():
+        title, detail = regwatch.describe(image, what, kind, key, count, iso_of(when))
+        f = _finding("technique", regwatch.SEVERITY, title, detail, image)
+        f["techniques"] = list(tids)
+        out.append(f)
+
+    # -- community rules (Sigma), judged per install --------------------------
+    # After the built-in rules and never instead of them. A replay (no store)
+    # learns nothing and returns every match.
+    def _community(severity, title, detail, image):
+        return _finding("technique", severity, title, detail, image or CHANNEL)
+
+    if community_rules is None:
+        community_rules = not probing
+    if community_rules:
+        out += community.findings(
+            sigma.WIN_PROC, [e for e in events if int(e.get("id") or 0) == 1],
+            lambda e: (e.get("image") or "", e.get("parent") or "", iso_of(e.get("time")),
+                       e.get("cmdline") or ""),
+            _community, store=store, now=now())
+        out += community.findings(
+            sigma.WIN_REG, [dict(e, event_type="SetValue") for e in events if int(e.get("id") or 0) == 13],
+            lambda e: (e.get("image") or "", "", iso_of(e.get("time")), e.get("reg_key") or ""),
+            _community, store=store, now=now())
 
     # Persist and re-surface. Reading incrementally means each run sees only
     # new events, so anything worth reporting has to outlive its own snapshot.

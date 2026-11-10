@@ -27,7 +27,7 @@ INLINE_CODE_RE = re.compile(
     re.I)
 
 INVISIBLE_RE = re.compile(
-    "[​-‏‪-‮⁠-⁤⁦-⁩﻿]")
+    "[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
 
 AGENT_DOC_NAMES = (
     "CLAUDE.md", "AGENTS.md", "AGENT.md", ".cursorrules", "GEMINI.md",

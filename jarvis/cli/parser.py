@@ -27,6 +27,7 @@ from .commands import (
     cmd_boot,
     cmd_bruteforce,
     cmd_containers,
+    cmd_content,
     cmd_control,
     cmd_coverage,
     cmd_dotnet,
@@ -83,6 +84,7 @@ from .commands import provenance as provenance_cli
 from .commands import reason as reason_cli
 from .commands import repair as repair_cli
 from .commands import retention as retention_cli
+from .commands import rules as rules_cli
 from .commands import sensor as sensor_cli
 from .commands import server as server_cli
 from .commands import timeline as timeline_cli
@@ -102,6 +104,7 @@ def build_parser():
     sub = p.add_subparsers(dest="cmd", required=True)
     repair_cli.add_parser(sub)
     ack_cli.add_parser(sub)
+    rules_cli.add_parser(sub)
     ask_cli.add_parser(sub)
     brief_cli.add_parser(sub)
     broker_cli.add_parser(sub)
@@ -458,6 +461,7 @@ def build_parser():
     bf.set_defaults(fn=cmd_bruteforce)
 
     for _name, _fn, _help in (
+        ("content", cmd_content, "bounded read-only community file-content scan"),
         ("sniffing", cmd_sniffing, "packet capture: promiscuous NICs, raw "
          "sockets, capture drivers and tools"),
         ("webshell", cmd_webshell, "server-side scripts that read as command "
