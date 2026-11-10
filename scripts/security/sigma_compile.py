@@ -284,7 +284,9 @@ def main(argv=None):
     if not re.fullmatch(r"[0-9a-f]{40}", args.commit):
         ap.error("--commit is a full 40-character commit id")
     doc, skipped = compile_tree(args.checkout, args.commit)
-    data = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    # ASCII only: some rules look for bidirectional and other control characters, and the
+    # repository refuses those characters in tracked files. Escaped, the parsed content is the same.
+    data = json.dumps(doc, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("ascii")
     sigma.parse(data)                      # what ships must be what the program accepts
     Path(args.out).write_bytes(data + b"\n")
     by = collections.Counter(r["cat"] for r in doc["rules"])
