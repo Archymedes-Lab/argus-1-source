@@ -64,7 +64,7 @@
       {#each groups as g (g.category)}
         {@const p = plainFinding(g.sample)}
         <button class="row row-click w-full items-start gap-4 py-4 text-left" onclick={() => (app.query = g.category)}>
-          <span class="w-[76px] shrink-0 pt-px"><Pill severity={g.worst} /></span>
+          <span class="{app.mode === 'simple' ? 'w-[112px]' : 'w-[76px]'} shrink-0 pt-px"><Pill severity={g.worst} /></span>
           <span class="min-w-0 flex-1">
             {#if hasGuide(g.sample)}
               <span class="block text-label-14">{tr(p.means)}</span>
@@ -85,7 +85,7 @@
       <div class="divide">
         {#each rows.slice(0, limit) as f, i (i)}
           <button class="row row-click w-full items-start text-left {app.selected === f ? 'bg-gray-100' : ''}" onclick={() => (app.selected = f)}>
-            <span class="w-[76px] shrink-0 pt-px"><Pill severity={f.severity} /></span>
+            <span class="{app.mode === 'simple' ? 'w-[112px]' : 'w-[76px]'} shrink-0 pt-px"><Pill severity={f.severity} /></span>
             <span class="min-w-0 flex-1">
               {#if app.mode === "simple"}
                 <span class="block truncate text-label-13">{brand(f.title)}</span>
