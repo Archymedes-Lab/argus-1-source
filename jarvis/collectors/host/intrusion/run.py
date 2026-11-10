@@ -44,6 +44,14 @@ def _epoch(value):
 PS_POLICY_TEST_SHA256 = "96ad1146eb96877eab5942ae0736b82d8b5e2039a80d3d6932665c1a4c87dcf7"
 PS_POLICY_TEST_NAME = re.compile(r"\\__PSScriptPolicyTest_[a-z0-9]+\.[a-z0-9]+\.ps1$", re.I)
 
+# Library source that a package manager unpacked (npm, pnpm, yarn): .js/.mjs/.cjs
+# files under node_modules. Nobody Authenticode-signs these, so "NotSigned" says
+# nothing about them, and an `npm install` in a scratch folder under Temp writes
+# hundreds at once (one real machine: 124 of its 226 high findings). Only
+# NotSigned source is lowered, and it stays listed. A native add-on (.node),
+# an executable, a hash mismatch or an untrusted signature keeps its severity.
+PACKAGE_SOURCE = re.compile(r"\\node_modules\\.+\.(?:js|mjs|cjs)$", re.I)
+
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 
@@ -189,6 +197,8 @@ def audit():
             # PowerShell probes AppLocker/WDAC by writing this exact one-line
             # comment to Temp; a crashed shell leaves it behind. Pinned to
             # the content hash, so any other body under the name stays high.
+            sev = "low"
+        elif sig == "NotSigned" and PACKAGE_SOURCE.search(path):
             sev = "low"
         elif in_temp or sig in ("HashMismatch", "NotTrusted"):
             sev = "high"
