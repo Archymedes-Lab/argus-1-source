@@ -53,6 +53,10 @@ META = {"manifest.json", "SHA256SUMS", "SHA256SUMS.txt", "SHA256SUMS.sig", "allo
         "LICENSE.txt", "THIRD-PARTY-NOTICES.txt"}
 SIGS = re.compile(r"^SHA256SUMS\.[A-Za-z0-9_-]+\.sig$")  # one signature per releaser
 MAX_MEMBER = 512 * 1024 * 1024
+# Aggregate bytes held for one archive's members (FZ-14), ~2.9x the largest real
+# artifact (~89 MiB unpacked server tarball, 2026-11-10). Members past the
+# budget are listed as "over-budget" without being read, and refused.
+MAX_TOTAL = 256 * 1024 * 1024
 CHUNK = 8 * 1024 * 1024
 OVERLAP = 4096
 
@@ -164,7 +168,7 @@ def _norm(name):
 
 
 def _tar_members(data):
-    out = []
+    out, total = [], 0
     with tarfile.open(fileobj=io.BytesIO(data)) as tf:
         for ti in tf.getmembers():
             path = _norm(ti.name)
@@ -174,14 +178,18 @@ def _tar_members(data):
                 if ti.size > MAX_MEMBER:
                     out.append(Member(path, b"", ti.mode, "oversize"))
                     continue
-                out.append(Member(path, tf.extractfile(ti).read(), ti.mode, "file"))
+                total += ti.size
+                if total > MAX_TOTAL:
+                    out.append(Member(path, b"", ti.mode, "over-budget"))
+                    continue
+                out.append(Member(path, tf.extractfile(ti).read(MAX_MEMBER + 1), ti.mode, "file"))
             else:
                 out.append(Member(path, b"", ti.mode, "link" if (ti.issym() or ti.islnk()) else "special"))
     return out
 
 
 def _zip_members(data):
-    out = []
+    out, total = [], 0
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         for zi in zf.infolist():
             path = _norm(zi.filename)
@@ -192,7 +200,13 @@ def _zip_members(data):
                 out.append(Member(path, b"", mode, "link"))
             elif zi.file_size > MAX_MEMBER:
                 out.append(Member(path, b"", mode, "oversize"))
+            elif total + zi.file_size > MAX_TOTAL:
+                total += zi.file_size
+                out.append(Member(path, b"", mode, "over-budget"))
             else:
+                # zipfile stops at the declared size and checks the CRC, so the
+                # declared size bounds what is held.
+                total += zi.file_size
                 out.append(Member(path, zf.read(zi), mode or 0o644, "file"))
     return out
 
@@ -427,11 +441,12 @@ def _check_nested_zips(data, label, policy, depth=0):
                 if zi.file_size > MAX_MEMBER:
                     out.append(f"{label}:{npath}: oversize nested member")
                     continue
-                ndata = zf.read(zi)
-                total += len(ndata)
+                # Budget on the declared size, before reading (FZ-14).
+                total += zi.file_size
                 if total > _NESTED_ZIP_BYTES:
                     out.append(f"{label}: nested archive exceeds read budget")
                     return out
+                ndata = zf.read(zi)
                 nlabel = f"{label}:{npath}"
                 why = denied_path(npath, policy)
                 if why:

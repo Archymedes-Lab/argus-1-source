@@ -7,7 +7,7 @@ SECURITY_TESTING = {
     'runner': 'scripts/security/campaign.py',
     'scope': 'checkout scanners and synthetic boundary tests',
     'limits': ('Hash-pinned scanner provisioning, source-bound SMT refinement of the '
-               'authority enable predicate, static ELF review and isolated native/VM '
+               'authority enable predicate, static ELF/PE header review and isolated native/VM '
                'adapters are development checks only; proof assumptions and native '
                'coverage are bounded; independent human review and successful VM '
                'receipts remain required; no whole-program or deployment validation'),

@@ -184,5 +184,52 @@ class CampaignTests(unittest.TestCase):
         self.assertFalse(report['complete'])
 
 
+ROOT = Path(__file__).resolve().parents[1]
+BIDI = tuple(chr(c).encode() for c in (*range(0x202A, 0x202F), *range(0x2066, 0x206A)))
+# Non-test files whose scanner hits were individually reviewed as public or synthetic.
+REVIEWED_NON_TEST = {'release/vmtest/fetch_image.py', 'release/vmtest/guest.py',
+                     'hosted/notify-cloudflare/wrangler.jsonc', 'jarvis/service/attackmap.py'}
+
+
+class SourceHygieneTests(unittest.TestCase):
+    def tracked(self):
+        import subprocess
+        out = subprocess.run(['git', 'ls-files', '-z'], cwd=ROOT, capture_output=True, timeout=60)
+        if out.returncode:
+            self.skipTest('not a git checkout')
+        return [name for name in out.stdout.decode().split('\0') if name]
+
+    def test_no_tracked_file_contains_bidirectional_controls(self):
+        # Trojan-source: bidi overrides make reviewed text differ from parsed text.
+        # Detectors that need these code points must spell them as escapes.
+        offenders = []
+        for name in self.tracked():
+            path = ROOT / name
+            if path.is_symlink() or not path.is_file():
+                continue
+            data = path.read_bytes()
+            if any(mark in data for mark in BIDI):
+                offenders.append(name)
+        self.assertEqual(offenders, [])
+
+    def test_gitleaks_dispositions_are_exact_and_scoped(self):
+        import re
+        lines = (ROOT / '.gitleaksignore').read_text(encoding='utf-8').splitlines()
+        entries = [line for line in lines if line.strip() and not line.startswith('#')]
+        self.assertTrue(entries)
+        shape = re.compile(r'^[0-9a-f]{40}:([^:*?\s]+):([a-z0-9-]+):([1-9][0-9]*)$')
+        for index, line in enumerate(lines):
+            if not line.strip() or line.startswith('#'):
+                continue
+            match = shape.match(line)
+            self.assertIsNotNone(match, 'disposition must be commit:file:rule:line, no globs')
+            path = match.group(1)
+            self.assertTrue(path.startswith('tests/') or '/tests/' in path or path in REVIEWED_NON_TEST, path)
+            self.assertTrue(index and lines[index - 1].startswith('# '), 'each disposition needs a reason')
+        self.assertEqual(len(entries), len(set(entries)))
+        # Negative control: a broad allowlist line is rejected by the same shape.
+        self.assertIsNone(shape.match('*:jarvis/core/secret.py:generic-api-key:1'))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -22,6 +22,7 @@ from scripts.security import (
     review_record,
     vm_pentest,
 )
+from tests.security.pe_fixture import synthetic_pe
 
 
 class CompletionTests(unittest.TestCase):
@@ -86,6 +87,42 @@ class CompletionTests(unittest.TestCase):
             with self.assertRaises(binary_review.InvalidBinary): binary_review.elf(malformed)
         p=self.home/'link';p.symlink_to('/no-such-file')
         with self.assertRaises(OSError): binary_review.review(p)
+
+    @staticmethod
+    def _pe(**kwargs):
+        return synthetic_pe(**kwargs)
+
+    def test_pe_hardening_detects_stripped_relocations_wx_code_and_signature_absence(self):
+        good = binary_review.pe(self._pe())
+        self.assertTrue(good['checks']['aslr_effective'])
+        self.assertTrue(good['checks']['entry_in_executable_section'])
+        self.assertFalse(good['checks']['authenticode_directory_present'])
+        self.assertFalse(good['signature_verified'])
+        # The measured NSIS stub shape: DYNAMIC_BASE declared, relocations stripped.
+        self.assertFalse(binary_review.pe(self._pe(characteristics=0x22F, reloc=(0, 0)))['checks']['aslr_effective'])
+        self.assertFalse(binary_review.pe(self._pe(reloc=(0, 0)))['checks']['aslr_effective'])
+        self.assertFalse(binary_review.pe(self._pe(dll=0x8120))['checks']['aslr_effective'])
+        self.assertFalse(binary_review.pe(self._pe(dll=0x8060))['checks']['dep_nx_compatible'])
+        self.assertFalse(binary_review.pe(self._pe(text=0xE0000020))['checks']['no_writable_executable_section'])
+        self.assertFalse(binary_review.pe(self._pe(entry=0x5000))['checks']['entry_in_executable_section'])
+        self.assertTrue(binary_review.pe(self._pe(cert=16))['checks']['authenticode_directory_present'])
+        self.assertFalse(good['checks']['control_flow_guard'])
+        self.assertTrue(binary_review.pe(self._pe(guard=True))['checks']['control_flow_guard'])
+        narrow = binary_review.pe(self._pe(wide=False))
+        self.assertEqual(narrow['format'], 'PE32')
+        self.assertNotIn('high_entropy_aslr', narrow['checks'])
+        self.assertEqual(binary_review.parse(bytes(self._pe()))['format'], 'PE32+')
+
+    def test_pe_parser_rejects_malformed_headers_instead_of_guessing(self):
+        data = self._pe(cert=16)
+        bad_offset = bytearray(data); struct.pack_into('<I', bad_offset, 0x3C, len(data))
+        bad_magic = bytearray(data); struct.pack_into('<H', bad_magic, 88, 0x107)
+        bad_section = bytearray(data); struct.pack_into('<I', bad_section, 64 + 24 + 240 + 20, len(data))
+        bad_cert = bytearray(data); struct.pack_into('<II', bad_cert, 88 + 112 + 32, 0x10, 16)
+        bad_count = bytearray(data); struct.pack_into('<I', bad_count, 88 + 108, 4096)
+        for malformed in [data[:60], bytes(data[:100]), bad_offset, bad_magic, bad_section, bad_cert, bad_count]:
+            with self.assertRaises(binary_review.InvalidBinary):
+                binary_review.pe(bytes(malformed))
 
     def test_native_container_has_no_network_privileges_or_writable_host_mount(self):
         argv=native_checks.container(self.home,'synthetic','test')

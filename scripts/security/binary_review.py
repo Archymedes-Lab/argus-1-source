@@ -1,4 +1,4 @@
-"""Bounded static ELF hardening and entry-point disassembly; never executes input."""
+"""Bounded static ELF/PE hardening and entry-point disassembly; never executes input."""
 import argparse
 import hashlib
 import json
@@ -73,6 +73,76 @@ def elf(data):
             'segments': len(segments), 'library_search_entries': len(paths)}
 
 
+IMAGE_FILE_RELOCS_STRIPPED = 0x0001
+DLL_HIGH_ENTROPY_VA, DLL_DYNAMIC_BASE, DLL_NX_COMPAT, DLL_GUARD_CF = 0x20, 0x40, 0x100, 0x4000
+SCN_EXECUTE, SCN_WRITE = 0x20000000, 0x80000000
+DIR_SECURITY, DIR_BASERELOC, DIR_LOAD_CONFIG = 4, 5, 10
+
+
+def pe(data):
+    """PE32/PE32+ header hardening. Header facts only: an Authenticode directory
+    being present is not a verified signature, and an overlay (for example an
+    installer payload) is counted but never inspected."""
+    if len(data) < 64 or data[:2] != b'MZ':
+        raise InvalidBinary('missing MZ header')
+    offset = struct.unpack_from('<I', data, 0x3C)[0]
+    if offset < 64 or offset + 24 > len(data) or data[offset:offset + 4] != b'PE\0\0':
+        raise InvalidBinary('invalid PE signature offset')
+    machine, sections, _, _, _, optional_size, characteristics = struct.unpack_from('<HHIIIHH', data, offset + 4)
+    optional = offset + 24
+    if sections == 0 or sections > 96 or optional + optional_size > len(data):
+        raise InvalidBinary('invalid COFF header')
+    magic = struct.unpack_from('<H', data, optional)[0]
+    if magic == 0x20B:
+        wide, directories_at, base = True, 112, struct.unpack_from('<Q', data, optional + 24)[0]
+    elif magic == 0x10B:
+        wide, directories_at, base = False, 96, struct.unpack_from('<I', data, optional + 28)[0]
+    else:
+        raise InvalidBinary('unknown optional header magic')
+    if optional_size < directories_at:
+        raise InvalidBinary('optional header too small')
+    entry = struct.unpack_from('<I', data, optional + 16)[0]
+    dll = struct.unpack_from('<H', data, optional + 70)[0]
+    count = struct.unpack_from('<I', data, optional + directories_at - 4)[0]
+    if count > 16 or directories_at + 8 * count > optional_size:
+        raise InvalidBinary('invalid data directory count')
+    directories = [struct.unpack_from('<II', data, optional + directories_at + 8 * i) for i in range(count)]
+    directories += [(0, 0)] * (16 - count)
+    table = optional + optional_size
+    if table + 40 * sections > len(data):
+        raise InvalidBinary('section table out of bounds')
+    rows, end = [], table + 40 * sections
+    for index in range(sections):
+        _, virtual_size, address, raw_size, raw_at = struct.unpack_from('<8sIIII', data, table + 40 * index)
+        flags = struct.unpack_from('<I', data, table + 40 * index + 36)[0]
+        if raw_size and raw_at + raw_size > len(data):
+            raise InvalidBinary('section raw data out of bounds')
+        rows.append((address, max(virtual_size, raw_size), flags))
+        if raw_size:
+            end = max(end, raw_at + raw_size)
+    security_at, security_size = directories[DIR_SECURITY]
+    if security_size and (security_at < end or security_at + security_size > len(data)):
+        raise InvalidBinary('certificate table out of bounds')
+    overlay = len(data) - end - (security_size if security_at >= end else 0)
+    checks = {
+        'aslr_effective': bool(dll & DLL_DYNAMIC_BASE) and not characteristics & IMAGE_FILE_RELOCS_STRIPPED
+                          and directories[DIR_BASERELOC][1] > 0,
+        'dep_nx_compatible': bool(dll & DLL_NX_COMPAT),
+        'no_writable_executable_section': not any(f & SCN_EXECUTE and f & SCN_WRITE for _, _, f in rows),
+        'entry_in_executable_section': any(f & SCN_EXECUTE and a <= entry < a + s for a, s, f in rows),
+        'control_flow_guard': bool(dll & DLL_GUARD_CF) and directories[DIR_LOAD_CONFIG][1] > 0,
+        'authenticode_directory_present': security_size > 0,
+    }
+    if wide:
+        checks['high_entropy_aslr'] = bool(dll & DLL_HIGH_ENTROPY_VA)
+    return {'format': 'PE32+' if wide else 'PE32', 'machine': machine, 'entry': base + entry, 'checks': checks,
+            'segments': sections, 'overlay_bytes': max(overlay, 0), 'signature_verified': False}
+
+
+def parse(data):
+    return pe(data) if data[:2] == b'MZ' else elf(data)
+
+
 def review(path):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, 'rb') as file:
@@ -82,7 +152,7 @@ def review(path):
         data = file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise InvalidBinary('artifact grew past bound')
-    report = elf(data)
+    report = parse(data)
     report.update(sha256=hashlib.sha256(data).hexdigest(), bytes=len(data),
                   human_review_required=True, provenance='caller-selected artifact; no signing claim')
     tool = shutil.which('objdump')

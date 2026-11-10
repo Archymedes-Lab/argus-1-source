@@ -170,3 +170,92 @@ The campaign is intentionally incomplete until absent tools and the native,
 formal-refinement, independent-review and disposable-deployment gaps are addressed.
 No runtime capability has been promoted. `assurance.SECURITY_TESTING` records
 partial development verification outside the runtime scoring registry.
+
+## First run with provisioned analyzers (2026-11-10)
+
+`scripts/security/provision.py` built the pinned toolchain (hash-verified Python
+tools, Gitleaks 8.30.1 archive digest, cargo-audit 0.22.2 from its locked crate;
+cargo-audit took about 15 minutes on 2 jobs). Every tool binary is recorded in a
+private receipt that the campaign checks before use.
+
+Analyzer results on this tree, scoped observations only:
+
+- **Semgrep taint:** 0 results, no errors; both rule controls pass.
+- **pip-audit:** no known advisories in `release/requirements-runtime.txt`.
+- **Gitleaks (full history):** 28 hits, each reviewed: detector and parser test
+  vectors, licence/notify vectors generated with fresh per-run test keys, the
+  RFC 6455 sample nonce, the public Ubuntu image signing-key fingerprint, a
+  synthetic VM-test marker, a VAPID *public* key and a synthetic OpenSSH body
+  used to build an attack-map sample. They are recorded in `.gitleaksignore` as
+  exact `commit:file:rule:line` fingerprints, each with a reason.
+  `SourceHygieneTests` refuses globs, unexplained entries and entries outside
+  test paths or the four reviewed files. A new secret still fails the scan.
+- **FZ-14 fixed:** the campaign's skipped FZ-14 test exposed that the release
+  gate held every archive member in memory. Members now share a 256 MiB budget
+  (~2.9x the largest real artifact); later members are listed as `over-budget`
+  without being read, and refused. Nested zips check the budget before reading.
+  The real 2026-11-09 release folder gives the same verdict as before (its only
+  refusal is the NSIS Setup needing 7z, absent here), 62 s, +26 MB peak RSS.
+- **Bandit:** 410 results, mostly low-severity classes (`subprocess` use with
+  fixed argv, `try/except/pass`, asserts). Medium/high reviewed:
+  - XML parsing (B314): Sysmon/event records, `pom.xml` from scanned codebases,
+    OVAL feeds and Sysmon configs. Measured on the bundled expat 2.6.1: a
+    billion-laughs `pom.xml` is refused in 0.29 s by expat's amplification
+    limit and an external entity is never resolved. This depends on expat >= 2.4.1
+    in the shipped runtime; `worldwatch` additionally refuses DTDs.
+  - SQL construction (B608): all interpolations are constant identifiers,
+    placeholder lists or Python keyword names from code; no data reaches SQL text.
+  - Trojan source (B613): `jarvis/collectors/host/toolchain/agents.py` held raw
+    bidi/invisible code points inside the very regex that detects them. Rewritten
+    as `\u` escapes (proven equivalent over the BMP) and guarded by a test that
+    no tracked file contains bidi controls (fails on the old file).
+  - `shell=True` only in the VM guest harness with fixed commands; the
+    provenance private key is created 0400 with `O_EXCL|O_NOFOLLOW`.
+  Bandit's step stays failing: the low-severity classes are not suppressed.
+
+### Windows binary hardening (PE support added to `binary_review.py`)
+
+`binary_review.py` now parses PE32/PE32+ headers (bounded, never executes the
+input) and disassembles the entry point with objdump. Measured on the shipped
+artifacts:
+
+| Check | `argus-desktop-windows-x64.exe` (2026.10.31) | `ARGUS-INSTINCT-Setup-windows-x64.exe` (2026-11-09) |
+| --- | --- | --- |
+| Effective ASLR | yes | **no**: DYNAMIC_BASE set, relocations stripped |
+| High-entropy ASLR / DEP | yes / yes | yes / yes |
+| No W+X section, entry in code | yes | yes |
+| Control Flow Guard | **no** | **no** |
+| Authenticode directory | **absent** | **absent** |
+
+The installer finding is the known NSIS stub limitation (stubs are linked
+without relocations; there is no makensis switch, and projects that patched the
+stub hit mandatory-ASLR failures). Severity is low: the installer requests
+user-level execution, installs under `%LOCALAPPDATA%`, reads only its own
+payload and exits. Fixing it means a different installer format (owner
+decision). Missing Authenticode means SmartScreen/WDAC cannot attribute the
+binaries to the publisher; integrity today rests on the SSH-signed SHA256SUMS.
+The desktop app is built on a Windows MSVC runner, so `release/build_desktop.py`
+now passes `-Ccontrol-flow-guard=checks` (our crates; the prebuilt std is not
+instrumented) and refuses to test or hand off an .exe whose headers lack
+effective ASLR, high-entropy ASLR, DEP, W^X sections, an entry in code, or CFG.
+The flag change rebuilds the cached crates once. Whether MSVC emits GUARD_CF for
+this build is measured only by the native Windows job, not on this host.
+
+### Campaign run with the toolchain (2026-11-10, before the fixes above)
+
+Full campaign, all 14 methods, source tree stable across the run (6 minutes):
+17 steps passed (Semgrep and its controls, DAST, IAST, bounded models, Z3
+authority spec and `_enabled` refinement, pip-audit, cargo-audit, three hosted
+Bun audits, Gitleaks after dispositions, ASES, service definitions). Failed:
+Bandit (unsuppressed low-severity classes) and the desktop Bun audit (the
+known, unwaived deepmerge advisory). Incomplete: three steps whose modules
+skipped tests, FZ-14 (now fixed) and a Windows Python DLL case that needs a
+Windows runtime. Pending, by design: native sanitizers, built-artifact review
+of a named sealed artifact, human review, deployed VM attack chains, threat
+review sign-off. The campaign is still not complete.
+
+Jev (`scripts/reviews/argus_scanner_findings_advisory.py`, metadata only):
+exact-fingerprint dispositions 0.99. A first call stated the installer runs
+elevated, which was wrong (`RequestExecutionLevel user`); corrected, the next-step
+Choice split between VM attack chains (0.41) and installer ASLR (0.37) at 0.21
+concentration, so it did not set priority. No answer authorized or passed a step.
