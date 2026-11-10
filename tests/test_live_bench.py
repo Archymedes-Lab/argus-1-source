@@ -183,6 +183,8 @@ class ExecutionFailures(unittest.TestCase):
         self.assertNotIn('updates', live.READ_ONLY)
         self.assertNotIn('coverage', live.READ_ONLY)
         self.assertIn('unshare --net', Workflow.TEXT)
+        self.assertIn('GITHUB_ACTIONS="$GITHUB_ACTIONS"', Workflow.TEXT)
+        self.assertIn('RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT"', Workflow.TEXT)
 
 class ProcessSafety(unittest.TestCase):
     def test_every_action_and_undo_has_valid_shell_syntax_without_execution(self):

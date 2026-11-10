@@ -28,7 +28,7 @@ jobs:
       - name: Real actions, then reviewed collectors
         run: |
           # No external network in the attack/collector phase. Dependencies were installed above.
-          sudo unshare --net -- env JARVIS_ARENA_SANDBOX=1 "$(command -v python)" scripts/security/live_bench.py --json "$RUNNER_TEMP/live.json" | tee "$RUNNER_TEMP/live.txt"
+          sudo unshare --net -- env JARVIS_ARENA_SANDBOX=1 GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" "$(command -v python)" scripts/security/live_bench.py --json "$RUNNER_TEMP/live.json" | tee "$RUNNER_TEMP/live.txt"
           { echo '```'; cat "$RUNNER_TEMP/live.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve measurement, including failed runs
         if: always()

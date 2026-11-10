@@ -92,3 +92,6 @@ incomplete rather than claiming all files were enumerated or guaranteeing eventu
   No test or product gate was weakened. Final continuity/harness tests ran separately.
 - Runtime smoke is read-only/scratch only. Real attack execution remains pending the
   manually dispatched disposable workflow; no result is inferred from workflow source.
+- Workflow environment review: sudo filters the runner identity variables, so the
+  live step now forwards just GITHUB_ACTIONS and RUNNER_ENVIRONMENT explicitly to
+  the isolation gate. A regression check prevents an always-refused live workflow.
