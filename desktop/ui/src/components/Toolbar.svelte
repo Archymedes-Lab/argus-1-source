@@ -24,16 +24,16 @@
 
 <svelte:window onkeydown={onKey} />
 
-<header class="material sticky top-0 z-10 flex h-13 items-center gap-4 border-b border-gray-300 px-6">
+<header class="material sticky top-0 z-10 flex items-center gap-4 {app.mode === 'simple' ? 'h-16 px-8' : 'h-13 border-b border-gray-300 px-6'}">
   <div class="flex shrink-0 items-center gap-3">
-    <h1 class="text-heading-16 whitespace-nowrap">{title}</h1>
+    <h1 class="{app.mode === 'simple' ? 'text-heading-24' : 'text-heading-16'} whitespace-nowrap">{title}</h1>
     {#if sec && app.mode === "expert"}
       <span class="pill max-xl:hidden {tone === 'red' ? 'pill-critical' : tone === 'amber' ? 'pill-high' : 'pill-ok'}">
         {tr("Score {n}", { n: sec.score })}{sec.state === "verifying" ? " · " + tr("re-checking") : ""}
       </span>
     {/if}
   </div>
-  <button class="input mx-auto flex h-9 min-w-0 max-w-[480px] flex-1 cursor-default items-center gap-2 text-gray-700" onclick={() => (app.palette = true)} aria-label={tr("Search")}>
+  <button class="input mx-auto flex h-9 min-w-0 flex-1 {app.mode === 'simple' ? 'max-w-[380px] rounded-full!' : 'max-w-[480px]'} cursor-default items-center gap-2 text-gray-700" onclick={() => (app.palette = true)} aria-label={tr("Search")}>
     <Search size={15} class="shrink-0" /><span class="min-w-0 flex-1 truncate text-left">{app.mode === "simple" ? tr("Search or jump to a page") : tr("Search or jump to…")}</span><span class="kbd max-md:hidden">Ctrl K</span>
   </button>
   <div class="flex shrink-0 items-center gap-1.5">

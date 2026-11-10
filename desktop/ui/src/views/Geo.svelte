@@ -80,7 +80,7 @@
           <dl class="mt-4 grid grid-cols-[130px_1fr] gap-x-4 gap-y-2 text-copy-13">
             <dt class="text-gray-900">{tr("Accuracy")}</dt><dd>{tr("within about {n} m", { n: loc!.accuracy_m ?? "?" })}</dd>
             {#if app.mode === "expert"}<dt class="text-gray-900">{tr("Source")}</dt><dd><span class="tag">{loc!.source}</span></dd>{/if}
-            <dt class="text-gray-900">{tr("Last fix")}</dt><dd>{agoT(loc!.ts)}</dd>
+            <dt class="text-gray-900">{app.mode === "simple" ? tr("Last update") : tr("Last fix")}</dt><dd>{agoT(loc!.ts)}</dd>
           </dl>
         {:else}
           <p class="text-heading-20">{tr("Location unavailable")}</p>

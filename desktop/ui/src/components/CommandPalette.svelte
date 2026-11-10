@@ -48,7 +48,7 @@
       <Command.Root shouldFilter={false} loop>
         <div class="flex items-center gap-2.5 border-b border-gray-300 px-4">
           <Search size={16} class="text-gray-700" />
-          <Command.Input bind:value={search} placeholder={tr("Search findings, collectors, or jump to a view")} class="h-13 flex-1 bg-transparent text-copy-14 outline-none placeholder:text-gray-700" />
+          <Command.Input bind:value={search} placeholder={app.mode === "simple" ? tr("Search or jump to a page") : tr("Search findings, collectors, or jump to a view")} class="h-13 flex-1 bg-transparent text-copy-14 outline-none placeholder:text-gray-700" />
           <span class="kbd">Esc</span>
         </div>
         <Command.List class="max-h-[420px] overflow-y-auto p-2">
@@ -69,7 +69,7 @@
                 <Command.GroupItems>
                   {#each findings as f, i (i)}
                     <Command.Item value={`finding-${i}`} onSelect={() => showFinding(f)} class="menu-item h-10">
-                      <span class="w-[76px] shrink-0"><Pill severity={f.severity} /></span>
+                      <span class="{app.mode === 'simple' ? 'w-[112px]' : 'w-[76px]'} shrink-0"><Pill severity={f.severity} /></span>
                       <span class="min-w-0 flex-1 truncate">{f.title}</span>
                       {#if f.count > 1}<span class="tabular text-label-12 text-gray-700">{tr("{n} places", { n: f.count })}</span>{/if}
                       <span class="tag">{f.job}</span>

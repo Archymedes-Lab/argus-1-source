@@ -16,6 +16,7 @@ import json
 import os
 import re
 import secrets
+import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -241,6 +242,23 @@ def _performance_state(jobs, scheduler):
             "running": running_jobs(scheduler)}
 
 
+def _indicator_kinds(store):
+    """Use the covering index, without retaining a connection or stale counts.
+
+    build_state opens a new Store per request, so an identity-keyed global cache
+    never hit across requests and retained the previous closed Store. Counting
+    the covering index is bounded by the existing indicator retention policy.
+    """
+    sql = ("SELECT kind, COUNT(*) n FROM indicators{} WHERE status='active' "
+           "GROUP BY kind ORDER BY n DESC")
+    try:
+        rows = store.db.execute(sql.format(" INDEXED BY idx_ind_kind")).fetchall()
+    except sqlite3.OperationalError:
+        # Older schema: preserve visibility without requiring a migration here.
+        rows = store.db.execute(sql.format("")).fetchall()
+    return {r["kind"]: r["n"] for r in rows}
+
+
 def _intel_state(store):
     """Knowledge-base health, so the page shows what the hunt is hunting with.
 
@@ -249,9 +267,7 @@ def _intel_state(store):
     refresh makes "no findings" mean something.
     """
     try:
-        kinds = {r["kind"]: r["n"] for r in store.db.execute(
-            "SELECT kind, COUNT(*) n FROM indicators WHERE status='active' "
-            "GROUP BY kind ORDER BY n DESC")}
+        kinds = _indicator_kinds(store)
         feeds_rows = [dict(r) for r in store.db.execute(
             "SELECT name,last_run,rows,kept,error FROM feed_runs ORDER BY name")]
         hits = [dict(r) for r in store.db.execute(

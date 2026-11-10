@@ -10,14 +10,14 @@
   "Look at the name. If you recognise the app, you can ignore this. If you do not, do not delete anything yet. Ask someone you trust to check it."
  ],
  "staging": [
-  "A new program, from a maker nobody has vouched for, was just saved in a folder where programs often end up.",
-  "Installers and tools you download do this too. Harmful programs also arrive this way.",
-  "Think back: did you just install or download something? If yes, this is probably it. If not, ask someone you trust to check."
+  "A new program file was just saved on your computer, and the computer cannot tell who made it.",
+  "Programs you download or build yourself do this too. Bad programs can arrive the same way.",
+  "Did you just download or install something? Then this is probably it. If not, ask someone you trust to take a look."
  ],
  "rules": [
-  "A setting on your computer lets other devices connect to a program here, and it is quite open.",
-  "An open door like this makes it easier for other devices on the network to reach that program.",
-  "Check which program it is. If you do not use it, ask someone you trust whether it can be closed."
+  "Your computer has a rule that lets other devices talk to one of its programs.",
+  "The more open the rule is, the easier it is for other devices on your network to reach that program.",
+  "Look at which program it is. If you do not use it, ask someone you trust if the rule can be removed."
  ],
  "remote": [
   "Your computer is set up so someone can connect to it from far away and use it.",

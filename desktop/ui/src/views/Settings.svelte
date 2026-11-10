@@ -75,7 +75,7 @@
       <div class="card row justify-between gap-4">
         <div>
           <p class="text-label-13">{tr("Open in your browser")}</p>
-          <p class="mt-0.5 text-copy-13 text-gray-900">{tr("See everything in your browser too. It pairs by itself; there is no token to copy.")}</p>
+          <p class="mt-0.5 text-copy-13 text-gray-900">{app.mode === "simple" ? tr("See everything in your browser too. It connects by itself.") : tr("See everything in your browser too. It pairs by itself; there is no token to copy.")}</p>
         </div>
         <button class="btn btn-sm btn-accent shrink-0" onclick={() => openInBrowser("dashboard")}>{tr("Open")}</button>
       </div>
@@ -120,13 +120,13 @@
       <div class="row justify-between gap-4">
         <div>
           <p class="text-label-13">{t("review.auto")}</p>
-          <p class="mt-0.5 text-copy-13 text-gray-900">{tr("After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.", { n: days })}</p>
+          <p class="mt-0.5 text-copy-13 text-gray-900">{app.mode === "simple" ? tr("If nothing changes for {n} days, small items that only need your OK are accepted for you and written down. Urgent items always wait for you.", { n: days }) : tr("After {n} unchanged days, items that only need your OK are accepted and logged. Never critical.", { n: days })}</p>
         </div>
         {#if ap?.policy}
           <input type="checkbox" checked={ap.policy.auto_handle} onchange={toggleAuto} aria-label={t("review.auto")} />
         {:else}<span class="text-copy-13 text-gray-900">{tr("Needs the newer ARGUS-INSTINCT service")}</span>{/if}
       </div>
-      <div class="row justify-between"><span class="text-label-13">{tr("Critical findings")}</span><span class="text-copy-13 text-gray-900">{tr("Always ask")}</span></div>
+      <div class="row justify-between"><span class="text-label-13">{app.mode === "simple" ? tr("Urgent items") : tr("Critical findings")}</span><span class="text-copy-13 text-gray-900">{tr("Always ask")}</span></div>
       <div class="row justify-between"><span class="text-label-13">{app.mode === "simple" ? tr("Fixing problems") : tr("Applying a fix")}</span><span class="text-copy-13 text-gray-900">{app.mode === "simple" ? tr("This app never changes your computer for you") : tr("Never from this app")}</span></div>
     </div>
   </section>

@@ -37,6 +37,34 @@ class StagedExecutableTests(unittest.TestCase):
         self.assertEqual([f["severity"] for f in out], ["high"])
 
 
+class PackageSourceTests(StagedExecutableTests):
+    """Library files an `npm install` unpacked are not unsigned programs."""
+
+    PKG = r"C:\Users\u\AppData\Local\Temp\app\node_modules\left-pad" + "\\"
+
+    def sev(self, name, sig="NotSigned"):
+        out = self.audit(staged(path=self.PKG + name, sig=sig, sha256="49D3" + "0" * 60))
+        return [f["severity"] for f in out]
+
+    def test_unsigned_package_source_is_listed_but_low(self):
+        for name in ("index.js", r"lib\a.mjs", "b.cjs"):
+            self.assertEqual(self.sev(name), ["low"], name)
+
+    def test_traversal_out_of_package_tree_stays_high(self):
+        self.assertEqual(self.sev(r"..\..\payload.js"), ["high"])
+
+    def test_native_addons_executables_and_bad_signatures_stay_high(self):
+        self.assertEqual(self.sev(r"build\x.node"), ["high"])
+        self.assertEqual(self.sev(r"bin\tool.exe"), ["high"])
+        self.assertEqual(self.sev("index.js", sig="HashMismatch"), ["high"])
+        self.assertEqual(self.sev("index.js", sig="NotTrusted"), ["high"])
+
+    def test_the_same_script_outside_node_modules_stays_high(self):
+        out = self.audit(staged(path=r"C:\Users\u\AppData\Local\Temp\index.js",
+                                sig="NotSigned", sha256="49D3" + "0" * 60))
+        self.assertEqual([f["severity"] for f in out], ["high"])
+
+
 class WmiApiDisagreementTests(unittest.TestCase):
     def audit(self, **extra):
         data = {"wmi": [{"pid": 100, "name": "a"}],
