@@ -31,7 +31,8 @@ try {
   $oldest = [int64]0
   $first = Get-WinEvent -LogName $name -MaxEvents 1 -Oldest -ErrorAction SilentlyContinue
   if ($first) { $oldest = [int64]$first.RecordId }
-  $o.log = @{ enabled=[bool]$l.IsEnabled; records=[int64]$l.RecordCount; max_bytes=[int64]$l.MaximumSizeInBytes; oldest=$oldest }
+  $newest = Get-WinEvent -LogName $name -MaxEvents 1 -ErrorAction SilentlyContinue
+  $o.log = @{ newest=([int64]$(if ($newest) { $newest.RecordId } else { 0 })); enabled=[bool]$l.IsEnabled; records=[int64]$l.RecordCount; max_bytes=[int64]$l.MaximumSizeInBytes; oldest=$oldest }
 } catch { $o.errors += 'log metadata unreadable' }
 
 $sha = [Security.Cryptography.SHA256]::Create()

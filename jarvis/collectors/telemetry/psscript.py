@@ -79,6 +79,7 @@ def _valid(data):
                "own": int(data["own"]), "more": bool(data["more"]),
                "errors": [str(e)[:120] for e in windows.aslist(data.get("errors"))][:8]}
         log = data.get("log")
+        out["newest"] = int(log["newest"]) if isinstance(log, dict) and "newest" in log else None
         out["oldest"] = int(log["oldest"]) if isinstance(log, dict) else 0
         out["log_bytes"] = int(log["max_bytes"]) if isinstance(log, dict) else 0
         blocks = []
@@ -135,6 +136,17 @@ def audit(store, hosts=("wsl", "win"), reader=read):
                                   f"{why}; nothing was checked this pass and the read position was kept.",
                                   CHANNEL)]
     out = []
+    reset = answer.get("newest") is not None and answer["newest"] < state["cursor"]
+    if reset and not answer["errors"]:
+        reread, why = reader(0)
+        if reread is None or reread["errors"]:
+            collection.failed("psscript", "log reset; reread failed")
+            return replay + [_finding("visibility", "low", "PowerShell log reset could not be read",
+                                      "The log record sequence reset; the previous cursor is retained until a valid reread.", CHANNEL)]
+        answer = reread
+        out.append(_finding("visibility", "low", "PowerShell log record sequence reset",
+                            "The log was cleared or recreated. Earlier script evidence is unavailable; "
+                            "reading restarted from the oldest retained record.", CHANNEL))
     if answer["errors"]:
         collection.failed("psscript", "; ".join(answer["errors"])[:160])
         return replay + [_finding("visibility", "low", "PowerShell script blocks were not read",
@@ -146,7 +158,10 @@ def audit(store, hosts=("wsl", "win"), reader=read):
             "Windows is not recording what PowerShell runs, so commands typed or run inside PowerShell "
             "are not seen by this check. Argus does not turn it on by itself: it records the text of "
             "every script on this computer. The hardening guide shows how to enable it.", CHANNEL)]
-    cursor = state["cursor"]
+    if answer["enabled"] is False:
+        out.append(_finding("visibility", "low", "PowerShell script-block logging is off",
+                            "Only retained records were read. New scripts may not be recorded; logging was not enabled by Argus.", CHANNEL))
+    cursor = 0 if reset else state["cursor"]
     lost = answer["oldest"] - cursor - 1 if cursor and answer["oldest"] > cursor + 1 else 0
     if lost > 0:
         out.append(_finding(
@@ -186,7 +201,7 @@ def audit(store, hosts=("wsl", "win"), reader=read):
     new_cursor = max(cursor, answer["last"]) if answer["read"] else cursor
     store.set_meta(META, json.dumps({"cursor": new_cursor, "hits": (kept + new_hits)[-KEEP_HITS:]},
                                     sort_keys=True))
-    if cut or lost or answer["more"]:
+    if cut or lost or answer["more"] or reset or answer["enabled"] is False:
         collection.failed("psscript", "script-block coverage incomplete; see visibility findings")
     else:
         collection.succeeded("psscript")

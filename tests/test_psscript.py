@@ -244,3 +244,33 @@ class PartialEvidence(Base):
 
     def test_reader_does_not_trust_process_id_for_following_blocks(self):
         self.assertNotIn('$ownPid', load_win_script('psscript.ps1'))
+
+class LogReset(Base):
+    def test_record_sequence_reset_rereads_from_zero_and_records_gap(self):
+        self.run_pass(answer(last=100))
+        raw = answer(first=0, last=0, read=0)
+        raw['log']['newest'] = 5
+        reread = answer(first=1, last=5, read=2)
+        reread['log']['newest'] = 5
+        values = iter([psscript._valid(raw), psscript._valid(reread)])
+        cursors = []
+        def reader(cursor):
+            cursors.append(cursor)
+            return next(values), ''
+        out = psscript.audit(self.store, reader=reader)
+        self.assertEqual(cursors, [100, 0])
+        self.assertEqual(self.cursor(), 5)
+        self.assertTrue(any('sequence reset' in f['title'] for f in out))
+
+    def test_failed_reread_after_reset_keeps_previous_cursor(self):
+        self.run_pass(answer(last=100))
+        raw = answer(first=0, last=0, read=0)
+        raw['log']['newest'] = 5
+        values = iter([(psscript._valid(raw), ''), (None, 'failed')])
+        out = psscript.audit(self.store, reader=lambda cursor: next(values))
+        self.assertEqual(self.cursor(), 100)
+        self.assertTrue(any('reset could not be read' in f['title'] for f in out))
+
+    def test_logging_off_is_reported_even_with_old_records(self):
+        out = self.run_pass(answer(enabled=False, blocks=[block(11)]))
+        self.assertTrue(any('logging is off' in f['title'] for f in out))

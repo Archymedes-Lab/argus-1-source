@@ -54,6 +54,15 @@ CHILD = ("import sys, json; sys.path.insert(0, %r)\n"
          " for f in (out or []) if isinstance(f, dict)]))\n") % ROOT
 T = "argus-live-" + uuid.uuid4().hex[:10]  # unique per run, plus scenario number
 
+def stop_process(sid, hidden=False):
+    """Kill only the recorded process whose executable still has our unique marker."""
+    prefix = f"/tmp/.{T}-{sid}/kworker" if hidden else f"/tmp/{T}-{sid}"
+    pidfile = f"/tmp/{T}-{sid}.pid"
+    return (f'if [ -r {pidfile} ]; then pid=$(cat {pidfile}); '
+            f'case "$(readlink /proc/$pid/exe)" in "{prefix}"*) kill "$pid";; esac; fi; '
+            f'rm -f {pidfile}')
+
+
 # (id, technique, what it is, do, undo, extra strings that identify it in a finding)
 # Each `do` is a shell script run as root with `set -e`. Local and reversible only.
 SCENARIOS = (
@@ -89,13 +98,15 @@ SCENARIOS = (
      f"rm -f /etc/profile.d/{T}-07.sh", ()),
     ("08", "T1571", "listener on all interfaces on an unusual port",
      f"cp \"$(command -v python3)\" /tmp/{T}-08; "
-     f"(setsid /tmp/{T}-08 -c 'import socket,time; s=socket.socket(); s.bind((\"0.0.0.0\", 44408)); "
-     "s.listen(1); time.sleep(3600)' >/dev/null 2>&1 &) ; sleep 1",
-     f"pkill -f /tmp/{T}-08 || true; rm -f /tmp/{T}-08", ("44408",)),
+     f"setsid /tmp/{T}-08 -c 'import socket,time; s=socket.socket(); s.bind((\"0.0.0.0\", 44408)); "
+     f"s.listen(1); time.sleep(3600)' >/dev/null 2>&1 & echo $! > /tmp/{T}-08.pid; "
+     f"sleep 1; kill -0 \"$(cat /tmp/{T}-08.pid)\"",
+     stop_process("08") + f"; rm -f /tmp/{T}-08", ("44408",)),
     ("09", "T1070.004", "process still running after its program file was deleted",
-     f"cp /bin/sleep /dev/shm/{T}-09; (setsid /dev/shm/{T}-09 3600 >/dev/null 2>&1 &); sleep 1; "
-     f"rm -f /dev/shm/{T}-09",
-     f"pkill -f {T}-09 || true", ()),
+     f"cp /bin/sleep /tmp/{T}-09; setsid /tmp/{T}-09 3600 >/dev/null 2>&1 & "
+     f"echo $! > /tmp/{T}-09.pid; sleep 1; kill -0 \"$(cat /tmp/{T}-09.pid)\"; "
+     f"rm -f /tmp/{T}-09",
+     stop_process("09") + f"; rm -f /tmp/{T}-09", ()),
     ("10", "T1098", "sshd drop-in allowing root password logins",
      f"mkdir -p /etc/ssh/sshd_config.d; printf 'PermitRootLogin yes\\nPasswordAuthentication yes\\n"
      f"PermitEmptyPasswords yes\\n' > /etc/ssh/sshd_config.d/00-{T}-10.conf",
@@ -112,10 +123,11 @@ SCENARIOS = (
     ("13", "T1053.003", "root crontab entry at reboot",
      f"(crontab -l 2>/dev/null; printf '@reboot /dev/shm/.{T}-13\\n') | crontab -",
      f"crontab -l 2>/dev/null | grep -v '{T}-13' | crontab - || true", ()),
-    ("14", "T1564.001", "hidden executable in /dev/shm, running",
-     f"mkdir -p /dev/shm/.{T}-14; cp /bin/sleep /dev/shm/.{T}-14/kworker; "
-     f"(setsid /dev/shm/.{T}-14/kworker 3600 >/dev/null 2>&1 &); sleep 1",
-     f"pkill -f /dev/shm/.{T}-14/kworker || true; rm -rf /dev/shm/.{T}-14", ()),
+    ("14", "T1564.001", "hidden executable in /tmp, running",
+     f"mkdir -p /tmp/.{T}-14; cp /bin/sleep /tmp/.{T}-14/kworker; "
+     f"setsid /tmp/.{T}-14/kworker 3600 >/dev/null 2>&1 & "
+     f"echo $! > /tmp/{T}-14.pid; sleep 1; kill -0 \"$(cat /tmp/{T}-14.pid)\"",
+     stop_process("14", hidden=True) + f"; rm -rf /tmp/.{T}-14", ()),
     ("15", "T1070.003", "root shell history redirected to /dev/null",
      f"cp -a /root/.bash_history /root/.bash_history.{T} 2>/dev/null || true; ln -sf /dev/null /root/.bash_history",
      f"rm -f /root/.bash_history; [ -e /root/.bash_history.{T} ] && mv -f /root/.bash_history.{T} "
@@ -240,7 +252,9 @@ def main(argv=None):
         print(f"refused, nothing was executed: {why}", file=sys.stderr)
         return 2
     names = job_names()
-    applied, not_applied, attempted, cleanup_failed = [], {}, [], {}
+    applied, attempted, cleanup_failed = [], [], {}
+    not_applied = {s[0]: "not attempted" for s in SCENARIOS}
+    after, failed_after, execution_error = {}, {}, ""
     def interrupted(signum, frame):
         raise InterruptedError("benchmark interrupted")
     signal.signal(signal.SIGTERM, interrupted)
@@ -259,9 +273,12 @@ def main(argv=None):
                     continue
                 if r.returncode == 0:
                     applied.append(s)
+                    not_applied.pop(s[0], None)
                 else:
                     not_applied[s[0]] = (r.stderr or r.stdout)[-160:].strip().replace("\n", " ")
             after, failed_after = sweep(names, db, home)
+        except (Exception, KeyboardInterrupt) as exc:
+            execution_error = type(exc).__name__
         finally:
             for s in reversed(attempted):
                 try:
@@ -283,7 +300,7 @@ def main(argv=None):
     n_caught = sum(1 for r in rows if r["state"] == "caught")
     report = {"applied": n_applied, "caught": n_caught, "scenarios": rows,
               "jobs_run": len(names), "jobs_failed_before": failed_before, "jobs_failed_after": failed_after,
-              "cleanup_failed": cleanup_failed, "new_findings": len(new), "seconds": round(time.time() - started, 1)}
+              "cleanup_failed": cleanup_failed, "execution_error": execution_error, "new_findings": len(new), "seconds": round(time.time() - started, 1)}
     print(f"live detection: {n_caught} of {n_applied} applied actions were named by a new finding "
           f"({len(SCENARIOS) - n_applied} could not be applied here); {len(names)} collectors, "
           f"{len(failed_after)} failed; {report['seconds']} s")
@@ -297,7 +314,7 @@ def main(argv=None):
     if args.json:
         with open(args.json, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=1)
-    return 1 if cleanup_failed or failed_before or failed_after or not_applied else 0
+    return 1 if execution_error or cleanup_failed or failed_before or failed_after or not_applied else 0
 
 
 if __name__ == "__main__":

@@ -42,7 +42,9 @@ measurement is historical, not independently revalidated for this final tree.
 The audit also removed the PowerShell reader's ten-minute process-id exemption:
 only complete exact own-script hashes are excluded. Incomplete/truncated blocks
 are reported as gaps and not evaluated. Nested blocks now receive ordinary rule
-judgment. The 120-second polling interval still loses evidence when the log wraps
+judgment. Log record-sequence resets trigger a validated reread from zero and an
+explicit evidence-gap finding; failed rereads keep the old cursor. Logging-off
+is reported even while retained records remain. The 120-second polling interval still loses evidence when the log wraps
 in about 30 seconds; this work does not enlarge logs or close that runtime gap.
 
 Real-execution work is a manually dispatched disposable-runner workflow with an

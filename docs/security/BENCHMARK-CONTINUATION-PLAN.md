@@ -68,3 +68,27 @@ incomplete rather than claiming all files were enumerated or guaranteeing eventu
   Choice skip-large probability 0.89 (concentration 0.83); Choice live execution as
   validation priority 0.74 (concentration 0.61); Noul production detection established
   by replay 0.03. Advice reinforces the conservative design, changes no authority.
+- Follow-up continuity audit: clearing/recreating the PowerShell log could leave
+  the old cursor above every new record indefinitely. The reader now returns the
+  newest log id; a sequence reset triggers a validated reread from zero with an
+  explicit gap. Failed rereads preserve the old cursor. Logging-off remains visible
+  even while retained old records are being processed. Regression tests cover both.
+- Read-only Windows smoke of the updated reader, scratch store only: two passes
+  took 5.06 s and 1.49 s; cursor advanced from 29157869 to 29158113. First pass
+  reported a visibility gap, second had no findings. No script content was printed,
+  retained in the scratch metadata or sent to Jev; no logging setting changed.
+- Live benchmark review also found broad pkill could kill the cleanup shell and
+  detached launches could be counted despite failing on noexec shared memory.
+  Background scenarios now verify liveness, use /tmp, record their pid and bind
+  cleanup to the per-run executable marker. All shell scripts are syntax-checked
+  without executing scenarios in the unit suite.
+
+## Local acceptance
+
+- Full scratch-HOME module run completed: 314/317 passed initially. The remaining
+  three passed on focused reruns: bulk-lane registration after adding the scanner;
+  provenance with a shorter private scratch path (AF_UNIX pathname limit); native
+  isolated-channel handoff alone (overlapping checks had caused WSL accept4 timeout).
+  No test or product gate was weakened. Final continuity/harness tests ran separately.
+- Runtime smoke is read-only/scratch only. Real attack execution remains pending the
+  manually dispatched disposable workflow; no result is inferred from workflow source.

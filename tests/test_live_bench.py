@@ -183,3 +183,27 @@ class ExecutionFailures(unittest.TestCase):
         self.assertNotIn('updates', live.READ_ONLY)
         self.assertNotIn('coverage', live.READ_ONLY)
         self.assertIn('unshare --net', Workflow.TEXT)
+
+class ProcessSafety(unittest.TestCase):
+    def test_every_action_and_undo_has_valid_shell_syntax_without_execution(self):
+        import subprocess
+        for sid, _tid, _what, action, undo, _extra in live.SCENARIOS:
+            for script in (action, undo):
+                result = subprocess.run(['/bin/sh', '-n'], input=script, text=True,
+                                        capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 0, (sid, result.stderr))
+
+    def test_background_actions_check_liveness_and_cleanup_binds_executable_identity(self):
+        for scenario in (live.SCENARIOS[7], live.SCENARIOS[8], live.SCENARIOS[13]):
+            self.assertIn('kill -0', scenario[3])
+            self.assertNotIn('pkill', scenario[4])
+            self.assertIn('readlink /proc/$pid/exe', scenario[4])
+            self.assertIn(live.T, scenario[4])
+
+class Interruption(ExecutionFailures):
+    def test_interrupted_partial_action_still_attempts_undo_and_fails(self):
+        import subprocess
+        ok = subprocess.CompletedProcess([], 0, '', '')
+        code, sh, _ = self.run_main([InterruptedError('signal'), ok])
+        self.assertEqual(code, 1)
+        self.assertEqual(sh.call_count, 2)
