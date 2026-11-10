@@ -177,3 +177,8 @@ Five recorded misses remain: profile script, PHP web shell, root crontab,
 shell-history redirection and rc.local. Do not remove or rewrite these cases to
 raise the count. They are next coverage work, with success and benign controls
 needed before broadening detection. The content-rule subset missed the PHP fixture.
+- Final CI ran 4,928 tests and caught the new strict text-open at the repository's
+  decoding gate. Preserve that gate: read bounded binary bytes, then explicitly
+  decode the kernel's ASCII protocol. Invalid bytes remain unavailable evidence,
+  while the collector's outer handler reports the gap. Add a non-ASCII failure
+  fixture; do not weaken the source guard or replace invalid bytes into valid rows.

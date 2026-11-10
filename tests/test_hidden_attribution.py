@@ -252,6 +252,9 @@ class SocketReadEvidence(unittest.TestCase):
                 (root / 'net/tcp').write_text(self.HEADER + 'incomplete row\n')
                 with self.assertRaises(ValueError):
                     linux.socket_table(strict=True)
+                (root / 'net/tcp').write_bytes(self.HEADER.encode() + b'\xff')
+                with self.assertRaises(UnicodeError):
+                    linux.socket_table(strict=True)
                 (root / 'net/tcp').write_text(self.HEADER)
                 with mock.patch.object(linux, 'MAX_SOCKET_TABLE_BYTES', 8):
                     with self.assertRaises(ValueError):

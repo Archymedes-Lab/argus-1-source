@@ -117,14 +117,15 @@ def _read_socket_table(strict=False):
     for fname, proto in (("tcp", "tcp"), ("tcp6", "tcp6"), ("udp", "udp"), ("udp6", "udp6")):
         if strict:
             try:
-                with open(f"{PROC}/net/{fname}", encoding="ascii") as handle:
-                    text = handle.read(MAX_SOCKET_TABLE_BYTES + 1)
+                with open(f"{PROC}/net/{fname}", "rb") as handle:
+                    raw = handle.read(MAX_SOCKET_TABLE_BYTES + 1)
             except FileNotFoundError:
                 if fname.endswith("6"):
                     continue
                 raise
-            if len(text) > MAX_SOCKET_TABLE_BYTES:
+            if len(raw) > MAX_SOCKET_TABLE_BYTES:
                 raise ValueError("socket table exceeded the read budget")
+            text = raw.decode("ascii")
             header = text.splitlines()[0] if text else ""
             if "local_address" not in header or "inode" not in header:
                 raise ValueError("socket table header is missing or malformed")
