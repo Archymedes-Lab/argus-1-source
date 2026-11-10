@@ -629,8 +629,11 @@ def probe_technique_lookalikes():
     wrong = [rule.title for rule in techniques.RULES for pair in rule.benign
              if any(set(rule.tids) & set(f.get("techniques") or ())
                     for f in _replay(rule.platform, [pair]))]
+    # As for process rules: the look-alike must not be reported as the rule's own technique.
+    # A different detector (the registry family watch judges the writer, not the value) may
+    # still have something to say about the same write.
     wrong += [rule.title for rule in techniques.REG_RULES for sample in rule.benign
-              if any(f.get("techniques") for f in _replay_registry(sample))]
+              if any(set(rule.tids) & set(f.get("techniques") or ()) for f in _replay_registry(sample))]
     total = sum(len(r.benign) for r in techniques.RULES + techniques.REG_RULES)
     return not wrong, (f"{total} benign look-alikes"
                        + (f"; fired: {', '.join(sorted(set(wrong))[:4])}" if wrong else ""))

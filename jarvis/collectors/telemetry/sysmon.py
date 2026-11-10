@@ -36,7 +36,7 @@ import os
 import re
 from datetime import datetime, timezone
 
-from jarvis.collectors.telemetry import community, techniques
+from jarvis.collectors.telemetry import community, regwatch, techniques
 from jarvis.core import collection, sigma, warninglist
 from jarvis.core.eventlog import EventLog, LogError
 from jarvis.core.finding import win_finding as _finding
@@ -773,6 +773,7 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                 if now() - known_at < VOLUMES_FOR_S
                 and techniques.volume_kind(letter, known_volumes) == techniques.INTERNAL}
     smb_out, failed_lookups, registry_hits, registry_seen, odd_ports = {}, [], {}, set(), {}
+    family_hits = {}                # (key family, writer image) -> [count, key, time, tids, what, kind]
     dropped, drop_times = {}, []
     boot_dropped, boot_drop_times, service_starts, drop_reports = {}, [], [], []
 
@@ -862,8 +863,17 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
                                        q, e.get("dns_status") or ""))
         elif eid == 13:
             registry_seen.update(techniques.registry_families(e.get("reg_key")))
-            for rule in techniques.registry(e.get("reg_key"), e.get("reg_details")):
+            specific = techniques.registry(e.get("reg_key"), e.get("reg_details"))
+            for rule in specific:
                 hit = registry_hits.setdefault((rule, image), [0, e.get("reg_key") or "", e.get("time")])
+                hit[0] += 1
+                hit[2] = e.get("time") or hit[2]
+            # A family write nobody's specific rule covers, judged by its writer.
+            watched = None if specific else regwatch.judge(image, e.get("reg_key"))
+            if watched:
+                fid, tids, what, kind = watched
+                hit = family_hits.setdefault((fid, image), [0, e.get("reg_key") or "", e.get("time"),
+                                                            tids, what, kind])
                 hit[0] += 1
                 hit[2] = e.get("time") or hit[2]
         elif eid == 3:
@@ -1220,6 +1230,13 @@ def audit(store=None, hours=24, hosts=("win",), incremental=False, eventlog=None
             known = {}
         known.update(dict.fromkeys(registry_seen, now()))
         store.set_meta(REGISTRY_RECORDED_META, json.dumps(known))
+
+    # -- security-relevant registry families written by an unexpected kind of program
+    for (_fid, image), (count, key, when, tids, what, kind) in family_hits.items():
+        title, detail = regwatch.describe(image, what, kind, key, count, iso_of(when))
+        f = _finding("technique", regwatch.SEVERITY, title, detail, image)
+        f["techniques"] = list(tids)
+        out.append(f)
 
     # -- community rules (Sigma), judged per install --------------------------
     # After the built-in rules and never instead of them. A replay (no store)
