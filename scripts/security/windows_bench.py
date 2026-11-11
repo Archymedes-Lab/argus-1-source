@@ -140,18 +140,23 @@ def more_cases(scratch):
     cmd = str(sysdir / 'cmd.exe')
     temp = Path(os.environ.get('TEMP', str(scratch)))
     stage = temp / (MARK + '-stage')
-    staged = stage / (MARK + '.exe')
+
+    def staged(sid):
+        # One copy per case, named with the case id, so a finding that names the
+        # program can be matched to the case that planted it.
+        return stage / f'{MARK}-{sid}.exe'
     run = r'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     lsa = r'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
     winlogon = r'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
     clsid = r'HKCU:\Software\Classes\CLSID\{b5f8350b-0548-48b1-a6ee-88bd00b4a5e7}'
     startup = Path(os.environ.get('ProgramData', r'C:\ProgramData')) / r'Microsoft\Windows\Start Menu\Programs\StartUp'
     encoded = 'ZQB4AGkAdAAgADAA'   # "exit 0" in UTF-16LE base64
-    prep = (f"New-Item -ItemType Directory -Force -Path {quote(stage)} | Out-Null; "
-            f"Copy-Item -LiteralPath {quote(cmd)} -Destination {quote(staged)} -Force; ")
+    def prep(sid):
+        return (f"New-Item -ItemType Directory -Force -Path {quote(stage)} | Out-Null; "
+                f"Copy-Item -LiteralPath {quote(cmd)} -Destination {quote(staged(sid))} -Force; ")
     return (
         ('06', 'T1547.001', 'Run value starting a program from the temporary folder',
-         prep + f"New-ItemProperty -LiteralPath {quote(run)} -Name '{MARK}-06' -Value {quote(str(staged) + ' /c exit 0')} -PropertyType String | Out-Null",
+         prep('06') + f"New-ItemProperty -LiteralPath {quote(run)} -Name '{MARK}-06' -Value {quote(str(staged('06')) + ' /c exit 0')} -PropertyType String | Out-Null",
          f"Remove-ItemProperty -LiteralPath {quote(run)} -Name '{MARK}-06' -ErrorAction SilentlyContinue",
          f"if (Get-ItemProperty -LiteralPath {quote(run)} -Name '{MARK}-06' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
         ('07', 'T1053.005', 'scheduled task running hidden encoded PowerShell',
@@ -160,7 +165,7 @@ def more_cases(scratch):
          f"Unregister-ScheduledTask -TaskName '{MARK}-07' -Confirm:$false -ErrorAction SilentlyContinue",
          f"if (Get-ScheduledTask -TaskName '{MARK}-07' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
         ('08', 'T1543.003', 'automatic service whose program is in the temporary folder',
-         prep + f"New-Service -Name '{MARK}-08' -BinaryPathName {quote(str(staged) + ' /c exit 0')} -StartupType Automatic | Out-Null",
+         prep('08') + f"New-Service -Name '{MARK}-08' -BinaryPathName {quote(str(staged('08')) + ' /c exit 0')} -StartupType Automatic | Out-Null",
          f"& sc.exe delete '{MARK}-08' | Out-Null",
          f"if (Get-Service -Name '{MARK}-08' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
         ('09', 'T1546.003', 'WMI event subscription running a command',
@@ -191,9 +196,9 @@ def more_cases(scratch):
          f"Remove-Item -LiteralPath {quote(clsid)} -Recurse -Force -ErrorAction SilentlyContinue",
          f"if (Test-Path -LiteralPath {quote(clsid)}) {{ throw 'remains' }}"),
         ('13', 'T1547.004', 'Winlogon Userinit extended with a second program',
-         prep + f"$v=(Get-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit).Userinit; "
+         prep('13') + f"$v=(Get-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit).Userinit; "
          f"Set-Content -LiteralPath {quote(str(scratch / (MARK + '-13.bak')))} -Value $v -Encoding UTF8; "
-         f"Set-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit -Value ($v.TrimEnd(',') + ',' + {quote(str(staged))} + ',')",
+         f"Set-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit -Value ($v.TrimEnd(',') + ',' + {quote(str(staged('13')))} + ',')",
          f"$b={quote(str(scratch / (MARK + '-13.bak')))}; if (Test-Path -LiteralPath $b) {{ "
          f"Set-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit -Value (Get-Content -LiteralPath $b -Raw).Trim(); Remove-Item -LiteralPath $b }}",
          f"if ((Get-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit).Userinit -like '*{MARK}*') {{ throw 'remains' }}"),
@@ -221,17 +226,18 @@ def more_cases(scratch):
          "& netsh.exe interface portproxy delete v4tov4 listenport=44417 listenaddress=127.0.0.1 | Out-Null",
          "if ((& netsh.exe interface portproxy show v4tov4) -match '44417') { throw 'remains' }"),
         ('18', 'T1036.005', 'program named svchost.exe running from the temporary folder',
-         f"New-Item -ItemType Directory -Force -Path {quote(str(stage / 'svc'))} | Out-Null; "
-         f"Copy-Item -LiteralPath {quote(str(sysdir / 'PING.EXE'))} -Destination {quote(str(stage / 'svc' / 'svchost.exe'))} -Force; "
-         f"$p=Start-Process -FilePath {quote(str(stage / 'svc' / 'svchost.exe'))} -ArgumentList '-n','3600','127.0.0.1' -WindowStyle Hidden -PassThru; "
+         f"New-Item -ItemType Directory -Force -Path {quote(str(stage / (MARK + '-18')))} | Out-Null; "
+         f"Copy-Item -LiteralPath {quote(str(sysdir / 'PING.EXE'))} -Destination {quote(str(stage / (MARK + '-18') / 'svchost.exe'))} -Force; "
+         f"$p=Start-Process -FilePath {quote(str(stage / (MARK + '-18') / 'svchost.exe'))} -ArgumentList '-n','3600','127.0.0.1' -WindowStyle Hidden -PassThru; "
          f"Start-Sleep -Seconds 1; if ($p.HasExited) {{ throw 'not running' }}",
          f"Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }} | Stop-Process -Force; "
          f"Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath {quote(str(stage))} -Recurse -Force -ErrorAction SilentlyContinue",
          f"if (Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }}) {{ throw 'remains' }}"),
         ('19', 'T1562.004', 'inbound firewall rule allowing a temporary-folder program',
-         f"New-NetFirewallRule -DisplayName '{MARK}-19' -Direction Inbound -Action Allow -Program {quote(str(staged))} -Profile Any | Out-Null",
-         f"Remove-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue",
-         f"if (Get-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
+         prep('19') + f"& netsh.exe advfirewall firewall add rule name='{MARK}-19' dir=in action=allow "
+         f"program={quote(str(staged('19')))} enable=yes profile=any | Out-Null; if ($LASTEXITCODE -ne 0) {{ throw 'netsh' }}",
+         f"& netsh.exe advfirewall firewall delete rule name='{MARK}-19' | Out-Null",
+         f"if ((& netsh.exe advfirewall firewall show rule name='{MARK}-19') -match '{MARK}-19') {{ throw 'remains' }}"),
     )
 
 

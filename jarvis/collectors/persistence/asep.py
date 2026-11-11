@@ -122,8 +122,14 @@ def audit():
     for key, pat in STOCK.items():
         val = (wl.get(key) or "").strip()
         if val and not pat.match(val):
+            # Name what was added beyond the stock entry: it is the part that matters, and a
+            # 100-character cut used to drop it (measured 2026-11-11, live campaign case 13).
+            parts = [x.strip() for x in val.split(",") if x.strip()]
+            extra = [x for x in parts if not pat.match(x)]
+            shown = ", ".join(extra)[:400] if extra else val[:400]
             out.append(_finding("logon", "critical", f"Winlogon {key} modified",
-                                f"{val[:100]} — this runs at every logon",
+                                f"{key} runs {shown} — this runs at every logon"
+                                + (f" (full value: {val[:400]})" if extra and len(parts) > 1 else ""),
                                 "Winlogon"))
 
     for a in aslist(data.get("activeSetup")):
@@ -156,7 +162,7 @@ def audit():
             benign_com += 1
             continue
         out.append(_finding("com", sev, "suspicious per-user COM registration",
-                            f"{c.get('clsid')} → {path[:80]} ({why})",
+                            f"{c.get('clsid')} → {path[:400]} ({why})",
                             "HKCU\\Software\\Classes\\CLSID"))
     if benign_com:
         out.append(_finding("com", "ok", "per-user COM registrations",
