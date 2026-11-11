@@ -10,17 +10,18 @@ import ctypes
 import hashlib
 import json
 import os
-from pathlib import Path
 import socket
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MARK = 'argus-win-' + uuid.uuid4().hex[:10]
-JOBS = ('sysmon', 'psscript', 'asep', 'backdoor', 'control')
+JOBS = ('sysmon', 'psscript', 'asep', 'backdoor', 'control', 'intrusion', 'implant', 'firewall', 'scan',
+        'evasion', 'winblocks')
 MAX_OUTPUT = 8 * 1024 * 1024
 CHILD = ("import sys,json; sys.path.insert(0,%r)\n"
          "from jarvis.service.jobs import run_job\n"
@@ -128,6 +129,112 @@ def cases(scratch):
     ), script, proof
 
 
+# Attack-shaped but harmless: every program is a renamed copy of a Windows tool given an
+# argument that exits at once, every object carries MARK, and every one is removed after.
+# (id, technique, description, apply, undo, absence check)
+EXTRA = {'17': ('44417',)}       # strings that identify a case where MARK cannot appear
+
+
+def more_cases(scratch):
+    sysdir = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32'
+    cmd = str(sysdir / 'cmd.exe')
+    temp = Path(os.environ.get('TEMP', str(scratch)))
+    stage = temp / (MARK + '-stage')
+    staged = stage / (MARK + '.exe')
+    run = r'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    lsa = r'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+    winlogon = r'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+    clsid = r'HKCU:\Software\Classes\CLSID\{b5f8350b-0548-48b1-a6ee-88bd00b4a5e7}'
+    startup = Path(os.environ.get('ProgramData', r'C:\ProgramData')) / r'Microsoft\Windows\Start Menu\Programs\StartUp'
+    encoded = 'ZQB4AGkAdAAgADAA'   # "exit 0" in UTF-16LE base64
+    prep = (f"New-Item -ItemType Directory -Force -Path {quote(stage)} | Out-Null; "
+            f"Copy-Item -LiteralPath {quote(cmd)} -Destination {quote(staged)} -Force; ")
+    return (
+        ('06', 'T1547.001', 'Run value starting a program from the temporary folder',
+         prep + f"New-ItemProperty -LiteralPath {quote(run)} -Name '{MARK}-06' -Value {quote(str(staged) + ' /c exit 0')} -PropertyType String | Out-Null",
+         f"Remove-ItemProperty -LiteralPath {quote(run)} -Name '{MARK}-06' -ErrorAction SilentlyContinue",
+         f"if (Get-ItemProperty -LiteralPath {quote(run)} -Name '{MARK}-06' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
+        ('07', 'T1053.005', 'scheduled task running hidden encoded PowerShell',
+         f"$a=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -WindowStyle Hidden -EncodedCommand {encoded}'; "
+         f"$t=New-ScheduledTaskTrigger -Daily -At 03:00; Register-ScheduledTask -TaskName '{MARK}-07' -Action $a -Trigger $t | Out-Null",
+         f"Unregister-ScheduledTask -TaskName '{MARK}-07' -Confirm:$false -ErrorAction SilentlyContinue",
+         f"if (Get-ScheduledTask -TaskName '{MARK}-07' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
+        ('08', 'T1543.003', 'automatic service whose program is in the temporary folder',
+         prep + f"New-Service -Name '{MARK}-08' -BinaryPathName {quote(str(staged) + ' /c exit 0')} -StartupType Automatic | Out-Null",
+         f"& sc.exe delete '{MARK}-08' | Out-Null",
+         f"if (Get-Service -Name '{MARK}-08' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
+        ('09', 'T1546.003', 'WMI event subscription running a command',
+         f"$ns='root\\subscription'; "
+         f"$f=Set-WmiInstance -Namespace $ns -Class __EventFilter -Arguments @{{Name='{MARK}-09';EventNamespace='root\\cimv2';QueryLanguage='WQL';"
+         f"Query=\"SELECT * FROM __InstanceModificationEvent WITHIN 3600 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System'\"}}; "
+         f"$c=Set-WmiInstance -Namespace $ns -Class CommandLineEventConsumer -Arguments @{{Name='{MARK}-09';CommandLineTemplate={quote(cmd + ' /c exit 0')}}}; "
+         f"Set-WmiInstance -Namespace $ns -Class __FilterToConsumerBinding -Arguments @{{Filter=$f;Consumer=$c}} | Out-Null",
+         f"$ns='root\\subscription'; "
+         f"Get-WmiObject -Namespace $ns -Class __FilterToConsumerBinding | Where-Object {{ $_.Filter -like '*{MARK}-09*' }} | Remove-WmiObject; "
+         f"Get-WmiObject -Namespace $ns -Class CommandLineEventConsumer -Filter \"Name='{MARK}-09'\" | Remove-WmiObject; "
+         f"Get-WmiObject -Namespace $ns -Class __EventFilter -Filter \"Name='{MARK}-09'\" | Remove-WmiObject",
+         f"if (Get-WmiObject -Namespace 'root\\subscription' -Class __EventFilter -Filter \"Name='{MARK}-09'\") {{ throw 'remains' }}"),
+        ('10', 'T1562.001', 'Microsoft Defender exclusion for a folder',
+         f"Add-MpPreference -ExclusionPath {quote(str(temp / (MARK + '-10')))}",
+         f"Remove-MpPreference -ExclusionPath {quote(str(temp / (MARK + '-10')))} -ErrorAction SilentlyContinue",
+         f"if ((Get-MpPreference).ExclusionPath -contains {quote(str(temp / (MARK + '-10')))}) {{ throw 'remains' }}"),
+        ('11', 'T1136.001', 'new local account added to Administrators',
+         f"$p=New-Object Security.SecureString; foreach($ch in ([guid]::NewGuid().ToString() + 'aA1!').ToCharArray()){{ $p.AppendChar($ch) }}; "
+         f"New-LocalUser -Name '{MARK[-10:]}11' -Password $p -Description '{MARK}-11' | Out-Null; "
+         f"Add-LocalGroupMember -SID 'S-1-5-32-544' -Member '{MARK[-10:]}11'",
+         f"Remove-LocalUser -Name '{MARK[-10:]}11' -ErrorAction SilentlyContinue",
+         f"if (Get-LocalUser -Name '{MARK[-10:]}11' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
+        ('12', 'T1546.015', 'per-user COM class registration pointing at a temporary-folder library',
+         f"if (Test-Path -LiteralPath {quote(clsid)}) {{ throw 'collision' }}; "
+         f"New-Item -Path {quote(clsid + chr(92) + 'InprocServer32')} -Force | Out-Null; "
+         f"Set-ItemProperty -LiteralPath {quote(clsid + chr(92) + 'InprocServer32')} -Name '(default)' -Value {quote(str(stage / (MARK + '-12.dll')))}",
+         f"Remove-Item -LiteralPath {quote(clsid)} -Recurse -Force -ErrorAction SilentlyContinue",
+         f"if (Test-Path -LiteralPath {quote(clsid)}) {{ throw 'remains' }}"),
+        ('13', 'T1547.004', 'Winlogon Userinit extended with a second program',
+         prep + f"$v=(Get-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit).Userinit; "
+         f"Set-Content -LiteralPath {quote(str(scratch / (MARK + '-13.bak')))} -Value $v -Encoding UTF8; "
+         f"Set-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit -Value ($v.TrimEnd(',') + ',' + {quote(str(staged))} + ',')",
+         f"$b={quote(str(scratch / (MARK + '-13.bak')))}; if (Test-Path -LiteralPath $b) {{ "
+         f"Set-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit -Value (Get-Content -LiteralPath $b -Raw).Trim(); Remove-Item -LiteralPath $b }}",
+         f"if ((Get-ItemProperty -LiteralPath {quote(winlogon)} -Name Userinit).Userinit -like '*{MARK}*') {{ throw 'remains' }}"),
+        ('14', 'T1547.005', 'extra LSA security package registered',
+         f"$v=@((Get-ItemProperty -LiteralPath {quote(lsa)} -Name 'Security Packages').'Security Packages'); "
+         f"Set-Content -LiteralPath {quote(str(scratch / (MARK + '-14.bak')))} -Value ($v -join \"`n\") -Encoding UTF8; "
+         f"Set-ItemProperty -LiteralPath {quote(lsa)} -Name 'Security Packages' -Type MultiString -Value ($v + '{MARK}-14')",
+         f"$b={quote(str(scratch / (MARK + '-14.bak')))}; if (Test-Path -LiteralPath $b) {{ "
+         f"$v=@((Get-Content -LiteralPath $b) | Where-Object {{ $_ -ne '' }}); "
+         f"Set-ItemProperty -LiteralPath {quote(lsa)} -Name 'Security Packages' -Type MultiString -Value $v; Remove-Item -LiteralPath $b }}",
+         f"if (@((Get-ItemProperty -LiteralPath {quote(lsa)} -Name 'Security Packages').'Security Packages') -contains '{MARK}-14') {{ throw 'remains' }}"),
+        ('15', 'T1547.001', 'script in the machine-wide startup folder',
+         f"Set-Content -LiteralPath {quote(str(startup / (MARK + '-15.cmd')))} -Value '@exit /b 0' -Encoding ASCII",
+         f"Remove-Item -LiteralPath {quote(str(startup / (MARK + '-15.cmd')))} -Force -ErrorAction SilentlyContinue",
+         f"if (Test-Path -LiteralPath {quote(str(startup / (MARK + '-15.cmd')))}) {{ throw 'remains' }}"),
+        ('16', 'T1197', 'BITS job that runs a command when it completes',
+         f"& bitsadmin.exe /create '{MARK}-16' | Out-Null; "
+         f"& bitsadmin.exe /SetNotifyCmdLine '{MARK}-16' {quote(cmd)} '/c exit 0' | Out-Null; "
+         f"if ($LASTEXITCODE -ne 0) {{ throw 'bits' }}",
+         f"& bitsadmin.exe /cancel '{MARK}-16' | Out-Null",
+         f"if ((& bitsadmin.exe /list /allusers) -match '{MARK}-16') {{ throw 'remains' }}"),
+        ('17', 'T1090.001', 'port proxy forwarding a local port',
+         "& netsh.exe interface portproxy add v4tov4 listenport=44417 listenaddress=127.0.0.1 connectport=9 connectaddress=127.0.0.1 | Out-Null; "
+         "if ($LASTEXITCODE -ne 0) { throw 'portproxy' }",
+         "& netsh.exe interface portproxy delete v4tov4 listenport=44417 listenaddress=127.0.0.1 | Out-Null",
+         "if ((& netsh.exe interface portproxy show v4tov4) -match '44417') { throw 'remains' }"),
+        ('18', 'T1036.005', 'program named svchost.exe running from the temporary folder',
+         f"New-Item -ItemType Directory -Force -Path {quote(str(stage / 'svc'))} | Out-Null; "
+         f"Copy-Item -LiteralPath {quote(str(sysdir / 'PING.EXE'))} -Destination {quote(str(stage / 'svc' / 'svchost.exe'))} -Force; "
+         f"$p=Start-Process -FilePath {quote(str(stage / 'svc' / 'svchost.exe'))} -ArgumentList '-n','3600','127.0.0.1' -WindowStyle Hidden -PassThru; "
+         f"Start-Sleep -Seconds 1; if ($p.HasExited) {{ throw 'not running' }}",
+         f"Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }} | Stop-Process -Force; "
+         f"Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath {quote(str(stage))} -Recurse -Force -ErrorAction SilentlyContinue",
+         f"if (Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }}) {{ throw 'remains' }}"),
+        ('19', 'T1562.004', 'inbound firewall rule allowing a temporary-folder program',
+         f"New-NetFirewallRule -DisplayName '{MARK}-19' -Direction Inbound -Action Allow -Program {quote(str(staged))} -Profile Any | Out-Null",
+         f"Remove-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue",
+         f"if (Get-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
+    )
+
+
 def telemetry(script_file):
     # Query errors remain errors; no payload or script text is returned.
     request = f"$fixture={quote(script_file)}; $prefix={quote(MARK)}; "
@@ -188,7 +295,10 @@ def main(argv=None):
     parser.add_argument('--list', action='store_true')
     args = parser.parse_args(argv)
     if args.list:
-        print('Run value; IFEO; logon task; inert service; LSASS process-id query. Hosted Windows only.')
+        print('Run value; IFEO; logon task; inert service; LSASS process-id query; and attack-shaped cases '
+              '06-19 (Temp Run key, encoded task, Temp service, WMI subscription, Defender exclusion, new admin, '
+              'COM hijack, Userinit, LSA package, startup script, BITS, port proxy, svchost look-alike, inbound rule). '
+              'Hosted Windows only.')
         return 0
     why = refusal()
     if why:
@@ -210,6 +320,7 @@ def main(argv=None):
         db = home / '.jarvis/test.db'
         subprocess.run([sys.executable, '-I', '-c', init, str(db)], env=env, check=True, capture_output=True, timeout=30)
         scenarios, script_file, proof = cases(scratch)
+        scenarios = scenarios + more_cases(scratch)
         before, failed_before = sweep(db, home)
         baseline = telemetry(script_file)
         applied, attempted, not_applied, cleanup = [], [], {}, {}
@@ -251,8 +362,9 @@ def main(argv=None):
         new = [value for key, value in after.items() if key not in before]
         rows = []
         for sid, tid, description, _do, _undo, _verify in scenarios:
+            marks = (MARK + '-' + sid,) + EXTRA.get(sid, ()) + ((MARK[-10:] + sid,) if sid == '11' else ())
             findings = [(job, f['severity'], f['title']) for job, f in new
-                        if MARK + '-' + sid in ' '.join(f.values())]
+                        if any(m in ' '.join(f.values()) for m in marks)]
             state = 'not applied' if sid not in applied else ('caught' if findings else 'missed')
             rows.append({'id': sid, 'technique': tid, 'what': description, 'state': state,
                          'why': not_applied.get(sid, ''), 'findings': findings})
