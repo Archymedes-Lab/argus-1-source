@@ -48,7 +48,7 @@ from jarvis.collectors.host import intrusion as intrusion_mod
 from jarvis.collectors.identity import bruteforce, impersonation, logins, secrets, sshwatch
 from jarvis.collectors.network import firewall, internetwatch, netflow, netwatch, sniffing, webshell
 from jarvis.collectors.persistence import asep as asep_mod
-from jarvis.collectors.persistence import backdoor, control, implant, pkgverify, startup
+from jarvis.collectors.persistence import backdoor, control, implant, linuxguard, pkgverify, startup
 from jarvis.collectors.process import evasion as evasion_mod
 from jarvis.collectors.process import hidden, memscan, monitor, resourcewatch
 from jarvis.collectors.telemetry import (
@@ -530,6 +530,7 @@ RUNNERS = {
     "psscript": _with_store(psscript.audit),
     "content": _with_store(content.audit),
     "winblocks": lambda hosts, db_path: winblocks.audit(hosts),
+    "linuxguard": _with_store(linuxguard.audit),
     "bootchain": _with_store(bootchain.audit),
     "selfguard": _selfguard,
     "keyreaders": _with_store(keyreaders.audit),

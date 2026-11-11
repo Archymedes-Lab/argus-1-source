@@ -47,7 +47,7 @@ from jarvis.lab import isolation  # noqa: E402
 
 # Explicit reviewed observation-only jobs; new scheduler jobs are excluded by default.
 READ_ONLY = frozenset({"scan", "implant", "backdoor", "posture", "asep", "hidden", "intrusion", "evasion",
-                       "webshell", "content", "sysmon_linux", "auditd", "logins", "sshwatch"})
+                       "webshell", "content", "sysmon_linux", "auditd", "logins", "sshwatch", "linuxguard"})
 CHILD = ("import sys, json; sys.path.insert(0, %r)\n"
          "from jarvis.service.jobs import run_job\n"
          "out = run_job(sys.argv[1], ('wsl',), sys.argv[2])\n"
@@ -139,6 +139,64 @@ SCENARIOS = (
      f"printf '#!/bin/sh\\n/dev/shm/{T}-16 &\\nexit 0\\n' > /etc/rc.local; chmod 755 /etc/rc.local",
      f"if [ -e /etc/rc.local.{T} ]; then mv -f /etc/rc.local.{T} /etc/rc.local; else rm -f /etc/rc.local; fi",
      ("rc.local",)),
+    # Second list (2026-11-11): persistence and defence evasion the first sixteen do not cover.
+    ("17", "T1053.006", "enabled systemd timer running a program from /tmp",
+     f"cp /bin/true /tmp/{T}-17; printf '[Unit]\\nDescription={T}-17\\n[Service]\\nType=oneshot\\nExecStart=/tmp/{T}-17\\n' "
+     f"> /etc/systemd/system/{T}-17.service; printf '[Unit]\\nDescription={T}-17\\n[Timer]\\nOnCalendar=hourly\\n"
+     f"[Install]\\nWantedBy=timers.target\\n' > /etc/systemd/system/{T}-17.timer; "
+     f"systemctl daemon-reload; systemctl enable --now {T}-17.timer",
+     f"systemctl disable --now {T}-17.timer || true; rm -f /etc/systemd/system/{T}-17.timer "
+     f"/etc/systemd/system/{T}-17.service /tmp/{T}-17; systemctl daemon-reload", ()),
+    ("18", "T1556.003", "PAM module line added to the shared sign-in stack",
+     f"printf '#!/bin/sh\\nexit 0\\n' > /tmp/{T}-18.sh; chmod 755 /tmp/{T}-18.sh; "
+     f"cp -a /etc/pam.d/common-auth /etc/pam.d/common-auth.{T}; "
+     f"printf 'auth optional pam_exec.so quiet /tmp/{T}-18.sh\\n' >> /etc/pam.d/common-auth",
+     f"if [ -e /etc/pam.d/common-auth.{T} ]; then mv -f /etc/pam.d/common-auth.{T} /etc/pam.d/common-auth; fi; "
+     f"rm -f /tmp/{T}-18.sh", ("pam_exec", "common-auth")),
+    ("19", "T1548.001", "file capability cap_setuid on a copy of an interpreter",
+     f"cp \"$(readlink -f \"$(command -v python3)\")\" /tmp/{T}-19; setcap cap_setuid+ep /tmp/{T}-19; "
+     f"getcap /tmp/{T}-19 | grep -q cap_setuid",
+     f"rm -f /tmp/{T}-19", ("cap_setuid",)),
+    ("20", "T1546", "udev rule that runs a program",
+     f"printf '#!/bin/sh\\nexit 0\\n' > /tmp/{T}-20.sh; chmod 755 /tmp/{T}-20.sh; "
+     f"printf 'ACTION==\"add\", SUBSYSTEM==\"net\", RUN+=\"/tmp/{T}-20.sh\"\\n' > /etc/udev/rules.d/99-{T}-20.rules",
+     f"rm -f /etc/udev/rules.d/99-{T}-20.rules /tmp/{T}-20.sh", ()),
+    ("21", "T1546.004", "line appended to the system-wide bash startup file",
+     f"cp -a /etc/bash.bashrc /etc/bash.bashrc.{T}; printf '(/tmp/{T}-21 >/dev/null 2>&1 &)\\n' >> /etc/bash.bashrc",
+     f"if [ -e /etc/bash.bashrc.{T} ]; then mv -f /etc/bash.bashrc.{T} /etc/bash.bashrc; fi", ("bash.bashrc",)),
+    ("22", "T1574.006", "LD_PRELOAD set for every session in /etc/environment",
+     f"cp -a /etc/environment /etc/environment.{T} 2>/dev/null || touch /etc/environment.{T}; "
+     f"printf 'LD_PRELOAD=/usr/local/lib/{T}-22.so\\n' >> /etc/environment",
+     f"if [ -e /etc/environment.{T} ]; then mv -f /etc/environment.{T} /etc/environment; fi", ("LD_PRELOAD",)),
+    ("23", "T1037", "executable script added to the login message directory",
+     f"mkdir -p /etc/update-motd.d; printf '#!/bin/sh\\n/tmp/{T}-23 &\\n' > /etc/update-motd.d/99-{T}-23; "
+     f"chmod 755 /etc/update-motd.d/99-{T}-23",
+     f"rm -f /etc/update-motd.d/99-{T}-23", ("update-motd",)),
+    ("24", "T1098", "new account added to the sudo group",
+     f"useradd -M -N -s /bin/bash -G sudo {T}-24",
+     f"userdel -f {T}-24 || true", ()),
+    ("25", "T1070.002", "authentication log emptied",
+     f"[ -e /var/log/auth.log ] || touch /var/log/auth.log; cp -a /var/log/auth.log /var/log/auth.log.{T}; "
+     f"printf 'Nov 11 00:00:00 host sshd[1]: argus-live seed line\\n' >> /var/log/auth.log; sync; : > /var/log/auth.log",
+     f"if [ -e /var/log/auth.log.{T} ]; then mv -f /var/log/auth.log.{T} /var/log/auth.log; fi", ("auth.log",)),
+    ("26", "T1546", "APT hook that runs a program before every package update",
+     f"printf '#!/bin/sh\\nexit 0\\n' > /tmp/{T}-26.sh; chmod 755 /tmp/{T}-26.sh; "
+     f"printf 'APT::Update::Pre-Invoke {{\"/tmp/{T}-26.sh\";}};\\n' > /etc/apt/apt.conf.d/99{T}-26",
+     f"rm -f /etc/apt/apt.conf.d/99{T}-26 /tmp/{T}-26.sh", ("Pre-Invoke",)),
+    ("27", "T1547.013", "desktop autostart entry for every user",
+     f"mkdir -p /etc/xdg/autostart; printf '[Desktop Entry]\\nType=Application\\nName={T}-27\\nExec=/tmp/{T}-27\\n' "
+     f"> /etc/xdg/autostart/{T}-27.desktop",
+     f"rm -f /etc/xdg/autostart/{T}-27.desktop", ()),
+    ("28", "T1036.005", "program named sshd running from a temporary folder",
+     f"mkdir -p /var/tmp/{T}-28; cp /bin/sleep /var/tmp/{T}-28/sshd; "
+     f"setsid /var/tmp/{T}-28/sshd 3600 >/dev/null 2>&1 & echo $! > /tmp/{T}-28.pid; sleep 1; "
+     f"kill -0 \"$(cat /tmp/{T}-28.pid)\"",
+     f"if [ -r /tmp/{T}-28.pid ]; then pid=$(cat /tmp/{T}-28.pid); "
+     f"case \"$(readlink /proc/$pid/exe)\" in /var/tmp/{T}-28/*) kill \"$pid\";; esac; fi; "
+     f"rm -f /tmp/{T}-28.pid; rm -rf /var/tmp/{T}-28", ()),
+    ("29", "T1565.001", "hosts file redirecting a sign-in domain",
+     f"cp -a /etc/hosts /etc/hosts.{T}; printf '203.0.113.7 login.microsoftonline.com # {T}-29\\n' >> /etc/hosts",
+     f"if [ -e /etc/hosts.{T} ]; then mv -f /etc/hosts.{T} /etc/hosts; fi", ("microsoftonline",)),
 )
 
 

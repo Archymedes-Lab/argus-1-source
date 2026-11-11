@@ -384,6 +384,12 @@ COLLECTORS = (
     _c("winblocks", 600, "Windows Security blocks", None, 0, 3, "medium", 60,
        command="status", domain="windows", depends_on=("windows-bridge",), cost_s=3.0,
        unscored="blocked-action findings are reported, not yet scored (unsoaked)"),
+    # Linux system integrity: PAM, sessions, sudo, loader, udev, APT, motd and
+    # module config by per-install baseline, plus invariants (PAM programs,
+    # global LD_PRELOAD, dangerous file capabilities, logs cut in place).
+    _c("linuxguard", 900, "Linux system integrity", None, 0, 3, "high", 60,
+       command="backdoor", domain="linux", cost_s=1.5,
+       unscored="system-integrity findings are reported, not yet scored (unsoaked)"),
     # ATT&CK coverage, validated by probing the real detectors.
     _c("attackmap", 21600, "ATT&CK coverage map", None, 0, 4, "low", 300,
        command="attack",
