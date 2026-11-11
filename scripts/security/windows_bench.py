@@ -236,13 +236,10 @@ def more_cases(scratch):
          f"Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath {quote(str(stage))} -Recurse -Force -ErrorAction SilentlyContinue",
          f"if (Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }}) {{ throw 'remains' }}"),
         ('19', 'T1562.004', 'inbound firewall rule allowing a temporary-folder program',
-         # PowerShell hands native programs their arguments as written: build "key=value"
-         # as one expanded string so netsh never sees quote characters.
-         prep('19') + f"$prog={quote(str(staged('19')))}; $out = & netsh.exe advfirewall firewall add rule "
-         f"\"name={MARK}-19\" dir=in action=allow \"program=$prog\" enable=yes profile=any; "
-         f"if ($LASTEXITCODE -ne 0) {{ throw ('netsh: ' + ($out -join ' ')) }}",
-         f"& netsh.exe advfirewall firewall delete rule \"name={MARK}-19\" | Out-Null",
-         f"if ((& netsh.exe advfirewall firewall show rule \"name={MARK}-19\") -match '{MARK}-19') {{ throw 'remains' }}"),
+         prep('19') + f"New-NetFirewallRule -DisplayName '{MARK}-19' -Direction Inbound -Action Allow "
+         f"-Program {quote(str(staged('19')))} -Profile Any -ErrorAction Stop | Out-Null",
+         f"Remove-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue",
+         f"if (Get-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
     )
 
 
