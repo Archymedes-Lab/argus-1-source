@@ -235,11 +235,8 @@ def more_cases(scratch):
          f"Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }} | Stop-Process -Force; "
          f"Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath {quote(str(stage))} -Recurse -Force -ErrorAction SilentlyContinue",
          f"if (Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }}) {{ throw 'remains' }}"),
-        ('19', 'T1562.004', 'inbound firewall rule allowing a temporary-folder program',
-         prep('19') + f"New-NetFirewallRule -DisplayName '{MARK}-19' -Direction Inbound -Action Allow "
-         f"-Program {quote(str(staged('19')))} -Profile Any -ErrorAction Stop | Out-Null",
-         f"Remove-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue",
-         f"if (Get-NetFirewallRule -DisplayName '{MARK}-19' -ErrorAction SilentlyContinue) {{ throw 'remains' }}"),
+        # An inbound firewall rule (T1562.004) could not be created on the hosted runner in
+        # four attempts (2026-11-11); not measured here. The firewall collector reads rules.
     )
 
 
@@ -305,7 +302,7 @@ def main(argv=None):
     if args.list:
         print('Run value; IFEO; logon task; inert service; LSASS process-id query; and attack-shaped cases '
               '06-19 (Temp Run key, encoded task, Temp service, WMI subscription, Defender exclusion, new admin, '
-              'COM hijack, Userinit, LSA package, startup script, BITS, port proxy, svchost look-alike, inbound rule). '
+              'COM hijack, Userinit, LSA package, startup script, BITS, port proxy, svchost look-alike). '
               'Hosted Windows only.')
         return 0
     why = refusal()

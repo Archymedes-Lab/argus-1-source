@@ -130,3 +130,30 @@ acknowledgements made against the old titles no longer apply and the findings sh
 again at full severity until confirmed: the score can only fall from this.
 
 Still for the owner: whether these should cost less than critical.
+
+## Second live lists, 2026-11-11
+
+Both campaigns were extended with attack-shaped, harmless, reversible cases and run on
+disposable GitHub-hosted runners.
+
+**Linux** (`live_bench.py`, cases 17-29): the first run caught 20 of 29. Nine actions no
+collector reported (PAM `pam_exec` line, `cap_setuid` file capability, udev `RUN` rule,
+system `bash.bashrc` line, `LD_PRELOAD` in `/etc/environment`, update-motd script, new
+sudo-group member, emptied `auth.log`, APT hook) are closed by the new `linuxguard`
+collector (PR #41): per-install baseline drift plus invariants. Run 43085086326:
+**29 of 29**, no collector failures.
+
+**Windows** (`windows_bench.py`, cases 06-18, and collectors intrusion, implant, firewall,
+scan, evasion and winblocks added to the run): the first run caught 14 of 18. Two of the
+three misses were findings that cut their evidence: the Winlogon detail at 100 characters
+lost the added program, and the COM detail at 80 lost the library's name. Both now name
+the evidence in full. The third was the harness (shared file names without the case id).
+Run 43094456700: **17 of 18**; the one miss is case 05, the deliberately inert process-id
+query. Case 19 (inbound firewall rule) could not be created on the hosted runner and was
+removed.
+
+A mid-branch Linux run exposed a regression of mine: an unguarded `import grp` broke every
+job on native Windows (0 of 5). Fixed with a regression test.
+
+What this does not show: one runner image per platform; harmless stand-ins, not real
+malware; nothing about the owner's machine, which still runs the 5 November release.
