@@ -195,6 +195,26 @@ class Invariants(Base):
         self.assertFalse([f for f in self.run_pass(store=False) if "LD_PRELOAD" in f["title"]])
 
 
+class Portability(unittest.TestCase):
+    def test_the_job_table_imports_where_unix_modules_do_not_exist(self):
+        # Measured 2026-11-11: an unguarded `import grp` broke every job on native Windows.
+        import subprocess
+        import sys
+        code = ("import builtins, sys\n"
+                "real = builtins.__import__\n"
+                "def guard(name, *a, **k):\n"
+                "    if name in ('grp', 'pwd', 'fcntl', 'termios', 'resource'):\n"
+                "        raise ImportError(name)\n"
+                "    return real(name, *a, **k)\n"
+                "builtins.__import__ = guard\n"
+                "import jarvis.collectors.persistence.linuxguard as g\n"
+                "assert g.privileged_members() == {}\n"
+                "print('ok')\n")
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60,
+                           cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.assertEqual(r.stdout.strip(), "ok", r.stderr[-400:])
+
+
 class Accept(Base):
     def test_accept_needs_a_typed_word_at_a_terminal(self):
         class Tty(io.StringIO):

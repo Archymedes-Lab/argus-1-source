@@ -36,7 +36,6 @@ between two passes is not seen; an attacker with root can rewrite the baseline i
 the store (the tamper-evident event log is the record of record).
 """
 
-import grp
 import hashlib
 import json
 import os
@@ -44,6 +43,11 @@ import re
 import stat
 import struct
 import time
+
+try:
+    import grp                      # Unix only: this module is imported by the job table everywhere
+except ImportError:                 # native Windows: the collector is Linux-domain and never runs there
+    grp = None
 
 from jarvis.core import collection, safe_files
 from jarvis.core.finding import file_finding, finding
@@ -196,8 +200,11 @@ def watched_files(scan, families=FAMILIES):
     return out
 
 
-def privileged_members(groups=PRIVILEGED_GROUPS, getgrnam=grp.getgrnam):
+def privileged_members(groups=PRIVILEGED_GROUPS, getgrnam=None):
+    getgrnam = getgrnam or (grp.getgrnam if grp else None)
     out = {}
+    if getgrnam is None:
+        return out
     for name in groups:
         try:
             out[name] = sorted(getgrnam(name).gr_mem)
@@ -218,9 +225,11 @@ def file_caps(raw):
     return [name for bit, name in sorted(DANGEROUS_CAPS.items()) if bits >> bit & 1]
 
 
-def capability_files(scan, roots=CAP_DIRS, getxattr=os.getxattr):
+def capability_files(scan, roots=CAP_DIRS, getxattr=getattr(os, "getxattr", None)):
     """[(path, [cap names])] for files under `roots` that carry dangerous capabilities."""
     out, seen = [], 0
+    if getxattr is None:
+        return out
     for root in roots:
         if scan.cut or not os.path.isdir(root) or os.path.islink(root):
             continue
@@ -279,7 +288,7 @@ def _load(store):
 
 
 def audit(store, hosts=("wsl",), clock=time.monotonic, families=FAMILIES, logs=LOGS, cap_roots=CAP_DIRS,
-          getgrnam=grp.getgrnam, getxattr=os.getxattr):
+          getgrnam=None, getxattr=getattr(os, "getxattr", None)):
     if "wsl" not in hosts:
         return []
     scan = Pass(clock)
