@@ -134,7 +134,9 @@ def describe(group):
                 "nothing was lost.")
     elif rule == REPUTATION and own:
         severity = "high"
-        note = (" This is part of Argus itself, so that part did not run and your protection is reduced. "
+        # Windows records a refused open and a refused start the same way, so say both.
+        note = (" This is part of Argus itself. Windows refused to let it be opened or started, so if this "
+                "was an attempt to install or run it, that part did not run and your protection is reduced. "
                 "Windows blocks it because the file is new and not yet signed by a publisher it knows. "
                 "An administrator can allow this one file (elevated PowerShell): "
                 f"Add-MpPreference -AttackSurfaceReductionOnlyExclusions '{path}' . That allows only this "
