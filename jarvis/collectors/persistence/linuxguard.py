@@ -45,7 +45,7 @@ import struct
 import time
 
 try:
-    import grp                      # Unix only: this module is imported by the job table everywhere
+    import grp  # Unix only: this module is imported by the job table everywhere
 except ImportError:                 # native Windows: the collector is Linux-domain and never runs there
     grp = None
 
@@ -53,6 +53,7 @@ from jarvis.core import collection, safe_files
 from jarvis.core.finding import file_finding, finding
 
 META = "linuxguard_v1"
+GETXATTR = getattr(os, "getxattr", None)      # Linux only
 MAX_FILES = 1500
 MAX_FILE_BYTES = 512 * 1024
 MAX_BYTES = 16 * 1024 * 1024
@@ -225,7 +226,7 @@ def file_caps(raw):
     return [name for bit, name in sorted(DANGEROUS_CAPS.items()) if bits >> bit & 1]
 
 
-def capability_files(scan, roots=CAP_DIRS, getxattr=getattr(os, "getxattr", None)):
+def capability_files(scan, roots=CAP_DIRS, getxattr=GETXATTR):
     """[(path, [cap names])] for files under `roots` that carry dangerous capabilities."""
     out, seen = [], 0
     if getxattr is None:
@@ -288,7 +289,7 @@ def _load(store):
 
 
 def audit(store, hosts=("wsl",), clock=time.monotonic, families=FAMILIES, logs=LOGS, cap_roots=CAP_DIRS,
-          getgrnam=None, getxattr=getattr(os, "getxattr", None)):
+          getgrnam=None, getxattr=GETXATTR):
     if "wsl" not in hosts:
         return []
     scan = Pass(clock)
