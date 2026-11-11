@@ -61,7 +61,9 @@ def powershell(script, timeout=45, as_json=False):
                              '-Command', "$ErrorActionPreference='Stop'; " + script],
                             capture_output=True, text=True, errors='replace', timeout=timeout)
     if result.returncode:
-        raise RuntimeError('PowerShell returned failure')
+        # The last error line says why (runner-only fixture text; no secrets exist here).
+        last = [ln.strip() for ln in (result.stderr or '').splitlines() if ln.strip()][-1:] or ['']
+        raise RuntimeError('PowerShell returned failure: ' + last[0][:160])
     if len(result.stdout) + len(result.stderr) > MAX_OUTPUT:
         raise RuntimeError('PowerShell output exceeded budget')
     if as_json:
@@ -234,10 +236,13 @@ def more_cases(scratch):
          f"Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath {quote(str(stage))} -Recurse -Force -ErrorAction SilentlyContinue",
          f"if (Get-Process -Name svchost -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '*{MARK}*' }}) {{ throw 'remains' }}"),
         ('19', 'T1562.004', 'inbound firewall rule allowing a temporary-folder program',
-         prep('19') + f"& netsh.exe advfirewall firewall add rule name='{MARK}-19' dir=in action=allow "
-         f"program={quote(str(staged('19')))} enable=yes profile=any | Out-Null; if ($LASTEXITCODE -ne 0) {{ throw 'netsh' }}",
-         f"& netsh.exe advfirewall firewall delete rule name='{MARK}-19' | Out-Null",
-         f"if ((& netsh.exe advfirewall firewall show rule name='{MARK}-19') -match '{MARK}-19') {{ throw 'remains' }}"),
+         # PowerShell hands native programs their arguments as written: build "key=value"
+         # as one expanded string so netsh never sees quote characters.
+         prep('19') + f"$prog={quote(str(staged('19')))}; $out = & netsh.exe advfirewall firewall add rule "
+         f"\"name={MARK}-19\" dir=in action=allow \"program=$prog\" enable=yes profile=any; "
+         f"if ($LASTEXITCODE -ne 0) {{ throw ('netsh: ' + ($out -join ' ')) }}",
+         f"& netsh.exe advfirewall firewall delete rule \"name={MARK}-19\" | Out-Null",
+         f"if ((& netsh.exe advfirewall firewall show rule \"name={MARK}-19\") -match '{MARK}-19') {{ throw 'remains' }}"),
     )
 
 
@@ -349,7 +354,7 @@ def main(argv=None):
                         powershell(row[3])
                     applied.append(row[0])
                 except Exception as exc:
-                    not_applied[row[0]] = type(exc).__name__
+                    not_applied[row[0]] = f'{type(exc).__name__}: {str(exc)[:200]}'
             # Event providers can publish asynchronously. Bound retries; never fabricate rows.
             for _attempt in range(10):
                 observed = telemetry(script_file)
