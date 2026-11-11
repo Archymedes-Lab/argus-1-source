@@ -47,6 +47,7 @@ class Explain(unittest.TestCase):
             self.assertEqual(f["severity"], "high", path)
             self.assertIn("part of Argus", f["title"])
             self.assertIn("protection is reduced", f["detail"])
+            self.assertIn("opened or started", f["detail"])
             self.assertIn(f"-AttackSurfaceReductionOnlyExclusions '{path}'", f["detail"])
             self.assertIn("do not exclude a whole folder", f["detail"])
 
