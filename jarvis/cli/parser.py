@@ -74,6 +74,7 @@ from .commands import impersonation as impersonation_cli
 from .commands import incidents as incidents_cli
 from .commands import inspect as inspect_cli
 from .commands import lifecycle as lifecycle_cli
+from .commands import linuxguard as linuxguard_cli
 from .commands import mesh as mesh_cli
 from .commands import model as model_cli
 from .commands import native as native_cli
@@ -104,6 +105,7 @@ def build_parser():
     sub = p.add_subparsers(dest="cmd", required=True)
     repair_cli.add_parser(sub)
     ack_cli.add_parser(sub)
+    linuxguard_cli.add_parser(sub)
     rules_cli.add_parser(sub)
     ask_cli.add_parser(sub)
     brief_cli.add_parser(sub)

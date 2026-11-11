@@ -47,7 +47,7 @@ from jarvis.lab import isolation  # noqa: E402
 
 # Explicit reviewed observation-only jobs; new scheduler jobs are excluded by default.
 READ_ONLY = frozenset({"scan", "implant", "backdoor", "posture", "asep", "hidden", "intrusion", "evasion",
-                       "webshell", "content", "sysmon_linux", "auditd", "logins", "sshwatch"})
+                       "webshell", "content", "sysmon_linux", "auditd", "logins", "sshwatch", "linuxguard"})
 CHILD = ("import sys, json; sys.path.insert(0, %r)\n"
          "from jarvis.service.jobs import run_job\n"
          "out = run_job(sys.argv[1], ('wsl',), sys.argv[2])\n"
