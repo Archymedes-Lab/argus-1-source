@@ -13,7 +13,11 @@ STATE = {
     "open_gates": ["coauthor relicensing authority", "full-history privacy and secrets review",
                    "collaboration artifacts review", "corresponding source for binaries",
                    "hosted modified version source offer", "external PR CI", "full validation"],
-    "publication": "blocked while any gate is open",
+    "implementation": {"history_inventory": "bounded Git batch stream, no raw matches in output",
+                       "regressions": "clean and deleted-secret histories, budgets, interruption, timeout, changed refs",
+                       "independent_check": "pinned Gitleaks history step passed",
+                       "runtime": "no production service or assurance changes"},
+    "publication": "readiness unestablished while privacy and rights gates remain open",
 }
 QUESTIONS = {
     "fit": {"type": "choice", "instructions":

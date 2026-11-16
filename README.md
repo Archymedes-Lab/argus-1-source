@@ -3,8 +3,8 @@
 Open-source preparation: project-owned code uses **AGPL-3.0-only**.
 See [licensing](LICENSING.md), [governance](GOVERNANCE.md),
 [trademark policy](TRADEMARKS.md), [security reporting](SECURITY.md) and
-[reproducible evaluations](docs/open-source/EVALUATIONS.md). Publication remains
-gated by the [transition checklist](docs/open-source/TRANSITION.md).
+[reproducible evaluations](docs/open-source/EVALUATIONS.md). Remaining rights,
+privacy and release gates are in the [transition checklist](docs/open-source/TRANSITION.md).
 
 Monitors what runs on this machine — both the WSL2 Linux side and the Windows
 host — and audits the ways something could take or keep control of it.
