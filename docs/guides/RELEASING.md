@@ -1,6 +1,7 @@
 # Releasing Argus
 
-This is the only way Argus reaches the public. It exists because on 2026-10-29
+This is the only way official Argus installable artifacts reach the public.
+Source publication follows [the open-source transition gates](../open-source/TRANSITION.md). It exists because on 2026-10-29
 the Windows download was found to contain the whole Python codebase, the Linux
 download decompilable bytecode, and both desktop binaries the build machine's
 home path. Every rule below closes one of those gaps or the way they happened
@@ -9,7 +10,7 @@ problem instead of allowing only known-good content).
 
 ## The rules
 
-1. **Binaries only.** A download may contain only what `release/policy.json`
+1. **Installable binaries only.** An installable download may contain only what `release/policy.json`
    allows, file by file: native programs, shared libraries, web assets, data,
    service units and the installer scripts. Source of any language, Python
    bytecode, tests, docs, source maps, lock files, keys and build-machine paths
@@ -32,6 +33,18 @@ problem instead of allowing only known-good content).
    version and every file verifies. A failure says so loudly and points here.
 6. **Reversible.** Every signed release stays in GitHub Releases (Argus-1,
    private). Rolling back is publishing an earlier tag again.
+
+## Open-source distribution requirements
+
+New project-owned source uses AGPL-3.0-only; earlier releases keep the terms
+that accompanied them. Keep installer content and signature gates intact.
+Before conveying a new AGPL binary, verify that complete corresponding source,
+required build/install scripts, notices and dependency source obligations are
+satisfied for that exact artifact. Record a durable source commit/tag and
+retrieval instructions in its release notes, and test access as a recipient.
+A GitHub-generated archive alone is not evidence of completeness. Do not publish
+new AGPL binaries until this gate has measured evidence. Modified versions
+serving remote users must also satisfy AGPL section 13 where applicable.
 
 ## Version order
 
@@ -263,23 +276,20 @@ releaser is the reverse; do it the same day a key may be lost.
 | a broken install | install-run-remove test on a real systemd host before the draft exists |
 | a bad release live | live readback, the owner's 30-minute audit, one-command rollback |
 
-## Known limits (free GitHub plan)
+## Repository protection and remaining limits
 
-The repositories are private on GitHub's free plan, which cannot protect
-branches, tags or workflow files. Anyone with write access could therefore
-edit a workflow to skip a check, or use the site's `VERCEL_TOKEN` secret from
-a workflow of their own. The signature check is in the workflows too, so on
-this plan it guards against mistakes and outside attackers, not against a
-collaborator acting in bad faith. What a collaborator cannot change is the
-owner's live audit (`release/audit.py`, run on the owner's machine with
-fingerprints pinned in the owner's own file): it would report an unsigned or
-non-conforming download within 30 minutes. Moving to GitHub Team would let
-rulesets protect `main`, `v*` tags and `.github/`, require a review, and keep
-deploy secrets behind an approval.
+Read back the actual GitHub settings before release; this document does not
+enforce them. On 2026-11-16, Archymedes-Lab/argus-1 had active main and release-tag
+rulesets. The checked-in main policy requires PRs and the python, desktop-ui
+and desktop-rust checks, with no bypass actors. Another cofounder's approval
+is optional under the 2026-11-09 owner decision. CODEOWNERS routes review and
+does not by itself restrict merges. Site repository permissions, environments
+and deploy credentials require their own review; product-repository protection
+does not prove that a download-host workflow is protected. Keep the independent
+owner-side signed-release audit and rollback path.
 
-Other limits: a native program can still be reverse-engineered with effort
-(it stops casual reading, not a determined analyst; never put secrets in
-code). The Windows server edition is not published until it is native too
+Other limits: native packaging provides no source confidentiality. Never put
+secrets in source or binaries. The Windows server edition is not published until it is native too
 (its PowerShell payloads must ship as text, which needs Authenticode signing,
 and its C# sensor must be prebuilt). The desktop binaries are not
 Authenticode-signed yet, so Windows SmartScreen warns.

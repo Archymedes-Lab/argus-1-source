@@ -306,7 +306,7 @@ cat <<EOF
   alerts:      argus alert --help        (email, webhook, ntfy or syslog)
   services:    edit /etc/argus/services.conf, then: argus services
   uninstall:   sudo /opt/argus/uninstall.sh
-  licence:     proprietary; terms in /opt/argus/LICENSE.txt, third-party
+  licence:     AGPL-3.0-only; terms in /opt/argus/LICENSE.txt, third-party
                components in /opt/argus/THIRD-PARTY-NOTICES.txt
 
 EOF
