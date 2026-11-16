@@ -101,7 +101,7 @@ def nuitka(tree, work, jobs):
     cmd = [sys.executable, "-m", "nuitka", "--standalone", "--assume-yes-for-downloads",
            f"--output-dir={work}", "--output-filename=argus-server",
            "--include-package=argus", "--nofollow-import-to=argus.platform.win",
-           # GNU Readline is GPL-3.0: a proprietary program must not ship linked to it
+           # GNU Readline remains excluded pending dependency/source-obligations review
            # (found bundled in v2026.10.30-2). The daemon never edits lines interactively;
            # the content gate refuses any release that still carries it.
            "--nofollow-import-to=readline", "--nofollow-import-to=rlcompleter",

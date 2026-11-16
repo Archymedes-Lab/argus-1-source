@@ -96,8 +96,8 @@ def sbom(version, commit):
                                         "purl": f"pkg:cargo/{name}@{ver}"}, licences))
     return {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
             "metadata": {"component": {"type": "application", "name": "argus", "version": version,
-                                       "licenses": [{"license": {"id": "LicenseRef-Archymedes-Proprietary",
-                                                                 "name": "ARGUS-1 EULA (LICENSE.txt)"}}],
+                                       "licenses": [{"license": {"id": "AGPL-3.0-only",
+                                                                 "name": "GNU Affero General Public License v3.0 only"}}],
                                        "properties": [{"name": "commit", "value": commit}]}},
             "components": comps}
 

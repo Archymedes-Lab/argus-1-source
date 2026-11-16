@@ -5,7 +5,7 @@
     python3 release/notices.py render    # writes THIRD-PARTY-NOTICES.txt from the snapshot
     python3 release/notices.py check     # exit 1 unless the committed file is current
 
-ARGUS-1 itself is proprietary (LICENSE.txt). What it ships also contains other
+ARGUS-1 itself is AGPL-3.0-only (LICENSE.txt; LICENSING.md). What it ships also contains other
 people's code, whose licences require their notices to travel with it (MIT and
 BSD: the copyright line and licence text; Apache-2.0: the licence; MPL-2.0:
 where the source of those files is). This file is the record, shipped in every
@@ -35,7 +35,7 @@ SNAPSHOT = HERE / "third_party.json"
 TEXTS = HERE / "licences"
 OUT = REPO / "THIRD-PARTY-NOTICES.txt"
 
-# Licences a component may be used under in a closed, commercial product. For an
+# Reviewed dependency licenses retained during the open-source transition. For an
 # "A OR B" expression the first permitted alternative is the one Archymedes takes.
 PREFERENCE = ("MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC", "Zlib", "0BSD",
               "MIT-0", "Unlicense", "CC0-1.0", "BSL-1.0", "Unicode-3.0", "PSF-2.0",
@@ -47,7 +47,7 @@ PREFERENCE = ("MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC", "Zlib"
               # from a rule names its author (enforced in jarvis/core/sigma.py).
               "DRL-1.1")
 ALLOWED = frozenset(PREFERENCE)
-# A licence whose terms extend to the whole program is never acceptable here.
+# Additional copyleft dependencies require a separate compatibility/source review.
 FORBIDDEN = re.compile(r"\b(A?GPL|LGPL|SSPL|BUSL|CC-BY-NC|Commons-Clause)\b", re.I)
 
 
@@ -82,7 +82,7 @@ def render(snapshot=None, texts=TEXTS):
     head = [
         "THIRD-PARTY NOTICES FOR ARGUS-1",
         "",
-        "ARGUS-1 is proprietary software of Archymedes, Inc. (see LICENSE.txt). It",
+        "ARGUS-1 is licensed under AGPL-3.0-only (see LICENSE.txt and LICENSING.md). It",
         "includes the third-party components below, each under its own licence, which",
         "is the licence that governs that component. Where a component is offered",
         "under a choice of licences, the licence named here is the one Archymedes uses.",

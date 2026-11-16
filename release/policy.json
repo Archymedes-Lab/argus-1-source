@@ -1,6 +1,6 @@
 {
   "_comment": "Deny by default. Every published file must match exactly one artifact rule below, and every file inside it must match that rule's allow list. Changing this file changes what the public can download: it needs the same two-person review as a release.",
-  "_copyleft_comment": "ARGUS-1 is proprietary (LICENSE.txt). A library whose licence would extend to the whole program must never ship inside it: GNU Readline (GPL-3.0) was found bundled in v2026.10.30-2 on 2026-11-02. Matched against each member's file name.",
+  "_copyleft_comment": "Conservative dependency deny list retained during AGPL transition. New dependencies require reviewed license compatibility, notices and corresponding-source obligations; AGPL conversion is not automatic approval.",
   "deny_copyleft_names": ["libreadline.so*", "readline*.so", "libhistory.so*"],
   "artifacts": [
     {

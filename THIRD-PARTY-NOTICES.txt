@@ -1,6 +1,6 @@
 THIRD-PARTY NOTICES FOR ARGUS-1
 
-ARGUS-1 is proprietary software of Archymedes, Inc. (see LICENSE.txt). It
+ARGUS-1 is licensed under AGPL-3.0-only (see LICENSE.txt and LICENSING.md). It
 includes the third-party components below, each under its own licence, which
 is the licence that governs that component. Where a component is offered
 under a choice of licences, the licence named here is the one Archymedes uses.

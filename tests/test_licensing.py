@@ -1,4 +1,4 @@
-"""ARGUS-1 is proprietary, says so everywhere, and ships every notice it owes.
+"""ARGUS-1 declares AGPL consistently and preserves dependency notice gates.
 
 2026-11-02: the product's own Rust runtime declared MIT, no release carried a
 licence, the SBOM had no licence data, and the server binary bundled GNU
@@ -25,43 +25,39 @@ import notices  # noqa: E402
 from tests.test_release_gate import GOOD_SERVER, SERVER, GateCase, ar_bytes, tar_bytes  # noqa: E402
 
 LICENCE = ROOT / "LICENSE.txt"
-PROPRIETARY = "LicenseRef-Archymedes-Proprietary"
+PROJECT_LICENSE = "AGPL-3.0-only"
 
 
 class TheLicence(unittest.TestCase):
-    def test_licence_names_the_product_licensor_and_says_proprietary(self):
+    def test_full_agpl_text_and_scope(self):
         text = LICENCE.read_text()
-        for needle in ("ARGUS-1 END USER LICENCE AGREEMENT", "Archymedes, Inc.", PROPRIETARY,
-                       "proprietary", "not open-source software", "THIRD-PARTY-NOTICES.txt"):
+        for needle in ("GNU AFFERO GENERAL PUBLIC LICENSE", "Version 3, 19 November 2007",
+                       "Remote Network Interaction", "END OF TERMS AND CONDITIONS"):
             self.assertIn(needle, text)
-        self.assertNotIn("source code in this repository", text)
+        scope = (ROOT / "LICENSING.md").read_text()
+        self.assertIn(PROJECT_LICENSE, scope)
+        self.assertIn("Third-party", scope)
+        self.assertIn("Earlier releases retain", scope)
 
-    def test_a_licence_without_the_draft_header_has_no_placeholders(self):
-        text = LICENCE.read_text()
-        placeholders = re.findall(r"\[[A-Z][A-Z /]+:", text)
-        if not text.startswith("DRAFT"):
-            self.assertEqual(placeholders, [], "a final licence must have every placeholder filled")
-        else:
-            self.assertIn("being\nincorporated", text)
-
-    def test_expiry_never_disables_core_functions(self):
-        self.assertIn("does not disable the Software's core", " ".join(LICENCE.read_text().split()))
+    def test_copyright_and_identity_are_separate_from_software_rights(self):
+        self.assertIn("Copyright (c) 2026 Archymedes, Inc.", (ROOT / "NOTICE").read_text())
+        self.assertIn("does not restrict", (ROOT / "TRADEMARKS.md").read_text())
+        self.assertIn("copyright assignment", (ROOT / "LICENSING.md").read_text())
 
 
 class OwnManifests(unittest.TestCase):
-    def test_own_rust_crates_are_proprietary_and_unpublishable(self):
+    def test_own_rust_crates_declare_agpl_without_accidental_registry_publish(self):
         for f in ("rust-runtime/Cargo.toml", "desktop/Cargo.toml"):
             text = (ROOT / f).read_text()
-            self.assertIn(f'license = "{PROPRIETARY}"', text, f)
+            self.assertIn(f'license = "{PROJECT_LICENSE}"', text, f)
             self.assertIn("publish = false", text, f)
-            self.assertNotRegex(text, r'license = "(MIT|Apache|GPL|BSD)', f)
 
-    def test_own_packages_are_private_and_unlicensed(self):
+    def test_own_packages_declare_agpl_without_accidental_registry_publish(self):
         for f in ("desktop/ui/package.json", "hosted/mesh-cloudflare/package.json",
                   "hosted/notify-cloudflare/package.json"):
             pkg = json.loads((ROOT / f).read_text())
             self.assertTrue(pkg.get("private"), f)
-            self.assertEqual(pkg.get("license"), "UNLICENSED", f)
+            self.assertEqual(pkg.get("license"), PROJECT_LICENSE, f)
 
 
 class Notices(unittest.TestCase):
@@ -191,10 +187,10 @@ class ReleaseFolder(unittest.TestCase):
     def test_licence_files_are_known_release_files(self):
         self.assertTrue({"LICENSE.txt", "THIRD-PARTY-NOTICES.txt"} <= gate.META)
 
-    def test_sbom_carries_licences_and_names_argus_proprietary(self):
+    def test_sbom_carries_licences_and_names_argus_agpl(self):
         import assemble
         bom = assemble.sbom("t", "c")
-        self.assertEqual(bom["metadata"]["component"]["licenses"][0]["license"]["id"], PROPRIETARY)
+        self.assertEqual(bom["metadata"]["component"]["licenses"][0]["license"]["id"], PROJECT_LICENSE)
         missing = [c["name"] for c in bom["components"] if "licenses" not in c and c["purl"].startswith("pkg:cargo/")]
         self.assertEqual(missing, [c for c in missing if c == "jarvis-desktop"])
         runtime = {c["name"] for c in bom["components"] if c["name"] in ("cryptography", "cffi", "pycparser")}

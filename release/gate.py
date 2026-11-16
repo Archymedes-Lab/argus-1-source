@@ -413,7 +413,7 @@ def denied_path(path, policy):
     if any(p in policy["deny_path_parts"] for p in parts[:-1]):
         return "denied folder"
     if any(fnmatch.fnmatchcase(parts[-1], pat) for pat in policy.get("deny_copyleft_names", [])):
-        return "copyleft library in a proprietary release"
+        return "copyleft library requires a separate license and source-obligations review"
     return None
 
 

@@ -1,4 +1,10 @@
-# JARVIS
+# ARGUS-1 / JARVIS
+
+Open-source preparation: project-owned code uses **AGPL-3.0-only**.
+See [licensing](LICENSING.md), [governance](GOVERNANCE.md),
+[trademark policy](TRADEMARKS.md), [security reporting](SECURITY.md) and
+[reproducible evaluations](docs/open-source/EVALUATIONS.md). Publication remains
+gated by the [transition checklist](docs/open-source/TRANSITION.md).
 
 Monitors what runs on this machine — both the WSL2 Linux side and the Windows
 host — and audits the ways something could take or keep control of it.
@@ -78,7 +84,7 @@ scripts/dev/static_gate.sh                # ruff, mypy, property and model check
 git push -u org feat/x && gh pr create    # pre-push hook runs the quick gate first; CI runs everything
 ```
 
-Ordinary code merges on green CI; workflows, `release/`, licensing and security docs need the other cofounder
+Maintainers merge on green CI; external contributions need maintainer review. Trust anchors follow the owner review policy
 ([CODEOWNERS](.github/CODEOWNERS)). Agents read [AGENTS.md](AGENTS.md): on your machine they must not run the
 owner-machine deploy steps it describes.
 

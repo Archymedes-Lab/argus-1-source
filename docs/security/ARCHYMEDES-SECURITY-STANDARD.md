@@ -579,7 +579,9 @@ This section makes `docs/guides/RELEASING.md` normative. It exists because of th
 
 ### 10.1 What may ship
 
-**REL-1 MUST [auto: release/gate.py]** — Downloads are binary-only. A public
+**REL-1 MUST [auto: release/gate.py]** — Installable artifacts are binary-only.
+Separately reviewed source publication is required for the open-source project;
+see [the transition gates](../open-source/TRANSITION.md). An installable
 artifact may contain only what `release/policy.json` allows, file by file: native
 programs, shared libraries, web assets, data, service units and installer
 scripts. Refused:
@@ -593,9 +595,9 @@ scripts. Refused:
 The policy is deny-by-default: a new kind of file fails until it is added on
 purpose, in a reviewed change.
 
-**REL-2 MUST** — Binary-only is a deterrent, not a vault. A native program can
-be reverse-engineered with effort. Never put secrets, private endpoints or
-security-through-obscurity in shipped code.
+**REL-2 MUST** — Source is public by design after publication review. Native
+packaging is not a confidentiality boundary. Never put secrets, private
+configuration or security-through-obscurity in shipped code.
 
 ### 10.2 How it is built
 

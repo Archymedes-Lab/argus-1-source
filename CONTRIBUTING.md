@@ -1,6 +1,6 @@
 # Working on JARVIS / ARGUS-INSTINCT
 
-Two cofounders, several AI agents (Claude Code, Codex), one private repository
+Two cofounders, several AI agents (Claude Code, Codex), one official repository
 (`Archymedes-Lab/argus-1`), and a CI budget that stops at $0. The rules below are
 the smallest set that keeps that combination fast and safe. The engineering
 rules themselves are in [AGENTS.md](AGENTS.md); this page is how we work together.
@@ -32,12 +32,12 @@ repository's `core.hooksPath`. It never installs a service or reads a secret.
 To also *run* JARVIS on your own machine, see "Using it" in the
 [README](README.md#cofounders-start-here).
 
-## Two people, many agents
+## Maintainers, contributors and agents
 
 | Rule | Why |
 |---|---|
 | **`main` only moves by pull request.** Branch from `org/main`: `feat/…`, `fix/…`, `docs/…`; `release-test/…` for a release build; `integrate/…` to combine branches. | One history both of us and every agent can trust. |
-| **Green CI merges itself; no review needed** for ordinary code. The author merges when CI is green. | Waiting on the other person for every change would halve our speed. |
+| **Maintainers merge ordinary code after green CI.** External contributions need maintainer review. | Contributions require a maintainer decision and measured checks. |
 | **Either cofounder may merge when required CI is green**, including trust-anchor changes. [CODEOWNERS](.github/CODEOWNERS) routes review requests; approval from the other cofounder is optional (owner decision 2026-11-09). | Both cofounders can ship; PR history, required checks and ASES DEV-12's independent review requirements remain in force. |
 | **One agent, one worktree, one branch.** `git worktree add ~/.cache/wt/<branch> -b <branch> org/main`. Never two agents in one checkout. | 2026-09-24: two agents in one checkout half-applied each other's edits. |
 | **Small PRs, merged the same day.** Stack them if needed; rebase or merge `org/main` before asking for review. | Long-lived branches are where our merges went wrong (the 68-vs-3 commit fork of 2026-11-02). |
@@ -90,3 +90,24 @@ That is deliberate: do not merge around it. An admin may set the `main` ruleset 
 "Evaluate" for an urgent fix only after recording it in
 `docs/security/exceptions.md` (owner, expiry) and running `fasttest.py --all` and
 `static_gate.sh` locally; set it back the same day.
+
+## Public contributions
+
+Anyone may submit a pull request; follow [GOVERNANCE.md](GOVERNANCE.md).
+Use synthetic examples, keep private data out of issues and patches, and route
+vulnerabilities through [SECURITY.md](SECURITY.md). Do not run untrusted PRs
+with production credentials or on the protected workstation. Maintainers must
+provide credential-free PR checks before accepting public contributions;
+current push-only CI does not establish an external fork's passing status.
+
+By submitting a contribution, you license it under AGPL-3.0-only, retain your
+copyright and certify [Developer Certificate of Origin 1.1](https://developercertificate.org/).
+Add a `Signed-off-by: Your Name <your-email>` trailer using `git commit -s`.
+Use an address you are willing to publish; maintainers verify the sign-off on
+each contributed commit. The DCO certifies contribution rights; it does not
+transfer ownership or grant a separate proprietary relicensing right.
+
+A PR should state the problem, approach, invariants, success/failure tests and
+remaining limits. Architectural and security changes follow AGENTS.md. Review
+may request changes or decline scope; nobody needs upstream permission to
+maintain a fork under the software license.

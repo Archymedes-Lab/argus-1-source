@@ -1,7 +1,7 @@
 {
   "name": "jarvis-evidence-witness",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "test": "bun test",
