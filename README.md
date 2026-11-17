@@ -1,10 +1,12 @@
 # ARGUS-1 — source preview
 
-**Unmerged, unreleased source preview.** This repository publishes a reviewed
-selection from proposed upstream PR #51 at commit
-`bbea895096685700cf9753931ef67caea63c7dde`. The upstream merge is still blocked
-by required checks. This preview does not represent an approved merge, signed
-binary release, deployment or verified protection of any machine.
+**Public source snapshot; upstream changes merged, no binary release.**
+This repository publishes a reviewed selection from upstream PR #51 at source
+commit `bbea895096685700cf9753931ef67caea63c7dde`. That PR merged on November 17,
+2026 as `eb747262924e0346dbc78f0c14efb89d984bb12e` after the owner explicitly
+waived CI checks blocked by GitHub billing. The required-check rules were restored
+and verified immediately afterward. This is not a passing-CI claim, signed binary
+release, deployment or verification of protection on any machine.
 
 ARGUS monitors processes, persistence, configuration and security evidence on
 Linux and Windows/WSL. The source includes the Python engine, desktop interface,

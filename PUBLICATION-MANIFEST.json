@@ -1,12 +1,12 @@
 {
-  "status": "unmerged-unreleased-source-preview",
+  "status": "merged-unreleased-source-snapshot",
   "source_repository": "Archymedes-Lab/argus-1",
   "source_commit": "bbea895096685700cf9753931ef67caea63c7dde",
-  "upstream_merge_completed": false,
+  "upstream_merge_completed": true,
   "private_history_included": false,
   "automation_enabled": false,
   "selected_file_count": 1361,
-  "selected_bytes": 18072981,
+  "selected_bytes": 18073610,
   "files_sha256": {
     ".gitattributes": "cc79f16276eef2e96603031a3ae40d9616b0f366d0fa4e1db5359c03767e8c4e",
     ".github/CODEOWNERS": "0e447f11ad59b202e38041289891d1ed47338ff27ff0e9c4ffdde0c68176c525",
@@ -25,8 +25,8 @@
     "LICENSE.txt": "ffcca38841adb694b6f380647e15f17c446a4d1656fed51a1e2041d064c94cc8",
     "LICENSING.md": "4cdea764d6aac3420ed95cc31c40d6458a14bcf4b2db6892ceea946a07cd9532",
     "NOTICE": "81077727d4ab5f1fba269106f82ed77d5b4e0627304c61d6142ad6fad876245e",
-    "PUBLICATION.md": "3983f7d1ae0d460d79c36e6692a531ec795562b9986b2e8d07f229b78003472c",
-    "README.md": "31ba4efa16fcccc6038fe3deace58b55ad513278536b5a99226d7bf5167f7a79",
+    "PUBLICATION.md": "de46b725825d43063c6671a37d0d0b73fbe8fa7cb956f376dd2eb502811bf84e",
+    "README.md": "d966d24fac815ed3163845cd607d3b105374620b9deaa98ded5eb823619859fe",
     "SECURITY.md": "fa3022ec6ef7be6719a64bbb1f6e2a2ffaed9b0b29206b9b76f37e6e54fa2b67",
     "THIRD-PARTY-NOTICES.txt": "90ababab1bfbf04600c52f4db1cbf529fabab32b4b3027c0c929eee3d8afbab2",
     "TRADEMARKS.md": "1771154cd0869e6f0e3dcd7d62cb05c87132c08bf97f694c95e478b788865b5e",
@@ -1406,5 +1406,7 @@
   },
   "production_source_unchanged": true,
   "hashes_are_release_signatures": false,
-  "manifest_self_hash_excluded": true
+  "manifest_self_hash_excluded": true,
+  "upstream_merge_commit": "eb747262924e0346dbc78f0c14efb89d984bb12e",
+  "upstream_ci": "not-run-billing-blocked-owner-authorized-merge-waiver"
 }
