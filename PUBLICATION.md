@@ -1,9 +1,14 @@
 # Publication boundary
 
-Status: **unmerged source preview**, exported from upstream proposed PR #51,
-commit `bbea895096685700cf9753931ef67caea63c7dde`. No upstream merge, signed
-binary release, official deployment, corresponding-source completeness for old
-binaries, installed-app launch or protection validation is asserted.
+Status: **public source snapshot; upstream PR #51 merged, unreleased**.
+Selected source commit: `bbea895096685700cf9753931ef67caea63c7dde`.
+Upstream merge commit: `eb747262924e0346dbc78f0c14efb89d984bb12e`, November 17,
+2026. The owner explicitly requested merging without CI because GitHub billing
+prevented the required jobs from starting. Only required-status-check enforcement
+was temporarily waived; the original rules were restored and read back unchanged.
+Required checks did not pass. No signed binary release, official deployment,
+corresponding-source completeness for old binaries, installed-app launch or
+protection validation is asserted.
 
 The public repository begins with one new snapshot commit. The original private
 repository, its history, evidence and rollback paths are retained. Earlier AGPL
@@ -35,4 +40,5 @@ No new native binaries are distributed here.
 
 The included read-only CI definition is published as source only. GitHub Actions
 is disabled for this review repository; release/publish workflows are withheld.
-No upstream required check is satisfied or bypassed by this publication.
+This snapshot does not satisfy upstream required checks. The separately authorized
+upstream merge waiver is recorded above; public availability is not CI approval.
