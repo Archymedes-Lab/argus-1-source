@@ -20,6 +20,6 @@ def _never_die_on_output():
 
 _never_die_on_output()
 
-from .cli import main  # noqa: E402  (after the stream guard on purpose)
+from .cli.parser import main  # noqa: E402  (after the stream guard on purpose)
 
 sys.exit(main())

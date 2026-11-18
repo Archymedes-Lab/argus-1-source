@@ -1,9 +1,78 @@
-# Development tooling only. Jarvis has no runtime dependencies beyond the
-# Python 3.12 standard library. Opt-in mesh commands additionally require
-# cryptography; importing or running core JARVIS does not require it.
+# Package metadata. This is what makes `pip install` / `uv tool install` / `python -m jarvis`
+# work. Core JARVIS has no runtime dependencies beyond the Python 3.12 standard
+# library. Opt-in mesh commands additionally require cryptography; importing or
+# running core JARVIS does not require it.
 #
 #   uvx ruff check            lint (unused/undefined names, syntax)
 #   python3 -m unittest discover -s tests
+
+[project]
+name = "jarvis"
+version = "1.0.0"
+description = "ARGUS-INSTINCT: continuous process, network and control-surface monitoring"
+readme = "README.md"
+license = {text = "AGPL-3.0"}
+requires-python = ">=3.12"
+authors = [{name = "ARGUS team", email = "dev@argus-instinct.xyz"}]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users \\Computer Software",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+mesh = ["cryptography>=42.0"]
+
+[project.scripts]
+jarvis = "jarvis.cli.parser:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "jarvis",
+    "jarvis.argus",
+    "jarvis.cli",
+    "jarvis.cli.commands",
+    "jarvis.collectors",
+    "jarvis.collectors.appcode",
+    "jarvis.collectors.host",
+    "jarvis.collectors.host.inputwatch",
+    "jarvis.collectors.host.intrusion",
+    "jarvis.collectors.host.pixel",
+    "jarvis.collectors.host.posture",
+    "jarvis.collectors.host.spyware",
+    "jarvis.collectors.host.toolchain",
+    "jarvis.collectors.host.veil",
+    "jarvis.collectors.identity",
+    "jarvis.collectors.identity.impersonation",
+    "jarvis.collectors.identity.secrets",
+    "jarvis.collectors.network",
+    "jarvis.collectors.network.netwatch",
+    "jarvis.collectors.persistence",
+    "jarvis.collectors.process",
+    "jarvis.collectors.process.hidden",
+    "jarvis.collectors.telemetry",
+    "jarvis.collectors.telemetry.sysmon_linux",
+    "jarvis.core",
+    "jarvis.core.execution",
+    "jarvis.core.reasoning",
+    "jarvis.intel",
+    "jarvis.intel.research",
+    "jarvis.licensing",
+    "jarvis.platform",
+    "jarvis.response",
+    "jarvis.service",
+    "jarvis.verify",
+    "jarvis.web",
+    "jarvis.web.ui",
+]
 
 [tool.ruff]
 target-version = "py312"
