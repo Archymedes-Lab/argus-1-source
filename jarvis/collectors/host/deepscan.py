@@ -52,11 +52,11 @@ SUSPICIOUS_DIRS = (
 )
 
 # Executable extensions on Windows, plus the classic Unix kinds.
-WIN_EXE_EXT = {
+WIN_EXE_EXT = (
     ".exe", ".dll", ".bat", ".cmd", ".com", ".pif", ".scr", ".msi", ".msp",
     ".mst", ".js", ".vbs", ".vbe", ".jse", ".ws", ".wsf", ".wsF", ".wsh",
     ".hta", ".ps1", ".psm1", ".psd1", ".ps1xml",
-}
+)
 UNIX_EXE_MASK = (
     "rwxrwxrwx", "rwxr-xr-x", "rwxrwx---", "rwxrwxr-x",
 )
