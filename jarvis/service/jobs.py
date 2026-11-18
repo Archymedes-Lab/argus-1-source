@@ -16,6 +16,7 @@ from jarvis.collectors import appcode
 from jarvis.collectors.host import (
     accelerator,
     audiowatch,
+    agent_guardian,
     bootchain,
     bootintegrity,
     canary,
@@ -568,6 +569,7 @@ RUNNERS = {
     "posture": _hosts_only(posture.audit),
     "backdoor": _hosts_only(backdoor.audit),
     "toolchain": _with_store(toolchain.audit),
+    "agent": agent_guardian.audit,
     "ledger": _ledger,
     "input": _input(deep=True),
     "memscan": lambda hosts, db_path: memscan.audit(hosts=hosts,
