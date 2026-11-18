@@ -24,6 +24,7 @@ from jarvis.collectors.host import (
     content,
     controlwatch,
     dotnet_posture,
+    deepscan,
     firmwareaudit,
     fridaydefender,
     geo,
@@ -39,6 +40,7 @@ from jarvis.collectors.host import (
     selfguard,
     spyware,
     storage,
+    system_monitor,
     toolchain,
     updates,
     winblocks,
@@ -47,7 +49,7 @@ from jarvis.collectors.host import (
 )
 from jarvis.collectors.host import intrusion as intrusion_mod
 from jarvis.collectors.identity import bruteforce, impersonation, logins, secrets, sshwatch
-from jarvis.collectors.network import firewall, internetwatch, netflow, netwatch, sniffing, webshell
+from jarvis.collectors.network import firewall, internetwatch, netflow, netwatch, sentinel, sniffing, webshell
 from jarvis.collectors.persistence import asep as asep_mod
 from jarvis.collectors.persistence import backdoor, control, implant, linuxguard, pkgverify, startup
 from jarvis.collectors.process import evasion as evasion_mod
@@ -554,6 +556,7 @@ RUNNERS = {
     # machine that has no Linux side.
     "spy": lambda hosts, db_path: spyware.sort_findings(spyware.audit(hosts=hosts)),
     "pixel": _hosts_only(pixel.audit),
+    "deepscan": _with_store(deepscan.scan_directory),
     "identity": _with_store(impersonation.audit),
     "intrusion": lambda hosts, db_path: _intrusion(db_path),
     "evasion": _sorted(evasion_mod),
@@ -564,12 +567,15 @@ RUNNERS = {
     "intel": _intel,
     "report": _report,
     "feeds": _feeds,
+    "sentinel": sentinel.audit,
     "implant": _hosts_only(implant.audit),
     "netwatch": _netwatch,
     "posture": _hosts_only(posture.audit),
     "backdoor": _hosts_only(backdoor.audit),
     "toolchain": _with_store(toolchain.audit),
     "agent": agent_guardian.audit,
+    "deepscan": _with_store(deepscan.scan_directory),
+    "system": system_monitor.audit,
     "ledger": _ledger,
     "input": _input(deep=True),
     "memscan": lambda hosts, db_path: memscan.audit(hosts=hosts,
