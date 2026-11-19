@@ -546,6 +546,34 @@ COLLECTORS = (
     _c("selfguard", 1800, "Argus self-protection & tamper evidence", None, 0, 3, "high", 120,
        command="status", domain="linux", cost_s=1.2,
        unscored="source-tested and measured once read-only on one host; not yet soaked"),
+    # AI Agent Guardian: watches agent-related processes, tool invocations,
+    # privilege escalation candidates, risky command lines and suspicious
+    # file targets. Observes; never judges. Advisory score only.
+    _c("agent", 60, "AI agent guardian", DP, 8, 1, "medium", 60,
+       command="agent", domain="both",
+       unscored="advisory signal, not a verdict; score is derived from local behaviour only",
+       cost_s=0.5),
+    # DeepScan + File Protection: hash files, flag executables, persistence
+    # trees, and suspicious content in temp, downloads and appdata. Finds
+    # evidence; the owner adjudicates.
+    _c("deepscan", 300, "File protection", MO, 9, 2, "medium", 120,
+       command="deepscan", domain="both",
+       unscored="observed files are evidence, not verdicts",
+       cost_s=1.0, isolated=True),
+    # Network Sentinel: turns connection records into findings about outbound
+    # peers, unusual destinations, and connection spray. Reports local
+    # analysis; states when external threat intel is unavailable.
+    _c("sentinel", 120, "Network sentinel", NW, 9, 1, "medium", 60,
+       command="netwatch", domain="both",
+       unscored="local peer analysis; no external threat feed yet",
+       cost_s=0.3),
+    # System Monitor: CPU, memory, disk, process resource consumption, and
+    # collector health. Reports stale collectors and resource pressure;
+    # clean state when nominal.
+    _c("system", 30, "System monitor", MO, 10, 0, "medium", 30,
+       command="system", domain="both",
+       unscored="measurement and health, not evidence of compromise",
+       cost_s=0.2, lane="frequent"),
 )
 
 BY_NAME = {c.name: c for c in COLLECTORS}

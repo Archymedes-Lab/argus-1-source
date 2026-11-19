@@ -143,19 +143,34 @@ def assess_outbound(sample: ConnectionSample, history: dict) -> dict:
 
     key = (sample.remote_ip, sample.remote_port)
     first_seen = peer_hist.get(key)
+    # The destination is new to this process, but the count of distinct
+    # destinations is computed BEFORE adding this one, so a process that
+    # connects to 51 different IPs gets a finding even before any IP is
+    # re-visited.
+    count = len(peer_hist)
     if first_seen is None:
-        # First time this process has reached out to this destination.
-        # Still record it, but do not report: a single sample does not make
-        # a pattern. The finding below uses the first-seen time so the
-        # caller can toast it after a threshold.
         peer_hist[key] = now_ts
+        count = len(peer_hist)
+        if count > 50:
+            return {
+                "host": sample.host,
+                "category": "network",
+                "severity": "medium",
+                "title": "Process establishing many outbound connections",
+                "detail": (f"{sample.exe or sample.proc} (pid {sample.pid}) "
+                           f"connected to {count} distinct remote IPs/ports "
+                           f"across {count} destinations since first sample."),
+                "where": "network-sentinel-outbound-spray",
+                "category": "network",
+                "reasons": ["high-peer-count"],
+                "score": 35,
+            }
         return {}
 
     # Seen before: normal for this host/process. Report only if the
     # destination is on a sensitive list and the process seems new, or if the
     # connection count is unusually high (above 50 reachable destinations).
     peer_hist[key] = now_ts
-    count = len(peer_hist)
     if count > 50:
         # The process is talking to many destinations: unusual for a
         # typical user process. Report with "unusual-spray" because it is a

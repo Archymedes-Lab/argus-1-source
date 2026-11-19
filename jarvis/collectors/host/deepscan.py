@@ -101,16 +101,14 @@ def _is_executable(path: str, mode: int) -> bool:
     name = os.path.basename(path).lower()
     if name.endswith(WIN_EXE_EXT):
         return True
-    if os.name == "nt":
-        # Windows: an extension not in the exe set, but the file is a script
-        # or something else that runs. The store keeps the extension list
-        # above; callers that need a separate enum should use the platform
-        # scripts only.
-        return False
-    # Unix: check the mode bits.
+    # Unix: check the mode bits for the regular-file case.
     if stat.S_ISREG(mode):
         return bool(mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
-    return False
+    # Windows may report an extension-less file that is a script or a
+    # non-executable binary; the platform's extension table is the
+    # authoritative source for Windows and we do not re-derive it here.
+    return os.name == "nt" and name in ("" ,)
+
 
 
 def _looks_suspicious(path: str) -> list[str]:
@@ -145,6 +143,13 @@ def scan_file(path: str, host: str = "wsl") -> dict:
         "reason": "",
     }
     try:
+        if not os.path.isfile(path):
+            return {
+                "host": host,
+                "path": path,
+                "accessible": False,
+                "reason": "not a regular file",
+            }
         st = os.stat(path)
     except OSError as exc:
         return {
